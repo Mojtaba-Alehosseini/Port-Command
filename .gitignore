@@ -6,6 +6,10 @@ build/
 logs/
 save/
 
+# JADE runtime artefacts (regenerated on every container boot)
+APDescription.txt
+MTPs-*.txt
+
 # Native / licensed jars — JADE must NOT be committed (license).
 # .gitkeep files in lib/ are still tracked.
 **/lib/*.jar

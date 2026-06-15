@@ -1,0 +1,1 @@
+:- write('Prolog up'), nl.
