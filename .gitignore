@@ -1,0 +1,29 @@
+# Gradle / build output
+.gradle/
+build/
+
+# Runtime artefacts
+logs/
+save/
+
+# Native / licensed jars — JADE must NOT be committed (license).
+# .gitkeep files in lib/ are still tracked.
+**/lib/*.jar
+
+# Rasa trained models (regenerated)
+nlp-python/rasa/models/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
