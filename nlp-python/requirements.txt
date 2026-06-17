@@ -1,0 +1,7 @@
+# Python deps for the Port Command Genova NLP side.
+# Python 3.10/3.11 ONLY (never 3.12+) — see the design rules / task 02.
+# Install into a venv:  py -3.11 -m venv .venv && .venv/Scripts/pip install -r requirements.txt
+#
+# owlready2 is used only as an OWL *parser* by ontology_to_assets.py (no reasoner).
+# Other deps (Rasa, Flask, ...) are added by later tasks.
+owlready2==0.46

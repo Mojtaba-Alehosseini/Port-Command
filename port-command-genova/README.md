@@ -18,7 +18,7 @@ level up: `../PROJECT_DEFINITION.md` (the what), `../MASTER_PLAN.md` (the how),
 | JDK | **Temurin 21 (LTS)** | The Gradle toolchain pins 21; your PATH `java` may differ — that's fine. |
 | Gradle | wrapper (**8.10.2**) | Use `./gradlew` / `gradlew.bat`; never a system Gradle. |
 | SWI-Prolog | **10.0.2** | System install. Ships `jpl.jar` + the native JPL bridge. |
-| Python | 3.10 / 3.11 | Not needed for task 01; required by later NLP tasks. |
+| Python | **3.10 / 3.11** (never 3.12+) | Ontology converter (task 02) + Rasa (later). See [Regenerating the ontology](#regenerating-the-ontology-prolog-file). |
 
 Install SWI-Prolog: Windows MSI from <https://www.swi-prolog.org/Download.html>,
 macOS `brew install swi-prolog`, Linux `apt install swi-prolog`.
@@ -64,6 +64,33 @@ macOS `brew install swi-prolog`, Linux `apt install swi-prolog`.
 
 A successful `./gradlew run` logs `SmokeAgent smoke up`, `JPL consult(...) -> true`,
 `JPL member(2, [1,2,3]) -> true`, and `=== Smoke test pass ===`.
+
+## Regenerating the ontology Prolog file
+
+`src/main/resources/prolog/port_ontology.pl` and `nlp-python/rasa/data/ontology_vocab.yml`
+are **generated** from `src/main/resources/ontology/port_ontology.owl` (the single source
+of truth) — never hand-edit them. Edit the OWL, then regenerate.
+
+One-time Python 3.11 venv (the converter forbids 3.12+):
+
+```bash
+# from the repo root (one level up from this module)
+py -3.11 -m venv nlp-python/.venv
+nlp-python/.venv/Scripts/python -m pip install -r nlp-python/requirements.txt
+```
+
+Regenerate (deterministic — running twice yields byte-identical files):
+
+```bash
+# from the repo root
+nlp-python/.venv/Scripts/python nlp-python/ontology_to_assets.py \
+    --owl   port-command-genova/src/main/resources/ontology/port_ontology.owl \
+    --pl    port-command-genova/src/main/resources/prolog/port_ontology.pl \
+    --vocab nlp-python/rasa/data/ontology_vocab.yml
+```
+
+Verify: `nlp-python/.venv/Scripts/python -m pytest nlp-python/test_ontology_to_assets.py`
+then `./gradlew test`. See `src/main/resources/ontology/README.md` for the class list.
 
 ## Troubleshooting
 
