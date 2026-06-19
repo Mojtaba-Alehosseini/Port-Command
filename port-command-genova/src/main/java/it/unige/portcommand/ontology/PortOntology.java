@@ -6,16 +6,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import it.unige.portcommand.prolog.PrologEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Singleton entry point to the generated ontology facts.
  *
- * <p>For task 02 this only guarantees that {@code port_ontology.pl} is present on
- * the classpath (so downstream tasks can rely on it) and can resolve its on-disk
- * path. The real JPL consult is wired in task 04, where {@link #init(Object)}'s
- * parameter tightens from {@code Object} to the concrete {@code PrologEngine}.
+ * <p>Guarantees that {@code port_ontology.pl} is present on the classpath (so
+ * downstream code can rely on it) and resolves its on-disk path. The actual JPL
+ * consult of the ontology is owned by {@link PrologEngine#init()} (which loads it
+ * first of the six files); {@link #init(PrologEngine)} here is a thin presence
+ * check, kept null-tolerant for callers that have no engine yet.
  */
 public final class PortOntology {
 
@@ -69,14 +71,19 @@ public final class PortOntology {
     }
 
     /**
-     * Task-02 stub. The real JPL consult arrives in task 04, where {@code engine}
-     * tightens from {@code Object} to {@code PrologEngine}.
+     * Thin presence check: verifies the ontology resolves on disk and notes
+     * whether the supplied engine has already consulted it. The consult itself is
+     * {@link PrologEngine#init()}'s responsibility — this does not consult.
      *
-     * @param engine the future Prolog engine (ignored in task 02)
+     * @param engine the Prolog engine, or {@code null} if none is wired yet
      */
-    public void init(Object engine) {
-        // TODO(task-04): replace with engine.consult(consultOntologyFile()).
-        log.info("PortOntology stub init: ontology present at {} (JPL consult deferred to task 04)",
-                consultOntologyFile());
+    public void init(PrologEngine engine) {
+        String path = consultOntologyFile();
+        if (engine != null && !engine.isInitialised()) {
+            log.warn("PortOntology.init: engine not initialised — call PrologEngine.init() to consult {}",
+                    path);
+        } else {
+            log.info("PortOntology present at {} (consult owned by PrologEngine.init)", path);
+        }
     }
 }

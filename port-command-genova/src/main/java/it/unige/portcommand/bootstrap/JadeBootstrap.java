@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 import it.unige.portcommand.ontology.OntologyValidation;
+import it.unige.portcommand.prolog.PrologEngine;
 import it.unige.portcommand.util.SimClock;
 import jade.core.AID;
 import jade.core.Profile;
@@ -74,6 +75,10 @@ public final class JadeBootstrap {
                     new Object[] {mainContainer, ready, dfCheck});
             awaitReady(ready, cfg.mainPort());
             bootDfSelfCheck = dfCheck.getNow(List.of());
+
+            // Prolog kernel up before any agent makes a binding decision. Independent
+            // of JADE (pure JPL); idempotent, so a restart cycle re-enters as a no-op.
+            PrologEngine.getInstance().init();
 
             started = true;
             log.info("JADE Main Container up on port {}", cfg.mainPort());

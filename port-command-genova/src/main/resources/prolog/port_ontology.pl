@@ -2,6 +2,13 @@
 % Source of truth: src/main/resources/ontology/port_ontology.owl
 % Regenerate: see port-command-genova/README.md 'Regenerating the ontology Prolog file'.
 
+% --- Dynamic predicates ---
+% default/3 and instance_of/2 are dynamic so the task-04 PrologQueries facade can
+% assertz/retract transient per-vessel facts (under the engine lock) around a query.
+% Declared before their facts load so SWI treats those facts as dynamic clauses.
+:- dynamic default/3.
+:- dynamic instance_of/2.
+
 % --- Classes ---
 class(berth).
 class(cargo).

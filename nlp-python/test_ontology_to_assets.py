@@ -177,6 +177,16 @@ def test_header_and_footer(pl_text):
     assert "ontology_loaded :- true." in pl_text
 
 
+def test_dynamic_declarations_for_transient_facts(pl_text):
+    # Task 04 asserts/retracts transient default/3 + instance_of/2 facts, so the
+    # generated ontology must declare them dynamic (before the facts load).
+    assert ":- dynamic default/3." in pl_text
+    assert ":- dynamic instance_of/2." in pl_text
+    # The dynamic decls must precede the first default/instance_of fact.
+    assert pl_text.index(":- dynamic default/3.") < pl_text.index("default(berth_1,")
+    assert pl_text.index(":- dynamic instance_of/2.") < pl_text.index("instance_of(berth_1,")
+
+
 def test_vessel_class_needs_deferred(pl_text):
     # Task 04 owns vessel_class_needs/2; the converter must NOT emit it (task 02 decision).
     assert "vessel_class_needs(" not in pl_text

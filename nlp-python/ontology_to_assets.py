@@ -164,6 +164,14 @@ def render_prolog(model: dict) -> str:
     out.append("% Regenerate: see port-command-genova/README.md 'Regenerating the ontology Prolog file'.")
 
     out.append("")
+    out.append("% --- Dynamic predicates ---")
+    out.append("% default/3 and instance_of/2 are dynamic so the task-04 PrologQueries facade can")
+    out.append("% assertz/retract transient per-vessel facts (under the engine lock) around a query.")
+    out.append("% Declared before their facts load so SWI treats those facts as dynamic clauses.")
+    out.append(":- dynamic default/3.")
+    out.append(":- dynamic instance_of/2.")
+
+    out.append("")
     out.append("% --- Classes ---")
     out += [f"class({a})." for a in model["class_atoms"]]
 
