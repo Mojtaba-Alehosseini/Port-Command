@@ -74,10 +74,32 @@ application {
 val nativePath: String = "${swiNativeDir()}${System.getProperty("path.separator")}${System.getenv("PATH") ?: ""}"
 
 tasks.withType<Test>().configureEach {
-    useJUnitPlatform()
+    // Native config applies to BOTH the unit (test) and integration (integrationTest) lanes.
     jvmArgs("-Djava.library.path=${swiNativeDir()}")
     environment("SWI_HOME_DIR", swiHome())
     environment("PATH", nativePath)
+}
+
+// Fast lane: unit tests only.
+tasks.test {
+    useJUnitPlatform { excludeTags("integration") }
+}
+
+// Integration lane: JADE Main Container / JPL boot tests. Forked per class so
+// JADE's Runtime singleton (and the 1099/18099 port binds) can't leak across IT classes.
+val integrationTest = tasks.register<Test>("integrationTest") {
+    description = "Runs @Tag(\"integration\") tests (JADE / JPL boot)."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform { includeTags("integration") }
+    setForkEvery(1L)
+    shouldRunAfter(tasks.test)
+}
+
+// Keep the commit gate strong: `check` (hence the pre-commit hook) runs both lanes.
+tasks.named("check") {
+    dependsOn(integrationTest)
 }
 
 tasks.named<JavaExec>("run") {

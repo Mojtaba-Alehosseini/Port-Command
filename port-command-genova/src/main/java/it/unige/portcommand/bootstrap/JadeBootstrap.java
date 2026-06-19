@@ -1,0 +1,139 @@
+package it.unige.portcommand.bootstrap;
+
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
+
+import it.unige.portcommand.ontology.OntologyValidation;
+import it.unige.portcommand.util.SimClock;
+import jade.core.AID;
+import jade.core.Profile;
+import jade.core.ProfileImpl;
+import jade.core.Runtime;
+import jade.wrapper.AgentContainer;
+import jade.wrapper.StaleProxyException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Owns the JADE Main Container lifecycle: build a {@link Profile}, boot a single
+ * Main Container, spawn a {@link BootstrapProbeAgent} for liveness + a DF
+ * self-check, expose the shared {@link SimClock}/{@link JadeAgentSpawner}/
+ * {@link ServiceLocator}, and tear down cleanly.
+ *
+ * <p>Not a {@link jade.core.Agent}: it uses only the {@code jade.wrapper} API and
+ * never calls the agent-side DF directly. Instance methods are guarded by a
+ * {@link ReentrantLock}; one instance per JVM.
+ */
+public final class JadeBootstrap {
+
+    private static final Logger log = LoggerFactory.getLogger(JadeBootstrap.class);
+    private static final long READY_TIMEOUT_SECONDS = 5L;
+
+    private final ReentrantLock lock = new ReentrantLock();
+    // Written under the lock in start()/shutdown(); volatile so the lock-free
+    // getters publish their values safely to other threads.
+    private volatile boolean started;
+    private volatile AgentContainer mainContainer;
+    private volatile SimClock simClock;
+    private volatile JadeAgentSpawner spawner;
+    private volatile List<AID> bootDfSelfCheck = List.of();
+
+    public void start(BootstrapConfig cfg) {
+        lock.lock();
+        try {
+            if (started) {
+                log.warn("start() called while already started — ignoring");
+                return;
+            }
+            // Task 02 guarantee: the ontology must have loaded before any agent runs.
+            if (OntologyValidation.getVesselTypes().isEmpty()) {
+                throw new IllegalStateException("ontology not loaded (no vessel types) — aborting bootstrap");
+            }
+
+            Profile profile = new ProfileImpl();
+            profile.setParameter(Profile.MAIN_HOST, "localhost");
+            profile.setParameter(Profile.MAIN_PORT, String.valueOf(cfg.mainPort()));
+            profile.setParameter(Profile.GUI, String.valueOf(cfg.enableRMA()));
+
+            Runtime rt = Runtime.instance();
+            rt.setCloseVM(false); // we own JVM shutdown, not JADE
+            mainContainer = rt.createMainContainer(profile);
+            if (mainContainer == null) {
+                throw new IllegalStateException("createMainContainer returned null — JADE failed to boot");
+            }
+
+            simClock = new SimClock(cfg.realSecondsPerGameDay());
+            spawner = new JadeAgentSpawner(mainContainer);
+
+            CountDownLatch ready = new CountDownLatch(1);
+            CompletableFuture<List<AID>> dfCheck = new CompletableFuture<>();
+            spawner.spawn("bootstrap_probe", BootstrapProbeAgent.class,
+                    new Object[] {mainContainer, ready, dfCheck});
+            awaitReady(ready, cfg.mainPort());
+            bootDfSelfCheck = dfCheck.getNow(List.of());
+
+            started = true;
+            log.info("JADE Main Container up on port {}", cfg.mainPort());
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void awaitReady(CountDownLatch ready, int port) {
+        try {
+            if (!ready.await(READY_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                throw new IllegalStateException(
+                        "bootstrap probe did not signal readiness within " + READY_TIMEOUT_SECONDS
+                                + "s on port " + port);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted waiting for bootstrap readiness", e);
+        }
+    }
+
+    public void shutdown() {
+        lock.lock();
+        try {
+            if (!started) {
+                log.warn("shutdown() called while not started — ignoring");
+                return;
+            }
+            try {
+                mainContainer.kill();
+            } catch (StaleProxyException e) {
+                log.warn("main container kill raised", e);
+            }
+            Runtime.instance().shutDown();
+            started = false;
+            log.info("JADE Main Container down");
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** The Main Container handle; {@code null} before {@link #start(BootstrapConfig)}. */
+    public AgentContainer getMainContainer() {
+        return mainContainer;
+    }
+
+    public SimClock getSimClock() {
+        return simClock;
+    }
+
+    public JadeAgentSpawner getSpawner() {
+        return spawner;
+    }
+
+    /** AIDs found by the boot-time {@code smoke-test} DF self-check (expected empty). */
+    public List<AID> bootDfSelfCheck() {
+        return bootDfSelfCheck;
+    }
+
+    public boolean isStarted() {
+        return started;
+    }
+}

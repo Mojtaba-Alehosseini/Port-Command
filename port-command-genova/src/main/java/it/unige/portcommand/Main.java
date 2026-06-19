@@ -1,23 +1,25 @@
 package it.unige.portcommand;
 
-import it.unige.portcommand.scaffold.SmokeTest;
+import it.unige.portcommand.bootstrap.BootstrapConfig;
+import it.unige.portcommand.bootstrap.JadeBootstrap;
 
 /**
- * Application entry point.
- *
- * <p>For task 01 this only runs the smoke test; later tasks rewrite it to boot
- * the game. It calls {@code System.exit(0)} after the smoke test because JADE
- * leaves non-daemon threads alive that would otherwise keep the JVM running.
- * The exit lives here and never inside {@link SmokeTest#run()} so the JUnit
- * runner is not terminated by the integration test.
+ * Application entry point. Boots the JADE Main Container and blocks; agent
+ * activity drives the JVM until Ctrl+C, when the shutdown hook tears JADE down
+ * cleanly. (Task 01's smoke test moved to the test source set — it is no longer a
+ * production entry point.)
  */
 public final class Main {
 
     private Main() {
     }
 
-    public static void main(String[] args) throws Exception {
-        SmokeTest.run();
-        System.exit(0);
+    public static void main(String[] args) throws InterruptedException {
+        BootstrapConfig cfg = BootstrapConfig.fromSystemProperties();
+        JadeBootstrap boot = new JadeBootstrap();
+        Runtime.getRuntime().addShutdownHook(new Thread(boot::shutdown, "JadeShutdownHook"));
+        boot.start(cfg);
+        // Block forever; the shutdown hook handles teardown on Ctrl+C / SIGTERM.
+        Thread.currentThread().join();
     }
 }

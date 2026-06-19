@@ -7,7 +7,7 @@
             <level>INFO</level>
         </filter>
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] [%X{agent}] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
@@ -18,7 +18,8 @@
             <maxHistory>7</maxHistory>
         </rollingPolicy>
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <!-- [%X{agent}] is the per-agent MDC token; agents set MDC.put("agent", localName) in setup(). -->
+            <pattern>%d{HH:mm:ss.SSS} [%thread] [%X{agent}] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
