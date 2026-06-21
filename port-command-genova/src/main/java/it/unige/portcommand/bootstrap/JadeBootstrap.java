@@ -1,5 +1,9 @@
 package it.unige.portcommand.bootstrap;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -32,6 +36,13 @@ public final class JadeBootstrap {
 
     private static final Logger log = LoggerFactory.getLogger(JadeBootstrap.class);
     private static final long READY_TIMEOUT_SECONDS = 5L;
+    private static final int PORT_PROBE_TIMEOUT_MS = 300;
+
+    // JVM-global, mirroring JADE's own Runtime singleton: once a Main Container has
+    // booted in this JVM, its RMI registry persists across shutdown and is reused on
+    // restart, so the held-port probe must run only on the FIRST (cold) boot — a
+    // foreign orphan can only wedge that one. Not DI/registry state; pure boot latch.
+    private static volatile boolean jadeBootedInThisJvm;
 
     private final ReentrantLock lock = new ReentrantLock();
     // Written under the lock in start()/shutdown(); volatile so the lock-free
@@ -54,6 +65,14 @@ public final class JadeBootstrap {
                 throw new IllegalStateException("ontology not loaded (no vessel types) — aborting bootstrap");
             }
 
+            // Fail fast on a held port: createMainContainer() blocks indefinitely on a
+            // contended RMI bind (a stale JADE container once wedged the build ~1h25m),
+            // and our awaitReady timeout only covers the probe AFTER the container exists.
+            // Cold boot only — a restart reuses this JVM's own persistent registry.
+            if (!jadeBootedInThisJvm) {
+                assertPortAvailable(cfg.mainPort());
+            }
+
             Profile profile = new ProfileImpl();
             profile.setParameter(Profile.MAIN_HOST, "localhost");
             profile.setParameter(Profile.MAIN_PORT, String.valueOf(cfg.mainPort()));
@@ -65,6 +84,7 @@ public final class JadeBootstrap {
             if (mainContainer == null) {
                 throw new IllegalStateException("createMainContainer returned null — JADE failed to boot");
             }
+            jadeBootedInThisJvm = true; // registry now persists in this JVM; skip the probe on restart
 
             simClock = new SimClock(cfg.realSecondsPerGameDay());
             spawner = new JadeAgentSpawner(mainContainer);
@@ -97,6 +117,33 @@ public final class JadeBootstrap {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("interrupted waiting for bootstrap readiness", e);
+        }
+    }
+
+    /**
+     * Throws fast if {@code port} has an <em>active listener</em> (typically a stale
+     * JADE container), rather than letting {@code createMainContainer} block on the
+     * contended RMI bind. Probes by <em>connecting</em> to the loopback port: a
+     * successful TCP handshake means something is listening → fail fast; a refused
+     * connection means the port is free to bind.
+     *
+     * <p>A connect probe — not a bind probe — is used deliberately: a clean
+     * {@link #shutdown()} leaves the port re-bindable but may leave {@code TIME_WAIT}
+     * remnants from the RMI connections, which a {@code ServerSocket} bind (without
+     * {@code SO_REUSEADDR}) would reject as a false positive. Connecting only detects
+     * a live listener, so the start→shutdown→start restart cycle is unaffected.
+     */
+    private static void assertPortAvailable(int port) {
+        boolean listenerPresent;
+        try (Socket probe = new Socket()) {
+            probe.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), PORT_PROBE_TIMEOUT_MS);
+            listenerPresent = true; // handshake completed → an active listener holds the port
+        } catch (IOException refusedOrUnreachable) {
+            listenerPresent = false; // connection refused / no listener → free to bind
+        }
+        if (listenerPresent) {
+            throw new IllegalStateException(
+                    "JADE main port " + port + " already in use — kill the stale java process holding it");
         }
     }
 
@@ -140,5 +187,10 @@ public final class JadeBootstrap {
 
     public boolean isStarted() {
         return started;
+    }
+
+    /** Test seam: clears the JVM cold-boot latch so a unit test can exercise the held-port probe. */
+    static void resetBootLatchForTest() {
+        jadeBootedInThisJvm = false;
     }
 }
