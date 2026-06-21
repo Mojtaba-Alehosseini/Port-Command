@@ -31,4 +31,20 @@ public final class MessageFactory {
         message.setLanguage(LANGUAGE);
         return message;
     }
+
+    /**
+     * Builds a reply to {@code original} with the given performative. Uses
+     * {@link ACLMessage#createReply()} so the conversation envelope
+     * (receiver=sender, conversation-id, in-reply-to, protocol) is preserved, then
+     * re-stamps {@link #ONTOLOGY}/{@link #LANGUAGE} so the reply always carries the
+     * protocol envelope regardless of what the original set. The single sanctioned
+     * way to construct a reply — no agent calls {@code createReply()} directly.
+     */
+    public static ACLMessage reply(ACLMessage original, int performative) {
+        ACLMessage r = original.createReply();
+        r.setPerformative(performative);
+        r.setOntology(ONTOLOGY);
+        r.setLanguage(LANGUAGE);
+        return r;
+    }
 }

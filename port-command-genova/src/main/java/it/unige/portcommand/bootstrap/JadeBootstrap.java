@@ -10,6 +10,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
+import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.ontology.OntologyValidation;
 import it.unige.portcommand.prolog.PrologEngine;
 import it.unige.portcommand.util.SimClock;
@@ -50,6 +51,7 @@ public final class JadeBootstrap {
     private volatile boolean started;
     private volatile AgentContainer mainContainer;
     private volatile SimClock simClock;
+    private volatile PortStateArtifact portStateArtifact;
     private volatile JadeAgentSpawner spawner;
     private volatile List<AID> bootDfSelfCheck = List.of();
 
@@ -87,6 +89,7 @@ public final class JadeBootstrap {
             jadeBootedInThisJvm = true; // registry now persists in this JVM; skip the probe on restart
 
             simClock = new SimClock(cfg.realSecondsPerGameDay());
+            portStateArtifact = new PortStateArtifact();
             spawner = new JadeAgentSpawner(mainContainer);
 
             CountDownLatch ready = new CountDownLatch(1);
@@ -174,6 +177,11 @@ public final class JadeBootstrap {
 
     public SimClock getSimClock() {
         return simClock;
+    }
+
+    /** Shared port-state store; {@code null} before {@link #start(BootstrapConfig)}. */
+    public PortStateArtifact getPortStateArtifact() {
+        return portStateArtifact;
     }
 
     public JadeAgentSpawner getSpawner() {

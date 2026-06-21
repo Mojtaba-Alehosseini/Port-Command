@@ -1,5 +1,6 @@
 package it.unige.portcommand.core;
 
+import jade.core.AID;
 import jade.lang.acl.ACLMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -35,4 +36,19 @@ class MessageFactoryTest {
         assertEquals("port_command_v1", m.getOntology());
         assertEquals("json", m.getLanguage());
     }
+
+    @Test
+    void replyStampsEnvelopeAndPreservesConversation() {
+        ACLMessage original = MessageFactory.create(ACLMessage.REQUEST);
+        original.setSender(new AID("hm", AID.ISGUID)); // ISGUID: no running platform to resolve a local name
+        original.setConversationId("conv-42");
+
+        ACLMessage reply = MessageFactory.reply(original, ACLMessage.CONFIRM);
+
+        assertEquals(ACLMessage.CONFIRM, reply.getPerformative(), "reply performative set");
+        assertEquals("port_command_v1", reply.getOntology(), "envelope re-stamped on reply");
+        assertEquals("json", reply.getLanguage());
+        assertEquals("conv-42", reply.getConversationId(), "conversation preserved via createReply()");
+    }
 }
+

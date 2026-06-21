@@ -40,7 +40,7 @@ class AgentStartupIT {
     void rosterRegistersEveryServiceWithExpectedCounts() throws Exception {
         boot = new JadeBootstrap();
         boot.start(testConfig());
-        AgentRoster.spawnSingletonsAndFleet(boot.getSpawner());
+        AgentRoster.spawnSingletonsAndFleet(boot.getSpawner(), boot.getPortStateArtifact(), boot.getSimClock());
 
         Map<String, Integer> counts = census();
         assertEquals(1, counts.get("harbour-master"), "HarbourMaster singleton");
@@ -56,12 +56,12 @@ class AgentStartupIT {
     void restartReRegistersCleanly() throws Exception {
         boot = new JadeBootstrap();
         boot.start(testConfig());
-        AgentRoster.spawnSingletonsAndFleet(boot.getSpawner());
+        AgentRoster.spawnSingletonsAndFleet(boot.getSpawner(), boot.getPortStateArtifact(), boot.getSimClock());
         census();
         boot.shutdown();
 
         boot.start(testConfig());
-        AgentRoster.spawnSingletonsAndFleet(boot.getSpawner());
+        AgentRoster.spawnSingletonsAndFleet(boot.getSpawner(), boot.getPortStateArtifact(), boot.getSimClock());
         Map<String, Integer> counts = census();
         assertEquals(4, counts.get("tug-escort"), "tugs re-register after restart");
         assertEquals(1, counts.get("harbour-master"), "HM re-registers after restart");
