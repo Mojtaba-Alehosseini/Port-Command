@@ -1,5 +1,6 @@
 package it.unige.portcommand;
 
+import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
 
@@ -19,6 +20,7 @@ public final class Main {
         JadeBootstrap boot = new JadeBootstrap();
         Runtime.getRuntime().addShutdownHook(new Thread(boot::shutdown, "JadeShutdownHook"));
         boot.start(cfg);
+        AgentRoster.spawnSingletonsAndFleet(boot.getSpawner());
         // Block forever; the shutdown hook handles teardown on Ctrl+C / SIGTERM.
         Thread.currentThread().join();
     }
