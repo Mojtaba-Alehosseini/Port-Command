@@ -1,9 +1,16 @@
 package it.unige.portcommand.agents;
 
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import it.unige.portcommand.behaviours.coordination.HandleClearanceRequestBehaviour;
+import it.unige.portcommand.util.RandomSource;
+
 /**
- * Customs pre-clearance (one instance). Stub: registers DF {@code customs}. Its
- * behaviours (PreClear, FlagForInspection, clearance-request handling) are
- * attached by task 09.
+ * Customs pre-clearance. Handles clearance REQUESTs from the HarbourMaster: hazmat
+ * cargo goes through the Prolog {@code clearance_ok} rule, non-hazmat through a
+ * seeded inspection roll. The master RNG is injected at args[0]; the inspection
+ * roll uses its {@code "customs"} sub-stream.
  */
 public final class CustomsAgent extends PortCommandAgent {
 
@@ -14,6 +21,12 @@ public final class CustomsAgent extends PortCommandAgent {
 
     @Override
     protected void onSetup() {
-        // No behaviours at the stub stage.
+        RandomSource randomSource = initArg(RandomSource.class);
+        if (randomSource == null) {
+            throw new IllegalStateException(
+                    "CustomsAgent " + getLocalName() + " requires RandomSource at args[0]");
+        }
+        Random customsRng = randomSource.forStream("customs");
+        addBehaviour(new HandleClearanceRequestBehaviour(this, customsRng, new AtomicInteger(1)));
     }
 }

@@ -137,6 +137,15 @@ public final class PrologQueries {
                 "clearance_ok(" + quoteAtom(vesselType) + ", " + quoteAtom(cargoClass) + ")");
     }
 
+    /**
+     * True iff {@code cargoClass} is a hazmat cargo. Goal {@code is_hazmat(<cargoClass>)};
+     * the predicate is owned by the ontology converter (port_ontology.pl), reading static
+     * {@code subclass_of/2} edges — pure, so cached.
+     */
+    public static boolean isHazmat(String cargoClass) {
+        return engine().hasSolutionCached("is_hazmat(" + quoteAtom(cargoClass) + ")");
+    }
+
     /** Inspection probability for the pair: 0.8 hazmat, 0.2 otherwise (RULE R23). Pure → cached. */
     public static double inspectionProbability(String vesselType, String cargoClass) {
         return engine().oneSolutionCached(

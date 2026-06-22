@@ -7,26 +7,30 @@ import it.unige.portcommand.agents.CustomsAgent;
 import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.agents.InitArgs.TerminalInitArgs;
 import it.unige.portcommand.agents.InitArgs.TugInitArgs;
+import it.unige.portcommand.agents.InitArgs.WeatherInitArgs;
 import it.unige.portcommand.agents.TerminalAgent;
+import it.unige.portcommand.agents.TransitionMatrix;
 import it.unige.portcommand.agents.TugAgent;
 import it.unige.portcommand.agents.WeatherAgent;
+import it.unige.portcommand.agents.WeatherSnapshot;
+import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.util.RandomSource;
 import it.unige.portcommand.util.SimClock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The single place that constructs the fixed agent fleet: the four singletons
- * (HarbourMaster, Weather, Customs, Assistant), the two terminals, and the four
- * tugs — 10 fixed instances. Vessel agents are spawned dynamically elsewhere.
+ * The single place that constructs the fixed agent fleet (10 instances). Live
+ * shared services (port state, sim clock, master RNG, market history) are
+ * constructor-injected through the {@code Object[]} args channel — never statics.
+ * Weather gets {@code [WeatherInitArgs, RandomSource]}; Customs {@code [RandomSource]};
+ * Assistant {@code [MarketHistoryArtifact]}; terminals {@code [TerminalInitArgs,
+ * PortStateArtifact, SimClock]}. Vessel agents are spawned dynamically elsewhere.
  *
- * <p>The terminals receive the shared {@link PortStateArtifact} and {@link SimClock}
- * through the {@code Object[]} args channel (args[1], args[2]) — live objects, not
- * serializable init records, so constructor-injected rather than via a static.
- *
- * <p>No spawn stagger: each agent registers with the DF asynchronously on its own
- * thread, so ten near-simultaneous {@code setup()} calls do not contend.
+ * <p>(The growing parameter list is a known smell — a {@code GameServices} bundle is
+ * the planned cleanup once tasks 10/11/15 add their injected deps.)
  */
 public final class AgentRoster {
 
@@ -37,11 +41,13 @@ public final class AgentRoster {
     }
 
     public static void spawnSingletonsAndFleet(JadeAgentSpawner spawner, PortStateArtifact portState,
-                                               SimClock simClock) {
+                                               SimClock simClock, RandomSource randomSource,
+                                               MarketHistoryArtifact marketHistory) {
         spawner.spawn("harbour_master", HarbourMasterAgent.class, null);
-        spawner.spawn("weather_agent", WeatherAgent.class, null);
-        spawner.spawn("customs_agent", CustomsAgent.class, null);
-        spawner.spawn("assistant_agent", AssistantAgent.class, null);
+        spawner.spawn("weather_agent", WeatherAgent.class,
+                new Object[] {defaultWeatherInit(), randomSource, simClock});
+        spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource});
+        spawner.spawn("assistant_agent", AssistantAgent.class, new Object[] {marketHistory});
 
         spawner.spawn("terminal_container", TerminalAgent.class, new Object[] {
                 new TerminalInitArgs("terminal_container", List.of("berth_2"), 4), portState, simClock});
@@ -56,5 +62,13 @@ public final class AgentRoster {
         }
 
         log.info("Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)");
+    }
+
+    /** Calm starting weather + the default Markov matrix, no scripted overrides. */
+    private static WeatherInitArgs defaultWeatherInit() {
+        return new WeatherInitArgs(
+                new WeatherSnapshot(18, "good", 0.5, "sunny", 0L),
+                TransitionMatrix.defaults(),
+                List.of());
     }
 }

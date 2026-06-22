@@ -34,7 +34,16 @@ public sealed interface InitArgs
             implements InitArgs {
     }
 
-    /** Weather init: the starting weather state (provisional; task 09 owns the model). */
-    record WeatherInitArgs(String initialState) implements InitArgs {
+    /**
+     * Weather init: the starting snapshot, the Markov transition matrix, and an
+     * optional list of scripted overrides (empty by default; the Storm scenario
+     * scripts a sim-minute-8 threshold event — task 09/23).
+     */
+    record WeatherInitArgs(WeatherSnapshot initial, TransitionMatrix matrix,
+                           List<ScriptedWeather> overrides) implements InitArgs {
+
+        /** A scenario-scripted snapshot applied at {@code simMinute}, overriding the Markov draw. */
+        public record ScriptedWeather(int simMinute, WeatherSnapshot snapshot) {
+        }
     }
 }

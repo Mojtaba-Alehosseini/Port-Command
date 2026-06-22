@@ -12,13 +12,36 @@ import java.util.Random;
 public final class RandomSource {
 
     private final Random random;
+    private long seed;
 
     public RandomSource(long seed) {
+        this.seed = seed;
         this.random = new Random(seed);
     }
 
     public void setSeed(long seed) {
+        this.seed = seed;
         random.setSeed(seed);
+    }
+
+    /**
+     * A deterministic, independent child RNG for a named sub-stream — seeded from
+     * the master seed XORed with a stable 64-bit hash of {@code name}. Adding or
+     * removing randomness in one consumer's stream never shifts another's draw
+     * sequence (each gets its own {@link Random}), yet a single save-file seed still
+     * reproduces the whole game. Used per stochastic agent (task 09: weather, customs).
+     */
+    public Random forStream(String name) {
+        return new Random(seed ^ stableHash(name));
+    }
+
+    /** Deterministic 64-bit polynomial hash (unlike 32-bit {@link String#hashCode()}). */
+    private static long stableHash(String s) {
+        long h = 1125899906842597L; // a large prime
+        for (int i = 0; i < s.length(); i++) {
+            h = 31 * h + s.charAt(i);
+        }
+        return h;
     }
 
     public double nextDouble() {

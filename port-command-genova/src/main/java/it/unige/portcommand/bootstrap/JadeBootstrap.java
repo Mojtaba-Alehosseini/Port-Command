@@ -10,9 +10,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
+import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.ontology.OntologyValidation;
 import it.unige.portcommand.prolog.PrologEngine;
+import it.unige.portcommand.util.RandomSource;
 import it.unige.portcommand.util.SimClock;
 import jade.core.AID;
 import jade.core.Profile;
@@ -38,6 +40,8 @@ public final class JadeBootstrap {
     private static final Logger log = LoggerFactory.getLogger(JadeBootstrap.class);
     private static final long READY_TIMEOUT_SECONDS = 5L;
     private static final int PORT_PROBE_TIMEOUT_MS = 300;
+    // Fixed master seed for reproducible runs; task 22/23 override it via RandomSource.setSeed on load/scenario.
+    private static final long DEFAULT_RANDOM_SEED = 20260622L;
 
     // JVM-global, mirroring JADE's own Runtime singleton: once a Main Container has
     // booted in this JVM, its RMI registry persists across shutdown and is reused on
@@ -52,6 +56,8 @@ public final class JadeBootstrap {
     private volatile AgentContainer mainContainer;
     private volatile SimClock simClock;
     private volatile PortStateArtifact portStateArtifact;
+    private volatile RandomSource randomSource;
+    private volatile MarketHistoryArtifact marketHistory;
     private volatile JadeAgentSpawner spawner;
     private volatile List<AID> bootDfSelfCheck = List.of();
 
@@ -90,6 +96,8 @@ public final class JadeBootstrap {
 
             simClock = new SimClock(cfg.realSecondsPerGameDay());
             portStateArtifact = new PortStateArtifact();
+            randomSource = new RandomSource(DEFAULT_RANDOM_SEED);
+            marketHistory = new MarketHistoryArtifact();
             spawner = new JadeAgentSpawner(mainContainer);
 
             CountDownLatch ready = new CountDownLatch(1);
@@ -182,6 +190,16 @@ public final class JadeBootstrap {
     /** Shared port-state store; {@code null} before {@link #start(BootstrapConfig)}. */
     public PortStateArtifact getPortStateArtifact() {
         return portStateArtifact;
+    }
+
+    /** Master seeded RNG; agents derive named sub-streams via {@code forStream}. */
+    public RandomSource getRandomSource() {
+        return randomSource;
+    }
+
+    /** Shared market-history store (deal outcomes); {@code null} before start. */
+    public MarketHistoryArtifact getMarketHistoryArtifact() {
+        return marketHistory;
     }
 
     public JadeAgentSpawner getSpawner() {

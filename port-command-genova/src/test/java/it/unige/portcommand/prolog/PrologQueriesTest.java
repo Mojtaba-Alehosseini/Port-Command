@@ -111,6 +111,12 @@ class PrologQueriesTest {
         assertEquals(expected, PrologQueries.inspectionProbability(vesselType, cargoClass), 1e-9);
     }
 
+    @Test
+    void isHazmatClassifiesCargo() {
+        assertTrue(PrologQueries.isHazmat("hazmat_class_3"), "hazmat_class_3 subclass_of hazmat_cargo");
+        assertFalse(PrologQueries.isHazmat("general_cargo"), "general_cargo is not hazmat");
+    }
+
     // --- Priority ----------------------------------------------------------
 
     @ParameterizedTest(name = "priorityRank({0}) = {1}")
