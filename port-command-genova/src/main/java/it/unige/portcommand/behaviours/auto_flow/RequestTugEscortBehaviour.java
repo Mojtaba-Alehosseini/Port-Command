@@ -6,8 +6,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Stub behaviour (task 05). The owning agent task fills the plan body; until then
- * the body logs once and does nothing else. No blocking spin, no JPL, no I/O.
+ * DEFERRED in task 07 — kept a no-op stub. The tug-escort REQUEST / CFP-trigger flow
+ * is owned by the HarbourMaster/CNP path (tasks 08/11); the vessel does not initiate
+ * the CFP. Retained as a stub to preserve the locked behaviour catalogue (51, ADR-01).
  */
 public final class RequestTugEscortBehaviour extends OneShotBehaviour {
 

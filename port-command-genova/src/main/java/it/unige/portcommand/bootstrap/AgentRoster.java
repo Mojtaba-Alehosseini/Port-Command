@@ -13,11 +13,16 @@ import it.unige.portcommand.agents.TransitionMatrix;
 import it.unige.portcommand.agents.TugAgent;
 import it.unige.portcommand.agents.WeatherAgent;
 import it.unige.portcommand.agents.WeatherSnapshot;
+import it.unige.portcommand.agents.ContractedVesselAgent;
+import it.unige.portcommand.agents.WalkInVesselAgent;
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.negotiation.NegotiationEngine;
 import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.util.RandomSource;
 import it.unige.portcommand.util.SimClock;
+import jade.wrapper.AgentController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,6 +67,34 @@ public final class AgentRoster {
         }
 
         log.info("Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)");
+    }
+
+    /**
+     * Spawn a contracted (Channel A) vessel. Args: {@code [VesselSpec, SimClock,
+     * MarketHistoryArtifact, contractId]}.
+     */
+    public static AgentController spawnContractedVessel(JadeAgentSpawner spawner, VesselSpec spec,
+                                                        String contractId, SimClock simClock,
+                                                        MarketHistoryArtifact marketHistory) {
+        return spawner.spawn(vesselLocalName(spec), ContractedVesselAgent.class,
+                new Object[] {spec, simClock, marketHistory, contractId});
+    }
+
+    /**
+     * Spawn a walk-in (Channel B) vessel. Args: {@code [VesselSpec, SimClock,
+     * MarketHistoryArtifact, NegotiationEngine, RandomSource]}. Production passes a
+     * {@code NoOpNegotiationEngine}; tests pass a Mockito mock.
+     */
+    public static AgentController spawnWalkIn(JadeAgentSpawner spawner, VesselSpec spec, SimClock simClock,
+                                              MarketHistoryArtifact marketHistory, RandomSource randomSource,
+                                              NegotiationEngine engine) {
+        return spawner.spawn(vesselLocalName(spec), WalkInVesselAgent.class,
+                new Object[] {spec, simClock, marketHistory, engine, randomSource});
+    }
+
+    /** A JADE-legal local name ({@code ^[a-z][a-z0-9_]*$}) derived from the vessel id. */
+    private static String vesselLocalName(VesselSpec spec) {
+        return "vessel_" + spec.vesselId().toLowerCase().replaceAll("[^a-z0-9_]", "_");
     }
 
     /** Calm starting weather + the default Markov matrix, no scripted overrides. */

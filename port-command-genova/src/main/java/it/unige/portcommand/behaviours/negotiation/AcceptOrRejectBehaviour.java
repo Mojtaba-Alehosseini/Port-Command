@@ -6,8 +6,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Stub behaviour (task 05). The owning agent task fills the plan body; until then
- * the body logs once and does nothing else. No blocking spin, no JPL, no I/O.
+ * FOLDED into {@link EvaluateCounterOfferBehaviour} (task-07 §64) — accept/reject is
+ * dispatched there (ACCEPT_PROPOSAL on a deal, PROPOSE on a counter). Retained as a
+ * no-op stub to preserve the locked behaviour catalogue (51, ADR-01).
  */
 public final class AcceptOrRejectBehaviour extends OneShotBehaviour {
 

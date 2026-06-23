@@ -6,8 +6,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Stub behaviour (task 05). The owning agent task fills the plan body; until then
- * the body logs once and does nothing else. No blocking spin, no JPL, no I/O.
+ * DEFERRED in task 07 — kept a no-op stub. Berth assignment is requested via
+ * {@link AnnounceArrivalBehaviour}'s REQUEST to the HarbourMaster; this separate
+ * behaviour stays a stub until a distinct re-assignment flow is needed. Retained to
+ * preserve the locked behaviour catalogue (51, ADR-01).
  */
 public final class RequestBerthAssignmentBehaviour extends OneShotBehaviour {
 

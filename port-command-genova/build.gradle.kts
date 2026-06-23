@@ -54,6 +54,8 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.5.6")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    // Mockito: test-only NegotiationEngine mock for the walk-in vessel IT (task 07; the real engine is task 15).
+    testImplementation("org.mockito:mockito-core:5.14.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

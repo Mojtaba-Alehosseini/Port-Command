@@ -1,24 +1,56 @@
 package it.unige.portcommand.behaviours.auto_flow;
 
+import java.util.Map;
+
+import it.unige.portcommand.agents.BaseVesselAgent;
+import it.unige.portcommand.behaviours.SimTickerBehaviour;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.util.SimClock;
 import jade.core.Agent;
-import jade.core.behaviours.OneShotBehaviour;
+import jade.lang.acl.ACLMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Stub behaviour (task 05). The owning agent task fills the plan body; until then
- * the body logs once and does nothing else. No blocking spin, no JPL, no I/O.
+ * Animates the vessel out of the harbour over a short sim-interval, INFORMs the
+ * HarbourMaster of departure, then {@code doDelete()}s the agent. A test completes it
+ * by advancing the SimClock.
  */
-public final class DepartBehaviour extends OneShotBehaviour {
+public final class DepartBehaviour extends SimTickerBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(DepartBehaviour.class);
+    private static final long TICK_SIM_MILLIS = 1000L;
+    private static final long DEPART_SIM_MILLIS = 60_000L; // ~1 sim-minute to clear the harbour
 
-    public DepartBehaviour(Agent agent) {
-        super(agent);
+    private final long departedBySimMillis;
+    private boolean informed = false;
+
+    public DepartBehaviour(Agent agent, SimClock simClock) {
+        super(agent, simClock, TICK_SIM_MILLIS);
+        this.departedBySimMillis = simClock.nowSimMillis() + DEPART_SIM_MILLIS;
     }
 
     @Override
-    public void action() {
-        log.debug("{} action stub", getClass().getSimpleName());
+    protected void onSimTick() {
+        BaseVesselAgent vessel = (BaseVesselAgent) myAgent;
+        Position p = vessel.position();
+        vessel.setPosition(new Position(p.x() - 1.0, p.y(), p.headingDeg())); // cosmetic
+        if (simClock().nowSimMillis() < departedBySimMillis) {
+            return;
+        }
+        if (!informed) {
+            vessel.serviceLocator().findUnique("harbour-master").ifPresent(hm -> {
+                ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);
+                inform.addReceiver(hm);
+                inform.setContent(TerminalJson.write(Map.of(
+                        "intent", "departed", "vessel_id", vessel.spec().vesselId())));
+                myAgent.send(inform);
+            });
+            informed = true;
+        }
+        log.info("{} departed -> doDelete", myAgent.getLocalName());
+        myAgent.doDelete();
     }
 }
