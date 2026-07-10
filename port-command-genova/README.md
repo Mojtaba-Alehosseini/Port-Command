@@ -1,7 +1,7 @@
 # Port Command Genova
 
 A single-player port-management game: a **JADE 4.6.0** multi-agent system gated by
-a **SWI-Prolog 10.0.2** rule kernel (in-process via **JPL 7**), with a **Rasa 3.16**
+a **SWI-Prolog 10.0.2** rule kernel (in-process via **JPL 7**), with a **Rasa OSS 3.6.21**
 NLU layer and a local **LLM** (Phi-4-mini). Java 21, Gradle (Kotlin DSL), Swing GUI.
 
 This directory is the buildable Gradle module. The authoritative specs live one
