@@ -19,11 +19,24 @@ test(r9_base_tugs_large) :- base_tugs(60000, 3).
 test(r10_tanker_minimum) :- type_tug_minimum(tanker, 2).
 test(r10_other_minimum)  :- type_tug_minimum(ferry, 0).
 
-% RULE R11
+% RULE R11 — canonical tug outcomes per PROJECT_DEFINITION S5.2 (updated by task 07b,
+% v1.1 2026-07-04: ferry exempt = own propulsion; every other type capped at 2 because
+% the fleet is 4 tugs — the pre-07b kernel gave big tankers/cargo 3. Doc-truth, not a
+% test weakening; see MASTER_PLAN S8 items 20-21).
+test(r11_ferry_zero_own_propulsion, [setup(mk_vessel(ev, ferry, 12000)), cleanup(rm_vessel(ev))]) :-
+    tugs_required(ev, N), N =:= 0.       % ferry exempt regardless of tonnage
 test(r11_tanker_small_still_two, [setup(mk_vessel(ev, tanker, 15000)), cleanup(rm_vessel(ev))]) :-
-    tugs_required(ev, N), N =:= 2.       % base 1, tanker minimum 2
-test(r11_cargo_large_three, [setup(mk_vessel(ev, cargo_vessel, 60000)), cleanup(rm_vessel(ev))]) :-
-    tugs_required(ev, N), N =:= 3.
+    tugs_required(ev, N), N =:= 2.       % base 1 lifted to tanker minimum 2
+test(r11_tanker_large_capped_two, [setup(mk_vessel(ev, tanker, 120000)), cleanup(rm_vessel(ev))]) :-
+    tugs_required(ev, N), N =:= 2.       % base 3 capped at 2 (fleet cap)
+test(r11_container_large_capped_two, [setup(mk_vessel(ev, container_vessel, 90000)), cleanup(rm_vessel(ev))]) :-
+    tugs_required(ev, N), N =:= 2.       % base 3 capped at 2
+test(r11_cargo_small_one, [setup(mk_vessel(ev, cargo_vessel, 15000)), cleanup(rm_vessel(ev))]) :-
+    tugs_required(ev, N), N =:= 1.       % <20k -> base 1, no type minimum
+test(r11_cargo_mid_two, [setup(mk_vessel(ev, cargo_vessel, 40000)), cleanup(rm_vessel(ev))]) :-
+    tugs_required(ev, N), N =:= 2.       % 20-50k -> base 2
+test(r11_cruise_large_capped_two, [setup(mk_vessel(ev, cruise_ship, 160000)), cleanup(rm_vessel(ev))]) :-
+    tugs_required(ev, N), N =:= 2.       % base 3 capped at 2
 
 % RULE R12
 test(r12_score_bid) :-

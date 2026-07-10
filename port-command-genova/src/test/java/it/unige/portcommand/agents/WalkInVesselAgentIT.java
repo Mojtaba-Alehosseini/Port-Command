@@ -62,8 +62,9 @@ class WalkInVesselAgentIT {
         boot.start(new BootstrapConfig(TEST_PORT, false, "realtime", 300));
 
         String vesselId = "W001";
-        // cargo_vessel (beam 23, needs general_crane) fits berth_1/2/3; a ferry can't berth anywhere
-        // (beam 25 > the only ro_ro berth's max beam 22).
+        // cargo_vessel (beam 23, needs general_crane) fits berth_1/2/3 — a representative walk-in.
+        // (Pre-07b a ferry couldn't berth anywhere; task 07b widened berth_4 to beam 26 so ferries
+        //  now fit too — but this IT keeps cargo_vessel as the canonical case.)
         VesselSpec spec = new VesselSpec(vesselId, "cargo_vessel", 8.0, 150.0, 30000, "general_cargo", 0L);
 
         // Prolog-verified compatible berth so the isCompatible guard passes and negotiation proceeds.

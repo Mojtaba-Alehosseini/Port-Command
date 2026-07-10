@@ -50,12 +50,21 @@ def to_snake(name: str) -> str:
 
 
 # --- static data (NOT OWL individuals; keeps the OWL clean) -------------------
-# Berth defaults: real Genova quay tariff data (Job 2 section 2.2). Do not change.
+# Berth defaults: real Genova quay tariff data (Job 2 section 2.2).
+# These numbers are the ontology *source of truth* for berth dimensions: the OWL
+# carries no berth individuals (only class/property schema), so the values live
+# here and are emitted verbatim into port_ontology.pl. Change them HERE, never in
+# the generated .pl.
+# Task 07b (v1.1, 2026-07-04): berth_2 has_max_length 250->340 (cruise up to 330 m
+# and containers up to 300 m must fit) and berth_4 has_max_beam 22->26 (ferry beam
+# 25 must fit) — reconciles the kernel to vessel_templates.json so every ship type
+# has >=1 compatible berth (test_spawnability.pl gate; MASTER_PLAN S8 item 20;
+# PROJECT_DEFINITION S5.2/S7.5). All other berth dimensions unchanged.
 BERTH_DEFAULTS = {
     "berth_1": {"has_max_draft": 22.0, "has_max_length": 350.0, "has_max_beam": 50.0},
-    "berth_2": {"has_max_draft": 14.0, "has_max_length": 250.0, "has_max_beam": 40.0},
+    "berth_2": {"has_max_draft": 14.0, "has_max_length": 340.0, "has_max_beam": 40.0},
     "berth_3": {"has_max_draft": 12.0, "has_max_length": 200.0, "has_max_beam": 32.0},
-    "berth_4": {"has_max_draft": 9.0, "has_max_length": 150.0, "has_max_beam": 22.0},
+    "berth_4": {"has_max_draft": 9.0, "has_max_length": 150.0, "has_max_beam": 26.0},
 }
 # Each berth maps to a *berth subclass* (subclass of berth in the OWL), never the
 # bare ``berth`` root, so the task-04 berth-class rules (R3) can fire.

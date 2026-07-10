@@ -11,14 +11,22 @@ base_tugs(_, 3).
 type_tug_minimum(tanker, 2) :- !.
 type_tug_minimum(VType, 0) :- vessel_type(VType).
 
-% RULE R11: tugs_required/2 — the greater of the tonnage bracket and the type minimum.
+% RULE R11: tugs_required/2 — ferry is exempt (own propulsion -> 0 tugs; task 07b,
+%   v1.1 2026-07-04); every other type takes max(tonnage bracket, type minimum)
+%   capped at 2, because the fleet is only 4 tugs (the pre-v1.1 kernel gave big
+%   tankers 3, which would starve the CNP and break the P&L's ~1-2-tugs/vessel
+%   assumption). Canonical outcomes: PROJECT_DEFINITION S5.2 — tanker/container/
+%   cruise 2, cargo 1-2, ferry 0. Rule count stays 30 (body change, not a new rule).
+tugs_required(Vessel, 0) :-
+    instance_of(Vessel, ferry),
+    !.
 tugs_required(Vessel, N) :-
     instance_of(Vessel, VType),
     vessel_type(VType),
     default(Vessel, has_tonnage, T),
     base_tugs(T, Base),
     type_tug_minimum(VType, Min),
-    N is max(Base, Min),
+    N is min(max(Base, Min), 2),
     !.
 
 % RULE R12: score_bid — higher is better; favours fuel, penalises cost and ETA.

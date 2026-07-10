@@ -18,6 +18,10 @@ berth_class_provides(deep_water_berth, hazmat_handling).
 berth_class_provides(deep_water_berth, general_crane).
 berth_class_provides(container_berth, container_crane).
 berth_class_provides(container_berth, general_crane).
+% berth_2 (container_berth) doubles as the scenic cruise quay (job2 S2.3 "Cruise
+% berth = B2"; task 07b, v1.1 2026-07-04) — gives cruise_ship a compatible berth
+% (its only other passenger_terminal provider, ferry_berth/berth_4, is far too small).
+berth_class_provides(container_berth, passenger_terminal).
 berth_class_provides(general_cargo_berth, general_crane).
 berth_class_provides(ferry_berth, ro_ro_ramp).
 berth_class_provides(ferry_berth, passenger_terminal).

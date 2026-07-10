@@ -54,7 +54,7 @@ primary-source check. A clean report has either confirmed each one (replacing
 |------|-----------|---------|---------------|----------------|--------|
 | R9 | `base_tugs/2` | tug count by gross tonnage bracket | <20000→1, <50000→2, else 3 | harbour towage / pilotage scaling — Capitaneria di Porto Genova ordinance | VERIFY |
 | R10 | `type_tug_minimum/2` | tanker minimum escort | tanker→2, others→0 | tanker approach-escort requirement — IMO / SOLAS + local tanker ordinance | VERIFY |
-| R11 | `tugs_required/2` | max(tonnage base, type minimum) | — | composition of R9 + R10 | DESIGN |
+| R11 | `tugs_required/2` | max(base, type-min) capped at 2 (fleet = 4); ferry exempt (own propulsion) | cap = fleet size (4 tugs); ferry own propulsion (task 07b) | composition of R9 + R10 | DESIGN |
 | R12 | `score_bid/2` | bid score (higher better) | `Fuel*100 − Cost*0.1 − Eta` | project CNP scoring model (task-04 decision D5) | DESIGN |
 | R13 | `best_n_bids/3` | top-N tugs by score, desc | tiebreaker: standard order of `Score-Tug` | composition | DESIGN |
 | R14 | `take_first_n/3`, `extract_tugs/2` | list helpers for R13 | — | composition | DESIGN |
@@ -62,7 +62,9 @@ primary-source check. A clean report has either confirmed each one (replacing
 > The tonnage brackets (20000 / 50000 t) and the tanker-minimum of 2 are the
 > `VERIFY` claims — real towage tariffs and tanker-escort rules scale with
 > tonnage, but the exact thresholds here are project approximations pending the
-> Capitaneria ordinance and AdSP towage tariff.
+> Capitaneria ordinance and AdSP towage tariff. The **2-tug cap** (fleet = 4) and
+> the **ferry own-propulsion exemption** (task 07b, PROJECT_DEFINITION §5.2) are
+> `DESIGN` game-balance choices, not a regulatory limit.
 
 ## `rules_weather.pl` — R15–R20 (operating limits)
 

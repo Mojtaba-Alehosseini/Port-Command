@@ -46,11 +46,16 @@ class PrologQueriesTest {
 
     // --- Escort ------------------------------------------------------------
 
+    // Canonical tug outcomes per PROJECT_DEFINITION S5.2 (updated by task 07b, v1.1
+    // 2026-07-04): ferry exempt (own propulsion); every other type capped at 2 because
+    // the fleet is only 4 tugs — the pre-07b kernel gave big tankers/cargo 3. See
+    // MASTER_PLAN S8 items 20-21; the full type x tonnage matrix is locked in test_escort.pl.
     @ParameterizedTest(name = "tugsRequired({0}, {1}) = {2}")
     @CsvSource({
+            "ferry,           15000, 0",   // ferry exempt — own propulsion (07b)
             "tanker,          15000, 2",   // base 1 (small) lifted to tanker minimum 2
-            "cargo_vessel,    60000, 3",   // large bracket
-            "ferry,           15000, 1",   // small bracket, no type minimum
+            "tanker,         120000, 2",   // base 3 (large) capped at 2 — fleet cap (07b)
+            "cargo_vessel,    60000, 2",   // base 3 (large) capped at 2 (07b)
             "container_vessel,30000, 2",   // mid bracket
     })
     void tugsRequiredByTypeAndTonnage(String vesselType, int tonnage, int expected) {

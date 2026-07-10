@@ -112,14 +112,14 @@ default(berth_1, has_max_draft, 22.0).
 default(berth_1, has_max_length, 350.0).
 default(berth_1, has_max_beam, 50.0).
 default(berth_2, has_max_draft, 14.0).
-default(berth_2, has_max_length, 250.0).
+default(berth_2, has_max_length, 340.0).
 default(berth_2, has_max_beam, 40.0).
 default(berth_3, has_max_draft, 12.0).
 default(berth_3, has_max_length, 200.0).
 default(berth_3, has_max_beam, 32.0).
 default(berth_4, has_max_draft, 9.0).
 default(berth_4, has_max_length, 150.0).
-default(berth_4, has_max_beam, 22.0).
+default(berth_4, has_max_beam, 26.0).
 
 % --- Per-vessel-type beam defaults (beam-fit rule R3, task 04) ---
 default(cargo_vessel, has_beam, 23.0).

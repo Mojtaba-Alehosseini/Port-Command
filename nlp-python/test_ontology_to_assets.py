@@ -132,9 +132,10 @@ def test_is_hazmat_clause(pl_text):
     "default(berth_1, has_max_length, 350.0).",
     "default(berth_1, has_max_beam, 50.0).",
     "default(berth_2, has_max_draft, 14.0).",
+    "default(berth_2, has_max_length, 340.0).",  # task 07b: 250 -> 340 (cruise/container fit)
     "default(berth_3, has_max_draft, 12.0).",
     "default(berth_4, has_max_draft, 9.0).",
-    "default(berth_4, has_max_beam, 22.0).",
+    "default(berth_4, has_max_beam, 26.0).",      # task 07b: 22 -> 26 (ferry beam 25 fits)
     "default(tanker, has_beam, 20.0).",
     "default(container_vessel, has_beam, 32.0).",
     "default(cruise_ship, has_beam, 35.0).",

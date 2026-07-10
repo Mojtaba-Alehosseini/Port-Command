@@ -28,8 +28,10 @@ class PrologRulesIT {
         PrologEngine.getInstance().init();
     }
 
+    // "spawnability" (task 07b) rides the same JPL lane as the five task-04 rule-module
+    // suites, proving the spawnability gate green in-process, not just under standalone swipl.
     @ParameterizedTest(name = "PLUnit suite ''{0}'' is all-green")
-    @ValueSource(strings = {"compatibility", "customs", "escort", "priority", "weather"})
+    @ValueSource(strings = {"compatibility", "customs", "escort", "priority", "spawnability", "weather"})
     void plunitSuitePasses(String suite) {
         PrologEngine e = PrologEngine.getInstance();
         String path = resolveTestSuite("/prolog/test_" + suite + ".pl");

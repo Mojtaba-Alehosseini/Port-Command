@@ -40,7 +40,7 @@ class VesselTemplatesTest {
     void samplingStaysWithinRangeAndIsDeterministic() {
         VesselTemplate tanker = VesselTemplates.forType("tanker");
         double min = tanker.sampleMinAcceptablePrice(new Random(7));
-        assertTrue(min >= 4000 && min <= 5500, "min sampled in range: " + min);
+        assertTrue(min >= 4000 && min <= 5200, "min sampled in range: " + min); // tanker band [4000,5200] (07b, S7.5)
         // same seed -> same draw
         assertEquals(tanker.sampleTargetPrice(new Random(7)), tanker.sampleTargetPrice(new Random(7)));
         int wait = tanker.sampleMaxWaitMinutes(new Random(3));
