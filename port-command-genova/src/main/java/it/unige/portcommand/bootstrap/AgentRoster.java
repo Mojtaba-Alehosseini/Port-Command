@@ -40,7 +40,13 @@ import org.slf4j.LoggerFactory;
 public final class AgentRoster {
 
     private static final Logger log = LoggerFactory.getLogger(AgentRoster.class);
-    private static final Position TUG_BASE = new Position(0.0, 0.0, 0.0);
+    // Tug pier next to the breakwater — four berths stacked vertically (task 08 §8.6).
+    private static final Position[] TUG_BASES = {
+            new Position(50.0, 100.0, 0.0),
+            new Position(50.0, 150.0, 0.0),
+            new Position(50.0, 200.0, 0.0),
+            new Position(50.0, 250.0, 0.0),
+    };
 
     private AgentRoster() {
     }
@@ -62,8 +68,10 @@ public final class AgentRoster {
 
         for (int i = 1; i <= 4; i++) {
             String id = "tug_" + i;
-            spawner.spawn(id, TugAgent.class,
-                    new Object[] {new TugInitArgs(id, TUG_BASE, 350.0, 2.0, 12.0, 1.0)});
+            // args[1]=portState, args[2]=simClock injected (not the serializable init record) —
+            // same channel as the terminals, so the tug can publish position + drive sim-time motion.
+            spawner.spawn(id, TugAgent.class, new Object[] {
+                    new TugInitArgs(id, TUG_BASES[i - 1], 350.0, 2.0, 12.0, 1.0), portState, simClock});
         }
 
         log.info("Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)");
