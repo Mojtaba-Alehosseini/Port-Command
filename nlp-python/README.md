@@ -101,6 +101,129 @@ Entity **values** are normalised to the ontology vocabulary
 → `container_vessel`, `berth 3` → `berth_3`, `class 3` → `hazmat_class_3` — via
 `EntitySynonymMapper`. `tug_name` values are the AgentRoster ids `tug_1..tug_4`.
 
+## LLM sidecar (task 13)
+
+A Flask service on **port 5006** that turns a decision trace into a 2-3 sentence
+prose explanation for the Assistant. It loads one local instruction model once at
+startup and serves deterministic (`do_sample=False`, greedy) completions.
+
+```bash
+cd nlp-python
+./start_llm.sh          # foreground; Windows: start_llm.bat
+```
+
+`/health` returns **503 `{"ready": false}`** while the model loads and **200
+`{"ready": true, ...}`** once warmup finishes. `POST /explain` accepts:
+
+```jsonc
+{
+  "prompt": "Recommend accept at 2000 ...",   // required (plain text; the sidecar
+                                               //   applies the model's OWN chat template)
+  "system": "You are the harbour-master's ...",// optional system instruction
+  "required_numbers": ["2000", "3"],           // optional; validator inputs
+  "required_entities": ["Aurora"],             // optional; validator inputs
+  "validate": true                             // optional; run the validator
+}
+// -> {"text": "...", "validated": true|false|null, "gen_seconds": 1.23}
+```
+
+`validated` is `null` when `validate` was not requested; `false` never blocks the
+response — the Java caller decides whether to use the text or fall back to the
+template (planning/13 §13.4). Prompts over `LLM_MAX_PROMPT_CHARS` (4096) → 400;
+model-not-ready → 503; generation error → 500 (type only, no stack trace).
+
+### Model selection & quantization
+
+| `settings.json` `llm.model` / `LLM_MODEL` | HF repo | License | Notes |
+|---|---|---|---|
+| `phi-4-mini` (default) | `microsoft/Phi-4-mini-instruct` | **MIT** | causal LM, `trust_remote_code=True` |
+| `gemma-3-4b` | `google/gemma-3-4b-it` | **Gemma Terms** | **🔒 HF-gated** — see below; multimodal checkpoint |
+
+`settings.json` is owned by task 15 and is **tolerated absent** — without it the
+sidecar defaults to `phi-4-mini`. The env var `LLM_MODEL` overrides it.
+
+**Gemma is HF-gated.** To use `gemma-3-4b` you must accept the license at
+<https://huggingface.co/google/gemma-3-4b-it> and provide a token
+(`huggingface-cli login`). The code branch (multimodal `Gemma3ForConditionalGeneration`
++ `AutoProcessor`) is implemented and unit-tested for config/branch resolution, but
+the real Gemma download is **deferred to the report-time A/B comparison** — CI never
+loads it.
+
+### Environment variables
+
+| Var | Default | Meaning |
+|---|---|---|
+| `LLM_MODEL` | *(settings.json → `phi-4-mini`)* | `phi-4-mini` \| `gemma-3-4b` |
+| `LLM_DEVICE` | `cpu` | `cpu` \| `cuda` |
+| `LLM_QUANT` | `none` | `none` (fp16/bf16) \| `int4` \| `gguf` |
+| `LLM_HOST` / `LLM_PORT` | `127.0.0.1` / `5006` | bind address |
+| `LLM_MAX_NEW_TOKENS` | `120` | generation cap (80 also fits 2-3 sentences, faster) |
+| `LLM_MAX_PROMPT_CHARS` | `4096` | reject longer prompts with 400 |
+| `LLM_LOG_LEVEL` / `LLM_LOG_FILE` | `INFO` / *(console)* | logging |
+| `LLM_AUTOLOAD` | `1` | `0` disables the import-time loader (used by tests) |
+| `LLM_VOCAB_PATH` | `rasa/data/ontology_vocab.yml` | validator gazetteer source |
+
+### Quantized fallbacks (low-RAM machines)
+
+Default `LLM_QUANT=none` loads fp16/bf16 (~7.6 GB RAM). For a smaller/faster
+footprint, install the optional extra (commented in `requirements-llm.txt`) and set:
+
+- **`LLM_QUANT=gguf`** (CPU-quantized, ~2-3 GB, and the *fast* CPU path in
+  principle): loads `unsloth/Phi-4-mini-instruct-GGUF` via `llama-cpp-python`.
+  **Caveat (measured):** the prebuilt wheels don't work on the dev CPU — see
+  **Performance** below; a from-source AVX2 build is required there.
+- **`LLM_QUANT=int4`** (**CUDA only** — bitsandbytes 4-bit kernels need a GPU):
+  `pip install bitsandbytes`, loads `unsloth/Phi-4-mini-instruct-bnb-4bit` (~3 GB).
+
+### Performance (measured 2026-07-12, task 13)
+
+> ⚠️ **On CPU, fp16 is correct but far too slow for interactive play.** On the dev
+> laptop (i7-8850H, no AVX-512), Phi-4-mini at `LLM_QUANT=none` measured **load 37 s,
+> generation ≈ 9 minutes** for a ~66-token explanation (0.1 tok/s — the CPU has no
+> native bf16, so PyTorch emulates it ~100× slower). Output is correct and
+> deterministic — just slow.
+
+Because of this, the Assistant treats the LLM as **optional polish**: the Java
+`LLMBridge` (task 14) calls `/explain` asynchronously with a config-driven timeout
+and shows the **template text** whenever the LLM does not answer in time (which, on
+this CPU, is always). To actually see LLM text in a demo you need a faster backend:
+
+- **GGUF** would be the CPU answer, but is **blocked on this CPU by a wheel
+  version-squeeze**: `llama-cpp-python` 0.3.x (which supports the Phi-4 GGUF arch)
+  ships an AVX-512 wheel that crashes (`0xc000001d`) on Coffee Lake, and 0.2.90 (AVX2)
+  is too old to load the Phi-4 GGUF. A working build needs compiling from source:
+  `CMAKE_ARGS="-DGGML_AVX512=OFF -DGGML_AVX2=ON -DGGML_NATIVE=OFF" pip install llama-cpp-python`.
+- **GPU** (the P2000, 5 GB) fits INT4 (~3 GB) but not fp16 (~7.6 GB); INT4 via
+  bitsandbytes is untested on Pascal + Windows.
+
+### Weights cache
+
+`transformers` downloads to the HuggingFace hub cache (`~/.cache/huggingface/hub`,
+or `%USERPROFILE%\.cache\huggingface\hub` on Windows) — **outside the repo**, so
+nothing is committed. First run downloads ~7.6 GB; pre-fetch with
+`huggingface-cli download microsoft/Phi-4-mini-instruct`.
+
+### The hallucination validator
+
+`validator.py` mirrors the task-10 Java `HallucinationValidator` (planning/10
+§10.4): (1) every required number must appear in the output — with v1.1 numeric
+normalisation so `€2,000` / `2 000` / `85%` compare equal to `2000` / `2000` /
+`85`; (2) every capitalised, non-sentence-initial, non-common-word token must be
+in the gazetteer (ontology entities ∪ per-call `required_entities`) — catching
+fabricated vessel/tug names. The Java side additionally runs a positive-control
+(`allFigures()`); that needs the full `Recommendation` object the sidecar never
+receives, so it stays Java-side.
+
+### Manual real-model smoke
+
+```bash
+./start_llm.sh &                                             # loads the model
+.venv/Scripts/python -m llm_sidecar.tests.smoke_real_model   # health, determinism, validator, latency
+```
+
+Not part of the commit gate — it loads real weights. The mocked pytest suite
+(`llm_sidecar/tests/`) never loads weights and runs in <1 s.
+
 ## Notes
 
 - **`set_policy` is a routing label only.** The Java layer hands the raw player
@@ -116,13 +239,21 @@ Entity **values** are normalised to the ontology vocabulary
 nlp-python/
 ├── requirements.txt          # two-venv router (installs nothing itself)
 ├── requirements-rasa.txt     # -> .venv-rasa (3.10): rasa==3.6.21
-├── requirements-llm.txt      # -> .venv (3.11): owlready2 (+ task-13 LLM deps)
+├── requirements-llm.txt      # -> .venv (3.11): owlready2 + Flask/transformers/torch (task 13)
 ├── csv_to_nlu.py             # authoring CSV -> nlu.yml + test_holdout.yml
 ├── test_csv_to_nlu.py        # pytest (split routing, leakage guard, canonical entities)
 ├── ontology_to_assets.py     # task 02 (OWL -> Prolog + Rasa vocab)
 ├── start_rasa.sh / .bat      # launch NLU server on 5005
+├── start_llm.sh / .bat       # launch LLM sidecar on 5006 (task 13)
 ├── train_rasa.sh             # regenerate + train
 ├── test_rasa.sh              # holdout gate + 5-fold CV
+├── llm_sidecar/              # Flask LLM sidecar (task 13)
+│   ├── config.py             # env + settings.json resolution (pure stdlib)
+│   ├── model.py              # LLMModel: lazy load, per-model chat template, greedy generate
+│   ├── validator.py          # HallucinationValidator (mirrors task-10 Java §10.4)
+│   ├── prompts.py            # DEFAULT_SYSTEM_PROMPT constant
+│   ├── server.py             # Flask app: /health, /explain (module-init loader)
+│   └── tests/                # mocked pytest (no weights) + smoke_real_model.py (manual)
 └── rasa/
     ├── config.yml            # DIET pipeline (100 epochs, char_wb 1-4)
     ├── domain.yml            # 9 intents / 8 entities
