@@ -1,0 +1,24 @@
+# NLP tooling + LLM sidecar dependencies — Port Command Genova.
+#
+# PYTHON 3.10 or 3.11 ONLY (never 3.12+). Installed into the primary venv:
+#
+#   py -3.11 -m venv .venv
+#   .venv/Scripts/pip install -r requirements-llm.txt
+#
+# This is the interpreter the pre-commit hook runs pytest under, and the one the
+# ontology converter (task 02) and the Flask LLM sidecar (task 13) use. It is a
+# SEPARATE process from the Rasa service, which runs on Python 3.10 out of
+# .venv-rasa (see requirements-rasa.txt) because rasa 3.6.21 forbids 3.11.
+
+# --- Ontology converter (task 02) ---
+# owlready2 is used only as an OWL *parser* by ontology_to_assets.py (no reasoner).
+owlready2==0.46
+
+# --- Flask LLM sidecar (task 13) — pins added when task 13 lands ---
+# Deferred here on purpose: transformers/torch/accelerate are ~2 GB and are not
+# needed to author, train, or gate the Rasa pipeline (task 12). Task 13 will add:
+#   flask==2.3.*
+#   transformers==4.49.*
+#   torch==2.5.1
+#   accelerate==1.3.0
+# (optional extras it may add: bitsandbytes, llama-cpp-python — see planning/13.)

@@ -1,7 +1,17 @@
-# Python deps for the Port Command Genova NLP side.
-# Python 3.10/3.11 ONLY (never 3.12+) — see the design rules / task 02.
-# Install into a venv:  py -3.11 -m venv .venv && .venv/Scripts/pip install -r requirements.txt
+# Port Command Genova — Python dependencies are SPLIT across two venvs.
 #
-# owlready2 is used only as an OWL *parser* by ontology_to_assets.py (no reasoner).
-# Other deps (Rasa, Flask, ...) are added by later tasks.
-owlready2==0.46
+# rasa 3.6.21 declares Requires-Python ">=3.8,<3.11" (verified 2026-07-11 via
+# `pip index versions rasa` + PyPI), so it cannot share an interpreter with the
+# 3.11 tooling. Task 12 therefore splits the deps into two files, per the
+# planning/12 v1.1 addendum:
+#
+#   requirements-rasa.txt  -> Python 3.10 venv  (.venv-rasa)   Rasa NLU service
+#   requirements-llm.txt   -> Python 3.11 venv  (.venv)        converter + sidecar + pytest
+#
+# Set up both:
+#   py -3.10 -m venv .venv-rasa && .venv-rasa/Scripts/pip install -r requirements-rasa.txt
+#   py -3.11 -m venv .venv      && .venv/Scripts/pip     install -r requirements-llm.txt
+#
+# This file intentionally installs NOTHING (`-r` the split files explicitly).
+# It exists so `nlp-python/requirements.txt` still resolves to a real, self-
+# describing file (referenced by MASTER_PLAN.md and planning/02).

@@ -1,0 +1,37 @@
+# Rasa domain — Port Command Genova (task 12).
+# 9 intents, 8 entities — EXACTLY per PROJECT_DEFINITION.md 6.3. Do not add/rename.
+version: "3.1"
+
+intents:
+  - propose_offer
+  - counter_offer
+  - accept_deal
+  - reject_deal
+  - query_status
+  - set_constraint
+  # set_policy is a ROUTING LABEL ONLY. When the Java confidence gate (task 14)
+  # classifies an utterance as set_policy, it hands the RAW player text to
+  # PolicyParser (task 10, regex-DSL) and INTENTIONALLY IGNORES any entities Rasa
+  # extracted on this path. Rasa entities still matter for the other 8 intents.
+  # (PROJECT_DEFINITION.md 6.3 note; planning/12 12.3.)
+  - set_policy
+  - request_help
+  - cancel_action
+
+entities:
+  - vessel_name
+  - vessel_class
+  - berth_id
+  - tug_name
+  - time_expression
+  - price_expression
+  - cargo_class
+  - hazmat_code
+
+responses:
+  utter_help:
+    - text: "Available commands: propose a price, accept, reject, ask about vessel status, withdraw."
+
+session_config:
+  session_expiration_time: 60
+  carry_over_slots_to_new_session: true

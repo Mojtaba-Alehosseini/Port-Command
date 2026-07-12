@@ -1,0 +1,112 @@
+# AUTO-GENERATED FROM data/nlu_authoring.csv BY csv_to_nlu.py. DO NOT EDIT.
+# Edit the authoring CSV and regenerate (see nlp-python/README.md).
+version: "3.1"
+nlu:
+- intent: propose_offer
+  examples: |
+    - We would offer [1500](price_expression) for [10 hours](time_expression)
+    - I can put [2200](price_expression) on the table for [2 hours](time_expression)
+    - Starting bid [2500](price_expression) for [9 hours](time_expression) at [quay 2]{"entity": "berth_id", "value": "berth_2"}
+    - I'd pay [1900](price_expression) to berth for [5 hrs](time_expression)
+    - We can manage [1600](price_expression) for [6 hrs](time_expression)
+    - Our bid is [2400](price_expression) for [half a day](time_expression) at [slip 3]{"entity": "berth_id", "value": "berth_3"}
+    - [MSC Aurora](vessel_name): [1750](price_expression) over [24 hours](time_expression)
+    - I'll stake [2100](price_expression) for [8h](time_expression)
+    - willing to pay [1450](price_expression) for [seven hours](time_expression)
+    - We tender [2800](price_expression) for [a couple of hours](time_expression) at [pier 4]{"entity": "berth_id", "value": "berth_4"}
+- intent: counter_offer
+  examples: |
+    - How about [3000](price_expression) for [5 hrs](time_expression) to close
+    - Counter with [2600](price_expression) instead
+    - Can we land at [1200](price_expression)
+    - What if I said [5000](price_expression)
+    - Let's compromise at [4500](price_expression)
+    - I'll stretch to [3500](price_expression)
+    - Let's nudge it to [2300](price_expression) instead
+    - How about we settle [1950](price_expression)
+    - [2050 euros](price_expression) then, deal
+    - meet halfway at [1850 euros](price_expression)
+- intent: accept_deal
+  examples: |
+    - It's a deal then
+    - Ok, that works
+    - Sure, let's proceed
+    - Agreed, we have a deal
+    - Yes, I accept that
+    - Fine, good deal
+    - I'll take that one
+    - That's done then
+    - Sounds good, I'm in
+    - Happy to accept
+- intent: reject_deal
+  examples: |
+    - No, we'll pass on that
+    - No, we'll walk
+    - Not even close
+    - Rejected
+    - We won't take that
+    - Way too low for us
+    - Sorry, no
+    - That's a hard pass
+    - Can't make that work
+    - No, decline it
+- intent: query_status
+  examples: |
+    - Tell me [Adriatic Pearl](vessel_name)'s draft
+    - How big is [Maersk Genova](vessel_name)
+    - What's the arrival time for [Genoa Star](vessel_name)
+    - What's the status of [MSC Aurora](vessel_name)
+    - Which berths are available
+    - What's the ETA of [CMA Lupo](vessel_name)
+    - Current position of [tug 3]{"entity": "tug_name", "value": "tug_3"}
+    - How many berths are free
+    - How long until [Costa Liguria](vessel_name) arrives
+    - Give me a status report
+- intent: set_constraint
+  examples: |
+    - Prevent [cruise vessel]{"entity": "vessel_class", "value": "cruise_ship"} from docking
+    - Keep the [hazmat class 1]{"entity": "hazmat_code", "value": "hazmat_class_1"} cargo offshore
+    - No arrivals at [berth 4]{"entity": "berth_id", "value": "berth_4"} tonight
+    - Bar [tanker]{"entity": "vessel_class", "value": "tanker"} from the inner harbour
+    - Hold [Ponte Vecchio](vessel_name) until further notice
+    - Seal off [dock 1]{"entity": "berth_id", "value": "berth_1"}
+    - Do not admit [tankers]{"entity": "vessel_class", "value": "tanker"}
+    - Restrict [bulk liquids]{"entity": "cargo_class", "value": "liquid_bulk"} to [dock 2]{"entity": "berth_id", "value": "berth_2"}
+    - Suspend berthing for [container vessel]{"entity": "vessel_class", "value": "container_vessel"}
+    - No oversized vessels at [dock 3]{"entity": "berth_id", "value": "berth_3"}
+- intent: set_policy
+  examples: |
+    - Auto-approve any offer above [4500](price_expression)
+    - Make counter-first the default
+    - Decline everything under [3500](price_expression)
+    - Set the auto-accept line at [2300](price_expression)
+    - Never settle below [1950](price_expression)
+    - Always auto-accept [liquid bulk]{"entity": "cargo_class", "value": "liquid_bulk"} past [2050 euros](price_expression)
+    - Standing order, reject under [1850 euros](price_expression)
+    - Automatically counter low offers
+    - Keep a hard floor at [2k](price_expression)
+    - Auto-accept [Nordic Breeze](vessel_name) over [1800 euros](price_expression)
+- intent: request_help
+  examples: |
+    - Can you explain the commands
+    - What options do I have
+    - Show me what I can do
+    - How do I get started
+    - I could use some help
+    - What's possible here
+    - Tell me the commands
+    - How do things work here
+    - Need a hand
+    - What are the available actions
+- intent: cancel_action
+  examples: |
+    - Let's cancel
+    - Scrap the negotiation
+    - I'm pulling out
+    - Cancel it all
+    - Abort this
+    - Withdraw the request
+    - Call it off now
+    - Stop the booking
+    - Never mind then
+    - Drop the deal

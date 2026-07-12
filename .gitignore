@@ -14,13 +14,19 @@ MTPs-*.txt
 # .gitkeep files in lib/ are still tracked.
 **/lib/*.jar
 
-# Rasa trained models (regenerated)
-nlp-python/rasa/models/
+# Rasa trained models (regenerated) — keep the dir, ignore the .tar.gz models
+nlp-python/rasa/models/*
+!nlp-python/rasa/models/.gitkeep
+# Rasa run/test artefacts (regenerated)
+nlp-python/rasa/results/
+nlp-python/rasa/.rasa/
+nlp-python/rasa/graph.html
 
 # Python
 __pycache__/
 *.pyc
 .venv/
+.venv-rasa/
 venv/
 .pytest_cache/
 
