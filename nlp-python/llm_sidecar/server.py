@@ -80,6 +80,7 @@ def _ensure_model_loaded() -> None:
                 device=config.LLM_DEVICE,
                 max_new_tokens=config.LLM_MAX_NEW_TOKENS,
                 gguf_file=config.LLM_GGUF_FILE,
+                onnx_dir=config.LLM_ONNX_DIR,
             )
             model = m  # publish only once fully warmed up
             log.info("model ready in %.1fs", time.perf_counter() - t0)

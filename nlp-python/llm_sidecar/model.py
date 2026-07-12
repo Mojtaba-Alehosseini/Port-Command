@@ -11,9 +11,14 @@ Determinism: generation uses ``do_sample=False`` (greedy) and passes NO
 ``temperature``/``top_p`` — with greedy decoding those are inert and transformers
 warns about them (planning/13 "common mistakes").
 
-Import policy: torch / transformers / llama_cpp are imported LAZILY inside the
-loader methods, so ``import llm_sidecar.model`` is cheap and dependency-free. The
-pytest suite mocks ``LLMModel`` and never triggers a real load or download.
+Import policy: torch / transformers / llama_cpp / onnxruntime_genai are imported
+LAZILY inside the loader methods, so ``import llm_sidecar.model`` is cheap and
+dependency-free. The pytest suite mocks ``LLMModel`` and never triggers a real
+load or download.
+
+Backends (``LLM_QUANT``): ``none`` fp16/bf16 + ``int4`` bitsandbytes + ``gguf``
+llama.cpp (task 13), plus ``onnx`` — ONNX Runtime GenAI CPU-INT4, the FAST CPU
+path added in task 13b (Phi-4-only; see ``resolve_load_plan``).
 """
 from __future__ import annotations
 
@@ -45,6 +50,20 @@ def _pad_token_id(tok):
     return pad
 
 
+def _phi4_prompt(messages: list[dict]) -> str:
+    """Manual Phi-4-mini chat format — FALLBACK for the onnx backend ONLY, used
+    only if the GenAI tokenizer's ``apply_chat_template`` is unavailable. Mirrors
+    the model's tokenizer_config chat_template: each turn renders
+    ``<|role|>content<|end|>`` then ``<|assistant|>`` opens the reply. Hard-coding
+    these tags is safe HERE because the onnx backend hosts EXCLUSIVELY
+    microsoft/Phi-4-mini-instruct-onnx (``resolve_load_plan`` rejects onnx for any
+    other model) — unlike the transformers path, which stays template-agnostic so
+    it also works for Gemma."""
+    parts = [f"<|{m['role']}|>{m['content']}<|end|>" for m in messages]
+    parts.append("<|assistant|>")
+    return "".join(parts)
+
+
 # Phi-4-mini ships custom modeling code on the Hub -> trust_remote_code=True.
 _TRUST_REMOTE_CODE = {"phi-4-mini": True, "gemma-3-4b": False}
 # Gemma-3-4B is an image-text-to-text checkpoint (loads via
@@ -59,20 +78,40 @@ class LoadPlan:
     quant: str
     device: str
     repo_id: str
-    backend: str            # "causal_lm" | "multimodal" | "gguf"
+    backend: str            # "causal_lm" | "multimodal" | "gguf" | "onnx"
     trust_remote_code: bool
     multimodal: bool
 
 
-def resolve_load_plan(model_key: str, quant: str, device: str, base_repo_id: str) -> LoadPlan:
+def resolve_load_plan(
+    model_key: str, quant: str, device: str, base_repo_id: str,
+    onnx_dir: str | None = None,
+) -> LoadPlan:
     """Pure branch logic (no imports, no I/O) — unit-tested without weights."""
     quant = (quant or "none").lower()
-    if quant not in {"none", "int4", "gguf"}:
-        raise ValueError(f"unknown LLM_QUANT {quant!r}; expected none|int4|gguf")
+    if quant not in {"none", "int4", "gguf", "onnx"}:
+        raise ValueError(f"unknown LLM_QUANT {quant!r}; expected none|int4|gguf|onnx")
     if model_key not in _MULTIMODAL:
         raise ValueError(f"unknown model key {model_key!r}")
     multimodal = _MULTIMODAL[model_key]
-    if quant == "gguf":
+    if quant == "onnx":
+        # ONNX Runtime GenAI CPU-INT4 (task 13b) — the FAST CPU path. Phi-4-ONLY:
+        # microsoft/Phi-4-mini-instruct-onnx ships only Phi-4 weights, so refuse
+        # onnx for any other model rather than silently mis-loading a Gemma dir.
+        if model_key != "phi-4-mini":
+            raise ValueError(
+                "LLM_QUANT=onnx is Phi-4-only (the ONNX repo hosts only phi-4-mini); "
+                f"got model_key={model_key!r}"
+            )
+        if not onnx_dir:
+            # the onnx backend loads a LOCAL filesystem dir, not an HF id — refuse to
+            # silently fall back to a repo id that og.Model() would fail on obscurely.
+            raise ValueError(
+                "LLM_QUANT=onnx requires a local model dir (onnx_dir / LLM_ONNX_DIR)"
+            )
+        # repo_id carries the LOCAL onnx model dir for this backend (not an HF id).
+        repo, backend = onnx_dir, "onnx"
+    elif quant == "gguf":
         repo, backend = _GGUF_REPO[model_key], "gguf"
     elif quant == "int4":
         repo = _INT4_REPO[model_key]
@@ -106,9 +145,10 @@ class LLMModel:
         device: str = "cpu",
         max_new_tokens: int = 120,
         gguf_file: str = "*Q4_K_M.gguf",
+        onnx_dir: str | None = None,
         warmup: bool = True,
     ):
-        self.plan = resolve_load_plan(model_key, quant, device, base_repo_id)
+        self.plan = resolve_load_plan(model_key, quant, device, base_repo_id, onnx_dir=onnx_dir)
         self.max_new_tokens = max_new_tokens
         self.gguf_file = gguf_file
         self.ready = False
@@ -116,6 +156,10 @@ class LLMModel:
         self._tok = None       # AutoTokenizer (Phi-4) or AutoProcessor (Gemma-3)
         self._model = None     # transformers model (causal_lm / multimodal)
         self._llama = None     # llama_cpp.Llama (gguf backend)
+        self._og = None        # onnxruntime_genai module (onnx backend)
+        self._og_model = None  # og.Model (onnx backend)
+        self._og_tok = None    # og.Tokenizer (onnx backend)
+        self._eos_ids: set[int] = set()  # onnx: eos ids stripped from the output slice
         self._load()
         if warmup:
             self._warmup()
@@ -125,7 +169,9 @@ class LLMModel:
 
     # --- loading -------------------------------------------------------------
     def _load(self) -> None:
-        if self.plan.backend == "gguf":
+        if self.plan.backend == "onnx":
+            self._load_onnx()
+        elif self.plan.backend == "gguf":
             self._load_gguf()
         elif self.plan.backend == "multimodal":
             self._load_multimodal()
@@ -182,6 +228,25 @@ class LLMModel:
             verbose=False,
         )
 
+    def _load_onnx(self) -> None:
+        """ONNX Runtime GenAI CPU-INT4 backend (task 13b) — the FAST CPU path for
+        Phi-4-mini. Loads the LOCAL cpu-int4 ONNX model dir (``plan.repo_id``, a
+        filesystem path downloaded out-of-repo, never an HF id). onnxruntime_genai
+        is imported lazily so ``import llm_sidecar.model`` stays torch/ORT-free and
+        the pytest suite is hermetic."""
+        import onnxruntime_genai as og
+
+        model_dir = self.plan.repo_id
+        self._og = og
+        self._og_model = og.Model(model_dir)
+        self._og_tok = og.Tokenizer(self._og_model)
+        # eos ids for slicing the reply cleanly (genai_config: [200020, 199999]).
+        # decode() has no skip_special_tokens flag, so we drop eos ids ourselves.
+        try:
+            self._eos_ids = {int(x) for x in self._og_tok.eos_token_ids}
+        except Exception:  # noqa: BLE001 — tolerate API drift; genai_config still stops gen
+            self._eos_ids = set()
+
     # --- generation ----------------------------------------------------------
     def _warmup(self) -> None:
         """One tiny greedy generation to trigger lazy kernel init before /health
@@ -199,6 +264,8 @@ class LLMModel:
             return self._run(messages, self.max_new_tokens)
 
     def _run(self, messages: list[dict], max_new_tokens: int) -> str:
+        if self.plan.backend == "onnx":
+            return self._run_onnx(messages, max_new_tokens)
         if self.plan.backend == "gguf":
             return self._run_gguf(messages, max_new_tokens)
         return self._run_transformers(messages, max_new_tokens)
@@ -237,3 +304,60 @@ class LLMModel:
             messages=messages, max_tokens=max_new_tokens, temperature=0.0
         )
         return out["choices"][0]["message"]["content"].strip()
+
+    def _run_onnx(self, messages: list[dict], max_new_tokens: int) -> str:
+        """Deterministic greedy generation via ONNX Runtime GenAI (task 13b).
+
+        do_sample=False → greedy argmax → byte-identical output (the genai_config
+        already defaults to greedy; we set it explicitly so the guarantee does not
+        depend on the shipped config). ``max_length`` is the TOTAL sequence budget
+        (prompt + new), so we add the prompt length to honour ``max_new_tokens``.
+        A fresh GeneratorParams/Generator per call is the ORT-GenAI pattern; the
+        Model + Tokenizer are reused, and the whole call is serialized by the
+        instance lock in ``generate``.
+        """
+        import numpy as np
+
+        og = self._og
+        input_ids = self._onnx_encode(messages)
+        input_len = int(np.asarray(input_ids).shape[-1])
+
+        params = og.GeneratorParams(self._og_model)
+        params.set_search_options(
+            do_sample=False,                       # greedy → deterministic
+            max_length=input_len + max_new_tokens,
+        )
+        gen = og.Generator(self._og_model, params)
+        gen.append_tokens(input_ids)
+        while not gen.is_done():
+            gen.generate_next_token()
+
+        seq = gen.get_sequence(0)                  # full sequence: prompt + reply
+        new = [int(t) for t in seq[input_len:] if int(t) not in self._eos_ids]
+        if not new:
+            return ""
+        return self._og_tok.decode(np.asarray(new, dtype=np.int32)).strip()
+
+    def _onnx_encode(self, messages: list[dict]):
+        """Chat-template + tokenize for the ONNX tokenizer → an int32 id array.
+
+        Prefer the GenAI tokenizer's own ``apply_chat_template`` (it applies the
+        model's EMBEDDED Phi-4 template, so we stay tag-agnostic like the
+        transformers path). Some ORT-GenAI builds return the rendered string and
+        some return token ids — handle both. Fall back to the manual Phi-4 tag
+        format only if the templating call is unavailable (Phi-4-only is correct
+        for this backend; see ``_phi4_prompt``).
+        """
+        import json
+
+        import numpy as np
+
+        tok = self._og_tok
+        messages_json = json.dumps(messages)
+        try:
+            templated = tok.apply_chat_template(messages_json, add_generation_prompt=True)
+        except Exception:  # noqa: BLE001 — no usable embedded template on this build
+            templated = _phi4_prompt(messages)
+        if isinstance(templated, np.ndarray):
+            return templated.astype(np.int32)
+        return tok.encode(templated)

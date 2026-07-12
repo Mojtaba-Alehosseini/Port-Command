@@ -155,27 +155,54 @@ loads it.
 |---|---|---|
 | `LLM_MODEL` | *(settings.json → `phi-4-mini`)* | `phi-4-mini` \| `gemma-3-4b` |
 | `LLM_DEVICE` | `cpu` | `cpu` \| `cuda` |
-| `LLM_QUANT` | `none` | `none` (fp16/bf16) \| `int4` \| `gguf` |
+| `LLM_QUANT` | `none` | `none` (fp16/bf16) \| `int4` \| `gguf` \| `onnx` (fast CPU path — task 13b) |
 | `LLM_HOST` / `LLM_PORT` | `127.0.0.1` / `5006` | bind address |
 | `LLM_MAX_NEW_TOKENS` | `120` | generation cap (80 also fits 2-3 sentences, faster) |
 | `LLM_MAX_PROMPT_CHARS` | `4096` | reject longer prompts with 400 |
 | `LLM_LOG_LEVEL` / `LLM_LOG_FILE` | `INFO` / *(console)* | logging |
 | `LLM_AUTOLOAD` | `1` | `0` disables the import-time loader (used by tests) |
 | `LLM_VOCAB_PATH` | `rasa/data/ontology_vocab.yml` | validator gazetteer source |
+| `LLM_ONNX_DIR` | `~/.cache/port-command-genova/…/cpu-int4-rtn-block-32-acc-level-4` | local ONNX-INT4 model dir (task 13b) |
+
+### Fast CPU backend: ONNX Runtime GenAI INT4 (`LLM_QUANT=onnx`) — recommended
+
+**The fast CPU path** (task 13b). Phi-4-mini int4 via ONNX Runtime GenAI measured
+**~4.56 tok/s ≈ 17 s/explanation** on the dev laptop (i7-8850H, AVX2, no AVX-512) —
+**~31× faster** than the fp16 default's ~9 min (see Performance). Deterministic
+(byte-identical), all figures preserved. Prebuilt CPU wheel (in `requirements-llm.txt`):
+no CUDA, no compile.
+
+One-time setup — weights live **outside the repo** (~4.9 GB), never committed:
+
+```bash
+huggingface-cli download microsoft/Phi-4-mini-instruct-onnx \
+  --include "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/*" \
+  --local-dir "$HOME/.cache/port-command-genova/Phi-4-mini-instruct-onnx"
+```
+
+Then `start_llm.{sh,bat}` **auto-selects** `LLM_QUANT=onnx` when the model is present
+(the portable default stays `none`); or set `LLM_QUANT=onnx` explicitly. `LLM_ONNX_DIR`
+overrides the model location. onnx is **Phi-4-only** (the ONNX repo hosts only Phi-4);
+the sidecar refuses `LLM_QUANT=onnx` for `gemma-3-4b`.
 
 ### Quantized fallbacks (low-RAM machines)
 
 Default `LLM_QUANT=none` loads fp16/bf16 (~7.6 GB RAM). For a smaller/faster
 footprint, install the optional extra (commented in `requirements-llm.txt`) and set:
 
-- **`LLM_QUANT=gguf`** (CPU-quantized, ~2-3 GB, and the *fast* CPU path in
-  principle): loads `unsloth/Phi-4-mini-instruct-GGUF` via `llama-cpp-python`.
+- **`LLM_QUANT=gguf`** (CPU-quantized, ~2-3 GB; **superseded by `onnx` above** as the
+  fast CPU path): loads `unsloth/Phi-4-mini-instruct-GGUF` via `llama-cpp-python`.
   **Caveat (measured):** the prebuilt wheels don't work on the dev CPU — see
   **Performance** below; a from-source AVX2 build is required there.
 - **`LLM_QUANT=int4`** (**CUDA only** — bitsandbytes 4-bit kernels need a GPU):
   `pip install bitsandbytes`, loads `unsloth/Phi-4-mini-instruct-bnb-4bit` (~3 GB).
 
-### Performance (measured 2026-07-12, task 13)
+### Performance (measured 2026-07-12, tasks 13 + 13b)
+
+> ✅ **Fast path — `LLM_QUANT=onnx` (ONNX Runtime GenAI CPU-INT4, task 13b):** on the dev
+> laptop (i7-8850H, AVX2, no AVX-512) — **load ~18 s, ~17 s/explanation, ~4.56 tok/s**,
+> deterministic (byte-identical), all figures preserved — **~31× faster** than fp16. The
+> recommended backend; see the fast-backend section above to enable it.
 
 > ⚠️ **On CPU, fp16 is correct but far too slow for interactive play.** On the dev
 > laptop (i7-8850H, no AVX-512), Phi-4-mini at `LLM_QUANT=none` measured **load 37 s,
@@ -183,10 +210,11 @@ footprint, install the optional extra (commented in `requirements-llm.txt`) and 
 > native bf16, so PyTorch emulates it ~100× slower). Output is correct and
 > deterministic — just slow.
 
-Because of this, the Assistant treats the LLM as **optional polish**: the Java
+On the fp16 backend the Assistant treats the LLM as **optional polish**: the Java
 `LLMBridge` (task 14) calls `/explain` asynchronously with a config-driven timeout
-and shows the **template text** whenever the LLM does not answer in time (which, on
-this CPU, is always). To actually see LLM text in a demo you need a faster backend:
+and shows the **template text** whenever the LLM does not answer in time (always at
+fp16). **With `LLM_QUANT=onnx` (task 13b) the LLM answers in ~17 s and the player sees
+real LLM prose.** The other CPU/GPU paths that were considered:
 
 - **GGUF** would be the CPU answer, but is **blocked on this CPU by a wheel
   version-squeeze**: `llama-cpp-python` 0.3.x (which supports the Phi-4 GGUF arch)

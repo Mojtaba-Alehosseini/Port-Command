@@ -204,6 +204,7 @@ def test_load_plan_branches_without_loading():
     assert gem.backend == "multimodal" and gem.multimodal is True
     assert resolve_load_plan("phi-4-mini", "int4", "cuda", "x").repo_id == "unsloth/Phi-4-mini-instruct-bnb-4bit"
     assert resolve_load_plan("phi-4-mini", "gguf", "cpu", "x").backend == "gguf"
+    assert resolve_load_plan("phi-4-mini", "onnx", "cpu", "x", onnx_dir="/m").backend == "onnx"
 
 
 def test_pad_token_id_from_tokenizer_processor_and_eos_fallback():

@@ -16,5 +16,20 @@ if [ ! -e "$PY" ]; then
   exit 1
 fi
 cd "$HERE"                                            # so `python -m llm_sidecar` resolves
+
+# Auto-select the fast ONNX Runtime GenAI CPU-INT4 backend (task 13b) when a
+# COMPLETE local ONNX model is present and LLM_QUANT is not pinned.
+# config.onnx_model_available() is the single source of truth (path + size gate).
+if [ -z "${LLM_QUANT:-}" ]; then
+  if [ "$("$PY" -c 'import llm_sidecar.config as c; print("onnx" if c.onnx_model_available() else "none")' 2>/dev/null)" = "onnx" ]; then
+    export LLM_QUANT=onnx
+    echo "backend: ONNX Runtime GenAI CPU-INT4 (local model found) -- fast path" >&2
+  else
+    echo "backend: fp16/bf16 default (no local ONNX model; set LLM_QUANT to override)" >&2
+  fi
+else
+  echo "backend: LLM_QUANT=$LLM_QUANT (pinned)" >&2
+fi
+
 echo "LLM sidecar -> http://127.0.0.1:5006  (GET /health, POST /explain). Ctrl+C to stop." >&2
 exec "$PY" -m llm_sidecar.server

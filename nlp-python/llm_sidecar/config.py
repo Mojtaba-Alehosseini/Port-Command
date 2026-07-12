@@ -63,7 +63,7 @@ if LLM_MODEL_KEY not in MODEL_REGISTRY:
 LLM_MODEL = MODEL_REGISTRY[LLM_MODEL_KEY]           # full HF repo id (fp16 base)
 
 LLM_DEVICE = os.getenv("LLM_DEVICE", "cpu")         # "cpu" | "cuda"
-LLM_QUANT = os.getenv("LLM_QUANT", "none").lower()  # "none" | "int4" | "gguf"
+LLM_QUANT = os.getenv("LLM_QUANT", "none").lower()  # "none" | "int4" | "gguf" | "onnx"
 LLM_HOST = os.getenv("LLM_HOST", "127.0.0.1")       # bind localhost, not 0.0.0.0
 LLM_PORT = int(os.getenv("LLM_PORT", "5006"))
 LLM_MAX_NEW_TOKENS = int(os.getenv("LLM_MAX_NEW_TOKENS", "120"))
@@ -72,6 +72,37 @@ LLM_LOG_LEVEL = os.getenv("LLM_LOG_LEVEL", "INFO").upper()
 LLM_LOG_FILE = os.getenv("LLM_LOG_FILE", "")        # "" => console only
 # GGUF quant file glob (llama-cpp-python's from_pretrained picks the match).
 LLM_GGUF_FILE = os.getenv("LLM_GGUF_FILE", "*Q4_K_M.gguf")
+
+# ONNX Runtime GenAI CPU-INT4 backend (task 13b — the fast CPU path). Weights live
+# OUTSIDE the repo (never committed); downloaded by hand into this default dir.
+# LLM_ONNX_DIR overrides. start_llm.{sh,bat} auto-select LLM_QUANT=onnx when a
+# local model is present (onnx_model_available()) AND LLM_QUANT is unset, so the
+# portable default stays LLM_QUANT=none.
+_DEFAULT_ONNX_DIR = (
+    pathlib.Path.home() / ".cache" / "port-command-genova"
+    / "Phi-4-mini-instruct-onnx" / "cpu_and_mobile" / "cpu-int4-rtn-block-32-acc-level-4"
+)
+LLM_ONNX_DIR = os.getenv("LLM_ONNX_DIR", str(_DEFAULT_ONNX_DIR))
+
+
+def onnx_model_available() -> bool:
+    """True when a COMPLETE local ONNX model dir is present. Pure filesystem check
+    (no heavy import), so the launchers can call it to decide whether to
+    auto-select the onnx backend.
+
+    Requires ``genai_config.json`` + ``model.onnx`` AND ~1 GB of weights on disk:
+    a marker-file check alone is unsafe because the tiny config/tokenizer files
+    land BEFORE the multi-GB ``model.onnx.data`` during download — a partial dir
+    would otherwise read as ready and the launcher would boot a broken backend."""
+    d = pathlib.Path(LLM_ONNX_DIR)
+    if not (d / "genai_config.json").is_file() or not (d / "model.onnx").is_file():
+        return False
+    try:
+        total = sum(p.stat().st_size for p in d.iterdir() if p.is_file())
+    except OSError:
+        return False
+    return total >= 1_000_000_000  # real int4 model ≈ 4.9 GB; a config-only stub ≈ 22 MB
+
 
 # Auto-start the background model loader at import time. Tests set "0" so that
 # importing the server never touches torch or downloads weights.

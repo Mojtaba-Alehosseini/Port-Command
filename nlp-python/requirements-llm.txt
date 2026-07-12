@@ -33,6 +33,18 @@ transformers==4.49.0
 torch==2.5.1
 accelerate==1.3.0
 
+# --- Fast CPU backend: ONNX Runtime GenAI INT4 (task 13b, LLM_QUANT=onnx) ---
+# THE fast CPU path. Phi-4-mini int4 via ONNX Runtime GenAI is dramatically faster
+# than the fp16/bf16 default on this CPU (i7-8850H, AVX2, no AVX-512), where fp16 is
+# ~9 min/explanation (task 13) — unusable in-game. Prebuilt CPU wheel: no CUDA, no
+# compile (unlike the bnb/llama-cpp optionals below). model.py imports
+# onnxruntime_genai LAZILY, so `import llm_sidecar.*` and the pytest suite stay
+# hermetic. Weights are a one-time ~4.9 GB manual download OUTSIDE the repo; then
+# set LLM_QUANT=onnx or let start_llm.{sh,bat} auto-select it. See README §Performance.
+#   huggingface-cli download microsoft/Phi-4-mini-instruct-onnx --include "cpu_and_mobile/cpu-int4-rtn-block-32-acc-level-4/*" --local-dir "%USERPROFILE%\.cache\port-command-genova\Phi-4-mini-instruct-onnx"
+onnxruntime-genai==0.14.1
+onnxruntime==1.27.0
+
 # --- Optional quantized backends (install by hand only if you need them) ---
 # Kept commented so the default `pip install -r requirements-llm.txt` stays lean
 # and CPU-only. See planning/13 "Hard constraints" for when each applies.

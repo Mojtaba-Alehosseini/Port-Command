@@ -11,5 +11,21 @@ if not exist "%PY%" (
   exit /b 1
 )
 cd /d "%HERE%"
+
+REM Auto-select the fast ONNX Runtime GenAI CPU-INT4 backend (task 13b) when a
+REM COMPLETE local ONNX model is present and the user has not pinned LLM_QUANT.
+REM config.onnx_model_available() is the single source of truth (path + size gate).
+if not "%LLM_QUANT%"=="" goto :launch
+"%PY%" -c "import llm_sidecar.config as c; print('onnx' if c.onnx_model_available() else 'none')" > "%TEMP%\pc_onnx_backend.txt" 2>nul
+set /p AUTO_QUANT=<"%TEMP%\pc_onnx_backend.txt"
+del "%TEMP%\pc_onnx_backend.txt" 2>nul
+if "%AUTO_QUANT%"=="onnx" (
+  set "LLM_QUANT=onnx"
+  echo backend: ONNX Runtime GenAI CPU-INT4 ^(local model found^) -- fast path
+) else (
+  echo backend: fp16/bf16 default ^(no local ONNX model; set LLM_QUANT to override^)
+)
+
+:launch
 echo LLM sidecar -^> http://127.0.0.1:5006  (GET /health, POST /explain). Ctrl+C to stop.
 "%PY%" -m llm_sidecar.server
