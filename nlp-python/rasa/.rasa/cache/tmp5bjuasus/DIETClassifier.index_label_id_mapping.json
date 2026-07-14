@@ -1,0 +1,11 @@
+{
+  "0": "accept_deal",
+  "1": "cancel_action",
+  "2": "counter_offer",
+  "3": "propose_offer",
+  "4": "query_status",
+  "5": "reject_deal",
+  "6": "request_help",
+  "7": "set_constraint",
+  "8": "set_policy"
+}

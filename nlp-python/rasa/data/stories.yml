@@ -1,0 +1,10 @@
+# Minimal stories — Port Command Genova (task 12).
+# NLU-only project; a single well-formed story keeps `rasa train` warning-clean.
+# Real dialogue flow lives in the JADE agents, not in Rasa Core.
+version: "3.1"
+
+stories:
+  - story: help then negotiate
+    steps:
+      - intent: request_help
+      - action: utter_help

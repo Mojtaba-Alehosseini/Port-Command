@@ -1,0 +1,18 @@
+[
+  {
+    "text": "Bar tanker from the inner harbour",
+    "intent": "set_constraint",
+    "intent_prediction": {
+      "name": "query_status",
+      "confidence": 0.47951769828796387
+    }
+  },
+  {
+    "text": "Hold Ponte Vecchio until further notice",
+    "intent": "set_constraint",
+    "intent_prediction": {
+      "name": "query_status",
+      "confidence": 0.9477344751358032
+    }
+  }
+]

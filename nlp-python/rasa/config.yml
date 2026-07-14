@@ -1,0 +1,35 @@
+# Rasa OSS 3.6.21 NLU pipeline — Port Command Genova (task 12).
+# Single pipeline (in-game negotiation commands). The policy-expression pipeline
+# was cut (PROJECT_DEFINITION.md 9 item 6); PolicyParser (task 10) replaces it.
+# Spec: planning/12_rasa_pipeline.md 12.2 + PROJECT_DEFINITION.md 6.3.
+recipe: default.v1
+# A stable assistant_id silences the rasa 3.6 "missing assistant_id" UserWarning;
+# it is metadata only and does not affect the pipeline below.
+assistant_id: port_command_genova
+
+language: en
+
+pipeline:
+  - name: WhitespaceTokenizer
+  - name: RegexFeaturizer
+  - name: LexicalSyntacticFeaturizer
+  - name: CountVectorsFeaturizer
+    analyzer: word
+  - name: CountVectorsFeaturizer
+    analyzer: char_wb
+    min_ngram: 1
+    max_ngram: 4
+  - name: DIETClassifier
+    epochs: 100
+    entity_recognition: true
+    constrain_similarities: true
+    random_seed: 42          # reproducible training so the F1 gate is stable run-to-run
+  - name: EntitySynonymMapper
+  - name: ResponseSelector
+    epochs: 100
+    random_seed: 42
+
+# We do NOT use Rasa Core dialogue management (the JADE Assistant drives dialogue).
+# RulePolicy is present only so `rasa train` does not warn about missing policies.
+policies:
+  - name: RulePolicy

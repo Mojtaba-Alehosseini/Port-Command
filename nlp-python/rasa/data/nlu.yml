@@ -1,0 +1,472 @@
+# AUTO-GENERATED FROM data/nlu_authoring.csv BY csv_to_nlu.py. DO NOT EDIT.
+# Edit the authoring CSV and regenerate (see nlp-python/README.md).
+version: "3.1"
+nlu:
+- intent: propose_offer
+  examples: |
+    - I'll give you [2000](price_expression) for [5 hours](time_expression) at [berth 1]{"entity": "berth_id", "value": "berth_1"}
+    - Offering [1800](price_expression) for the cargo, [6 hours](time_expression)
+    - I can offer [1500](price_expression) for [4 hours](time_expression)
+    - We can do [2200](price_expression) for [7 hours](time_expression) at [berth 2]{"entity": "berth_id", "value": "berth_2"}
+    - Take [2500](price_expression) for [3 hours](time_expression)
+    - Pay you [1900](price_expression) for [8 hours](time_expression) at [berth 3]{"entity": "berth_id", "value": "berth_3"}
+    - My offer is [1600](price_expression) for [6h](time_expression)
+    - We propose [2400](price_expression) for [5h](time_expression)
+    - Let me offer [1750](price_expression) for [4h](time_expression) at [berth 4]{"entity": "berth_id", "value": "berth_4"}
+    - I'll pay [2100](price_expression) for [12 hours](time_expression)
+    - Our opening offer is [1450](price_expression) for [10 hours](time_expression)
+    - I'd like to offer [2800](price_expression) for [2 hours](time_expression) at [dock 1]{"entity": "berth_id", "value": "berth_1"}
+    - You can have [dock 2]{"entity": "berth_id", "value": "berth_2"} for [3000](price_expression), [9 hours](time_expression)
+    - I'm offering [2600](price_expression) for [5 hrs](time_expression)
+    - We'll give [1200](price_expression) for [6 hrs](time_expression) at [dock 3]{"entity": "berth_id", "value": "berth_3"}
+    - Proposing [5000](price_expression) for [half a day](time_expression)
+    - The offer is [4500](price_expression) for [24 hours](time_expression) at [quay 2]{"entity": "berth_id", "value": "berth_2"}
+    - I'll do [3500](price_expression) for [8h](time_expression)
+    - Here's my offer, [2300](price_expression) for [seven hours](time_expression)
+    - We can pay [1950](price_expression) for [a couple of hours](time_expression) at [slip 3]{"entity": "berth_id", "value": "berth_3"}
+    - Offering [2050 euros](price_expression) to dock for [5 hours](time_expression)
+    - I propose [1850 euros](price_expression) for [6 hours](time_expression) at [pier 4]{"entity": "berth_id", "value": "berth_4"}
+    - How about we start at [2k](price_expression) for [4 hours](time_expression)
+    - A berthing fee of [1800 euros](price_expression) for [7 hours](time_expression)
+    - I'll offer [2000](price_expression) for the [tanker]{"entity": "vessel_class", "value": "tanker"}, [3 hours](time_expression)
+    - We can give you [1800](price_expression) for [8 hours](time_expression)
+    - Let's start at [1500](price_expression) for [6h](time_expression) at [berth one]{"entity": "berth_id", "value": "berth_1"}
+    - I want to offer [2200](price_expression) for [5h](time_expression)
+    - For [4h](time_expression) at [berth two]{"entity": "berth_id", "value": "berth_2"} I'll pay [2500](price_expression)
+    - You get [1900](price_expression) for [12 hours](time_expression)
+    - I'll put up [1600](price_expression) for [10 hours](time_expression) at [berth 1]{"entity": "berth_id", "value": "berth_1"}
+    - We're offering [2400](price_expression) for [2 hours](time_expression)
+    - My proposal is [1750](price_expression) for [9 hours](time_expression) at [berth 2]{"entity": "berth_id", "value": "berth_2"}
+    - I'll cover [2100](price_expression) for [5 hrs](time_expression)
+    - ill give [1450](price_expression) for [6 hrs](time_expression) [berth 3]{"entity": "berth_id", "value": "berth_3"}
+    - i'll do [2800](price_expression) for [half a day](time_expression)
+    - we offer [3000](price_expression) for [24 hours](time_expression)
+    - offering [2600](price_expression) [8h](time_expression)
+    - can pay [1200](price_expression) for [seven hours](time_expression)
+    - gimme [berth 4]{"entity": "berth_id", "value": "berth_4"} for [5000](price_expression) [a couple of hours](time_expression)
+    - we can do [4500](price_expression) [5 hours](time_expression)
+    - ill pay [3500](price_expression) for [6 hours](time_expression) at [dock 1]{"entity": "berth_id", "value": "berth_1"}
+    - I'll offr [2300](price_expression) for [4 hours](time_expression)
+    - Offering [1950](price_expression) for the cargo, [7 hours](time_expression)
+    - I'll giev you [2050 euros](price_expression) for [3 hours](time_expression)
+    - We can offor [1850 euros](price_expression) for [8 hours](time_expression)
+    - My ofer is [2k](price_expression) for [6h](time_expression) at [dock 2]{"entity": "berth_id", "value": "berth_2"}
+    - [Maersk Genova](vessel_name): [1800 euros](price_expression) for [5h](time_expression)
+    - [2000](price_expression) for [4h](time_expression), [dock 3]{"entity": "berth_id", "value": "berth_3"}
+    - [Genoa Star](vessel_name) - [1800](price_expression), [12 hours](time_expression)
+- intent: counter_offer
+  examples: |
+    - How about [3000](price_expression) then
+    - What about [2600](price_expression) instead
+    - Can you do [1200](price_expression)
+    - Counter at [5000](price_expression)
+    - Let's meet at [4500](price_expression)
+    - I'll go up to [3500](price_expression)
+    - Come down to [2300](price_expression) for [5 hours](time_expression)
+    - How about [1950](price_expression) for [6 hours](time_expression) instead
+    - What if we say [2050 euros](price_expression)
+    - Make it [1850 euros](price_expression) for [4 hours](time_expression)
+    - I'd counter with [2k](price_expression)
+    - Meet me at [1800 euros](price_expression)
+    - We could do [2000](price_expression) instead
+    - How about [7 hours](time_expression) instead
+    - Let's split it at [1800](price_expression)
+    - What about [1500](price_expression) for [3 hours](time_expression) then
+    - I'll counter at [2200](price_expression)
+    - Can you go to [2500](price_expression)
+    - How about [1900](price_expression) and [8 hours](time_expression)
+    - Instead let's do [1600](price_expression)
+    - My counter is [2400](price_expression)
+    - Bump it to [1750](price_expression)
+    - Push it to [2100](price_expression) for [6h](time_expression)
+    - Not [1450](price_expression), how about a bit more
+    - Let's do [2800](price_expression) rather
+    - How about we meet at [3000](price_expression)
+    - Counter offer, [2600](price_expression) for [5h](time_expression)
+    - Can we settle at [1200](price_expression)
+    - Raise it to [5000](price_expression)
+    - I'll do [4500](price_expression) if you extend to [4h](time_expression)
+    - What about [3500](price_expression) at [berth one]{"entity": "berth_id", "value": "berth_1"} instead
+    - Then make it [2300](price_expression)
+    - Let's land on [1950](price_expression) for [12 hours](time_expression)
+    - How about [2050 euros](price_expression) to close this
+    - how about [1850 euros](price_expression) then
+    - what about [2k](price_expression) instead
+    - can u do [1800 euros](price_expression)
+    - make it [2000](price_expression)
+    - counter [1800](price_expression)
+    - meet me at [1500](price_expression)
+    - gimme [2200](price_expression) instead
+    - bump to [2500](price_expression) for [10 hours](time_expression)
+    - How abuot [1900](price_expression) then
+    - What abt [1600](price_expression) instaed
+    - Cuonter at [2400](price_expression)
+    - Meet me at [1750](price_expression) insted
+    - Mkae it [2100](price_expression) for [2 hours](time_expression)
+    - [1450](price_expression) then
+    - [2800](price_expression) instead
+    - make it [9 hours](time_expression)
+- intent: accept_deal
+  examples: |
+    - Deal
+    - Done
+    - OK
+    - Agreed
+    - Sounds good
+    - Sure
+    - Let's do it
+    - Fine
+    - Accepted
+    - I accept
+    - That works
+    - Works for me
+    - Perfect
+    - Yes
+    - You've got a deal
+    - It's a deal
+    - That's acceptable
+    - I'll take it
+    - Sold
+    - Consider it done
+    - Good deal
+    - Happy with that
+    - Let's proceed
+    - I'm in
+    - Confirmed
+    - Absolutely
+    - Approved
+    - Take the deal
+    - That'll do
+    - Let's shake on it
+    - That's settled
+    - I can live with that
+    - We have a deal
+    - Go ahead and book it
+    - yep
+    - yup
+    - sure thing
+    - ok cool
+    - all good
+    - sounds like a plan
+    - lets go
+    - im good with that
+    - Deel
+    - Agreeed
+    - Souds good
+    - Acepted
+    - Perfct
+    - deal then
+    - agreed then
+    - yep, done
+- intent: reject_deal
+  examples: |
+    - No
+    - Too low
+    - No deal
+    - Pass
+    - Not enough
+    - Decline
+    - Won't work
+    - That's too low
+    - No thanks
+    - Not acceptable
+    - I'll pass
+    - Forget it
+    - No way
+    - That doesn't work
+    - Not interested
+    - Absolutely not
+    - Too expensive
+    - That's a no
+    - We can't accept that
+    - Not good enough
+    - I reject that
+    - Declined
+    - No, too low
+    - That price is too low
+    - Nope
+    - I'm declining
+    - Not happening
+    - That won't do
+    - We refuse
+    - Reject
+    - No, not enough
+    - Hard no
+    - Can't accept that offer
+    - That's unacceptable
+    - too low man
+    - nah
+    - not enough sorry
+    - no deal thanks
+    - cant do that
+    - nah too low
+    - not gonna happen
+    - no chance
+    - No thnaks
+    - Too lwo
+    - Not enguh
+    - Declien
+    - Unaccpetable
+    - way too low
+    - not for that
+    - no from me
+- intent: query_status
+  examples: |
+    - What's your draft
+    - How long do you need
+    - What's your cargo
+    - What's the IMO
+    - Status of [CMA Lupo](vessel_name)
+    - What's the ETA
+    - Where is [Costa Liguria](vessel_name)
+    - How big is the [tankers]{"entity": "vessel_class", "value": "tanker"}
+    - What berth is [Grimaldi Palermo](vessel_name) at
+    - Is [Ever Ligure](vessel_name) cleared
+    - What's the tonnage
+    - How deep is your draft
+    - When do you arrive
+    - What are you carrying
+    - Give me the status of [Aida Sole](vessel_name)
+    - What's the length of [Ponte Vecchio](vessel_name)
+    - Which berth is free
+    - How long until [Blue Marlin](vessel_name) docks
+    - Is customs done for [Nordic Breeze](vessel_name)
+    - What's the beam of the [container vessel]{"entity": "vessel_class", "value": "container_vessel"}
+    - Show me [Adriatic Pearl](vessel_name)'s status
+    - Is [berth two]{"entity": "berth_id", "value": "berth_2"} available
+    - What's the current weather
+    - Is [berth 1]{"entity": "berth_id", "value": "berth_1"} occupied
+    - What's the draft of [Maersk Genova](vessel_name)
+    - Any hazmat on [Genoa Star](vessel_name)
+    - How many berths are open
+    - Is [tug 1]{"entity": "tug_name", "value": "tug_1"} free
+    - Where's [tug 2]{"entity": "tug_name", "value": "tug_2"}
+    - What [containers]{"entity": "cargo_class", "value": "containerized_cargo"} is on [MSC Aurora](vessel_name)
+    - What's the priority of [CMA Lupo](vessel_name)
+    - Is [Costa Liguria](vessel_name) carrying [containerized cargo]{"entity": "cargo_class", "value": "containerized_cargo"}
+    - When is [Grimaldi Palermo](vessel_name) expected
+    - What's the status at [berth 2]{"entity": "berth_id", "value": "berth_2"}
+    - whats your draft
+    - how long u need
+    - wheres [Ever Ligure](vessel_name)
+    - hows the weather
+    - whats on board
+    - which berth is open
+    - is [Aida Sole](vessel_name) cleared yet
+    - eta
+    - Whats your draeft
+    - How lnog do you need
+    - Statsu of [Ponte Vecchio](vessel_name)
+    - Wheres teh [container ship]{"entity": "vessel_class", "value": "container_vessel"}
+    - Whats the tonnaeg
+    - [Blue Marlin](vessel_name) status
+    - draft
+    - eta for [Nordic Breeze](vessel_name)
+- intent: set_constraint
+  examples: |
+    - Hold [cargo vessel]{"entity": "vessel_class", "value": "cargo_vessel"} offshore
+    - No vessels above 250m at [berth 3]{"entity": "berth_id", "value": "berth_3"}
+    - Block [class 1]{"entity": "hazmat_code", "value": "hazmat_class_1"} cargo
+    - Keep [cargo ship]{"entity": "vessel_class", "value": "cargo_vessel"} out of [berth 4]{"entity": "berth_id", "value": "berth_4"}
+    - Don't allow [ferry]{"entity": "vessel_class", "value": "ferry"} at [dock 1]{"entity": "berth_id", "value": "berth_1"}
+    - Restrict [ferries]{"entity": "vessel_class", "value": "ferry"} to [dock 2]{"entity": "berth_id", "value": "berth_2"}
+    - No [class 3]{"entity": "hazmat_code", "value": "hazmat_class_3"} at [dock 3]{"entity": "berth_id", "value": "berth_3"}
+    - Limit [quay 2]{"entity": "berth_id", "value": "berth_2"} to vessels under 200m
+    - Hold all [cruise ship]{"entity": "vessel_class", "value": "cruise_ship"} at anchor
+    - No [general cargo]{"entity": "cargo_class", "value": "general_cargo"} at [slip 3]{"entity": "berth_id", "value": "berth_3"}
+    - Segregate [liquid bulk]{"entity": "cargo_class", "value": "liquid_bulk"} from [pier 4]{"entity": "berth_id", "value": "berth_4"}
+    - Ban [hazmat cargo]{"entity": "cargo_class", "value": "hazmat_cargo"} from [berth one]{"entity": "berth_id", "value": "berth_1"}
+    - Only [cruise vessel]{"entity": "vessel_class", "value": "cruise_ship"} allowed at [berth two]{"entity": "berth_id", "value": "berth_2"}
+    - No berthing for [tanker]{"entity": "vessel_class", "value": "tanker"} today
+    - Reserve [berth 1]{"entity": "berth_id", "value": "berth_1"} for [tankers]{"entity": "vessel_class", "value": "tanker"}
+    - Hold [Grimaldi Palermo](vessel_name) offshore
+    - Block anything over 300m from [berth 2]{"entity": "berth_id", "value": "berth_2"}
+    - Keep [berth 3]{"entity": "berth_id", "value": "berth_3"} clear for now
+    - Don't berth [hazmat class 3]{"entity": "hazmat_code", "value": "hazmat_class_3"} cargo
+    - No [container vessel]{"entity": "vessel_class", "value": "container_vessel"} until the storm passes
+    - Quarantine [hazmat class 1]{"entity": "hazmat_code", "value": "hazmat_class_1"} shipments
+    - Cap draft at [berth 4]{"entity": "berth_id", "value": "berth_4"} to 12m
+    - Prohibit [container ship]{"entity": "vessel_class", "value": "container_vessel"} at night
+    - Stop routing [cargo vessel]{"entity": "vessel_class", "value": "cargo_vessel"} to [dock 1]{"entity": "berth_id", "value": "berth_1"}
+    - Hold [cargo ship]{"entity": "vessel_class", "value": "cargo_vessel"} until customs clears
+    - No wide vessels at [dock 2]{"entity": "berth_id", "value": "berth_2"}
+    - Keep [hazmat]{"entity": "cargo_class", "value": "hazmat_cargo"} off [dock 3]{"entity": "berth_id", "value": "berth_3"}
+    - Restrict [IMDG class 3]{"entity": "hazmat_code", "value": "hazmat_class_3"} to the outer anchorage
+    - Freeze arrivals at [quay 2]{"entity": "berth_id", "value": "berth_2"}
+    - Deny [ferry]{"entity": "vessel_class", "value": "ferry"} entry
+    - No new [ferries]{"entity": "vessel_class", "value": "ferry"} berthings
+    - Hold [cruise ship]{"entity": "vessel_class", "value": "cruise_ship"} pending inspection
+    - Embargo [IMDG class 1]{"entity": "hazmat_code", "value": "hazmat_class_1"} at all berths
+    - Keep [Ever Ligure](vessel_name) at anchor for now
+    - hold [cruise vessel]{"entity": "vessel_class", "value": "cruise_ship"} offshore
+    - no [tanker]{"entity": "vessel_class", "value": "tanker"} at [slip 3]{"entity": "berth_id", "value": "berth_3"}
+    - block [class 1]{"entity": "hazmat_code", "value": "hazmat_class_1"}
+    - keep [tankers]{"entity": "vessel_class", "value": "tanker"} out
+    - no hazmat at [pier 4]{"entity": "berth_id", "value": "berth_4"}
+    - dont berth [container vessel]{"entity": "vessel_class", "value": "container_vessel"}
+    - reserve [berth one]{"entity": "berth_id", "value": "berth_1"} for [container ship]{"entity": "vessel_class", "value": "container_vessel"}
+    - hold [Aida Sole](vessel_name) outside
+    - Hold [cargo vessel]{"entity": "vessel_class", "value": "cargo_vessel"} offshoer
+    - Bolck [class 3]{"entity": "hazmat_code", "value": "hazmat_class_3"} cargo
+    - No vesels at [berth two]{"entity": "berth_id", "value": "berth_2"}
+    - Restrcit [cargo ship]{"entity": "vessel_class", "value": "cargo_vessel"} to [berth 1]{"entity": "berth_id", "value": "berth_1"}
+    - Kepe [ferry]{"entity": "vessel_class", "value": "ferry"} out of [berth 2]{"entity": "berth_id", "value": "berth_2"}
+    - no [ferries]{"entity": "vessel_class", "value": "ferry"} at [berth 3]{"entity": "berth_id", "value": "berth_3"}
+    - hold [cruise ship]{"entity": "vessel_class", "value": "cruise_ship"}
+    - block [hazmat class 3]{"entity": "hazmat_code", "value": "hazmat_class_3"}
+- intent: set_policy
+  examples: |
+    - Auto accept [container ship]{"entity": "vessel_class", "value": "container_vessel"} above [2k](price_expression)
+    - Always counter the first offer
+    - Reject anything under [1800 euros](price_expression)
+    - Auto-accept offers over [2000](price_expression)
+    - Never accept below [1800](price_expression)
+    - Automatically reject [cargo vessel]{"entity": "vessel_class", "value": "cargo_vessel"} under [1500](price_expression)
+    - By default counter every offer
+    - Always accept [cargo ship]{"entity": "vessel_class", "value": "cargo_vessel"} over [2200](price_expression)
+    - Auto reject offers below [2500](price_expression)
+    - Accept [ferry]{"entity": "vessel_class", "value": "ferry"} automatically above [1900](price_expression)
+    - Never counter more than once
+    - Always reject under [1600](price_expression)
+    - Auto-accept [Blue Marlin](vessel_name) above [2400](price_expression)
+    - Set a floor of [1750](price_expression) for [containers]{"entity": "cargo_class", "value": "containerized_cargo"}
+    - Always reject [containerized cargo]{"entity": "cargo_class", "value": "containerized_cargo"} under [2100](price_expression)
+    - Always hold out for [1450](price_expression)
+    - Auto-approve [ferries]{"entity": "vessel_class", "value": "ferry"} at [2800](price_expression) or more
+    - Never go below [3000](price_expression)
+    - Counter automatically if under [2600](price_expression)
+    - Accept anything over [1200](price_expression) without asking
+    - Make it policy to reject under [5000](price_expression)
+    - Auto-accept the [cruise ship]{"entity": "vessel_class", "value": "cruise_ship"} if above [4500](price_expression)
+    - Always ask for at least [3500](price_expression)
+    - Reject [cruise vessel]{"entity": "vessel_class", "value": "cruise_ship"} offers under [2300](price_expression) automatically
+    - Standing rule, accept over [1950](price_expression)
+    - Default policy, counter first offers
+    - Auto-decline below [2050 euros](price_expression)
+    - Always counter [tanker]{"entity": "vessel_class", "value": "tanker"} below [1850 euros](price_expression)
+    - Set auto-accept threshold to [2k](price_expression)
+    - Never accept a first offer
+    - Auto-accept [general cargo]{"entity": "cargo_class", "value": "general_cargo"} shipments over [1800 euros](price_expression)
+    - Always reject [tankers]{"entity": "vessel_class", "value": "tanker"} under [2000](price_expression)
+    - By default reject anything below [1800](price_expression)
+    - Auto-accept above [1500](price_expression) for [container vessel]{"entity": "vessel_class", "value": "container_vessel"}
+    - auto accept [container ship]{"entity": "vessel_class", "value": "container_vessel"} over [2200](price_expression)
+    - always counter first offer
+    - reject under [2500](price_expression)
+    - auto reject below [1900](price_expression)
+    - never accept below [1600](price_expression)
+    - auto accept over [2400](price_expression)
+    - always ask [1750](price_expression) min
+    - auto decline under [2100](price_expression)
+    - Auto acept [cargo vessel]{"entity": "vessel_class", "value": "cargo_vessel"} above [1450](price_expression)
+    - Allways counter first offer
+    - Reject anythign under [2800](price_expression)
+    - Nevar accept below [3000](price_expression)
+    - Auto-rejcet offers below [2600](price_expression)
+    - auto-accept over [1200](price_expression)
+    - always counter
+    - reject under [5000](price_expression)
+- intent: request_help
+  examples: |
+    - Help
+    - What can I do
+    - Commands
+    - How does this work
+    - What are my options
+    - Show commands
+    - I need help
+    - What now
+    - Can you help me
+    - List the commands
+    - How do I play
+    - What should I do
+    - Help me out
+    - I'm stuck
+    - What are the controls
+    - Explain the commands
+    - How do I negotiate
+    - What do I type
+    - Give me a hand
+    - Show me the options
+    - What can I say
+    - How do I make an offer
+    - Instructions please
+    - What are the rules
+    - Help with commands
+    - How do I accept a deal
+    - What actions are available
+    - I don't know what to do
+    - Guide me
+    - Show help
+    - What's the command list
+    - How do I set a policy
+    - Walk me through this
+    - What commands can I use
+    - need help here
+    - how do i do this
+    - whats the deal here
+    - gimme the commands
+    - how to play this
+    - what do i do now
+    - im lost here
+    - help pls
+    - Halp
+    - Comands
+    - How do i paly
+    - What can i doo
+    - I need halp
+    - um, help
+    - any commands?
+    - what're my choices
+- intent: cancel_action
+  examples: |
+    - Cancel
+    - Never mind
+    - Stop the deal
+    - Pull out
+    - Abort
+    - Call it off
+    - Withdraw
+    - Cancel that
+    - Stop
+    - Forget the deal
+    - Abort the negotiation
+    - Cancel the offer
+    - Let's not
+    - Back out
+    - Scrap it
+    - Drop it
+    - Cancel the request
+    - Nevermind that
+    - Stop the negotiation
+    - Withdraw my offer
+    - Call the whole thing off
+    - Undo that
+    - Cancel the booking
+    - I withdraw
+    - End the negotiation
+    - Abort mission
+    - Pull the offer
+    - Forget the whole thing
+    - Halt the deal
+    - Stop right there
+    - Cancel everything
+    - Take it back
+    - Cancel my request
+    - Kill the deal
+    - nvm
+    - cancel plz
+    - stop it pls
+    - abort pls
+    - scrap this deal
+    - im backing out
+    - pull the plug
+    - forget all this
+    - Cancle
+    - Nevermnd
+    - Abrot
+    - Withdaw
+    - Stpo it
+    - forget it, cancel
+    - no, cancel
+    - stop, abort

@@ -1,0 +1,3 @@
+# Endpoints — Port Command Genova (task 12).
+# Intentionally empty: no action server, no tracker store, no NLG server. The
+# NLU model is queried over HTTP via `rasa run --enable-api` (POST /model/parse).

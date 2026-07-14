@@ -1,0 +1,541 @@
+intent,text,annotated_text,split
+propose_offer,I'll give you 2000 for 5 hours at berth 1,"I'll give you [2000](price_expression) for [5 hours](time_expression) at [berth 1]{""entity"": ""berth_id"", ""value"": ""berth_1""}",train
+propose_offer,"Offering 1800 for the cargo, 6 hours","Offering [1800](price_expression) for the cargo, [6 hours](time_expression)",train
+propose_offer,I can offer 1500 for 4 hours,I can offer [1500](price_expression) for [4 hours](time_expression),train
+propose_offer,We can do 2200 for 7 hours at berth 2,"We can do [2200](price_expression) for [7 hours](time_expression) at [berth 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+propose_offer,Take 2500 for 3 hours,Take [2500](price_expression) for [3 hours](time_expression),train
+propose_offer,Pay you 1900 for 8 hours at berth 3,"Pay you [1900](price_expression) for [8 hours](time_expression) at [berth 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",train
+propose_offer,My offer is 1600 for 6h,My offer is [1600](price_expression) for [6h](time_expression),train
+propose_offer,We propose 2400 for 5h,We propose [2400](price_expression) for [5h](time_expression),train
+propose_offer,Let me offer 1750 for 4h at berth 4,"Let me offer [1750](price_expression) for [4h](time_expression) at [berth 4]{""entity"": ""berth_id"", ""value"": ""berth_4""}",train
+propose_offer,I'll pay 2100 for 12 hours,I'll pay [2100](price_expression) for [12 hours](time_expression),train
+propose_offer,Our opening offer is 1450 for 10 hours,Our opening offer is [1450](price_expression) for [10 hours](time_expression),train
+propose_offer,I'd like to offer 2800 for 2 hours at dock 1,"I'd like to offer [2800](price_expression) for [2 hours](time_expression) at [dock 1]{""entity"": ""berth_id"", ""value"": ""berth_1""}",train
+propose_offer,"You can have dock 2 for 3000, 9 hours","You can have [dock 2]{""entity"": ""berth_id"", ""value"": ""berth_2""} for [3000](price_expression), [9 hours](time_expression)",train
+propose_offer,I'm offering 2600 for 5 hrs,I'm offering [2600](price_expression) for [5 hrs](time_expression),train
+propose_offer,We'll give 1200 for 6 hrs at dock 3,"We'll give [1200](price_expression) for [6 hrs](time_expression) at [dock 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",train
+propose_offer,Proposing 5000 for half a day,Proposing [5000](price_expression) for [half a day](time_expression),train
+propose_offer,The offer is 4500 for 24 hours at quay 2,"The offer is [4500](price_expression) for [24 hours](time_expression) at [quay 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+propose_offer,I'll do 3500 for 8h,I'll do [3500](price_expression) for [8h](time_expression),train
+propose_offer,"Here's my offer, 2300 for seven hours","Here's my offer, [2300](price_expression) for [seven hours](time_expression)",train
+propose_offer,We can pay 1950 for a couple of hours at slip 3,"We can pay [1950](price_expression) for [a couple of hours](time_expression) at [slip 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",train
+propose_offer,Offering 2050 euros to dock for 5 hours,Offering [2050 euros](price_expression) to dock for [5 hours](time_expression),train
+propose_offer,I propose 1850 euros for 6 hours at pier 4,"I propose [1850 euros](price_expression) for [6 hours](time_expression) at [pier 4]{""entity"": ""berth_id"", ""value"": ""berth_4""}",train
+propose_offer,How about we start at 2k for 4 hours,How about we start at [2k](price_expression) for [4 hours](time_expression),train
+propose_offer,A berthing fee of 1800 euros for 7 hours,A berthing fee of [1800 euros](price_expression) for [7 hours](time_expression),train
+propose_offer,"I'll offer 2000 for the tanker, 3 hours","I'll offer [2000](price_expression) for the [tanker]{""entity"": ""vessel_class"", ""value"": ""tanker""}, [3 hours](time_expression)",train
+propose_offer,We can give you 1800 for 8 hours,We can give you [1800](price_expression) for [8 hours](time_expression),train
+propose_offer,Let's start at 1500 for 6h at berth one,"Let's start at [1500](price_expression) for [6h](time_expression) at [berth one]{""entity"": ""berth_id"", ""value"": ""berth_1""}",train
+propose_offer,I want to offer 2200 for 5h,I want to offer [2200](price_expression) for [5h](time_expression),train
+propose_offer,For 4h at berth two I'll pay 2500,"For [4h](time_expression) at [berth two]{""entity"": ""berth_id"", ""value"": ""berth_2""} I'll pay [2500](price_expression)",train
+propose_offer,You get 1900 for 12 hours,You get [1900](price_expression) for [12 hours](time_expression),train
+propose_offer,I'll put up 1600 for 10 hours at berth 1,"I'll put up [1600](price_expression) for [10 hours](time_expression) at [berth 1]{""entity"": ""berth_id"", ""value"": ""berth_1""}",train
+propose_offer,We're offering 2400 for 2 hours,We're offering [2400](price_expression) for [2 hours](time_expression),train
+propose_offer,My proposal is 1750 for 9 hours at berth 2,"My proposal is [1750](price_expression) for [9 hours](time_expression) at [berth 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+propose_offer,I'll cover 2100 for 5 hrs,I'll cover [2100](price_expression) for [5 hrs](time_expression),train
+propose_offer,ill give 1450 for 6 hrs berth 3,"ill give [1450](price_expression) for [6 hrs](time_expression) [berth 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",train
+propose_offer,i'll do 2800 for half a day,i'll do [2800](price_expression) for [half a day](time_expression),train
+propose_offer,we offer 3000 for 24 hours,we offer [3000](price_expression) for [24 hours](time_expression),train
+propose_offer,offering 2600 8h,offering [2600](price_expression) [8h](time_expression),train
+propose_offer,can pay 1200 for seven hours,can pay [1200](price_expression) for [seven hours](time_expression),train
+propose_offer,gimme berth 4 for 5000 a couple of hours,"gimme [berth 4]{""entity"": ""berth_id"", ""value"": ""berth_4""} for [5000](price_expression) [a couple of hours](time_expression)",train
+propose_offer,we can do 4500 5 hours,we can do [4500](price_expression) [5 hours](time_expression),train
+propose_offer,ill pay 3500 for 6 hours at dock 1,"ill pay [3500](price_expression) for [6 hours](time_expression) at [dock 1]{""entity"": ""berth_id"", ""value"": ""berth_1""}",train
+propose_offer,I'll offr 2300 for 4 hours,I'll offr [2300](price_expression) for [4 hours](time_expression),train
+propose_offer,"Offering 1950 for the cargo, 7 hours","Offering [1950](price_expression) for the cargo, [7 hours](time_expression)",train
+propose_offer,I'll giev you 2050 euros for 3 hours,I'll giev you [2050 euros](price_expression) for [3 hours](time_expression),train
+propose_offer,We can offor 1850 euros for 8 hours,We can offor [1850 euros](price_expression) for [8 hours](time_expression),train
+propose_offer,My ofer is 2k for 6h at dock 2,"My ofer is [2k](price_expression) for [6h](time_expression) at [dock 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+propose_offer,Maersk Genova: 1800 euros for 5h,[Maersk Genova](vessel_name): [1800 euros](price_expression) for [5h](time_expression),train
+propose_offer,"2000 for 4h, dock 3","[2000](price_expression) for [4h](time_expression), [dock 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",train
+propose_offer,"Genoa Star - 1800, 12 hours","[Genoa Star](vessel_name) - [1800](price_expression), [12 hours](time_expression)",train
+propose_offer,We would offer 1500 for 10 hours,We would offer [1500](price_expression) for [10 hours](time_expression),test
+propose_offer,I can put 2200 on the table for 2 hours,I can put [2200](price_expression) on the table for [2 hours](time_expression),test
+propose_offer,Starting bid 2500 for 9 hours at quay 2,"Starting bid [2500](price_expression) for [9 hours](time_expression) at [quay 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",test
+propose_offer,I'd pay 1900 to berth for 5 hrs,I'd pay [1900](price_expression) to berth for [5 hrs](time_expression),test
+propose_offer,We can manage 1600 for 6 hrs,We can manage [1600](price_expression) for [6 hrs](time_expression),test
+propose_offer,Our bid is 2400 for half a day at slip 3,"Our bid is [2400](price_expression) for [half a day](time_expression) at [slip 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",test
+propose_offer,MSC Aurora: 1750 over 24 hours,[MSC Aurora](vessel_name): [1750](price_expression) over [24 hours](time_expression),test
+propose_offer,I'll stake 2100 for 8h,I'll stake [2100](price_expression) for [8h](time_expression),test
+propose_offer,willing to pay 1450 for seven hours,willing to pay [1450](price_expression) for [seven hours](time_expression),test
+propose_offer,We tender 2800 for a couple of hours at pier 4,"We tender [2800](price_expression) for [a couple of hours](time_expression) at [pier 4]{""entity"": ""berth_id"", ""value"": ""berth_4""}",test
+counter_offer,How about 3000 then,How about [3000](price_expression) then,train
+counter_offer,What about 2600 instead,What about [2600](price_expression) instead,train
+counter_offer,Can you do 1200,Can you do [1200](price_expression),train
+counter_offer,Counter at 5000,Counter at [5000](price_expression),train
+counter_offer,Let's meet at 4500,Let's meet at [4500](price_expression),train
+counter_offer,I'll go up to 3500,I'll go up to [3500](price_expression),train
+counter_offer,Come down to 2300 for 5 hours,Come down to [2300](price_expression) for [5 hours](time_expression),train
+counter_offer,How about 1950 for 6 hours instead,How about [1950](price_expression) for [6 hours](time_expression) instead,train
+counter_offer,What if we say 2050 euros,What if we say [2050 euros](price_expression),train
+counter_offer,Make it 1850 euros for 4 hours,Make it [1850 euros](price_expression) for [4 hours](time_expression),train
+counter_offer,I'd counter with 2k,I'd counter with [2k](price_expression),train
+counter_offer,Meet me at 1800 euros,Meet me at [1800 euros](price_expression),train
+counter_offer,We could do 2000 instead,We could do [2000](price_expression) instead,train
+counter_offer,How about 7 hours instead,How about [7 hours](time_expression) instead,train
+counter_offer,Let's split it at 1800,Let's split it at [1800](price_expression),train
+counter_offer,What about 1500 for 3 hours then,What about [1500](price_expression) for [3 hours](time_expression) then,train
+counter_offer,I'll counter at 2200,I'll counter at [2200](price_expression),train
+counter_offer,Can you go to 2500,Can you go to [2500](price_expression),train
+counter_offer,How about 1900 and 8 hours,How about [1900](price_expression) and [8 hours](time_expression),train
+counter_offer,Instead let's do 1600,Instead let's do [1600](price_expression),train
+counter_offer,My counter is 2400,My counter is [2400](price_expression),train
+counter_offer,Bump it to 1750,Bump it to [1750](price_expression),train
+counter_offer,Push it to 2100 for 6h,Push it to [2100](price_expression) for [6h](time_expression),train
+counter_offer,"Not 1450, how about a bit more","Not [1450](price_expression), how about a bit more",train
+counter_offer,Let's do 2800 rather,Let's do [2800](price_expression) rather,train
+counter_offer,How about we meet at 3000,How about we meet at [3000](price_expression),train
+counter_offer,"Counter offer, 2600 for 5h","Counter offer, [2600](price_expression) for [5h](time_expression)",train
+counter_offer,Can we settle at 1200,Can we settle at [1200](price_expression),train
+counter_offer,Raise it to 5000,Raise it to [5000](price_expression),train
+counter_offer,I'll do 4500 if you extend to 4h,I'll do [4500](price_expression) if you extend to [4h](time_expression),train
+counter_offer,What about 3500 at berth one instead,"What about [3500](price_expression) at [berth one]{""entity"": ""berth_id"", ""value"": ""berth_1""} instead",train
+counter_offer,Then make it 2300,Then make it [2300](price_expression),train
+counter_offer,Let's land on 1950 for 12 hours,Let's land on [1950](price_expression) for [12 hours](time_expression),train
+counter_offer,How about 2050 euros to close this,How about [2050 euros](price_expression) to close this,train
+counter_offer,how about 1850 euros then,how about [1850 euros](price_expression) then,train
+counter_offer,what about 2k instead,what about [2k](price_expression) instead,train
+counter_offer,can u do 1800 euros,can u do [1800 euros](price_expression),train
+counter_offer,make it 2000,make it [2000](price_expression),train
+counter_offer,counter 1800,counter [1800](price_expression),train
+counter_offer,meet me at 1500,meet me at [1500](price_expression),train
+counter_offer,gimme 2200 instead,gimme [2200](price_expression) instead,train
+counter_offer,bump to 2500 for 10 hours,bump to [2500](price_expression) for [10 hours](time_expression),train
+counter_offer,How abuot 1900 then,How abuot [1900](price_expression) then,train
+counter_offer,What abt 1600 instaed,What abt [1600](price_expression) instaed,train
+counter_offer,Cuonter at 2400,Cuonter at [2400](price_expression),train
+counter_offer,Meet me at 1750 insted,Meet me at [1750](price_expression) insted,train
+counter_offer,Mkae it 2100 for 2 hours,Mkae it [2100](price_expression) for [2 hours](time_expression),train
+counter_offer,1450 then,[1450](price_expression) then,train
+counter_offer,2800 instead,[2800](price_expression) instead,train
+counter_offer,make it 9 hours,make it [9 hours](time_expression),train
+counter_offer,How about 3000 for 5 hrs to close,How about [3000](price_expression) for [5 hrs](time_expression) to close,test
+counter_offer,Counter with 2600 instead,Counter with [2600](price_expression) instead,test
+counter_offer,Can we land at 1200,Can we land at [1200](price_expression),test
+counter_offer,What if I said 5000,What if I said [5000](price_expression),test
+counter_offer,Let's compromise at 4500,Let's compromise at [4500](price_expression),test
+counter_offer,I'll stretch to 3500,I'll stretch to [3500](price_expression),test
+counter_offer,Let's nudge it to 2300 instead,Let's nudge it to [2300](price_expression) instead,test
+counter_offer,How about we settle 1950,How about we settle [1950](price_expression),test
+counter_offer,"2050 euros then, deal","[2050 euros](price_expression) then, deal",test
+counter_offer,meet halfway at 1850 euros,meet halfway at [1850 euros](price_expression),test
+accept_deal,Deal,Deal,train
+accept_deal,Done,Done,train
+accept_deal,OK,OK,train
+accept_deal,Agreed,Agreed,train
+accept_deal,Sounds good,Sounds good,train
+accept_deal,Sure,Sure,train
+accept_deal,Let's do it,Let's do it,train
+accept_deal,Fine,Fine,train
+accept_deal,Accepted,Accepted,train
+accept_deal,I accept,I accept,train
+accept_deal,That works,That works,train
+accept_deal,Works for me,Works for me,train
+accept_deal,Perfect,Perfect,train
+accept_deal,Yes,Yes,train
+accept_deal,You've got a deal,You've got a deal,train
+accept_deal,It's a deal,It's a deal,train
+accept_deal,That's acceptable,That's acceptable,train
+accept_deal,I'll take it,I'll take it,train
+accept_deal,Sold,Sold,train
+accept_deal,Consider it done,Consider it done,train
+accept_deal,Good deal,Good deal,train
+accept_deal,Happy with that,Happy with that,train
+accept_deal,Let's proceed,Let's proceed,train
+accept_deal,I'm in,I'm in,train
+accept_deal,Confirmed,Confirmed,train
+accept_deal,Absolutely,Absolutely,train
+accept_deal,Approved,Approved,train
+accept_deal,Take the deal,Take the deal,train
+accept_deal,That'll do,That'll do,train
+accept_deal,Let's shake on it,Let's shake on it,train
+accept_deal,That's settled,That's settled,train
+accept_deal,I can live with that,I can live with that,train
+accept_deal,We have a deal,We have a deal,train
+accept_deal,Go ahead and book it,Go ahead and book it,train
+accept_deal,yep,yep,train
+accept_deal,yup,yup,train
+accept_deal,sure thing,sure thing,train
+accept_deal,ok cool,ok cool,train
+accept_deal,all good,all good,train
+accept_deal,sounds like a plan,sounds like a plan,train
+accept_deal,lets go,lets go,train
+accept_deal,im good with that,im good with that,train
+accept_deal,Deel,Deel,train
+accept_deal,Agreeed,Agreeed,train
+accept_deal,Souds good,Souds good,train
+accept_deal,Acepted,Acepted,train
+accept_deal,Perfct,Perfct,train
+accept_deal,deal then,deal then,train
+accept_deal,agreed then,agreed then,train
+accept_deal,"yep, done","yep, done",train
+accept_deal,It's a deal then,It's a deal then,test
+accept_deal,"Ok, that works","Ok, that works",test
+accept_deal,"Sure, let's proceed","Sure, let's proceed",test
+accept_deal,"Agreed, we have a deal","Agreed, we have a deal",test
+accept_deal,"Yes, I accept that","Yes, I accept that",test
+accept_deal,"Fine, good deal","Fine, good deal",test
+accept_deal,I'll take that one,I'll take that one,test
+accept_deal,That's done then,That's done then,test
+accept_deal,"Sounds good, I'm in","Sounds good, I'm in",test
+accept_deal,Happy to accept,Happy to accept,test
+reject_deal,No,No,train
+reject_deal,Too low,Too low,train
+reject_deal,No deal,No deal,train
+reject_deal,Pass,Pass,train
+reject_deal,Not enough,Not enough,train
+reject_deal,Decline,Decline,train
+reject_deal,Won't work,Won't work,train
+reject_deal,That's too low,That's too low,train
+reject_deal,No thanks,No thanks,train
+reject_deal,Not acceptable,Not acceptable,train
+reject_deal,I'll pass,I'll pass,train
+reject_deal,Forget it,Forget it,train
+reject_deal,No way,No way,train
+reject_deal,That doesn't work,That doesn't work,train
+reject_deal,Not interested,Not interested,train
+reject_deal,Absolutely not,Absolutely not,train
+reject_deal,Too expensive,Too expensive,train
+reject_deal,That's a no,That's a no,train
+reject_deal,We can't accept that,We can't accept that,train
+reject_deal,Not good enough,Not good enough,train
+reject_deal,I reject that,I reject that,train
+reject_deal,Declined,Declined,train
+reject_deal,"No, too low","No, too low",train
+reject_deal,That price is too low,That price is too low,train
+reject_deal,Nope,Nope,train
+reject_deal,I'm declining,I'm declining,train
+reject_deal,Not happening,Not happening,train
+reject_deal,That won't do,That won't do,train
+reject_deal,We refuse,We refuse,train
+reject_deal,Reject,Reject,train
+reject_deal,"No, not enough","No, not enough",train
+reject_deal,Hard no,Hard no,train
+reject_deal,Can't accept that offer,Can't accept that offer,train
+reject_deal,That's unacceptable,That's unacceptable,train
+reject_deal,too low man,too low man,train
+reject_deal,nah,nah,train
+reject_deal,not enough sorry,not enough sorry,train
+reject_deal,no deal thanks,no deal thanks,train
+reject_deal,cant do that,cant do that,train
+reject_deal,nah too low,nah too low,train
+reject_deal,not gonna happen,not gonna happen,train
+reject_deal,no chance,no chance,train
+reject_deal,No thnaks,No thnaks,train
+reject_deal,Too lwo,Too lwo,train
+reject_deal,Not enguh,Not enguh,train
+reject_deal,Declien,Declien,train
+reject_deal,Unaccpetable,Unaccpetable,train
+reject_deal,way too low,way too low,train
+reject_deal,not for that,not for that,train
+reject_deal,no from me,no from me,train
+reject_deal,"No, we'll pass on that","No, we'll pass on that",test
+reject_deal,"No, we'll walk","No, we'll walk",test
+reject_deal,Not even close,Not even close,test
+reject_deal,Rejected,Rejected,test
+reject_deal,We won't take that,We won't take that,test
+reject_deal,Way too low for us,Way too low for us,test
+reject_deal,"Sorry, no","Sorry, no",test
+reject_deal,That's a hard pass,That's a hard pass,test
+reject_deal,Can't make that work,Can't make that work,test
+reject_deal,"No, decline it","No, decline it",test
+query_status,What's your draft,What's your draft,train
+query_status,How long do you need,How long do you need,train
+query_status,What's your cargo,What's your cargo,train
+query_status,What's the IMO,What's the IMO,train
+query_status,Status of CMA Lupo,Status of [CMA Lupo](vessel_name),train
+query_status,What's the ETA,What's the ETA,train
+query_status,Where is Costa Liguria,Where is [Costa Liguria](vessel_name),train
+query_status,How big is the tankers,"How big is the [tankers]{""entity"": ""vessel_class"", ""value"": ""tanker""}",train
+query_status,What berth is Grimaldi Palermo at,What berth is [Grimaldi Palermo](vessel_name) at,train
+query_status,Is Ever Ligure cleared,Is [Ever Ligure](vessel_name) cleared,train
+query_status,What's the tonnage,What's the tonnage,train
+query_status,How deep is your draft,How deep is your draft,train
+query_status,When do you arrive,When do you arrive,train
+query_status,What are you carrying,What are you carrying,train
+query_status,Give me the status of Aida Sole,Give me the status of [Aida Sole](vessel_name),train
+query_status,What's the length of Ponte Vecchio,What's the length of [Ponte Vecchio](vessel_name),train
+query_status,Which berth is free,Which berth is free,train
+query_status,How long until Blue Marlin docks,How long until [Blue Marlin](vessel_name) docks,train
+query_status,Is customs done for Nordic Breeze,Is customs done for [Nordic Breeze](vessel_name),train
+query_status,What's the beam of the container vessel,"What's the beam of the [container vessel]{""entity"": ""vessel_class"", ""value"": ""container_vessel""}",train
+query_status,Show me Adriatic Pearl's status,Show me [Adriatic Pearl](vessel_name)'s status,train
+query_status,Is berth two available,"Is [berth two]{""entity"": ""berth_id"", ""value"": ""berth_2""} available",train
+query_status,What's the current weather,What's the current weather,train
+query_status,Is berth 1 occupied,"Is [berth 1]{""entity"": ""berth_id"", ""value"": ""berth_1""} occupied",train
+query_status,What's the draft of Maersk Genova,What's the draft of [Maersk Genova](vessel_name),train
+query_status,Any hazmat on Genoa Star,Any hazmat on [Genoa Star](vessel_name),train
+query_status,How many berths are open,How many berths are open,train
+query_status,Is tug 1 free,"Is [tug 1]{""entity"": ""tug_name"", ""value"": ""tug_1""} free",train
+query_status,Where's tug 2,"Where's [tug 2]{""entity"": ""tug_name"", ""value"": ""tug_2""}",train
+query_status,What containers is on MSC Aurora,"What [containers]{""entity"": ""cargo_class"", ""value"": ""containerized_cargo""} is on [MSC Aurora](vessel_name)",train
+query_status,What's the priority of CMA Lupo,What's the priority of [CMA Lupo](vessel_name),train
+query_status,Is Costa Liguria carrying containerized cargo,"Is [Costa Liguria](vessel_name) carrying [containerized cargo]{""entity"": ""cargo_class"", ""value"": ""containerized_cargo""}",train
+query_status,When is Grimaldi Palermo expected,When is [Grimaldi Palermo](vessel_name) expected,train
+query_status,What's the status at berth 2,"What's the status at [berth 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+query_status,whats your draft,whats your draft,train
+query_status,how long u need,how long u need,train
+query_status,wheres Ever Ligure,wheres [Ever Ligure](vessel_name),train
+query_status,hows the weather,hows the weather,train
+query_status,whats on board,whats on board,train
+query_status,which berth is open,which berth is open,train
+query_status,is Aida Sole cleared yet,is [Aida Sole](vessel_name) cleared yet,train
+query_status,eta,eta,train
+query_status,Whats your draeft,Whats your draeft,train
+query_status,How lnog do you need,How lnog do you need,train
+query_status,Statsu of Ponte Vecchio,Statsu of [Ponte Vecchio](vessel_name),train
+query_status,Wheres teh container ship,"Wheres teh [container ship]{""entity"": ""vessel_class"", ""value"": ""container_vessel""}",train
+query_status,Whats the tonnaeg,Whats the tonnaeg,train
+query_status,Blue Marlin status,[Blue Marlin](vessel_name) status,train
+query_status,draft,draft,train
+query_status,eta for Nordic Breeze,eta for [Nordic Breeze](vessel_name),train
+query_status,Tell me Adriatic Pearl's draft,Tell me [Adriatic Pearl](vessel_name)'s draft,test
+query_status,How big is Maersk Genova,How big is [Maersk Genova](vessel_name),test
+query_status,What's the arrival time for Genoa Star,What's the arrival time for [Genoa Star](vessel_name),test
+query_status,What's the status of MSC Aurora,What's the status of [MSC Aurora](vessel_name),test
+query_status,Which berths are available,Which berths are available,test
+query_status,What's the ETA of CMA Lupo,What's the ETA of [CMA Lupo](vessel_name),test
+query_status,Current position of tug 3,"Current position of [tug 3]{""entity"": ""tug_name"", ""value"": ""tug_3""}",test
+query_status,How many berths are free,How many berths are free,test
+query_status,How long until Costa Liguria arrives,How long until [Costa Liguria](vessel_name) arrives,test
+query_status,Give me a status report,Give me a status report,test
+set_constraint,Hold cargo vessel offshore,"Hold [cargo vessel]{""entity"": ""vessel_class"", ""value"": ""cargo_vessel""} offshore",train
+set_constraint,No vessels above 250m at berth 3,"No vessels above 250m at [berth 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",train
+set_constraint,Block class 1 cargo,"Block [class 1]{""entity"": ""hazmat_code"", ""value"": ""hazmat_class_1""} cargo",train
+set_constraint,Keep cargo ship out of berth 4,"Keep [cargo ship]{""entity"": ""vessel_class"", ""value"": ""cargo_vessel""} out of [berth 4]{""entity"": ""berth_id"", ""value"": ""berth_4""}",train
+set_constraint,Don't allow ferry at dock 1,"Don't allow [ferry]{""entity"": ""vessel_class"", ""value"": ""ferry""} at [dock 1]{""entity"": ""berth_id"", ""value"": ""berth_1""}",train
+set_constraint,Restrict ferries to dock 2,"Restrict [ferries]{""entity"": ""vessel_class"", ""value"": ""ferry""} to [dock 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+set_constraint,No class 3 at dock 3,"No [class 3]{""entity"": ""hazmat_code"", ""value"": ""hazmat_class_3""} at [dock 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",train
+set_constraint,Limit quay 2 to vessels under 200m,"Limit [quay 2]{""entity"": ""berth_id"", ""value"": ""berth_2""} to vessels under 200m",train
+set_constraint,Hold all cruise ship at anchor,"Hold all [cruise ship]{""entity"": ""vessel_class"", ""value"": ""cruise_ship""} at anchor",train
+set_constraint,No general cargo at slip 3,"No [general cargo]{""entity"": ""cargo_class"", ""value"": ""general_cargo""} at [slip 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",train
+set_constraint,Segregate liquid bulk from pier 4,"Segregate [liquid bulk]{""entity"": ""cargo_class"", ""value"": ""liquid_bulk""} from [pier 4]{""entity"": ""berth_id"", ""value"": ""berth_4""}",train
+set_constraint,Ban hazmat cargo from berth one,"Ban [hazmat cargo]{""entity"": ""cargo_class"", ""value"": ""hazmat_cargo""} from [berth one]{""entity"": ""berth_id"", ""value"": ""berth_1""}",train
+set_constraint,Only cruise vessel allowed at berth two,"Only [cruise vessel]{""entity"": ""vessel_class"", ""value"": ""cruise_ship""} allowed at [berth two]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+set_constraint,No berthing for tanker today,"No berthing for [tanker]{""entity"": ""vessel_class"", ""value"": ""tanker""} today",train
+set_constraint,Reserve berth 1 for tankers,"Reserve [berth 1]{""entity"": ""berth_id"", ""value"": ""berth_1""} for [tankers]{""entity"": ""vessel_class"", ""value"": ""tanker""}",train
+set_constraint,Hold Grimaldi Palermo offshore,Hold [Grimaldi Palermo](vessel_name) offshore,train
+set_constraint,Block anything over 300m from berth 2,"Block anything over 300m from [berth 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+set_constraint,Keep berth 3 clear for now,"Keep [berth 3]{""entity"": ""berth_id"", ""value"": ""berth_3""} clear for now",train
+set_constraint,Don't berth hazmat class 3 cargo,"Don't berth [hazmat class 3]{""entity"": ""hazmat_code"", ""value"": ""hazmat_class_3""} cargo",train
+set_constraint,No container vessel until the storm passes,"No [container vessel]{""entity"": ""vessel_class"", ""value"": ""container_vessel""} until the storm passes",train
+set_constraint,Quarantine hazmat class 1 shipments,"Quarantine [hazmat class 1]{""entity"": ""hazmat_code"", ""value"": ""hazmat_class_1""} shipments",train
+set_constraint,Cap draft at berth 4 to 12m,"Cap draft at [berth 4]{""entity"": ""berth_id"", ""value"": ""berth_4""} to 12m",train
+set_constraint,Prohibit container ship at night,"Prohibit [container ship]{""entity"": ""vessel_class"", ""value"": ""container_vessel""} at night",train
+set_constraint,Stop routing cargo vessel to dock 1,"Stop routing [cargo vessel]{""entity"": ""vessel_class"", ""value"": ""cargo_vessel""} to [dock 1]{""entity"": ""berth_id"", ""value"": ""berth_1""}",train
+set_constraint,Hold cargo ship until customs clears,"Hold [cargo ship]{""entity"": ""vessel_class"", ""value"": ""cargo_vessel""} until customs clears",train
+set_constraint,No wide vessels at dock 2,"No wide vessels at [dock 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+set_constraint,Keep hazmat off dock 3,"Keep [hazmat]{""entity"": ""cargo_class"", ""value"": ""hazmat_cargo""} off [dock 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",train
+set_constraint,Restrict IMDG class 3 to the outer anchorage,"Restrict [IMDG class 3]{""entity"": ""hazmat_code"", ""value"": ""hazmat_class_3""} to the outer anchorage",train
+set_constraint,Freeze arrivals at quay 2,"Freeze arrivals at [quay 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+set_constraint,Deny ferry entry,"Deny [ferry]{""entity"": ""vessel_class"", ""value"": ""ferry""} entry",train
+set_constraint,No new ferries berthings,"No new [ferries]{""entity"": ""vessel_class"", ""value"": ""ferry""} berthings",train
+set_constraint,Hold cruise ship pending inspection,"Hold [cruise ship]{""entity"": ""vessel_class"", ""value"": ""cruise_ship""} pending inspection",train
+set_constraint,Embargo IMDG class 1 at all berths,"Embargo [IMDG class 1]{""entity"": ""hazmat_code"", ""value"": ""hazmat_class_1""} at all berths",train
+set_constraint,Keep Ever Ligure at anchor for now,Keep [Ever Ligure](vessel_name) at anchor for now,train
+set_constraint,hold cruise vessel offshore,"hold [cruise vessel]{""entity"": ""vessel_class"", ""value"": ""cruise_ship""} offshore",train
+set_constraint,no tanker at slip 3,"no [tanker]{""entity"": ""vessel_class"", ""value"": ""tanker""} at [slip 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",train
+set_constraint,block class 1,"block [class 1]{""entity"": ""hazmat_code"", ""value"": ""hazmat_class_1""}",train
+set_constraint,keep tankers out,"keep [tankers]{""entity"": ""vessel_class"", ""value"": ""tanker""} out",train
+set_constraint,no hazmat at pier 4,"no hazmat at [pier 4]{""entity"": ""berth_id"", ""value"": ""berth_4""}",train
+set_constraint,dont berth container vessel,"dont berth [container vessel]{""entity"": ""vessel_class"", ""value"": ""container_vessel""}",train
+set_constraint,reserve berth one for container ship,"reserve [berth one]{""entity"": ""berth_id"", ""value"": ""berth_1""} for [container ship]{""entity"": ""vessel_class"", ""value"": ""container_vessel""}",train
+set_constraint,hold Aida Sole outside,hold [Aida Sole](vessel_name) outside,train
+set_constraint,Hold cargo vessel offshoer,"Hold [cargo vessel]{""entity"": ""vessel_class"", ""value"": ""cargo_vessel""} offshoer",train
+set_constraint,Bolck class 3 cargo,"Bolck [class 3]{""entity"": ""hazmat_code"", ""value"": ""hazmat_class_3""} cargo",train
+set_constraint,No vesels at berth two,"No vesels at [berth two]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+set_constraint,Restrcit cargo ship to berth 1,"Restrcit [cargo ship]{""entity"": ""vessel_class"", ""value"": ""cargo_vessel""} to [berth 1]{""entity"": ""berth_id"", ""value"": ""berth_1""}",train
+set_constraint,Kepe ferry out of berth 2,"Kepe [ferry]{""entity"": ""vessel_class"", ""value"": ""ferry""} out of [berth 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",train
+set_constraint,no ferries at berth 3,"no [ferries]{""entity"": ""vessel_class"", ""value"": ""ferry""} at [berth 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",train
+set_constraint,hold cruise ship,"hold [cruise ship]{""entity"": ""vessel_class"", ""value"": ""cruise_ship""}",train
+set_constraint,block hazmat class 3,"block [hazmat class 3]{""entity"": ""hazmat_code"", ""value"": ""hazmat_class_3""}",train
+set_constraint,Prevent cruise vessel from docking,"Prevent [cruise vessel]{""entity"": ""vessel_class"", ""value"": ""cruise_ship""} from docking",test
+set_constraint,Keep the hazmat class 1 cargo offshore,"Keep the [hazmat class 1]{""entity"": ""hazmat_code"", ""value"": ""hazmat_class_1""} cargo offshore",test
+set_constraint,No arrivals at berth 4 tonight,"No arrivals at [berth 4]{""entity"": ""berth_id"", ""value"": ""berth_4""} tonight",test
+set_constraint,Bar tanker from the inner harbour,"Bar [tanker]{""entity"": ""vessel_class"", ""value"": ""tanker""} from the inner harbour",test
+set_constraint,Hold Ponte Vecchio until further notice,Hold [Ponte Vecchio](vessel_name) until further notice,test
+set_constraint,Seal off dock 1,"Seal off [dock 1]{""entity"": ""berth_id"", ""value"": ""berth_1""}",test
+set_constraint,Do not admit tankers,"Do not admit [tankers]{""entity"": ""vessel_class"", ""value"": ""tanker""}",test
+set_constraint,Restrict bulk liquids to dock 2,"Restrict [bulk liquids]{""entity"": ""cargo_class"", ""value"": ""liquid_bulk""} to [dock 2]{""entity"": ""berth_id"", ""value"": ""berth_2""}",test
+set_constraint,Suspend berthing for container vessel,"Suspend berthing for [container vessel]{""entity"": ""vessel_class"", ""value"": ""container_vessel""}",test
+set_constraint,No oversized vessels at dock 3,"No oversized vessels at [dock 3]{""entity"": ""berth_id"", ""value"": ""berth_3""}",test
+set_policy,Auto accept container ship above 2k,"Auto accept [container ship]{""entity"": ""vessel_class"", ""value"": ""container_vessel""} above [2k](price_expression)",train
+set_policy,Always counter the first offer,Always counter the first offer,train
+set_policy,Reject anything under 1800 euros,Reject anything under [1800 euros](price_expression),train
+set_policy,Auto-accept offers over 2000,Auto-accept offers over [2000](price_expression),train
+set_policy,Never accept below 1800,Never accept below [1800](price_expression),train
+set_policy,Automatically reject cargo vessel under 1500,"Automatically reject [cargo vessel]{""entity"": ""vessel_class"", ""value"": ""cargo_vessel""} under [1500](price_expression)",train
+set_policy,By default counter every offer,By default counter every offer,train
+set_policy,Always accept cargo ship over 2200,"Always accept [cargo ship]{""entity"": ""vessel_class"", ""value"": ""cargo_vessel""} over [2200](price_expression)",train
+set_policy,Auto reject offers below 2500,Auto reject offers below [2500](price_expression),train
+set_policy,Accept ferry automatically above 1900,"Accept [ferry]{""entity"": ""vessel_class"", ""value"": ""ferry""} automatically above [1900](price_expression)",train
+set_policy,Never counter more than once,Never counter more than once,train
+set_policy,Always reject under 1600,Always reject under [1600](price_expression),train
+set_policy,Auto-accept Blue Marlin above 2400,Auto-accept [Blue Marlin](vessel_name) above [2400](price_expression),train
+set_policy,Set a floor of 1750 for containers,"Set a floor of [1750](price_expression) for [containers]{""entity"": ""cargo_class"", ""value"": ""containerized_cargo""}",train
+set_policy,Always reject containerized cargo under 2100,"Always reject [containerized cargo]{""entity"": ""cargo_class"", ""value"": ""containerized_cargo""} under [2100](price_expression)",train
+set_policy,Always hold out for 1450,Always hold out for [1450](price_expression),train
+set_policy,Auto-approve ferries at 2800 or more,"Auto-approve [ferries]{""entity"": ""vessel_class"", ""value"": ""ferry""} at [2800](price_expression) or more",train
+set_policy,Never go below 3000,Never go below [3000](price_expression),train
+set_policy,Counter automatically if under 2600,Counter automatically if under [2600](price_expression),train
+set_policy,Accept anything over 1200 without asking,Accept anything over [1200](price_expression) without asking,train
+set_policy,Make it policy to reject under 5000,Make it policy to reject under [5000](price_expression),train
+set_policy,Auto-accept the cruise ship if above 4500,"Auto-accept the [cruise ship]{""entity"": ""vessel_class"", ""value"": ""cruise_ship""} if above [4500](price_expression)",train
+set_policy,Always ask for at least 3500,Always ask for at least [3500](price_expression),train
+set_policy,Reject cruise vessel offers under 2300 automatically,"Reject [cruise vessel]{""entity"": ""vessel_class"", ""value"": ""cruise_ship""} offers under [2300](price_expression) automatically",train
+set_policy,"Standing rule, accept over 1950","Standing rule, accept over [1950](price_expression)",train
+set_policy,"Default policy, counter first offers","Default policy, counter first offers",train
+set_policy,Auto-decline below 2050 euros,Auto-decline below [2050 euros](price_expression),train
+set_policy,Always counter tanker below 1850 euros,"Always counter [tanker]{""entity"": ""vessel_class"", ""value"": ""tanker""} below [1850 euros](price_expression)",train
+set_policy,Set auto-accept threshold to 2k,Set auto-accept threshold to [2k](price_expression),train
+set_policy,Never accept a first offer,Never accept a first offer,train
+set_policy,Auto-accept general cargo shipments over 1800 euros,"Auto-accept [general cargo]{""entity"": ""cargo_class"", ""value"": ""general_cargo""} shipments over [1800 euros](price_expression)",train
+set_policy,Always reject tankers under 2000,"Always reject [tankers]{""entity"": ""vessel_class"", ""value"": ""tanker""} under [2000](price_expression)",train
+set_policy,By default reject anything below 1800,By default reject anything below [1800](price_expression),train
+set_policy,Auto-accept above 1500 for container vessel,"Auto-accept above [1500](price_expression) for [container vessel]{""entity"": ""vessel_class"", ""value"": ""container_vessel""}",train
+set_policy,auto accept container ship over 2200,"auto accept [container ship]{""entity"": ""vessel_class"", ""value"": ""container_vessel""} over [2200](price_expression)",train
+set_policy,always counter first offer,always counter first offer,train
+set_policy,reject under 2500,reject under [2500](price_expression),train
+set_policy,auto reject below 1900,auto reject below [1900](price_expression),train
+set_policy,never accept below 1600,never accept below [1600](price_expression),train
+set_policy,auto accept over 2400,auto accept over [2400](price_expression),train
+set_policy,always ask 1750 min,always ask [1750](price_expression) min,train
+set_policy,auto decline under 2100,auto decline under [2100](price_expression),train
+set_policy,Auto acept cargo vessel above 1450,"Auto acept [cargo vessel]{""entity"": ""vessel_class"", ""value"": ""cargo_vessel""} above [1450](price_expression)",train
+set_policy,Allways counter first offer,Allways counter first offer,train
+set_policy,Reject anythign under 2800,Reject anythign under [2800](price_expression),train
+set_policy,Nevar accept below 3000,Nevar accept below [3000](price_expression),train
+set_policy,Auto-rejcet offers below 2600,Auto-rejcet offers below [2600](price_expression),train
+set_policy,auto-accept over 1200,auto-accept over [1200](price_expression),train
+set_policy,always counter,always counter,train
+set_policy,reject under 5000,reject under [5000](price_expression),train
+set_policy,Auto-approve any offer above 4500,Auto-approve any offer above [4500](price_expression),test
+set_policy,Make counter-first the default,Make counter-first the default,test
+set_policy,Decline everything under 3500,Decline everything under [3500](price_expression),test
+set_policy,Set the auto-accept line at 2300,Set the auto-accept line at [2300](price_expression),test
+set_policy,Never settle below 1950,Never settle below [1950](price_expression),test
+set_policy,Always auto-accept liquid bulk past 2050 euros,"Always auto-accept [liquid bulk]{""entity"": ""cargo_class"", ""value"": ""liquid_bulk""} past [2050 euros](price_expression)",test
+set_policy,"Standing order, reject under 1850 euros","Standing order, reject under [1850 euros](price_expression)",test
+set_policy,Automatically counter low offers,Automatically counter low offers,test
+set_policy,Keep a hard floor at 2k,Keep a hard floor at [2k](price_expression),test
+set_policy,Auto-accept Nordic Breeze over 1800 euros,Auto-accept [Nordic Breeze](vessel_name) over [1800 euros](price_expression),test
+request_help,Help,Help,train
+request_help,What can I do,What can I do,train
+request_help,Commands,Commands,train
+request_help,How does this work,How does this work,train
+request_help,What are my options,What are my options,train
+request_help,Show commands,Show commands,train
+request_help,I need help,I need help,train
+request_help,What now,What now,train
+request_help,Can you help me,Can you help me,train
+request_help,List the commands,List the commands,train
+request_help,How do I play,How do I play,train
+request_help,What should I do,What should I do,train
+request_help,Help me out,Help me out,train
+request_help,I'm stuck,I'm stuck,train
+request_help,What are the controls,What are the controls,train
+request_help,Explain the commands,Explain the commands,train
+request_help,How do I negotiate,How do I negotiate,train
+request_help,What do I type,What do I type,train
+request_help,Give me a hand,Give me a hand,train
+request_help,Show me the options,Show me the options,train
+request_help,What can I say,What can I say,train
+request_help,How do I make an offer,How do I make an offer,train
+request_help,Instructions please,Instructions please,train
+request_help,What are the rules,What are the rules,train
+request_help,Help with commands,Help with commands,train
+request_help,How do I accept a deal,How do I accept a deal,train
+request_help,What actions are available,What actions are available,train
+request_help,I don't know what to do,I don't know what to do,train
+request_help,Guide me,Guide me,train
+request_help,Show help,Show help,train
+request_help,What's the command list,What's the command list,train
+request_help,How do I set a policy,How do I set a policy,train
+request_help,Walk me through this,Walk me through this,train
+request_help,What commands can I use,What commands can I use,train
+request_help,need help here,need help here,train
+request_help,how do i do this,how do i do this,train
+request_help,whats the deal here,whats the deal here,train
+request_help,gimme the commands,gimme the commands,train
+request_help,how to play this,how to play this,train
+request_help,what do i do now,what do i do now,train
+request_help,im lost here,im lost here,train
+request_help,help pls,help pls,train
+request_help,Halp,Halp,train
+request_help,Comands,Comands,train
+request_help,How do i paly,How do i paly,train
+request_help,What can i doo,What can i doo,train
+request_help,I need halp,I need halp,train
+request_help,"um, help","um, help",train
+request_help,any commands?,any commands?,train
+request_help,what're my choices,what're my choices,train
+request_help,Can you explain the commands,Can you explain the commands,test
+request_help,What options do I have,What options do I have,test
+request_help,Show me what I can do,Show me what I can do,test
+request_help,How do I get started,How do I get started,test
+request_help,I could use some help,I could use some help,test
+request_help,What's possible here,What's possible here,test
+request_help,Tell me the commands,Tell me the commands,test
+request_help,How do things work here,How do things work here,test
+request_help,Need a hand,Need a hand,test
+request_help,What are the available actions,What are the available actions,test
+cancel_action,Cancel,Cancel,train
+cancel_action,Never mind,Never mind,train
+cancel_action,Stop the deal,Stop the deal,train
+cancel_action,Pull out,Pull out,train
+cancel_action,Abort,Abort,train
+cancel_action,Call it off,Call it off,train
+cancel_action,Withdraw,Withdraw,train
+cancel_action,Cancel that,Cancel that,train
+cancel_action,Stop,Stop,train
+cancel_action,Forget the deal,Forget the deal,train
+cancel_action,Abort the negotiation,Abort the negotiation,train
+cancel_action,Cancel the offer,Cancel the offer,train
+cancel_action,Let's not,Let's not,train
+cancel_action,Back out,Back out,train
+cancel_action,Scrap it,Scrap it,train
+cancel_action,Drop it,Drop it,train
+cancel_action,Cancel the request,Cancel the request,train
+cancel_action,Nevermind that,Nevermind that,train
+cancel_action,Stop the negotiation,Stop the negotiation,train
+cancel_action,Withdraw my offer,Withdraw my offer,train
+cancel_action,Call the whole thing off,Call the whole thing off,train
+cancel_action,Undo that,Undo that,train
+cancel_action,Cancel the booking,Cancel the booking,train
+cancel_action,I withdraw,I withdraw,train
+cancel_action,End the negotiation,End the negotiation,train
+cancel_action,Abort mission,Abort mission,train
+cancel_action,Pull the offer,Pull the offer,train
+cancel_action,Forget the whole thing,Forget the whole thing,train
+cancel_action,Halt the deal,Halt the deal,train
+cancel_action,Stop right there,Stop right there,train
+cancel_action,Cancel everything,Cancel everything,train
+cancel_action,Take it back,Take it back,train
+cancel_action,Cancel my request,Cancel my request,train
+cancel_action,Kill the deal,Kill the deal,train
+cancel_action,nvm,nvm,train
+cancel_action,cancel plz,cancel plz,train
+cancel_action,stop it pls,stop it pls,train
+cancel_action,abort pls,abort pls,train
+cancel_action,scrap this deal,scrap this deal,train
+cancel_action,im backing out,im backing out,train
+cancel_action,pull the plug,pull the plug,train
+cancel_action,forget all this,forget all this,train
+cancel_action,Cancle,Cancle,train
+cancel_action,Nevermnd,Nevermnd,train
+cancel_action,Abrot,Abrot,train
+cancel_action,Withdaw,Withdaw,train
+cancel_action,Stpo it,Stpo it,train
+cancel_action,"forget it, cancel","forget it, cancel",train
+cancel_action,"no, cancel","no, cancel",train
+cancel_action,"stop, abort","stop, abort",train
+cancel_action,Let's cancel,Let's cancel,test
+cancel_action,Scrap the negotiation,Scrap the negotiation,test
+cancel_action,I'm pulling out,I'm pulling out,test
+cancel_action,Cancel it all,Cancel it all,test
+cancel_action,Abort this,Abort this,test
+cancel_action,Withdraw the request,Withdraw the request,test
+cancel_action,Call it off now,Call it off now,test
+cancel_action,Stop the booking,Stop the booking,test
+cancel_action,Never mind then,Never mind then,test
+cancel_action,Drop the deal,Drop the deal,test

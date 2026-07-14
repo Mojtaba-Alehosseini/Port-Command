@@ -1,0 +1,13 @@
+# Rasa NLU service dependencies — Port Command Genova (task 12).
+#
+# PYTHON 3.10 ONLY. rasa 3.6.21 declares Requires-Python ">=3.8,<3.11", so it
+# CANNOT install on the 3.11 venv used for the rest of the NLP side. It lives in
+# its own interpreter/venv (see the two-venv note in requirements.txt):
+#
+#   py -3.10 -m venv .venv-rasa
+#   .venv-rasa/Scripts/pip install -r requirements-rasa.txt
+#   .venv-rasa/Scripts/rasa --version   # -> Rasa Version 3.6.21
+#
+# rasa pins its own dependency tree (tensorflow 2.12, spaCy, scikit-learn, ...),
+# so this file pins only rasa itself — do NOT auto-upgrade (CLAUDE.md rule 1).
+rasa==3.6.21

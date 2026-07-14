@@ -1,0 +1,190 @@
+[
+  {
+    "text": "I'd pay 1900 to berth for 5 hrs",
+    "entities": [
+      {
+        "start": 8,
+        "end": 12,
+        "value": "1900",
+        "entity": "price_expression"
+      },
+      {
+        "start": 26,
+        "end": 31,
+        "value": "5 hrs",
+        "entity": "time_expression"
+      }
+    ],
+    "predicted_entities": [
+      {
+        "entity": "price_expression",
+        "start": 8,
+        "end": 12,
+        "confidence_entity": 0.9994786381721497,
+        "value": "1900",
+        "extractor": "DIETClassifier",
+        "processors": [
+          "EntitySynonymMapper"
+        ]
+      },
+      {
+        "entity": "berth_id",
+        "start": 16,
+        "end": 21,
+        "confidence_entity": 0.9985892176628113,
+        "value": "berth",
+        "extractor": "DIETClassifier"
+      },
+      {
+        "entity": "time_expression",
+        "start": 26,
+        "end": 31,
+        "confidence_entity": 0.9946205615997314,
+        "value": "5 hrs",
+        "extractor": "DIETClassifier",
+        "processors": [
+          "EntitySynonymMapper"
+        ]
+      }
+    ]
+  },
+  {
+    "text": "We tender 2800 for a couple of hours at pier 4",
+    "entities": [
+      {
+        "start": 10,
+        "end": 14,
+        "value": "2800",
+        "entity": "price_expression"
+      },
+      {
+        "start": 19,
+        "end": 36,
+        "value": "a couple of hours",
+        "entity": "time_expression"
+      },
+      {
+        "start": 40,
+        "end": 46,
+        "value": "berth_4",
+        "entity": "berth_id"
+      }
+    ],
+    "predicted_entities": [
+      {
+        "entity": "berth_id",
+        "start": 10,
+        "end": 14,
+        "confidence_entity": 0.5713951587677002,
+        "value": "2800",
+        "extractor": "DIETClassifier",
+        "processors": [
+          "EntitySynonymMapper"
+        ]
+      },
+      {
+        "entity": "time_expression",
+        "start": 19,
+        "end": 36,
+        "confidence_entity": 0.9652969241142273,
+        "value": "a couple of hours",
+        "extractor": "DIETClassifier",
+        "processors": [
+          "EntitySynonymMapper"
+        ]
+      },
+      {
+        "entity": "berth_id",
+        "start": 40,
+        "end": 46,
+        "confidence_entity": 0.999697208404541,
+        "value": "berth_4",
+        "extractor": "DIETClassifier",
+        "processors": [
+          "EntitySynonymMapper"
+        ]
+      }
+    ]
+  },
+  {
+    "text": "I'll take that one",
+    "entities": [],
+    "predicted_entities": [
+      {
+        "entity": "berth_id",
+        "start": 15,
+        "end": 18,
+        "confidence_entity": 0.6045805215835571,
+        "value": "one",
+        "extractor": "DIETClassifier"
+      }
+    ]
+  },
+  {
+    "text": "Not even close",
+    "entities": [],
+    "predicted_entities": [
+      {
+        "entity": "vessel_name",
+        "start": 4,
+        "end": 8,
+        "confidence_entity": 0.6291162371635437,
+        "value": "even",
+        "extractor": "DIETClassifier"
+      }
+    ]
+  },
+  {
+    "text": "Keep the hazmat class 1 cargo offshore",
+    "entities": [
+      {
+        "start": 9,
+        "end": 23,
+        "value": "hazmat_class_1",
+        "entity": "hazmat_code"
+      }
+    ],
+    "predicted_entities": [
+      {
+        "entity": "hazmat_code",
+        "start": 9,
+        "end": 29,
+        "confidence_entity": 0.4542095959186554,
+        "value": "hazmat class 1 cargo",
+        "extractor": "DIETClassifier"
+      }
+    ]
+  },
+  {
+    "text": "Bar tanker from the inner harbour",
+    "entities": [
+      {
+        "start": 4,
+        "end": 10,
+        "value": "tanker",
+        "entity": "vessel_class"
+      }
+    ],
+    "predicted_entities": [
+      {
+        "entity": "vessel_class",
+        "start": 4,
+        "end": 10,
+        "confidence_entity": 0.9991971850395203,
+        "value": "tanker",
+        "extractor": "DIETClassifier",
+        "processors": [
+          "EntitySynonymMapper"
+        ]
+      },
+      {
+        "entity": "time_expression",
+        "start": 26,
+        "end": 33,
+        "confidence_entity": 0.9233737587928772,
+        "value": "harbour",
+        "extractor": "DIETClassifier"
+      }
+    ]
+  }
+]

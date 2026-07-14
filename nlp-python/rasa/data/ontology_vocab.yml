@@ -1,0 +1,30 @@
+# AUTO-GENERATED FROM port_ontology.owl BY ontology_to_assets.py. DO NOT EDIT.
+# Rasa NER vocabulary (consumed by task 12). Source of truth: the OWL ontology.
+vessel_types:
+  - cargo_vessel
+  - container_vessel
+  - cruise_ship
+  - ferry
+  - tanker
+berths:
+  - berth_1
+  - berth_2
+  - berth_3
+  - berth_4
+cargo_classes:
+  - containerized_cargo
+  - general_cargo
+  - hazmat_cargo
+  - hazmat_class_1
+  - hazmat_class_3
+  - liquid_bulk
+service_types:
+  - tug
+verbs_for_negotiation:
+  - propose
+  - offer
+  - give
+  - pay
+  - accept
+  - refuse
+  - reject
