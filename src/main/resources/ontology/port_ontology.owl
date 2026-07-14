@@ -1,0 +1,170 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://unige.it/portcommand/ontology#"
+     xml:base="http://unige.it/portcommand/ontology"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#">
+
+    <owl:Ontology rdf:about="http://unige.it/portcommand/ontology">
+        <rdfs:comment>Port Command Genova domain ontology (Task 02). Single source of truth: ontology_to_assets.py derives src/main/resources/prolog/port_ontology.pl and nlp-python/rasa/data/ontology_vocab.yml from this file. No individuals here — berth instances are emitted as Prolog facts by the converter. Class/property names are PascalCase here and normalised to snake_case atoms in Prolog.</rdfs:comment>
+    </owl:Ontology>
+
+    <!-- ============================================================= -->
+    <!-- Abstract root classes                                          -->
+    <!-- ============================================================= -->
+    <owl:Class rdf:about="#Vessel"/>
+    <owl:Class rdf:about="#Berth"/>
+    <owl:Class rdf:about="#Cargo"/>
+    <owl:Class rdf:about="#PortService"/>
+    <owl:Class rdf:about="#WeatherCondition"/>
+    <owl:Class rdf:about="#Person"/>
+
+    <!-- ============================================================= -->
+    <!-- Vessel hierarchy — the five committed ship types               -->
+    <!-- ============================================================= -->
+    <owl:Class rdf:about="#Tanker">
+        <rdfs:subClassOf rdf:resource="#Vessel"/>
+    </owl:Class>
+    <owl:Class rdf:about="#ContainerVessel">
+        <rdfs:subClassOf rdf:resource="#Vessel"/>
+    </owl:Class>
+    <owl:Class rdf:about="#CargoVessel">
+        <rdfs:subClassOf rdf:resource="#Vessel"/>
+    </owl:Class>
+    <owl:Class rdf:about="#Ferry">
+        <rdfs:subClassOf rdf:resource="#Vessel"/>
+    </owl:Class>
+    <owl:Class rdf:about="#CruiseShip">
+        <rdfs:subClassOf rdf:resource="#Vessel"/>
+    </owl:Class>
+
+    <!-- ============================================================= -->
+    <!-- Berth hierarchy — four concrete berth classes                  -->
+    <!-- (berth_1=deep_water_berth .. berth_4=ferry_berth are emitted   -->
+    <!--  as instance_of/2 facts by the converter, not as OWL individs) -->
+    <!-- ============================================================= -->
+    <owl:Class rdf:about="#DeepWaterBerth">
+        <rdfs:subClassOf rdf:resource="#Berth"/>
+    </owl:Class>
+    <owl:Class rdf:about="#ContainerBerth">
+        <rdfs:subClassOf rdf:resource="#Berth"/>
+    </owl:Class>
+    <owl:Class rdf:about="#GeneralCargoBerth">
+        <rdfs:subClassOf rdf:resource="#Berth"/>
+    </owl:Class>
+    <owl:Class rdf:about="#FerryBerth">
+        <rdfs:subClassOf rdf:resource="#Berth"/>
+    </owl:Class>
+
+    <!-- ============================================================= -->
+    <!-- Cargo hierarchy — hazmat parent + concrete cargo classes       -->
+    <!-- is_hazmat/1 is derived in Prolog from subclass_of(_,hazmat_cargo)-->
+    <!-- ============================================================= -->
+    <owl:Class rdf:about="#HazmatCargo">
+        <rdfs:subClassOf rdf:resource="#Cargo"/>
+    </owl:Class>
+    <owl:Class rdf:about="#GeneralCargo">
+        <rdfs:subClassOf rdf:resource="#Cargo"/>
+    </owl:Class>
+    <owl:Class rdf:about="#LiquidBulk">
+        <rdfs:subClassOf rdf:resource="#Cargo"/>
+    </owl:Class>
+    <owl:Class rdf:about="#ContainerizedCargo">
+        <rdfs:subClassOf rdf:resource="#Cargo"/>
+    </owl:Class>
+    <owl:Class rdf:about="#HazmatClass1">
+        <rdfs:subClassOf rdf:resource="#HazmatCargo"/>
+    </owl:Class>
+    <owl:Class rdf:about="#HazmatClass3">
+        <rdfs:subClassOf rdf:resource="#HazmatCargo"/>
+    </owl:Class>
+
+    <!-- ============================================================= -->
+    <!-- Port services — tug only (v1)                                  -->
+    <!-- ============================================================= -->
+    <owl:Class rdf:about="#Tug">
+        <rdfs:subClassOf rdf:resource="#PortService"/>
+    </owl:Class>
+
+    <!-- ============================================================= -->
+    <!-- Weather conditions — four classes                              -->
+    <!-- ============================================================= -->
+    <owl:Class rdf:about="#ClearWeather">
+        <rdfs:subClassOf rdf:resource="#WeatherCondition"/>
+    </owl:Class>
+    <owl:Class rdf:about="#Fog">
+        <rdfs:subClassOf rdf:resource="#WeatherCondition"/>
+    </owl:Class>
+    <owl:Class rdf:about="#Storm">
+        <rdfs:subClassOf rdf:resource="#WeatherCondition"/>
+    </owl:Class>
+    <owl:Class rdf:about="#HighWind">
+        <rdfs:subClassOf rdf:resource="#WeatherCondition"/>
+    </owl:Class>
+
+    <!-- ============================================================= -->
+    <!-- People — supporting classes from PROJECT_DEFINITION 6.5         -->
+    <!-- ============================================================= -->
+    <owl:Class rdf:about="#Officer">
+        <rdfs:subClassOf rdf:resource="#Person"/>
+    </owl:Class>
+
+    <!-- ============================================================= -->
+    <!-- Datatype properties (10)                                       -->
+    <!-- ============================================================= -->
+    <owl:DatatypeProperty rdf:about="#hasIMO">
+        <rdfs:domain rdf:resource="#Vessel"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="#hasDraft">
+        <rdfs:domain rdf:resource="#Vessel"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#decimal"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="#hasLength">
+        <rdfs:domain rdf:resource="#Vessel"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#decimal"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="#hasTonnage">
+        <rdfs:domain rdf:resource="#Vessel"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#integer"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="#hasMaxDraft">
+        <rdfs:domain rdf:resource="#Berth"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#decimal"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="#hasMaxLength">
+        <rdfs:domain rdf:resource="#Berth"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#decimal"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="#requiresEscort">
+        <rdfs:domain rdf:resource="#Vessel"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#boolean"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="#requiresHazmatClearance">
+        <rdfs:domain rdf:resource="#Vessel"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#boolean"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="#hasContractedFee">
+        <rdfs:domain rdf:resource="#Vessel"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#decimal"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="#hasContractedHours">
+        <rdfs:domain rdf:resource="#Vessel"/>
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#integer"/>
+    </owl:DatatypeProperty>
+
+    <!-- ============================================================= -->
+    <!-- Object properties (2)                                          -->
+    <!-- ============================================================= -->
+    <owl:ObjectProperty rdf:about="#hasCargoClass">
+        <rdfs:domain rdf:resource="#Vessel"/>
+        <rdfs:range rdf:resource="#Cargo"/>
+    </owl:ObjectProperty>
+    <owl:ObjectProperty rdf:about="#isCompatibleWith">
+        <rdfs:domain rdf:resource="#Vessel"/>
+        <rdfs:range rdf:resource="#Berth"/>
+        <rdfs:comment>Derived; not asserted. Computed by the Prolog compatibility rules (R4) in rules_compatibility.pl (task 04); never materialised as OWL assertions.</rdfs:comment>
+    </owl:ObjectProperty>
+
+</rdf:RDF>

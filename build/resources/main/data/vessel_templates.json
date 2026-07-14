@@ -1,0 +1,47 @@
+{
+  "tanker": {
+    "personality_distribution": {"AGGRESSIVE": 0.30, "NEUTRAL": 0.55, "DESPERATE": 0.15},
+    "min_acceptable_price_range": [4000, 5200],
+    "target_price_range": [5500, 8000],
+    "max_wait_minutes_range": [15, 30],
+    "draft_range": [12.0, 15.5],
+    "length_range": [180.0, 240.0],
+    "tonnage_range": [50000, 120000]
+  },
+  "container_vessel": {
+    "personality_distribution": {"AGGRESSIVE": 0.35, "NEUTRAL": 0.50, "DESPERATE": 0.15},
+    "min_acceptable_price_range": [1800, 2500],
+    "target_price_range": [2600, 3500],
+    "max_wait_minutes_range": [10, 20],
+    "draft_range": [10.0, 14.0],
+    "length_range": [200.0, 300.0],
+    "tonnage_range": [40000, 90000]
+  },
+  "cargo_vessel": {
+    "personality_distribution": {"AGGRESSIVE": 0.20, "NEUTRAL": 0.55, "DESPERATE": 0.25},
+    "min_acceptable_price_range": [1400, 1800],
+    "target_price_range": [1900, 2200],
+    "max_wait_minutes_range": [20, 40],
+    "draft_range": [8.0, 12.0],
+    "length_range": [120.0, 180.0],
+    "tonnage_range": [20000, 50000]
+  },
+  "ferry": {
+    "personality_distribution": {"AGGRESSIVE": 0.25, "NEUTRAL": 0.60, "DESPERATE": 0.15},
+    "min_acceptable_price_range": [1100, 1500],
+    "target_price_range": [1600, 2000],
+    "max_wait_minutes_range": [5, 12],
+    "draft_range": [4.0, 6.5],
+    "length_range": [80.0, 140.0],
+    "tonnage_range": [5000, 15000]
+  },
+  "cruise_ship": {
+    "personality_distribution": {"AGGRESSIVE": 0.15, "NEUTRAL": 0.65, "DESPERATE": 0.20},
+    "min_acceptable_price_range": [3200, 4200],
+    "target_price_range": [4500, 5500],
+    "max_wait_minutes_range": [15, 30],
+    "draft_range": [7.5, 9.5],
+    "length_range": [250.0, 330.0],
+    "tonnage_range": [80000, 160000]
+  }
+}

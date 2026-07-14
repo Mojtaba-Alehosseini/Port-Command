@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - TugAgentIT</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>TugAgentIT</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/it.unige.portcommand.agents.html">it.unige.portcommand.agents</a> &gt; TugAgentIT</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">5</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">16.880s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div id="tabs">
+<ul class="tabLinks">
+<li>
+<a href="#tab0">Tests</a>
+</li>
+<li>
+<a href="#tab1">Standard output</a>
+</li>
+<li>
+<a href="#tab2">Standard error</a>
+</li>
+</ul>
+<div id="tab0" class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">acceptDrivesTransitEscortThenReturnsIdle()</td>
+<td class="success">3.032s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">cancelMidTransitRemovesBehaviourAndReturnsToBase()</td>
+<td class="success">3.046s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">engagedTugRefusesBusy()</td>
+<td class="success">4.681s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">fourAvailableTugsProposeWithCorrectBidContent()</td>
+<td class="success">3.067s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">lowFuelTugRefusesThenRefuelsAndProposesFull()</td>
+<td class="success">3.054s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div id="tab1" class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>22:06:04.962 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:06:04.962 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:06:05.018 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:06:05.516 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1â€“R30)
+22:06:05.516 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:06:05.520 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent cnp_probe spawned (class=CnpProbeAgent)
+22:06:05.531 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+22:06:05.531 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+22:06:05.531 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+22:06:05.541 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+22:06:05.699 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=470.42 eta=162.55min fuel=1.0 -&gt; cnp_probe
+22:06:05.740 [tug_1] [tug_1] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_1 ACCEPTED escort of V1 on CNP cnp-c1 -&gt; transit to Position[x=500.0, y=500.0, headingDeg=0.0]
+22:06:05.766 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 REFUSE busy -&gt; cnp_probe
+22:06:07.838 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:06:07.946 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:06:07.946 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:06:07.954 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:06:07.965 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:06:07.968 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent cnp_probe spawned (class=CnpProbeAgent)
+22:06:07.972 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+22:06:07.972 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+22:06:07.974 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_2 spawned (class=TugAgent)
+22:06:07.976 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_2
+22:06:07.979 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_3 spawned (class=TugAgent)
+22:06:07.979 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_3
+22:06:07.980 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_4 spawned (class=TugAgent)
+22:06:07.980 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_4
+22:06:07.980 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+22:06:07.980 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+22:06:07.989 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=470.42 eta=162.55min fuel=1.0 -&gt; cnp_probe
+22:06:07.990 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_2'
+22:06:07.991 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+22:06:07.994 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=464.02 eta=153.91min fuel=1.0 -&gt; cnp_probe
+22:06:07.996 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_3'
+22:06:07.996 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+22:06:07.996 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 PROPOSE cost=458.17 eta=146.01min fuel=1.0 -&gt; cnp_probe
+22:06:08.000 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_4'
+22:06:08.002 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+22:06:08.002 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 PROPOSE cost=452.96 eta=138.98min fuel=1.0 -&gt; cnp_probe
+22:06:10.944 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:06:10.984 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:06:10.985 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:06:10.985 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:06:10.993 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:06:10.993 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent cnp_probe spawned (class=CnpProbeAgent)
+22:06:10.993 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+22:06:10.993 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+22:06:10.993 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+22:06:10.993 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+22:06:11.011 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=470.42 eta=162.55min fuel=1.0 -&gt; cnp_probe
+22:06:11.046 [tug_1] [tug_1] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_1 ACCEPTED escort of V1 on CNP cnp-d -&gt; transit to Position[x=500.0, y=500.0, headingDeg=0.0]
+22:06:11.164 [tug_1] [tug_1] INFO  i.u.p.b.c.TransitToVesselBehaviour - tug_1 reached vessel pickup Position[x=500.0, y=500.0, headingDeg=0.0] -&gt; escorting to berth
+22:06:11.273 [tug_1] [tug_1] INFO  i.u.p.b.c.EscortToBerthBehaviour - tug_1 delivered vessel to berth Position[x=900.0, y=300.0, headingDeg=0.0] -&gt; returning to base
+22:06:11.339 [tug_1] [tug_1] INFO  i.u.p.b.c.ReturnToBaseBehaviour - tug_1 back at base -&gt; idle
+22:06:11.994 [tug_1] [tug_1] INFO  i.u.p.b.c.RefuelIfLowBehaviour - tug_1 low fuel (0.0387471078658892) at base -&gt; refuelling for 60 sim-s
+22:06:12.205 [tug_1] [tug_1] INFO  i.u.p.b.c.RefuelIfLowBehaviour - tug_1 refuelled to full
+22:06:13.977 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:06:14.048 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:06:14.063 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:06:14.073 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:06:14.089 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:06:14.093 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent cnp_probe spawned (class=CnpProbeAgent)
+22:06:14.093 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+22:06:14.100 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+22:06:14.108 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+22:06:14.109 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=0.1 topSpeed=12.0kn
+22:06:14.111 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 REFUSE low_fuel -&gt; cnp_probe
+22:06:15.115 [tug_1] [tug_1] INFO  i.u.p.b.c.RefuelIfLowBehaviour - tug_1 low fuel (0.1) at base -&gt; refuelling for 60 sim-s
+22:06:15.324 [tug_1] [tug_1] INFO  i.u.p.b.c.RefuelIfLowBehaviour - tug_1 refuelled to full
+22:06:15.334 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=470.42 eta=162.55min fuel=1.0 -&gt; cnp_probe
+22:06:17.033 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:06:17.093 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:06:17.093 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:06:17.093 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:06:17.105 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:06:17.105 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent cnp_probe spawned (class=CnpProbeAgent)
+22:06:17.105 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+22:06:17.105 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+22:06:17.124 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+22:06:17.124 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+22:06:17.124 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=470.42 eta=162.55min fuel=1.0 -&gt; cnp_probe
+22:06:17.139 [tug_1] [tug_1] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_1 ACCEPTED escort of V1 on CNP cnp-e -&gt; transit to Position[x=500.0, y=500.0, headingDeg=0.0]
+22:06:17.198 [tug_1] [tug_1] INFO  i.u.p.b.c.HandleCancelBehaviour - tug_1 CANCEL from cnp_probe -&gt; abort, return to base
+22:06:17.205 [tug_1] [tug_1] INFO  i.u.p.b.c.ReturnToBaseBehaviour - tug_1 back at base -&gt; idle
+22:06:19.824 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=470.42 eta=162.55min fuel=0.9644416 -&gt; cnp_probe
+22:06:20.076 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+</pre>
+</span>
+</div>
+<div id="tab2" class="tab">
+<h2>Standard error</h2>
+<span class="code">
+<pre>Jul 14, 2026 10:06:04 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:06:04 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:06:04 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:06:04 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:06:04 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:06:04 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:06:04 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:06:04 PM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:06:04 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:06:04 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:06:07 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:06:07 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:06:07 PM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@30d25c03[Cannot bind server socket to localhost port 18099].
+Jul 14, 2026 10:06:07 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:06:07 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:06:07 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:06:07 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:06:07 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:06:07 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:06:07 PM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:06:07 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:06:07 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:06:10 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:06:10 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:06:10 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:06:10 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:06:10 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:06:10 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:06:10 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:06:10 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:06:10 PM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:06:10 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:06:10 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:06:13 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:06:13 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:06:14 PM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@14ac77b9[Cannot bind server socket to localhost port 18099].
+Jul 14, 2026 10:06:14 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:06:14 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:06:14 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:06:14 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:06:14 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:06:14 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:06:14 PM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:06:14 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:06:14 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:06:17 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:06:17 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:06:17 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:06:17 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:06:17 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:06:17 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:06:17 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:06:17 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:06:17 PM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:06:17 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:06:17 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:06:20 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="http://www.gradle.org">Gradle 8.10.2</a> at Jul 14, 2026, 10:08:34 PM</p>
+</div>
+</div>
+</body>
+</html>

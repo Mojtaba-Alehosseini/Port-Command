@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - JadeBootstrapIT</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>JadeBootstrapIT</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/it.unige.portcommand.bootstrap.html">it.unige.portcommand.bootstrap</a> &gt; JadeBootstrapIT</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">2</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">10.720s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div id="tabs">
+<ul class="tabLinks">
+<li>
+<a href="#tab0">Tests</a>
+</li>
+<li>
+<a href="#tab1">Standard output</a>
+</li>
+<li>
+<a href="#tab2">Standard error</a>
+</li>
+</ul>
+<div id="tab0" class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">bootsAndShutsDown()</td>
+<td class="success">4.616s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">restartsCleanly()</td>
+<td class="success">6.104s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div id="tab1" class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>22:07:01.340 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:07:01.340 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:07:01.461 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:07:02.457 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1â€“R30)
+22:07:02.457 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:07:04.078 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:07:04.196 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:07:04.198 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:07:04.207 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:07:04.219 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:07:07.183 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:07:07.258 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:07:07.258 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:07:07.272 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:07:07.276 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:07:10.241 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+</pre>
+</span>
+</div>
+<div id="tab2" class="tab">
+<h2>Standard error</h2>
+<span class="code">
+<pre>Jul 14, 2026 10:07:00 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:07:00 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:07:00 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:07:00 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:07:00 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:07:00 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:07:01 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:07:01 PM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:07:01 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:07:01 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:07:04 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:07:04 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:07:04 PM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@63fdffcd[Cannot bind server socket to localhost port 18099].
+Jul 14, 2026 10:07:04 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:07:04 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:07:04 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:07:04 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:07:04 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:07:04 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:07:04 PM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:07:04 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:07:04 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:07:07 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:07:07 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:07:07 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:07:07 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:07:07 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:07:07 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:07:07 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:07:07 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:07:07 PM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:07:07 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:07:07 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:07:10 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="http://www.gradle.org">Gradle 8.10.2</a> at Jul 14, 2026, 10:08:34 PM</p>
+</div>
+</div>
+</body>
+</html>

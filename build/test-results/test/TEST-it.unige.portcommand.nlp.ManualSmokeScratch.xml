@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.ManualSmokeScratch" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-14T20:13:49" hostname="MOJI" time="12.553">
+  <properties/>
+  <testcase name="llmRealExplainOnnx()" classname="it.unige.portcommand.nlp.ManualSmokeScratch" time="12.475"/>
+  <testcase name="rasaRealRoundTrip()" classname="it.unige.portcommand.nlp.ManualSmokeScratch" time="0.076"/>
+  <system-out><![CDATA[=== LLM SMOKE ===
+isReady=true
+elapsed_ms=10457
+validated=false
+text=The harbour master should accept the 2000 EUR offer for 5 hours at berth 3 because it represents a fair and competitive price for the services offered. Additionally, accepting the offer would help maintain good relations with the customer and possibly attract repeat business or referrals.
+=== RASA SMOKE ===
+elapsed_ms=50
+intent=propose_offer confidence=1.0
+entities={price_expression=EntityHit[entity=price_expression, value=2000, start=16, end=20], berth_id=EntityHit[entity=berth_id, value=berth_3, start=36, end=43], time_expression=EntityHit[entity=time_expression, value=5 hours, start=25, end=32]}
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

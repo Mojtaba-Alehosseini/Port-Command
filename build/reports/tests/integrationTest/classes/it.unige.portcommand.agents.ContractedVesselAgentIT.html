@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - ContractedVesselAgentIT</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>ContractedVesselAgentIT</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/it.unige.portcommand.agents.html">it.unige.portcommand.agents</a> &gt; ContractedVesselAgentIT</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">1</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">4.477s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div id="tabs">
+<ul class="tabLinks">
+<li>
+<a href="#tab0">Tests</a>
+</li>
+<li>
+<a href="#tab1">Standard output</a>
+</li>
+<li>
+<a href="#tab2">Standard error</a>
+</li>
+</ul>
+<div id="tab0" class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">contractedVesselRunsArrivalToDeparture()</td>
+<td class="success">4.477s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div id="tab1" class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>22:04:51.935 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:04:51.935 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:04:51.976 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:04:52.614 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1â€“R30)
+22:04:52.614 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:04:52.620 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent fake_hm spawned (class=AutoAcceptHarbourMaster)
+22:04:52.651 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent vessel_c001 spawned (class=ContractedVesselAgent)
+22:04:52.651 [vessel_c001] [vessel_c001] INFO  i.u.p.agents.ContractedVesselAgent - Starting agent vessel_c001
+22:04:52.659 [vessel_c001] [vessel_c001] INFO  i.u.p.agents.ContractedVesselAgent - DF registered: type='vessel' name='vessel_c001'
+22:04:52.661 [vessel_c001] [vessel_c001] INFO  i.u.p.agents.ContractedVesselAgent - vessel_c001 arrived (contracted, CONTRACT-1) -&gt; announce arrival
+22:04:52.850 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_c001 announced arrival (contract CONTRACT-1) -&gt; harbour-master
+22:04:52.904 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_c001: berth GRANTED berth_1 (price 5000.0, 1h) -&gt; transit
+22:04:53.214 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_c001 reached berth berth_1 -&gt; docking
+22:04:53.514 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.DockAndServiceBehaviour - vessel_c001 finished service (1h) at berth_1 -&gt; depart
+22:04:53.835 [vessel_c001] [vessel_c001] INFO  i.u.p.b.auto_flow.DepartBehaviour - vessel_c001 departed -&gt; doDelete
+22:04:54.838 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+</pre>
+</span>
+</div>
+<div id="tab2" class="tab">
+<h2>Standard error</h2>
+<span class="code">
+<pre>Jul 14, 2026 10:04:51 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:04:51 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:04:51 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:04:51 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:04:51 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:04:51 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:04:51 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:04:51 PM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:04:51 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:04:51 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:04:54 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="http://www.gradle.org">Gradle 8.10.2</a> at Jul 14, 2026, 10:08:34 PM</p>
+</div>
+</div>
+</body>
+</html>

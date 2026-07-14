@@ -1,0 +1,584 @@
+19:45:50.408 [Test worker] [] WARN  i.u.p.artifacts.PortStateArtifact - PortStateArtifact subscriber threw on BerthDelta
+java.lang.RuntimeException: boom
+	at it.unige.portcommand.artifacts.PortStateArtifactTest.lambda$subscriberExceptionDoesNotBreakOthers$1(PortStateArtifactTest.java:61)
+	at it.unige.portcommand.artifacts.PortStateArtifact.emit(PortStateArtifact.java:64)
+	at it.unige.portcommand.artifacts.PortStateArtifact.update(PortStateArtifact.java:34)
+	at it.unige.portcommand.artifacts.PortStateArtifactTest.subscriberExceptionDoesNotBreakOthers(PortStateArtifactTest.java:64)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.junit.platform.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:728)
+	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:156)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:147)
+	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:103)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:93)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed(InvocationInterceptorChain.java:64)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke(InvocationInterceptorChain.java:45)
+	at org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke(InvocationInterceptorChain.java:37)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:92)
+	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke(InterceptingExecutableInvoker.java:86)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$7(TestMethodTestDescriptor.java:218)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod(TestMethodTestDescriptor.java:214)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:139)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute(TestMethodTestDescriptor.java:69)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:151)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:141)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:139)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:95)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:155)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:141)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:139)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:95)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:155)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:141)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:139)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:138)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:95)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:198)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:169)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:93)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:141)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:57)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.processAllTestClasses(JUnitPlatformTestClassProcessor.java:124)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor$CollectAllTestClassesExecutor.access$000(JUnitPlatformTestClassProcessor.java:99)
+	at org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor.stop(JUnitPlatformTestClassProcessor.java:94)
+	at org.gradle.api.internal.tasks.testing.SuiteTestClassProcessor.stop(SuiteTestClassProcessor.java:63)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:36)
+	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
+	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
+	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
+	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)
+	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:63)
+	at org.gradle.process.internal.worker.child.ActionExecutionWorker.execute(ActionExecutionWorker.java:56)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:121)
+	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:71)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69)
+	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74)
+19:45:50.791 [Test worker] [] INFO  i.u.p.ontology.PortOntology - PortOntology present at C:/Projects/SDAI and NLP joint Project/PortCommand/port-command-genova/build/resources/main/prolog/port_ontology.pl (consult owned by PrologEngine.init)
+19:45:50.981 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/port_ontology.pl
+19:45:50.983 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_compatibility.pl
+19:45:50.984 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_customs.pl
+19:45:50.986 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_escort.pl
+19:45:50.987 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_priority.pl
+19:45:50.990 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_weather.pl
+19:45:50.994 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+19:45:51.302 [Test worker] [] DEBUG it.unige.portcommand.util.EventBus - EventBus.subscribe SimClockTickEvent mode=ASYNC (stub: stored, no dispatch yet)
+19:45:51.304 [Test worker] [] DEBUG it.unige.portcommand.util.EventBus - EventBus.publish SimClockTickEvent (stub: stored, dispatch arrives in task 17)
+19:45:51.307 [Test worker] [] DEBUG it.unige.portcommand.util.EventBus - EventBus.subscribe SimClockTickEvent mode=CALLER_THREAD (stub: stored, no dispatch yet)
+19:45:51.307 [Test worker] [] DEBUG it.unige.portcommand.util.EventBus - EventBus.publish SimClockTickEvent (stub: stored, dispatch arrives in task 17)
+19:45:53.578 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:45:53.578 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:45:53.613 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:45:53.685 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/port_ontology.pl
+19:45:53.688 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_compatibility.pl
+19:45:53.690 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_customs.pl
+19:45:53.693 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_escort.pl
+19:45:53.695 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_priority.pl
+19:45:53.696 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_weather.pl
+19:45:53.699 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+19:45:53.699 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:45:53.872 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent harbour_master spawned (class=HarbourMasterAgent)
+19:45:53.872 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - Starting agent harbour_master
+19:45:53.879 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - DF registered: type='harbour-master' name='harbour_master'
+19:45:53.880 [harbour_master] [harbour_master] DEBUG i.u.p.b.c.AutoFlowDispatcherBehaviour - AutoFlowDispatcherBehaviour action stub
+19:45:53.886 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
+19:45:53.887 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
+19:45:53.889 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
+19:45:53.892 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+19:45:53.892 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+19:45:53.896 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+19:45:53.897 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent assistant_agent spawned (class=AssistantAgent)
+19:45:53.898 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - Starting agent assistant_agent
+19:45:53.900 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - DF registered: type='assistant' name='assistant_agent'
+19:45:53.900 [assistant_agent] [assistant_agent] DEBUG i.u.p.b.a.RecommendOnDemandBehaviour - RecommendOnDemandBehaviour action stub
+19:45:53.907 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+19:45:53.908 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+19:45:53.910 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+19:45:53.911 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+19:45:53.912 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+19:45:53.915 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+19:45:53.919 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+19:45:53.919 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+19:45:53.920 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_2 spawned (class=TugAgent)
+19:45:53.920 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_2
+19:45:53.921 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_3 spawned (class=TugAgent)
+19:45:53.921 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_3
+19:45:53.922 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+19:45:53.922 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_4 spawned (class=TugAgent)
+19:45:53.923 [tug_1] [tug_1] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:45:53.923 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+19:45:53.923 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_4
+19:45:53.925 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_2'
+19:45:53.925 [tug_2] [tug_2] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:45:53.928 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent df_census_probe spawned (class=DfCensusProbe)
+19:45:53.928 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_3'
+19:45:53.929 [tug_3] [tug_3] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:45:53.930 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_4'
+19:45:53.931 [tug_4] [tug_4] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:45:54.940 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.WeatherEvolutionBehaviour - weather Markov step sunny -> sunny
+19:45:55.983 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.WeatherEvolutionBehaviour - weather Markov step sunny -> sunny
+19:45:56.561 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:45:56.601 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:45:56.602 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:45:56.604 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:45:56.605 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:45:56.606 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent harbour_master spawned (class=HarbourMasterAgent)
+19:45:56.607 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - Starting agent harbour_master
+19:45:56.608 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
+19:45:56.613 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
+19:45:56.614 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - DF registered: type='harbour-master' name='harbour_master'
+19:45:56.615 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+19:45:56.615 [harbour_master] [harbour_master] DEBUG i.u.p.b.c.AutoFlowDispatcherBehaviour - AutoFlowDispatcherBehaviour action stub
+19:45:56.615 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+19:45:56.616 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
+19:45:56.616 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent assistant_agent spawned (class=AssistantAgent)
+19:45:56.616 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - Starting agent assistant_agent
+19:45:56.617 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+19:45:56.617 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+19:45:56.617 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+19:45:56.618 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+19:45:56.618 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - DF registered: type='assistant' name='assistant_agent'
+19:45:56.619 [assistant_agent] [assistant_agent] DEBUG i.u.p.b.a.RecommendOnDemandBehaviour - RecommendOnDemandBehaviour action stub
+19:45:56.619 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+19:45:56.619 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+19:45:56.619 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+19:45:56.620 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+19:45:56.620 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_2 spawned (class=TugAgent)
+19:45:56.620 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+19:45:56.621 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_2
+19:45:56.621 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_3 spawned (class=TugAgent)
+19:45:56.622 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_3
+19:45:56.622 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+19:45:56.623 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_4 spawned (class=TugAgent)
+19:45:56.623 [tug_1] [tug_1] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:45:56.623 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+19:45:56.624 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_2'
+19:45:56.625 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_4
+19:45:56.625 [tug_2] [tug_2] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:45:56.625 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent df_census_probe spawned (class=DfCensusProbe)
+19:45:56.627 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_3'
+19:45:56.628 [tug_3] [tug_3] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:45:56.630 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_4'
+19:45:56.630 [tug_4] [tug_4] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:45:57.659 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.WeatherEvolutionBehaviour - weather Markov step sunny -> sunny
+19:45:58.702 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.WeatherEvolutionBehaviour - weather Markov step sunny -> sunny
+19:45:59.604 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:45:59.630 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:45:59.630 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:45:59.632 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:45:59.632 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:45:59.633 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent harbour_master spawned (class=HarbourMasterAgent)
+19:45:59.633 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - Starting agent harbour_master
+19:45:59.633 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
+19:45:59.634 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
+19:45:59.634 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+19:45:59.634 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - DF registered: type='harbour-master' name='harbour_master'
+19:45:59.634 [harbour_master] [harbour_master] DEBUG i.u.p.b.c.AutoFlowDispatcherBehaviour - AutoFlowDispatcherBehaviour action stub
+19:45:59.637 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+19:45:59.638 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent assistant_agent spawned (class=AssistantAgent)
+19:45:59.638 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
+19:45:59.638 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - Starting agent assistant_agent
+19:45:59.638 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+19:45:59.639 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+19:45:59.640 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+19:45:59.640 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - DF registered: type='assistant' name='assistant_agent'
+19:45:59.640 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+19:45:59.641 [assistant_agent] [assistant_agent] DEBUG i.u.p.b.a.RecommendOnDemandBehaviour - RecommendOnDemandBehaviour action stub
+19:45:59.641 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+19:45:59.642 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+19:45:59.643 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+19:45:59.643 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+19:45:59.645 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_2 spawned (class=TugAgent)
+19:45:59.645 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+19:45:59.645 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_2
+19:45:59.646 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+19:45:59.646 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_3 spawned (class=TugAgent)
+19:45:59.646 [tug_1] [tug_1] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:45:59.646 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_3
+19:45:59.647 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_2'
+19:45:59.647 [tug_2] [tug_2] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:45:59.647 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_4 spawned (class=TugAgent)
+19:45:59.647 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+19:45:59.647 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_4
+19:45:59.648 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_3'
+19:45:59.648 [tug_3] [tug_3] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:45:59.648 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent df_census_probe spawned (class=DfCensusProbe)
+19:45:59.649 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_4'
+19:45:59.649 [tug_4] [tug_4] DEBUG i.u.p.b.cnp.BidInCNPBehaviour - BidInCNPBehaviour action stub
+19:46:00.680 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.WeatherEvolutionBehaviour - weather Markov step sunny -> sunny
+19:46:01.722 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.WeatherEvolutionBehaviour - weather Markov step sunny -> sunny
+19:46:02.626 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:06.983 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:06.983 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:07.010 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:07.080 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/port_ontology.pl
+19:46:07.082 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_compatibility.pl
+19:46:07.083 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_customs.pl
+19:46:07.086 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_escort.pl
+19:46:07.087 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_priority.pl
+19:46:07.089 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_weather.pl
+19:46:07.092 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+19:46:07.092 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:07.095 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent fake_hm spawned (class=AutoAcceptHarbourMaster)
+19:46:07.116 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent vessel_c001 spawned (class=ContractedVesselAgent)
+19:46:07.116 [vessel_c001] [vessel_c001] INFO  i.u.p.agents.ContractedVesselAgent - Starting agent vessel_c001
+19:46:07.119 [vessel_c001] [vessel_c001] INFO  i.u.p.agents.ContractedVesselAgent - DF registered: type='vessel' name='vessel_c001'
+19:46:07.119 [vessel_c001] [vessel_c001] INFO  i.u.p.agents.ContractedVesselAgent - vessel_c001 arrived (contracted, CONTRACT-1) -> announce arrival
+19:46:07.190 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_c001 announced arrival (contract CONTRACT-1) -> harbour-master
+19:46:07.210 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_c001: berth GRANTED berth_1 (price 5000.0, 1h) -> transit
+19:46:07.522 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_c001 reached berth berth_1 -> docking
+19:46:07.828 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.DockAndServiceBehaviour - vessel_c001 finished service (1h) at berth_1 -> depart
+19:46:08.136 [vessel_c001] [vessel_c001] INFO  i.u.p.b.auto_flow.DepartBehaviour - vessel_c001 departed -> doDelete
+19:46:09.923 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:13.336 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:13.336 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:13.363 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:13.435 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/port_ontology.pl
+19:46:13.437 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_compatibility.pl
+19:46:13.439 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_customs.pl
+19:46:13.440 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_escort.pl
+19:46:13.443 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_priority.pl
+19:46:13.445 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_weather.pl
+19:46:13.448 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+19:46:13.448 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:13.451 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+19:46:13.451 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+19:46:13.455 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+19:46:13.477 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:13.490 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - clearance REQUEST tanker / hazmat_class_3 from probe_1
+19:46:13.495 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - CONFIRM clearance -> probe_1
+19:46:16.277 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:16.306 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:16.308 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:16.308 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:16.308 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:16.308 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+19:46:16.308 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+19:46:16.308 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+19:46:16.308 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:16.308 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - clearance REQUEST tanker / hazmat_class_3 from probe_1
+19:46:16.308 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - INFORM flagged (blacklisted) -> probe_1
+19:46:16.308 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_2 spawned (class=MessageProbe)
+19:46:16.308 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - clearance REQUEST tanker / hazmat_class_3 from probe_2
+19:46:16.308 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - CONFIRM clearance -> probe_2
+19:46:19.312 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:19.335 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:19.336 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:19.337 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:19.338 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:19.339 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+19:46:19.339 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+19:46:19.340 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:19.341 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+19:46:19.342 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - clearance REQUEST tanker / general_cargo from probe_1
+19:46:19.344 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - INFORM routine_inspection -> probe_1
+19:46:22.335 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:22.354 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:22.354 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:22.355 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:22.356 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:22.357 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+19:46:22.357 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+19:46:22.358 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:22.360 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+19:46:22.361 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - clearance REQUEST tanker / general_cargo from probe_1
+19:46:22.363 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - CONFIRM clearance -> probe_1
+19:46:25.351 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:32.177 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:32.177 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:32.219 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:32.292 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/port_ontology.pl
+19:46:32.292 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_compatibility.pl
+19:46:32.292 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_customs.pl
+19:46:32.292 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_escort.pl
+19:46:32.292 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_priority.pl
+19:46:32.292 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_weather.pl
+19:46:32.309 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+19:46:32.309 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:32.309 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+19:46:32.309 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+19:46:32.309 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+19:46:32.309 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+19:46:32.309 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+19:46:32.309 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+19:46:32.324 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+19:46:32.328 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+19:46:32.331 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+19:46:32.405 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:32.408 [terminal_nocrane] [terminal_nocrane] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+19:46:32.491 [terminal_nocrane] [terminal_nocrane] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE no_crane -> probe_1
+19:46:35.106 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:35.136 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:35.136 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:35.138 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:35.138 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:35.139 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+19:46:35.139 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+19:46:35.140 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+19:46:35.140 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+19:46:35.140 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+19:46:35.140 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+19:46:35.141 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+19:46:35.142 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+19:46:35.144 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+19:46:35.145 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent fake_hm spawned (class=FakeHarbourMaster)
+19:46:35.151 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:35.152 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+19:46:35.158 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> probe_1
+19:46:35.562 [terminal_general] [terminal_general] INFO  i.u.p.b.c.ProcessCargoHandlingBehaviour - INFORM handling_complete vessel=v1 berth=berth_1 -> harbour-master
+19:46:38.140 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:38.175 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:38.175 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:38.176 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:38.176 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:38.176 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+19:46:38.176 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+19:46:38.176 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+19:46:38.176 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+19:46:38.176 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+19:46:38.184 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+19:46:38.184 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+19:46:38.184 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+19:46:38.185 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:38.186 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+19:46:38.186 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+19:46:38.187 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE incompatible -> probe_1
+19:46:41.169 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:41.193 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:41.193 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:41.193 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:41.193 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:41.193 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+19:46:41.202 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+19:46:41.202 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+19:46:41.202 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+19:46:41.202 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+19:46:41.202 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+19:46:41.202 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+19:46:41.205 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent fake_hm spawned (class=FakeHarbourMaster)
+19:46:41.205 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+19:46:41.206 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:41.206 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+19:46:41.207 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+19:46:41.209 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> probe_1
+19:46:41.210 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_2 spawned (class=MessageProbe)
+19:46:41.210 [terminal_general] [terminal_general] INFO  i.u.p.b.c.RetractIfFloodBehaviour - flood INFORM for berth berth_1 — retracting occupancy
+19:46:41.210 [terminal_general] [terminal_general] INFO  i.u.p.b.c.RetractIfFloodBehaviour - DISCONFIRM retracted berth=berth_1 -> harbour-master
+19:46:44.191 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:44.215 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:44.215 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:44.215 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:44.215 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:44.215 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+19:46:44.215 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+19:46:44.215 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+19:46:44.215 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+19:46:44.215 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+19:46:44.215 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+19:46:44.215 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+19:46:44.224 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+19:46:44.224 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:44.225 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+19:46:44.225 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+19:46:44.226 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> probe_1
+19:46:47.216 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:47.234 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:47.234 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:47.236 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:47.236 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:47.237 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+19:46:47.237 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+19:46:47.238 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+19:46:47.238 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+19:46:47.239 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+19:46:47.239 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+19:46:47.239 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+19:46:47.240 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+19:46:47.240 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:47.241 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+19:46:47.241 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+19:46:47.243 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> probe_1
+19:46:47.245 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_2 spawned (class=MessageProbe)
+19:46:47.246 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_2
+19:46:47.247 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE berth_busy -> probe_2
+19:46:50.236 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:50.257 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:50.257 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:50.259 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:50.260 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:50.262 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+19:46:50.263 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+19:46:50.265 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+19:46:50.265 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+19:46:50.266 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+19:46:50.267 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+19:46:50.267 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+19:46:50.267 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+19:46:50.268 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:50.268 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+19:46:50.269 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+19:46:50.270 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> probe_1
+19:46:53.255 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:46:53.275 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:46:53.275 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:46:53.276 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:46:53.276 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:46:53.276 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+19:46:53.276 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+19:46:53.276 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+19:46:53.276 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+19:46:53.276 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+19:46:53.276 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+19:46:53.282 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+19:46:53.282 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+19:46:53.283 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+19:46:53.283 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+19:46:53.284 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+19:46:53.284 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE malformed -> probe_1
+19:46:56.274 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:47:00.655 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:47:00.655 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:47:00.692 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:47:00.786 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/port_ontology.pl
+19:47:00.788 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_compatibility.pl
+19:47:00.790 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_customs.pl
+19:47:00.792 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_escort.pl
+19:47:00.794 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_priority.pl
+19:47:00.797 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_weather.pl
+19:47:00.800 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+19:47:00.801 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:47:02.613 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent fake_hm spawned (class=CounterOfferHarbourMaster)
+19:47:02.760 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent vessel_w001 spawned (class=WalkInVesselAgent)
+19:47:02.760 [vessel_w001] [vessel_w001] INFO  i.u.p.agents.WalkInVesselAgent - Starting agent vessel_w001
+19:47:02.760 [vessel_w001] [vessel_w001] INFO  i.u.p.agents.WalkInVesselAgent - DF registered: type='vessel' name='vessel_w001'
+19:47:02.776 [vessel_w001] [vessel_w001] INFO  i.u.p.agents.WalkInVesselAgent - vessel_w001 arrived (walk-in, NEUTRAL) -> opening proposal
+19:47:02.898 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.OpeningProposalBehaviour - vessel_w001 opened at 2270.6639933301 (13h) -> harbour-master
+19:47:02.953 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w001: COUNTER at 6000.0 (round 2)
+19:47:02.957 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w001: ACCEPT at 5500.0 (10h) -> closing deal
+19:47:03.001 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.DealClosedBehaviour - vessel_w001: deal closed at 5500.0 (10h) -> CONFIRM + recorded + awaiting berth
+19:47:03.590 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:47:06.542 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:47:06.542 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:47:06.569 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:47:06.649 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/port_ontology.pl
+19:47:06.651 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_compatibility.pl
+19:47:06.653 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_customs.pl
+19:47:06.655 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_escort.pl
+19:47:06.656 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_priority.pl
+19:47:06.658 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_weather.pl
+19:47:06.661 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+19:47:06.663 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:47:06.671 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
+19:47:06.671 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
+19:47:06.673 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent fake_hm spawned (class=SubscriberProbe)
+19:47:06.674 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent wx_sub spawned (class=SubscriberProbe)
+19:47:06.675 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
+19:47:06.974 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=18 state=sunny -> 1 subscriber(s)
+19:47:07.186 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=18 state=sunny -> 1 subscriber(s)
+19:47:07.395 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=18 state=sunny -> 1 subscriber(s)
+19:47:07.606 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=18 state=sunny -> 1 subscriber(s)
+19:47:07.720 [weather_agent] [weather_agent] INFO  i.u.p.b.c.WeatherEvolutionBehaviour - scripted weather applied at sim-min 24: wind=32 state=stormy
+19:47:07.816 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=32 state=stormy -> 1 subscriber(s)
+19:47:07.821 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather threshold crossed (wind 32) -> high-priority INFORM to harbour-master
+19:47:08.034 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=32 state=stormy -> 1 subscriber(s)
+19:47:08.245 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=32 state=stormy -> 1 subscriber(s)
+19:47:08.454 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=32 state=stormy -> 1 subscriber(s)
+19:47:08.664 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=32 state=stormy -> 1 subscriber(s)
+19:47:08.762 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.WeatherEvolutionBehaviour - weather Markov step stormy -> cloudy
+19:47:08.874 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=18 state=cloudy -> 1 subscriber(s)
+19:47:09.085 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=18 state=cloudy -> 1 subscriber(s)
+19:47:09.296 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=18 state=cloudy -> 1 subscriber(s)
+19:47:09.470 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:47:09.499 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:47:09.500 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:47:09.501 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:47:09.502 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:47:09.503 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
+19:47:09.503 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
+19:47:09.504 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent wx_sub spawned (class=SubscriberProbe)
+19:47:09.505 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
+19:47:09.719 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=18 state=sunny -> 1 subscriber(s)
+19:47:09.929 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=18 state=sunny -> 1 subscriber(s)
+19:47:10.138 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=18 state=sunny -> 1 subscriber(s)
+19:47:10.347 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=18 state=sunny -> 1 subscriber(s)
+19:47:10.548 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.WeatherEvolutionBehaviour - weather Markov step sunny -> sunny
+19:47:10.557 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=13 state=sunny -> 1 subscriber(s)
+19:47:10.768 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=13 state=sunny -> 1 subscriber(s)
+19:47:10.979 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=13 state=sunny -> 1 subscriber(s)
+19:47:11.188 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=13 state=sunny -> 1 subscriber(s)
+19:47:11.397 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=13 state=sunny -> 1 subscriber(s)
+19:47:11.590 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.WeatherEvolutionBehaviour - weather Markov step sunny -> sunny
+19:47:11.607 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=6 state=sunny -> 1 subscriber(s)
+19:47:11.817 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=6 state=sunny -> 1 subscriber(s)
+19:47:12.028 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=6 state=sunny -> 1 subscriber(s)
+19:47:12.237 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=6 state=sunny -> 1 subscriber(s)
+19:47:12.446 [weather_agent] [weather_agent] DEBUG i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather broadcast wind=6 state=sunny -> 1 subscriber(s)
+19:47:12.502 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:47:18.731 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:47:18.731 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:47:18.761 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:47:18.835 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/port_ontology.pl
+19:47:18.837 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_compatibility.pl
+19:47:18.839 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_customs.pl
+19:47:18.841 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_escort.pl
+19:47:18.842 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_priority.pl
+19:47:18.844 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_weather.pl
+19:47:18.848 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+19:47:18.849 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:47:21.674 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:47:21.717 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:47:21.717 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:47:21.719 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:47:21.719 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:47:24.708 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:47:24.734 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+19:47:24.734 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+19:47:24.736 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+19:47:24.736 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+19:47:27.721 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+19:47:39.801 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/port_ontology.pl
+19:47:39.806 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_compatibility.pl
+19:47:39.808 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_customs.pl
+19:47:39.810 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_escort.pl
+19:47:39.812 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_priority.pl
+19:47:39.817 [Test worker] [] DEBUG i.u.portcommand.prolog.PrologEngine - consulted /prolog/rules_weather.pl
+19:47:39.821 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+19:47:42.265 [Test worker] [] INFO  i.u.portcommand.scaffold.JplProbe - JPL consult('C:/Projects/SDAI and NLP joint Project/PortCommand/port-command-genova/build/resources/test/prolog/smoke.pl') -> true
+19:47:42.290 [Test worker] [] INFO  i.u.portcommand.scaffold.JplProbe - JPL member(2, [1,2,3]) -> true
+19:47:45.260 [Test worker] [] INFO  i.u.portcommand.scaffold.SmokeTest - === Smoke test start ===
+19:47:45.346 [Test worker] [] INFO  i.u.portcommand.scaffold.JplProbe - JPL consult('C:/Projects/SDAI and NLP joint Project/PortCommand/port-command-genova/build/resources/test/prolog/smoke.pl') -> true
+19:47:45.353 [Test worker] [] INFO  i.u.portcommand.scaffold.JplProbe - JPL member(2, [1,2,3]) -> true
+19:47:45.686 [smoke] [] INFO  i.u.portcommand.scaffold.SmokeAgent - SmokeAgent smoke up
+19:47:45.735 [smoke] [] INFO  i.u.portcommand.scaffold.SmokeAgent - SmokeAgent smoke down
+19:47:48.637 [Test worker] [] INFO  i.u.portcommand.scaffold.SmokeTest - === Smoke test pass ===

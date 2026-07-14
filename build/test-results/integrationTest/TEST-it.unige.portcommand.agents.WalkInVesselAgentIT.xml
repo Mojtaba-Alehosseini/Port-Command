@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.agents.WalkInVesselAgentIT" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-07-14T20:06:25" hostname="MOJI" time="7.057">
+  <properties/>
+  <testcase name="walkInNegotiatesCounterThenAcceptWithoutLeakingBeliefs()" classname="it.unige.portcommand.agents.WalkInVesselAgentIT" time="7.057"/>
+  <system-out><![CDATA[22:06:27.930 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:06:27.930 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:06:27.998 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:06:28.610 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1â€“R30)
+22:06:28.611 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:06:31.964 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent fake_hm spawned (class=CounterOfferHarbourMaster)
+22:06:32.184 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent vessel_w001 spawned (class=WalkInVesselAgent)
+22:06:32.184 [vessel_w001] [vessel_w001] INFO  i.u.p.agents.WalkInVesselAgent - Starting agent vessel_w001
+22:06:32.194 [vessel_w001] [vessel_w001] INFO  i.u.p.agents.WalkInVesselAgent - DF registered: type='vessel' name='vessel_w001'
+22:06:32.200 [vessel_w001] [vessel_w001] INFO  i.u.p.agents.WalkInVesselAgent - vessel_w001 arrived (walk-in, NEUTRAL) -> opening proposal
+22:06:32.583 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.OpeningProposalBehaviour - vessel_w001 opened at 2270.6639933301 (13h) -> harbour-master
+22:06:32.738 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w001: COUNTER at 6000.0 (round 2)
+22:06:32.747 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w001: ACCEPT at 5500.0 (10h) -> closing deal
+22:06:32.910 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.DealClosedBehaviour - vessel_w001: deal closed at 5500.0 (10h) -> CONFIRM + recorded + awaiting berth
+22:06:32.962 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+]]></system-out>
+  <system-err><![CDATA[Jul 14, 2026 10:06:26 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:06:26 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:06:27 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:06:27 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:06:27 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:06:27 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:06:27 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:06:27 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:06:27 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:06:27 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (C:\Users\aleho\.gradle\caches\modules-2\files-2.1\net.bytebuddy\byte-buddy-agent\1.15.4\58e850dde88f3cf20f41f659440bef33f6c4fe02\byte-buddy-agent-1.15.4.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+Jul 14, 2026 10:06:32 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+]]></system-err>
+</testsuite>

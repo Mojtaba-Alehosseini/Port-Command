@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.agents.CustomsAgentIT" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-07-14T20:04:59" hostname="MOJI" time="14.198">
+  <properties/>
+  <testcase name="hazmatClearanceConfirmsWithRef()" classname="it.unige.portcommand.agents.CustomsAgentIT" time="4.903"/>
+  <testcase name="blacklistedHazmatFlaggedThenClearedAfterRetract()" classname="it.unige.portcommand.agents.CustomsAgentIT" time="3.073"/>
+  <testcase name="nonHazmatLowRollTriggersRoutineInspection()" classname="it.unige.portcommand.agents.CustomsAgentIT" time="3.071"/>
+  <testcase name="nonHazmatRollMatchesTheSeededStream()" classname="it.unige.portcommand.agents.CustomsAgentIT" time="3.086"/>
+  <system-out><![CDATA[22:05:02.027 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:02.046 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:02.107 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:02.735 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1â€“R30)
+22:05:02.736 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:02.742 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+22:05:02.751 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+22:05:02.764 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+22:05:02.826 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:02.858 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - clearance REQUEST tanker / hazmat_class_3 from probe_1
+22:05:02.866 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - CONFIRM clearance -> probe_1
+22:05:04.805 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:05:04.878 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:04.878 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:04.881 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:04.881 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:04.881 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+22:05:04.881 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+22:05:04.895 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:04.898 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+22:05:04.898 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - clearance REQUEST tanker / hazmat_class_3 from probe_1
+22:05:04.901 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - INFORM flagged (blacklisted) -> probe_1
+22:05:04.904 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_2 spawned (class=MessageProbe)
+22:05:04.904 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - clearance REQUEST tanker / hazmat_class_3 from probe_2
+22:05:04.906 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - CONFIRM clearance -> probe_2
+22:05:07.894 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:05:08.026 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:08.026 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:08.033 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:08.040 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:08.044 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+22:05:08.046 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+22:05:08.049 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:08.052 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+22:05:08.053 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - clearance REQUEST tanker / general_cargo from probe_1
+22:05:08.058 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - INFORM routine_inspection -> probe_1
+22:05:11.025 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:05:11.121 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:11.121 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:11.133 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:11.149 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:11.150 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+22:05:11.150 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+22:05:11.150 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:11.165 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+22:05:11.165 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - clearance REQUEST tanker / general_cargo from probe_1
+22:05:11.165 [customs_agent] [customs_agent] INFO  i.u.p.b.c.HandleClearanceRequestBehaviour - CONFIRM clearance -> probe_1
+22:05:14.114 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+]]></system-out>
+  <system-err><![CDATA[Jul 14, 2026 10:05:00 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:00 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:01 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:01 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:01 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:01 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:01 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:01 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:01 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:01 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:04 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:05:04 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:04 PM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@20e6c4dc[Cannot bind server socket to localhost port 18099].
+Jul 14, 2026 10:05:04 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:04 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:04 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:04 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:04 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:04 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:04 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:04 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:04 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:07 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:05:07 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:07 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:08 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:08 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:08 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:08 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:08 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:08 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:08 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:08 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:11 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:05:11 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:11 PM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@61fafb74[Cannot bind server socket to localhost port 18099].
+Jul 14, 2026 10:05:11 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:11 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:11 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:11 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:11 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:11 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:11 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:11 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:11 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:14 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+]]></system-err>
+</testsuite>

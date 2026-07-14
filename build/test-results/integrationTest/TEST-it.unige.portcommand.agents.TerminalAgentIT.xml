@@ -1,0 +1,416 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.agents.TerminalAgentIT" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-07-14T20:05:27" hostname="MOJI" time="25.679">
+  <properties/>
+  <testcase name="requestWhenNoCraneIsRefused()" classname="it.unige.portcommand.agents.TerminalAgentIT" time="4.247"/>
+  <testcase name="cargoCompletionInformsHarbourMasterOnAgentThread()" classname="it.unige.portcommand.agents.TerminalAgentIT" time="3.092"/>
+  <testcase name="incompatibleVesselIsRefused()" classname="it.unige.portcommand.agents.TerminalAgentIT" time="3.046"/>
+  <testcase name="floodInformTriggersDisconfirm()" classname="it.unige.portcommand.agents.TerminalAgentIT" time="3.057"/>
+  <testcase name="requestForUnmanagedBerthIsWrongTerminal()" classname="it.unige.portcommand.agents.TerminalAgentIT" time="3.057"/>
+  <testcase name="secondRequestForSameBerthIsBusy()" classname="it.unige.portcommand.agents.TerminalAgentIT" time="3.041"/>
+  <testcase name="compatibleRequestGetsConfirmWithCrane()" classname="it.unige.portcommand.agents.TerminalAgentIT" time="3.054"/>
+  <testcase name="malformedContentIsRefused()" classname="it.unige.portcommand.agents.TerminalAgentIT" time="3.058"/>
+  <system-out><![CDATA[22:05:29.101 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:29.101 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:29.209 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:30.179 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1â€“R30)
+22:05:30.181 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:30.210 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+22:05:30.210 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+22:05:30.223 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+22:05:30.223 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+22:05:30.227 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+22:05:30.228 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+22:05:30.240 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+22:05:30.245 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+22:05:30.251 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+22:05:30.427 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:30.432 [terminal_nocrane] [terminal_nocrane] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+22:05:30.589 [terminal_nocrane] [terminal_nocrane] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE no_crane -> probe_1
+22:05:31.909 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:05:32.044 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:32.045 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:32.054 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:32.068 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:32.074 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+22:05:32.074 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+22:05:32.076 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+22:05:32.078 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+22:05:32.080 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+22:05:32.080 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+22:05:32.086 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+22:05:32.089 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent fake_hm spawned (class=FakeHarbourMaster)
+22:05:32.090 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+22:05:32.093 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+22:05:32.093 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:32.094 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+22:05:32.106 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> probe_1
+22:05:32.515 [terminal_general] [terminal_general] INFO  i.u.p.b.c.ProcessCargoHandlingBehaviour - INFORM handling_complete vessel=v1 berth=berth_1 -> harbour-master
+22:05:35.045 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:05:35.148 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:35.148 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:35.156 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:35.184 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:35.188 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+22:05:35.188 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+22:05:35.190 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+22:05:35.190 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+22:05:35.190 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+22:05:35.195 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+22:05:35.195 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+22:05:35.199 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:35.201 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+22:05:35.201 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+22:05:35.205 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+22:05:35.209 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE incompatible -> probe_1
+22:05:38.098 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:05:38.158 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:38.160 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:38.168 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:38.178 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:38.180 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+22:05:38.182 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+22:05:38.184 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+22:05:38.184 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+22:05:38.188 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+22:05:38.188 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+22:05:38.190 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+22:05:38.192 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent fake_hm spawned (class=FakeHarbourMaster)
+22:05:38.194 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+22:05:38.197 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:38.198 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+22:05:38.198 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+22:05:38.205 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> probe_1
+22:05:38.210 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_2 spawned (class=MessageProbe)
+22:05:38.213 [terminal_general] [terminal_general] INFO  i.u.p.b.c.RetractIfFloodBehaviour - flood INFORM for berth berth_1 â€” retracting occupancy
+22:05:38.222 [terminal_general] [terminal_general] INFO  i.u.p.b.c.RetractIfFloodBehaviour - DISCONFIRM retracted berth=berth_1 -> harbour-master
+22:05:41.158 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:05:41.222 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:41.222 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:41.227 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:41.238 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:41.240 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+22:05:41.240 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+22:05:41.244 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+22:05:41.244 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+22:05:41.246 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+22:05:41.246 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+22:05:41.246 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+22:05:41.251 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:41.251 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+22:05:41.253 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+22:05:41.254 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+22:05:41.254 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> probe_1
+22:05:44.216 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:05:44.273 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:44.275 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:44.280 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:44.280 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:44.280 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+22:05:44.280 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+22:05:44.280 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+22:05:44.296 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+22:05:44.296 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+22:05:44.296 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+22:05:44.296 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+22:05:44.301 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+22:05:44.302 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:44.303 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+22:05:44.303 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+22:05:44.308 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> probe_1
+22:05:44.313 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_2 spawned (class=MessageProbe)
+22:05:44.314 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_2
+22:05:44.321 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE berth_busy -> probe_2
+22:05:47.264 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:05:47.312 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:47.328 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:47.328 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:47.344 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:47.344 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+22:05:47.344 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+22:05:47.344 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+22:05:47.344 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+22:05:47.344 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+22:05:47.344 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+22:05:47.344 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+22:05:47.361 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:47.361 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+22:05:47.363 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+22:05:47.365 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+22:05:47.369 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> probe_1
+22:05:50.321 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+22:05:50.369 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+22:05:50.369 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
+22:05:50.386 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+22:05:50.400 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+22:05:50.400 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+22:05:50.400 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+22:05:50.410 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+22:05:50.410 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+22:05:50.410 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+22:05:50.413 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_nocrane spawned (class=TerminalAgent)
+22:05:50.413 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_nocrane
+22:05:50.416 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+22:05:50.417 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent probe_1 spawned (class=MessageProbe)
+22:05:50.418 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from probe_1
+22:05:50.419 [terminal_nocrane] [terminal_nocrane] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_nocrane'
+22:05:50.420 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE malformed -> probe_1
+22:05:53.380 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+]]></system-out>
+  <system-err><![CDATA[Jul 14, 2026 10:05:28 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:28 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:28 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:28 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:28 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:28 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:28 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:28 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:28 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:29 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:31 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:05:31 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:31 PM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@2add4d24[Cannot bind server socket to localhost port 18099].
+Jul 14, 2026 10:05:31 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:31 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:31 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:32 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:32 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:32 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:32 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:32 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:32 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:35 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:05:35 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:35 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:35 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:35 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:35 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:35 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:35 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:35 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:35 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:35 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:38 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:05:38 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:38 PM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@a137d7a[Cannot bind server socket to localhost port 18099].
+Jul 14, 2026 10:05:38 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:38 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:38 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:38 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:38 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:38 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:38 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:38 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:38 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:41 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:05:41 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:41 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:41 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:41 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:41 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:41 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:41 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:41 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:41 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:41 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:44 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:05:44 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:44 PM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@58b67519[Cannot bind server socket to localhost port 18099].
+Jul 14, 2026 10:05:44 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:44 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:44 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:44 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:44 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:44 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:44 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:44 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:44 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:47 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:05:47 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:47 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:47 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:47 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:47 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:47 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:47 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:47 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:47 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:47 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:50 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 14, 2026 10:05:50 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:05:50 PM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@4038cd3a[Cannot bind server socket to localhost port 18099].
+Jul 14, 2026 10:05:50 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:18099
+
+Jul 14, 2026 10:05:50 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:05:50 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:05:50 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:05:50 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:05:50 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:05:50 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:05:50 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:05:50 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:05:53 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+]]></system-err>
+</testsuite>

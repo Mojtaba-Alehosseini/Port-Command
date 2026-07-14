@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.scaffold.SmokeTestIT" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-07-14T20:08:19" hostname="MOJI" time="4.4">
+  <properties/>
+  <testcase name="smokeTestRunsCleanly()" classname="it.unige.portcommand.scaffold.SmokeTestIT" time="4.4"/>
+  <system-out><![CDATA[22:08:19.723 [Test worker] [] INFO  i.u.portcommand.scaffold.SmokeTest - === Smoke test start ===
+22:08:19.862 [Test worker] [] INFO  i.u.portcommand.scaffold.JplProbe - JPL consult('C:/Projects/SDAI and NLP joint Project/PortCommand/port-command-genova/build/resources/test/prolog/smoke.pl') -> true
+22:08:19.870 [Test worker] [] INFO  i.u.portcommand.scaffold.JplProbe - JPL member(2, [1,2,3]) -> true
+22:08:20.527 [smoke] [] INFO  i.u.portcommand.scaffold.SmokeAgent - SmokeAgent smoke up
+22:08:20.604 [smoke] [] INFO  i.u.portcommand.scaffold.SmokeAgent - SmokeAgent smoke down
+22:08:23.416 [Test worker] [] INFO  i.u.portcommand.scaffold.SmokeTest - === Smoke test pass ===
+]]></system-out>
+  <system-err><![CDATA[Jul 14, 2026 10:08:19 PM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 14, 2026 10:08:19 PM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.205.181.230:1099
+
+Jul 14, 2026 10:08:20 PM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 14, 2026 10:08:20 PM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 14, 2026 10:08:20 PM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 14, 2026 10:08:20 PM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 14, 2026 10:08:20 PM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 14, 2026 10:08:20 PM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 14, 2026 10:08:20 PM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 14, 2026 10:08:20 PM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.205.181.230 is ready.
+--------------------------------------------
+Jul 14, 2026 10:08:23 PM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+]]></system-err>
+</testsuite>
