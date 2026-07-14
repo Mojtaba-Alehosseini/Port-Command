@@ -41,6 +41,8 @@ class JadeBootstrapIT {
         assertNotNull(boot.getSimClock(), "sim clock present after start");
         assertNotNull(boot.getSpawner(), "spawner present after start");
         assertTrue(boot.bootDfSelfCheck().isEmpty(), "no smoke-test providers at boot");
+        assertNotNull(boot.getRasaBridge(), "rasa bridge present after start (no network I/O at construction)");
+        assertNotNull(boot.getLLMBridge(), "llm bridge present after start (no network I/O at construction)");
 
         boot.shutdown();
         assertFalse(boot.isStarted(), "stopped after shutdown");

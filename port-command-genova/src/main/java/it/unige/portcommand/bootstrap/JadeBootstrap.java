@@ -4,14 +4,19 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.http.HttpClient;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.nlp.LLMBridge;
+import it.unige.portcommand.nlp.RasaBridge;
 import it.unige.portcommand.ontology.OntologyValidation;
 import it.unige.portcommand.prolog.PrologEngine;
 import it.unige.portcommand.util.RandomSource;
@@ -60,6 +65,8 @@ public final class JadeBootstrap {
     private volatile MarketHistoryArtifact marketHistory;
     private volatile JadeAgentSpawner spawner;
     private volatile List<AID> bootDfSelfCheck = List.of();
+    private volatile RasaBridge rasaBridge;
+    private volatile LLMBridge llmBridge;
 
     public void start(BootstrapConfig cfg) {
         lock.lock();
@@ -106,6 +113,14 @@ public final class JadeBootstrap {
                     new Object[] {mainContainer, ready, dfCheck});
             awaitReady(ready, cfg.mainPort());
             bootDfSelfCheck = dfCheck.getNow(List.of());
+
+            // One shared HttpClient for both NLP bridges (thread-safe; planning/14's own
+            // note). Single Rasa pipeline on port 5005 — there is no second instance.
+            HttpClient sharedHttpClient = RasaBridge.newClientBuilder().build();
+            ObjectMapper sharedJson = new ObjectMapper();
+            rasaBridge = new RasaBridge(RasaBridge.resolveParseUri(), sharedHttpClient, sharedJson);
+            llmBridge = new LLMBridge(LLMBridge.resolveExplainUri(), LLMBridge.resolveHealthUri(),
+                    sharedHttpClient, sharedJson);
 
             // Prolog kernel up before any agent makes a binding decision. Independent
             // of JADE (pure JPL); idempotent, so a restart cycle re-enters as a no-op.
@@ -209,6 +224,16 @@ public final class JadeBootstrap {
     /** AIDs found by the boot-time {@code smoke-test} DF self-check (expected empty). */
     public List<AID> bootDfSelfCheck() {
         return bootDfSelfCheck;
+    }
+
+    /** The single Rasa NLU pipeline client (port 5005); {@code null} before start. */
+    public RasaBridge getRasaBridge() {
+        return rasaBridge;
+    }
+
+    /** The Flask LLM sidecar client (port 5006); {@code null} before start. */
+    public LLMBridge getLLMBridge() {
+        return llmBridge;
     }
 
     public boolean isStarted() {
