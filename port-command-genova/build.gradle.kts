@@ -15,6 +15,16 @@ java {
     }
 }
 
+// Without this, javac falls back to the platform default charset to read .java source
+// files. On Windows that default is a single-byte charset (e.g. Windows-1252), so any
+// literal non-ASCII character in source (€, ±, emoji — task 10's Assistant chat text)
+// gets silently misdecoded into mojibake in the compiled class's string constants
+// (confirmed by codepoint inspection: € became U+00E2 U+201A U+00AC instead of U+20AC).
+// Source files on disk are UTF-8; tell javac to read them as UTF-8 explicitly.
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+}
+
 // --- Native dependency resolution (SWI-Prolog / JADE) ----------------------
 // SWI-Prolog ships jpl.jar (the JPL Java API) and the native bridge
 // (jpl.dll / libjpl.so / libjpl.dylib) inside its install tree. We resolve

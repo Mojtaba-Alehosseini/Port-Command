@@ -21,7 +21,8 @@ public final class Main {
         Runtime.getRuntime().addShutdownHook(new Thread(boot::shutdown, "JadeShutdownHook"));
         boot.start(cfg);
         AgentRoster.spawnSingletonsAndFleet(boot.getSpawner(), boot.getPortStateArtifact(),
-                boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact());
+                boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact(),
+                boot.getLLMBridge(), boot.getEventBus());
         // Block forever; the shutdown hook handles teardown on Ctrl+C / SIGTERM.
         Thread.currentThread().join();
     }
