@@ -113,11 +113,13 @@ public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
                 log.info("{}: COUNTER at {} (round {})", myAgent.getLocalName(), decision.newCounter(), state.round());
             }
             case WITHDRAW -> {
-                // Task 07 maps every engine WITHDRAW to "player_refused". TODO(task 15): when the real
-                // engine distinguishes a price-exhaustion withdrawal, pass "over_priced" here so the
-                // canonical WITHDRAW_PRICE outcome fires (the outcomeFor mapping already supports it).
+                // The engine only ever withdraws for price reasons (task 15's outcome-ownership
+                // contract: evaluate() produces ACCEPT or WITHDRAW("over_priced") only; TIMEOUT and
+                // PLAYER_REFUSED come from TimeoutWithdrawalBehaviour and an explicit player-refuse
+                // path respectively, never from here) -- pass the engine's own reason straight
+                // through so WithdrawalBehaviour.outcomeFor records the canonical WITHDRAW_PRICE.
                 concluded.set(true);
-                myAgent.addBehaviour(new WithdrawalBehaviour(myAgent, stateRef, conversationId, "player_refused"));
+                myAgent.addBehaviour(new WithdrawalBehaviour(myAgent, stateRef, conversationId, decision.reason()));
                 myAgent.removeBehaviour(this);
             }
         }

@@ -4,13 +4,16 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.harbourmaster.CnpRequest;
 import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
+import it.unige.portcommand.harbourmaster.cnp.CnpRetryBehaviour;
 import it.unige.portcommand.prolog.PrologQueries;
 import it.unige.portcommand.prolog.TugBid;
 import jade.core.AID;
@@ -22,9 +25,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Scores the collected bids and closes out the Contract Net. Zero bids (or every
- * PROPOSE malformed) -> INFORM the vessel to hold; the retry seam is task 15's
- * {@code CnpRetryBehaviour}, not fired here. One or more usable bids ->
- * {@link PrologQueries#selectBestBids} (RULE R13) picks the winner(s) — the
+ * PROPOSE malformed) -> INFORM the vessel to hold, then schedule task 15's
+ * {@link CnpRetryBehaviour} (bounded at {@link CnpRetryBehaviour#MAX_RETRIES}). One or more
+ * usable bids -> {@link PrologQueries#selectBestBids} (RULE R13) picks the winner(s) — the
  * Prolog-gated decision behind every tug ACCEPT_PROPOSAL this agent sends.
  */
 public final class AwardContractBehaviour extends OneShotBehaviour {
@@ -79,6 +82,7 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
         HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
         hm.activeVessels().computeIfPresent(req.vesselId(),
                 (id, tracking) -> tracking.withTugs(winners).withStage(Stage.IN_TRANSIT));
+        hm.cnpRetryAttempts().remove(req.vesselId());
     }
 
     private void holdVessel(String reason) {
@@ -87,5 +91,25 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
         inform.setContent(TerminalJson.write(Map.of("event", "tug_hold", "reason", reason)));
         myAgent.send(inform);
         log.info("CNP for {} held: {}", req.vesselId(), reason);
+        if ("no_bids".equals(reason)) {
+            scheduleRetryIfWithinCap();
+        }
+    }
+
+    /** Schedules {@link CnpRetryBehaviour}, bounded at {@link CnpRetryBehaviour#MAX_RETRIES}. */
+    private void scheduleRetryIfWithinCap() {
+        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
+        int attempt = hm.cnpRetryAttempts()
+                .computeIfAbsent(req.vesselId(), id -> new AtomicInteger(0))
+                .incrementAndGet();
+        if (attempt > CnpRetryBehaviour.MAX_RETRIES) {
+            log.warn("CNP for {}: giving up after {} retries", req.vesselId(), CnpRetryBehaviour.MAX_RETRIES);
+            hm.cnpRetryAttempts().remove(req.vesselId());
+            return;
+        }
+        long delayWallMs = hm.simClock().simSecondsToWallMs(Settings.load().cnpRetryAfterSimSeconds());
+        myAgent.addBehaviour(new CnpRetryBehaviour(myAgent, hm.cnpCoordinator(), req, delayWallMs));
+        log.info("CNP for {}: scheduling retry {}/{} in {} sim-s",
+                req.vesselId(), attempt, CnpRetryBehaviour.MAX_RETRIES, Settings.load().cnpRetryAfterSimSeconds());
     }
 }

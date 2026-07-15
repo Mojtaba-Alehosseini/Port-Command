@@ -312,6 +312,39 @@ class HarbourMasterAgentIT {
         assertEquals(4900.0, grantContent.get("price").asDouble());
     }
 
+    @Test
+    void walkInDealConfirmed_dispatchesTugCnpWhenRequired() throws Exception {
+        // Task 15: closes the walk-in CNP-dispatch gap ADR-08 left deliberately open --
+        // reuses the exact cargo_vessel fixture (draft 9.0/length 150/tonnage 30000) the
+        // contracted-path test already proves has tugsRequired>0.
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W004", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vessel = spawnProbe("t14_vessel", null);
+        Probe tug = spawnProbe("t14_tug", "tug-escort");
+
+        vessel.outbox.put(openingOffer(hm, spec, 4800.0, 6, "nego-W004"));
+        NegotiationOpenedEvent opened = awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-W004".equals(e.dialogueId()), 10_000);
+        assertNotNull(opened);
+
+        vessel.outbox.put(dealConfirmed(hm, 4900.0, 6, "nego-W004"));
+        ACLMessage grant = pollUntil(vessel.inbox, m -> true, 10_000);
+        assertNotNull(grant, "deal_confirmed must produce a berth grant");
+        assertEnvelope(grant, ACLMessage.ACCEPT_PROPOSAL);
+
+        int tugsRequired = PrologQueries.tugsRequired("cargo_vessel", 30000, 150.0);
+        assertTrue(tugsRequired > 0, "fixture sanity: this cargo_vessel spec must require >=1 tug");
+
+        ACLMessage cfp = pollUntil(tug.inbox, m -> true, 10_000);
+        assertNotNull(cfp, "walk-in deal-confirm must now dispatch a tug CNP (task 15 closes ADR-08's gap)");
+        assertEquals(ACLMessage.CFP, cfp.getPerformative());
+
+        tug.outbox.put(bidReply(cfp, 100.0, 5.0, 0.9));
+        ACLMessage award = pollUntil(tug.inbox, m -> true, 10_000);
+        assertNotNull(award, "the lone bidder must be awarded -- vessel ends fully engaged in the CNP/escort pipeline");
+        assertEquals(ACLMessage.ACCEPT_PROPOSAL, award.getPerformative());
+    }
+
     // ==================== Player command dispatch ====================
 
     @Test

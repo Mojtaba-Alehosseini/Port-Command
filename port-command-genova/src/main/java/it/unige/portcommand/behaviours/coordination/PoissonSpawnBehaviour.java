@@ -6,7 +6,8 @@ import java.util.Random;
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.JadeAgentSpawner;
-import it.unige.portcommand.negotiation.NoOpNegotiationEngine;
+import it.unige.portcommand.core.Settings;
+import it.unige.portcommand.negotiation.RealNegotiationEngine;
 import it.unige.portcommand.negotiation.VesselTemplate;
 import it.unige.portcommand.negotiation.VesselTemplates;
 import it.unige.portcommand.ontology.VesselSpec;
@@ -25,12 +26,12 @@ import org.slf4j.LoggerFactory;
  * {@code RandomSource} sub-stream so a run replays deterministically from a save
  * seed.
  *
- * <p>Spawns through {@link AgentRoster#spawnWalkIn}, whose own javadoc already
- * documents the contract this behaviour relies on: "Production passes a
- * NoOpNegotiationEngine; tests pass a Mockito mock." The opening PROPOSE round
- * works today (this task); a counter-offer round starts working the moment task
- * 15's {@code RealNegotiationEngine} replaces that binding — not a gap introduced
- * here.
+ * <p>Spawns through {@link AgentRoster#spawnWalkIn}, constructing a fresh
+ * {@link RealNegotiationEngine} per vessel (task 15) — {@code roundLimit} from
+ * {@link Settings#load()}, its personality-roll {@link java.util.Random} from an
+ * independent {@code "nego-"+vesselId} sub-stream (kept separate from the
+ * {@code "vessel-"+vesselId} belief-sampling stream {@code WalkInVesselAgent} already uses, so
+ * neither draw sequence shifts the other).
  *
  * <p>No scenario config exists yet (task 23 owns that); the arrival rate is a
  * fixed default, isolated in one constant so wiring it to config later is a
@@ -82,7 +83,9 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
         VesselSpec spec = new VesselSpec(vesselId, vesselType, draft, length, tonnage,
                 CARGO_CLASS, simClock.nowSimMillis());
 
-        AgentRoster.spawnWalkIn(spawner, spec, simClock, marketHistory, randomSource, new NoOpNegotiationEngine());
+        RealNegotiationEngine engine = new RealNegotiationEngine(
+                Settings.load().roundLimit(), randomSource.forStream("nego-" + vesselId));
+        AgentRoster.spawnWalkIn(spawner, spec, simClock, marketHistory, randomSource, engine);
         log.info("Poisson spawn: {} ({}) draft={} length={} tonnage={}",
                 vesselId, vesselType, draft, length, tonnage);
     }

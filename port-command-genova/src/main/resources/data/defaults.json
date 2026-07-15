@@ -1,0 +1,16 @@
+{
+  "roundLimit": 4,
+  "timeLimitSeconds": 60,
+  "autopilotEnabled": false,
+  "difficulty": "NORMAL",
+  "realSecondsPerGameDay": 300,
+  "maxGameDays": 30,
+  "firstLaunch": true,
+  "llmModel": "microsoft/Phi-4-mini-instruct",
+  "withdrawalPenaltyEur": 500.0,
+  "cnpReplyBySimSeconds": 5,
+  "cnpRetryAfterSimSeconds": 30,
+  "llm": {
+    "timeout_ms": 30000
+  }
+}

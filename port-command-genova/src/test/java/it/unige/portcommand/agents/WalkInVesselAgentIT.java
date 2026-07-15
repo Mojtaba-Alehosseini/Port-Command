@@ -12,9 +12,11 @@ import it.unige.portcommand.artifacts.DealRecord;
 import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
+import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.negotiation.Decision;
 import it.unige.portcommand.negotiation.NegotiationEngine;
 import it.unige.portcommand.negotiation.Personality;
+import it.unige.portcommand.negotiation.RealNegotiationEngine;
 import it.unige.portcommand.negotiation.VesselTemplate;
 import it.unige.portcommand.negotiation.VesselTemplates;
 import it.unige.portcommand.ontology.Deal;
@@ -136,6 +138,114 @@ class WalkInVesselAgentIT {
         List<DealRecord> recorded = boot.getMarketHistoryArtifact().lastN(1);
         assertEquals(1, recorded.size(), "deal recorded");
         assertEquals(Deal.Outcome.DEAL, recorded.get(0).outcome());
+    }
+
+    /**
+     * Task 15: the REAL engine (not a mock) drives an in-band constant counter-offer to an
+     * eventual CONFIRM. Deterministic in execution (fixed seed, no flakiness) without pinning one
+     * exact round count -- termination-by-ACCEPT within {@code roundLimit} rounds is guaranteed
+     * for ANY seed by the engine's forced-accept-at-last-round rule.
+     */
+    @Test
+    void walkInWithRealEngine_eventuallyAcceptsAnInBandCounterOffer() throws Exception {
+        boot = new JadeBootstrap();
+        boot.start(new BootstrapConfig(TEST_PORT, false, "realtime", 300));
+
+        String vesselId = "W010";
+        VesselSpec spec = new VesselSpec(vesselId, "cargo_vessel", 8.0, 150.0, 30000, "general_cargo", 0L);
+        List<String> berths = PrologQueries.findCompatibleBerths(
+                spec.vesselType(), spec.draft(), spec.length(), spec.tonnage());
+        assertFalse(berths.isEmpty(), "precondition: cargo_vessel must have a compatible berth");
+        String berthId = berths.get(0);
+
+        VesselTemplate template = VesselTemplates.forType(spec.vesselType());
+        Random r = boot.getRandomSource().forStream("vessel-" + vesselId);
+        Personality personality = template.samplePersonality(r);
+        double min = template.sampleMinAcceptablePrice(r);
+        double target = template.sampleTargetPrice(r);
+        double inBandCounter = (min + target) / 2.0;
+
+        NegotiationEngine engine = new RealNegotiationEngine(
+                Settings.load().roundLimit(), boot.getRandomSource().forStream("nego-" + vesselId));
+
+        BlockingQueue<ACLMessage> hmInbox = new LinkedBlockingQueue<>();
+        boot.getSpawner().spawn("fake_hm_accept", CounterOfferHarbourMaster.class,
+                new Object[] {hmInbox, inBandCounter, 10, berthId});
+
+        AgentRoster.spawnWalkIn(boot.getSpawner(), spec, boot.getSimClock(),
+                boot.getMarketHistoryArtifact(), boot.getRandomSource(), engine);
+
+        boolean confirm = false;
+        for (int i = 0; i < 12 && !confirm; i++) {
+            ACLMessage m = hmInbox.poll(10, TimeUnit.SECONDS);
+            if (m == null) {
+                break;
+            }
+            assertNoHiddenBeliefs(m, personality, min, target);
+            if (m.getPerformative() == ACLMessage.CONFIRM) {
+                confirm = true;
+            }
+        }
+        assertTrue(confirm, "vessel must eventually CONFIRM an in-band deal within roundLimit rounds");
+
+        List<DealRecord> recorded = boot.getMarketHistoryArtifact().lastN(1);
+        assertEquals(1, recorded.size(), "deal recorded");
+        assertEquals(Deal.Outcome.DEAL, recorded.get(0).outcome());
+    }
+
+    /**
+     * Task 15: the REAL engine withdraws when the player never comes above the vessel's
+     * minimum -- this is the known-dead branch task 07 left unreachable (over_priced ->
+     * WITHDRAW_PRICE), now proven live end-to-end.
+     */
+    @Test
+    void walkInWithRealEngine_withdrawsOverPricedWhenPlayerStaysBelowMinimum() throws Exception {
+        boot = new JadeBootstrap();
+        boot.start(new BootstrapConfig(TEST_PORT, false, "realtime", 300));
+
+        String vesselId = "W011";
+        VesselSpec spec = new VesselSpec(vesselId, "cargo_vessel", 8.0, 150.0, 30000, "general_cargo", 0L);
+        List<String> berths = PrologQueries.findCompatibleBerths(
+                spec.vesselType(), spec.draft(), spec.length(), spec.tonnage());
+        assertFalse(berths.isEmpty(), "precondition: cargo_vessel must have a compatible berth");
+        String berthId = berths.get(0);
+
+        VesselTemplate template = VesselTemplates.forType(spec.vesselType());
+        Random r = boot.getRandomSource().forStream("vessel-" + vesselId);
+        Personality personality = template.samplePersonality(r);
+        double min = template.sampleMinAcceptablePrice(r);
+        double target = template.sampleTargetPrice(r);
+        double belowMinimumCounter = min * 0.5;
+
+        NegotiationEngine engine = new RealNegotiationEngine(
+                Settings.load().roundLimit(), boot.getRandomSource().forStream("nego-" + vesselId));
+
+        BlockingQueue<ACLMessage> hmInbox = new LinkedBlockingQueue<>();
+        boot.getSpawner().spawn("fake_hm_withdraw", CounterOfferHarbourMaster.class,
+                new Object[] {hmInbox, belowMinimumCounter, 10, berthId});
+
+        AgentRoster.spawnWalkIn(boot.getSpawner(), spec, boot.getSimClock(),
+                boot.getMarketHistoryArtifact(), boot.getRandomSource(), engine);
+
+        boolean withdrawInform = false;
+        for (int i = 0; i < 12 && !withdrawInform; i++) {
+            ACLMessage m = hmInbox.poll(10, TimeUnit.SECONDS);
+            if (m == null) {
+                break;
+            }
+            assertNoHiddenBeliefs(m, personality, min, target);
+            if (m.getPerformative() == ACLMessage.INFORM) {
+                JsonNode content = MAPPER.readTree(m.getContent());
+                assertEquals("withdraw", content.get("intent").asText());
+                assertEquals("over_priced", content.get("reason").asText());
+                withdrawInform = true;
+            }
+        }
+        assertTrue(withdrawInform, "vessel must withdraw (over_priced) when the player never meets its minimum");
+
+        List<DealRecord> recorded = boot.getMarketHistoryArtifact().lastN(1);
+        assertEquals(1, recorded.size(), "withdrawal recorded");
+        assertEquals(Deal.Outcome.WITHDRAW_PRICE, recorded.get(0).outcome());
     }
 
     /** The privacy invariant: NO hidden belief (field name OR value) in any outbound content. */

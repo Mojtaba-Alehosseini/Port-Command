@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import it.unige.portcommand.bootstrap.ServiceLocator;
 import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.harbourmaster.CnpRequest;
 import it.unige.portcommand.util.SimClock;
@@ -35,7 +36,6 @@ public final class InitiateCNPBehaviour extends OneShotBehaviour {
      * ({@code ForwardWalkInToPlayerBehaviour} explicitly excludes it).
      */
     public static final String CNP_PROTOCOL = "fipa-contract-net";
-    private static final int REPLY_BY_SIM_SECONDS = 5; // planning/15's own default; hardcoded until Settings (task 15) exists
 
     private final CnpRequest req;
     private final ServiceLocator serviceLocator;
@@ -57,8 +57,9 @@ public final class InitiateCNPBehaviour extends OneShotBehaviour {
             return;
         }
 
+        int replyBySimSeconds = Settings.load().cnpReplyBySimSeconds();
         String cfpId = "cnp-" + UUID.randomUUID();
-        long replyBySimMillis = simClock.nowSimMillis() + REPLY_BY_SIM_SECONDS * 1000L;
+        long replyBySimMillis = simClock.nowSimMillis() + replyBySimSeconds * 1000L;
 
         Map<String, Object> content = new LinkedHashMap<>();
         content.put("target_vessel_id", req.vesselId());
@@ -76,7 +77,7 @@ public final class InitiateCNPBehaviour extends OneShotBehaviour {
 
         BidCollectorBehaviour collector = new BidCollectorBehaviour(myAgent, cfpId, req);
         myAgent.addBehaviour(collector);
-        myAgent.addBehaviour(new WakerBehaviour(myAgent, simClock.simSecondsToWallMs(REPLY_BY_SIM_SECONDS)) {
+        myAgent.addBehaviour(new WakerBehaviour(myAgent, simClock.simSecondsToWallMs(replyBySimSeconds)) {
             @Override
             protected void onWake() {
                 collector.closeAndAward();

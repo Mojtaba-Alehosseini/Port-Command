@@ -2,9 +2,9 @@ package it.unige.portcommand.harbourmaster;
 
 /**
  * Seam between the HarbourMaster's auto-flow dispatch and the tug Contract Net.
- * {@link StubCnpCoordinator} (this task) implements the real CFP/collect/award
- * cycle; task 15 replaces it with {@code RealCnpCoordinator} (adds zero-bid retry,
- * Settings-driven timing, post-ACCEPT-failure handling).
+ * {@link RealCnpCoordinator} implements the real CFP/collect/award cycle (task 11/ADR-08), with
+ * zero-bid retry and Settings-driven timing added by task 15; post-ACCEPT-failure handling
+ * (a winning tug REFUSEs) remains the one documented, accepted exit ramp.
  */
 public interface CnpCoordinator {
 

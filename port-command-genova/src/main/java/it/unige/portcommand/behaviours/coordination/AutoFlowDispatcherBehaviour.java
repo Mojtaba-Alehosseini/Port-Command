@@ -63,10 +63,12 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
     // lookup (found by HarbourMasterAgentIT: a customs/terminal probe spawned just
     // before the vessel's REQUEST can lose this race — DF registration is async).
     private static final long DF_RETRY_WALL_MS = 1200L;
-    // Placeholder "harbour entrance" point a contracted vessel is escorted FROM —
-    // no live per-vessel position channel exists yet (ADR-07); task 18's real map
-    // supersedes this, same placeholder spirit as BerthPositions.
-    private static final Position CHANNEL_ENTRY = new Position(700.0, 200.0, 180.0);
+    // Placeholder "harbour entrance" point a vessel is escorted FROM — no live per-vessel
+    // position channel exists yet (ADR-07); task 18's real map supersedes this, same
+    // placeholder spirit as BerthPositions. Package-private (not private): task 15's
+    // ForwardWalkInToPlayerBehaviour reuses this same entrance point for walk-in CNP requests
+    // rather than duplicating the placeholder.
+    static final Position CHANNEL_ENTRY = new Position(700.0, 200.0, 180.0);
 
     public AutoFlowDispatcherBehaviour(Agent agent) {
         super(agent);

@@ -7,19 +7,20 @@ import jade.core.Agent;
 
 /**
  * Real (not hardcoded) tug Contract Net: DF-discovers tugs and runs a non-blocking
- * CFP/collect/award cycle scored by Prolog {@code best_n_bids}. Keeps the
- * {@code StubCnpCoordinator} name task 15 already expects to replace with
- * {@code RealCnpCoordinator} (which adds zero-bid retry, Settings-driven timing, and
- * post-ACCEPT-failure handling — this task's zero-bid path is a one-shot hold, no
- * retry, per the session brief).
+ * CFP/collect/award cycle scored by Prolog {@code best_n_bids}. Renamed from
+ * {@code StubCnpCoordinator} (task 15) — this class was already the real cycle as of task 11/
+ * ADR-08; only the name was stale. Zero-bid retry is now bounded via task 15's
+ * {@code CnpRetryBehaviour}, scheduled from {@code AwardContractBehaviour.holdVessel}; the CFP
+ * reply-by window is Settings-driven ({@code InitiateCNPBehaviour}). Post-ACCEPT-failure handling
+ * (a winning tug REFUSEs) is not implemented — the documented, accepted exit ramp.
  */
-public final class StubCnpCoordinator implements CnpCoordinator {
+public final class RealCnpCoordinator implements CnpCoordinator {
 
     private final Agent agent;
     private final ServiceLocator serviceLocator;
     private final SimClock simClock;
 
-    public StubCnpCoordinator(Agent agent, ServiceLocator serviceLocator, SimClock simClock) {
+    public RealCnpCoordinator(Agent agent, ServiceLocator serviceLocator, SimClock simClock) {
         this.agent = agent;
         this.serviceLocator = serviceLocator;
         this.simClock = simClock;

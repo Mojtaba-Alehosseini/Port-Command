@@ -16,8 +16,8 @@ import it.unige.portcommand.behaviours.coordination.PoissonSpawnBehaviour;
 import it.unige.portcommand.bootstrap.JadeAgentSpawner;
 import it.unige.portcommand.bootstrap.ServiceLocator;
 import it.unige.portcommand.harbourmaster.CnpCoordinator;
+import it.unige.portcommand.harbourmaster.RealCnpCoordinator;
 import it.unige.portcommand.harbourmaster.ReputationLedger;
-import it.unige.portcommand.harbourmaster.StubCnpCoordinator;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.harbourmaster.WalletLedger;
 import it.unige.portcommand.ontology.ServiceContract;
@@ -52,6 +52,7 @@ public final class HarbourMasterAgent extends PortCommandAgent {
     private final ConcurrentHashMap<String, String> pendingCustomsChecks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> negotiationBerths = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> negotiationRounds = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AtomicInteger> cnpRetryAttempts = new ConcurrentHashMap<>();
 
     private WalletLedger walletLedger;
     private ReputationLedger reputationLedger;
@@ -81,7 +82,7 @@ public final class HarbourMasterAgent extends PortCommandAgent {
         this.contracts = contractsArg();
         JadeAgentSpawner spawner = argAt(5, JadeAgentSpawner.class);
         MarketHistoryArtifact marketHistory = argAt(6, MarketHistoryArtifact.class);
-        this.cnpCoordinator = new StubCnpCoordinator(this, serviceLocator(), simClock);
+        this.cnpCoordinator = new RealCnpCoordinator(this, serviceLocator(), simClock);
 
         addBehaviour(new AutoFlowDispatcherBehaviour(this));
         addBehaviour(new ForwardWalkInToPlayerBehaviour(this));
@@ -147,6 +148,11 @@ public final class HarbourMasterAgent extends PortCommandAgent {
 
     public ConcurrentHashMap<String, AtomicInteger> negotiationRounds() {
         return negotiationRounds;
+    }
+
+    /** Zero-bid CNP retry counter per vessel (task 15's {@code CnpRetryBehaviour} seam). */
+    public ConcurrentHashMap<String, AtomicInteger> cnpRetryAttempts() {
+        return cnpRetryAttempts;
     }
 
     public Map<String, ServiceContract> contracts() {

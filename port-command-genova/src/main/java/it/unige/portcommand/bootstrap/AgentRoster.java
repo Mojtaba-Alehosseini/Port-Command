@@ -112,7 +112,8 @@ public final class AgentRoster {
     /**
      * Spawn a walk-in (Channel B) vessel. Args: {@code [VesselSpec, SimClock,
      * MarketHistoryArtifact, NegotiationEngine, RandomSource]}. Production passes a
-     * {@code NoOpNegotiationEngine}; tests pass a Mockito mock.
+     * {@code RealNegotiationEngine} (task 15, constructed per-vessel by
+     * {@code PoissonSpawnBehaviour}); tests pass a Mockito mock or their own engine instance.
      */
     public static AgentController spawnWalkIn(JadeAgentSpawner spawner, VesselSpec spec, SimClock simClock,
                                               MarketHistoryArtifact marketHistory, RandomSource randomSource,

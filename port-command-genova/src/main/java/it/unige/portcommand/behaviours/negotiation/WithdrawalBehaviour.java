@@ -21,7 +21,8 @@ import org.slf4j.LoggerFactory;
  * Ends a walk-in negotiation: INFORM the HarbourMaster of the withdrawal, record the
  * outcome in {@link it.unige.portcommand.artifacts.MarketHistoryArtifact} with the
  * canonical {@link Deal.Outcome} for the reason, then {@code doDelete()}. Fired from the
- * counter-eval ({@code player_refused}) and the timeout ticker ({@code timeout}).
+ * counter-eval (task 15's engine only ever withdraws with {@code over_priced}) and the
+ * timeout ticker ({@code timeout}).
  */
 public final class WithdrawalBehaviour extends OneShotBehaviour {
 

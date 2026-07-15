@@ -1,10 +1,10 @@
 package it.unige.portcommand.negotiation;
 
 /**
- * The price-decision surface a walk-in vessel calls once per player offer. The real
- * implementation (round limits, personality concessions, time limits) is task 15;
- * this task introduces the interface and wires it in. Production binds
- * {@link NoOpNegotiationEngine} (fails loudly); tests inject a Mockito mock.
+ * The price-decision surface a walk-in vessel calls once per player offer. Production binds
+ * {@link RealNegotiationEngine} (task 15, constructed per-vessel by
+ * {@code PoissonSpawnBehaviour}); tests inject a Mockito mock or their own instance.
+ * {@link NoOpNegotiationEngine} (fails loudly) remains as the documented "unwired" guard.
  */
 public interface NegotiationEngine {
 

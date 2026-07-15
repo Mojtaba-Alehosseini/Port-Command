@@ -11,9 +11,12 @@ import it.unige.portcommand.behaviours.cnp.InitiateCNPBehaviour;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.harbourmaster.BerthPositions;
+import it.unige.portcommand.harbourmaster.CnpRequest;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.harbourmaster.VesselTracking.Channel;
 import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
+import it.unige.portcommand.ontology.Position;
 import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.prolog.PrologQueries;
 import jade.core.AID;
@@ -32,7 +35,9 @@ import org.slf4j.LoggerFactory;
  * non-vacuous Prolog gate); the {@code deal_confirmed} CONFIRM grants the final berth
  * (RULE 1-8 gated, mirrors {@link AutoFlowDispatcherBehaviour}'s ACCEPT/REFUSE, on a
  * fresh {@code "berth-"+localName} conversation that the vessel's own
- * {@code AwaitBerthBehaviour} is already listening on); the {@code withdraw} INFORM
+ * {@code AwaitBerthBehaviour} is already listening on) and — task 15, closing a gap ADR-08 left
+ * deliberately open — dispatches the same tug Contract Net {@link AutoFlowDispatcherBehaviour}
+ * initiates for contracted vessels, when {@code tugsRequired > 0}; the {@code withdraw} INFORM
  * just clears tracking.
  *
  * <p>{@link #TEMPLATE} excludes CNP traffic and the weather/customs/terminal
@@ -143,6 +148,16 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         hm.negotiationBerths().remove(dialogueId);
         hm.negotiationRounds().remove(dialogueId);
         log.info("{}: berth GRANTED {} (price {}, {}h)", spec.vesselId(), berthId, price, hours);
+
+        // Task 15: closes the walk-in CNP-dispatch gap ADR-08 left deliberately open —
+        // mirrors AutoFlowDispatcherBehaviour's own tugsRequired>0 gate exactly. Terminal/customs
+        // dispatch stays out of scope (not asked for; a separate, larger parity gap — see ADR-09).
+        int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());
+        if (tugsRequired > 0) {
+            Position berthPosition = BerthPositions.position(berthId);
+            hm.cnpCoordinator().initiate(new CnpRequest(spec.vesselId(), msg.getSender(),
+                    AutoFlowDispatcherBehaviour.CHANNEL_ENTRY, berthPosition, tugsRequired));
+        }
     }
 
     private void handleWithdraw(HarbourMasterAgent hm, ACLMessage msg, JsonNode content) {

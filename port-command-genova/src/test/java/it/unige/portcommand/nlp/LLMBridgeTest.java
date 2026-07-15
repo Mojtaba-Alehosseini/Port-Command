@@ -204,8 +204,12 @@ class LLMBridgeTest {
     // --- timeout config resolution -----------------------------------------------------------
 
     @Test
-    void resolveTimeoutMsDefaultsTo30000WhenNoConfigFilePresent() {
-        // /data/defaults.json is task 15's file; it does not exist yet in this repo state.
+    void resolveTimeoutMsReadsTheShippedDefaultsJson() {
+        // Task 15 created src/main/resources/data/defaults.json with llm.timeout_ms=30000, so this
+        // now exercises the file-present read path (not the file-absent fallback -- that guard
+        // clause in readTimeoutMsFromDefaultsJson is a two-line null check not independently
+        // covered, since testing it would need LLMBridge to accept an injectable resource path,
+        // out of this task's scope). The shipped value equals DEFAULT_TIMEOUT_MS by design.
         assertEquals(30_000L, LLMBridge.resolveTimeoutMs());
         assertEquals(LLMBridge.DEFAULT_TIMEOUT_MS, LLMBridge.resolveTimeoutMs());
     }
