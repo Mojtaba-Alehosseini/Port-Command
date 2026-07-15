@@ -81,9 +81,17 @@ public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour 
         }
         ACLMessage alert = MessageFactory.create(ACLMessage.INFORM);
         alert.addReceiver(hm.get());
+        // v1.1: visibility + swell ride along so the HarbourMaster can evaluate
+        // operationSafe/swellWithinLimit/weatherStateUnsafe from this SAME reading,
+        // instead of risking a second, possibly-stale query (task 11).
         alert.setContent(TerminalJson.write(Map.of(
-                "event", "weather_threshold", "wind_knots", w.wind(), "state", w.state())));
+                "event", "weather_threshold", "wind_knots", w.wind(), "visibility", w.visibility(),
+                "swell", w.swell(), "state", w.state())));
         alert.addUserDefinedParameter("priority", "high");
+        // Lets HandleWeatherAlertBehaviour match by protocol instead of sender AID —
+        // avoids a DF-lookup timing race (task 11 adversarial review finding).
+        // Same package, no import needed.
+        alert.setProtocol(HandleWeatherAlertBehaviour.WEATHER_ALERT_PROTOCOL);
         myAgent.send(alert);
         log.info("weather threshold crossed (wind {}) -> high-priority INFORM to harbour-master", w.wind());
     }

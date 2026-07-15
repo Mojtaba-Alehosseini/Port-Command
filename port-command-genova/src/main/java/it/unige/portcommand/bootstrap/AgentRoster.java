@@ -1,10 +1,17 @@
 package it.unige.portcommand.bootstrap;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import it.unige.portcommand.agents.AssistantAgent;
 import it.unige.portcommand.agents.CustomsAgent;
 import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.agents.HarbourMasterInitArgs;
 import it.unige.portcommand.agents.InitArgs.TerminalInitArgs;
 import it.unige.portcommand.agents.InitArgs.TugInitArgs;
 import it.unige.portcommand.agents.InitArgs.WeatherInitArgs;
@@ -21,6 +28,7 @@ import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.negotiation.NegotiationEngine;
 import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.RandomSource;
@@ -50,6 +58,9 @@ public final class AgentRoster {
             new Position(50.0, 200.0, 0.0),
             new Position(50.0, 250.0, 0.0),
     };
+    // Placeholder game-balance starting figures; task 20/24 own real calibration.
+    private static final double HM_STARTING_WALLET = 50_000.0;
+    private static final double HM_STARTING_REPUTATION = 70.0;
 
     private AgentRoster() {
     }
@@ -58,7 +69,9 @@ public final class AgentRoster {
                                                SimClock simClock, RandomSource randomSource,
                                                MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
                                                EventBus eventBus) {
-        spawner.spawn("harbour_master", HarbourMasterAgent.class, null);
+        spawner.spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
+                new HarbourMasterInitArgs(HM_STARTING_WALLET, HM_STARTING_REPUTATION),
+                simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory});
         spawner.spawn("weather_agent", WeatherAgent.class,
                 new Object[] {defaultWeatherInit(), randomSource, simClock});
         spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource});
@@ -119,5 +132,27 @@ public final class AgentRoster {
                 new WeatherSnapshot(18, "good", 0.5, "sunny", 0L),
                 TransitionMatrix.defaults(),
                 List.of());
+    }
+
+    /**
+     * Loads {@code data/contracts.json} once at startup (planning/11 §11.2 step 1),
+     * keyed by {@code contractId}. A test constructs its own small map directly
+     * instead of calling this (constructor-arg DI — no static registry). Missing
+     * resource is non-fatal (empty map, WARN logged): the fixed demo contracts are
+     * placeholder data superseded by task 23's scenario loader.
+     */
+    private static Map<String, ServiceContract> loadContracts() {
+        try (InputStream in = AgentRoster.class.getResourceAsStream("/data/contracts.json")) {
+            if (in == null) {
+                log.warn("data/contracts.json not found on classpath; HarbourMaster boots with zero contracts");
+                return Map.of();
+            }
+            List<ServiceContract> contracts = new ObjectMapper()
+                    .readValue(in, new TypeReference<List<ServiceContract>>() { });
+            return contracts.stream()
+                    .collect(Collectors.toMap(ServiceContract::contractId, c -> c));
+        } catch (IOException e) {
+            throw new IllegalStateException("failed to load data/contracts.json", e);
+        }
     }
 }

@@ -126,6 +126,24 @@ public final class PrologQueries {
         });
     }
 
+    /**
+     * True iff {@code swellMetres} is within the operating limit (RULE R17). Takes no
+     * vessel context — pure lookup against the static {@code max_swell/1} fact, so
+     * (unlike {@link #operationSafe}) it is cached.
+     */
+    public static boolean swellWithinLimit(double swellMetres) {
+        return engine().hasSolutionCached("swell_within_limit(" + swellMetres + ")");
+    }
+
+    /**
+     * True iff {@code state} (the weather Markov state atom, e.g. {@code stormy}) is
+     * unsafe regardless of the numeric wind/visibility/swell readings (RULE R19). Pure
+     * lookup against a static fact → cached.
+     */
+    public static boolean weatherStateUnsafe(String state) {
+        return engine().hasSolutionCached("weather_state_unsafe(" + quoteAtom(state) + ")");
+    }
+
     // --- Customs (R21–R24) -------------------------------------------------
 
     /**

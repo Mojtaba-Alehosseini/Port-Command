@@ -47,4 +47,24 @@ public final class TerminalJson {
             return null;
         }
     }
+
+    /**
+     * Converts a nested {@link JsonNode} (e.g. a {@code vessel_spec} sub-object
+     * pulled out of a larger content tree) to {@code type}, or {@code null} on any
+     * failure. Catches {@link RuntimeException} too (not just the checked
+     * {@link JsonProcessingException}) because a validating record compact
+     * constructor (e.g. {@code VesselSpec}) can throw {@link IllegalArgumentException}
+     * on malformed wire content, and this is a system boundary — untrusted input
+     * must map to a graceful REFUSE("malformed"), never an uncaught exception.
+     */
+    public static <T> T treeToOrNull(JsonNode node, Class<T> type) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return null;
+        }
+        try {
+            return MAPPER.treeToValue(node, type);
+        } catch (JsonProcessingException | RuntimeException e) {
+            return null;
+        }
+    }
 }

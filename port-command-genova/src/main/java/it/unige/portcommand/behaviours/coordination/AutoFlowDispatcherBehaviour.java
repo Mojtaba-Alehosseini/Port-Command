@@ -1,17 +1,72 @@
 package it.unige.portcommand.behaviours.coordination;
 
+import java.util.List;
+import java.util.Map;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import it.unige.portcommand.agents.BerthRequest;
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.harbourmaster.BerthPositions;
+import it.unige.portcommand.harbourmaster.CnpRequest;
+import it.unige.portcommand.harbourmaster.VesselTracking;
+import it.unige.portcommand.harbourmaster.VesselTracking.Channel;
+import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
+import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.ontology.ServiceContract;
+import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.prolog.PrologQueries;
+import jade.core.AID;
 import jade.core.Agent;
 import jade.core.behaviours.CyclicBehaviour;
+import jade.core.behaviours.WakerBehaviour;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Stub behaviour (task 05). The owning agent task fills the plan body; until then
- * the body logs once and does nothing else. No blocking spin, no JPL, no I/O.
+ * Contracted-vessel (Channel A) hub: on a {@code request_berth} REQUEST, gates the
+ * berth grant through {@code isCompatible} (RULES R1-R8) before ANY binding reply —
+ * REFUSE on failure, ACCEPT_PROPOSAL with deal terms on success (design rule 4).
+ * Then initiates the tug Contract Net (skipped when {@code tugsRequired==0}, the
+ * ferry path since 07b), fires the terminal berth REQUEST (9-field, ADR-03) and,
+ * for hazmat cargo, the customs pre-clearance REQUEST (task-09's deferred note:
+ * "HM customs-REQUEST keys + reply parse").
+ *
+ * <p>Also drains the terminal's CONFIRM/REFUSE reply to that REQUEST (tagged
+ * {@link #TERMINAL_BERTH_PROTOCOL} so {@code ForwardWalkInToPlayerBehaviour}'s
+ * broader CONFIRM template can exclude it): the REQUEST is broadcast to every
+ * terminal, so the non-owning one always REFUSEs {@code wrong_terminal} and, before
+ * this fix, nothing ever consumed those replies — they piled up in the
+ * HarbourMaster's queue for the life of the process (adversarial review finding,
+ * task 11). Still fire-and-forget in the sense that nothing here blocks the
+ * auto-flow on the reply; this only stops the leak and logs the outcome.
  */
 public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(AutoFlowDispatcherBehaviour.class);
+    /** Set on the terminal berth REQUEST; its CONFIRM/REFUSE reply preserves it via {@code createReply()}. */
+    public static final String TERMINAL_BERTH_PROTOCOL = "port-command-terminal-berth";
+    private static final MessageTemplate REQUEST_TEMPLATE = MessageTemplate.and(
+            MessageTemplate.MatchPerformative(ACLMessage.REQUEST),
+            MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));
+    private static final MessageTemplate TERMINAL_REPLY_TEMPLATE = MessageTemplate.and(
+            MessageTemplate.MatchProtocol(TERMINAL_BERTH_PROTOCOL),
+            MessageTemplate.or(MessageTemplate.MatchPerformative(ACLMessage.CONFIRM),
+                    MessageTemplate.MatchPerformative(ACLMessage.REFUSE)));
+    private static final MessageTemplate TEMPLATE = MessageTemplate.or(REQUEST_TEMPLATE, TERMINAL_REPLY_TEMPLATE);
+    private static final int DF_RETRY_ATTEMPTS = 3;
+    // Must exceed ServiceLocator's 1 s DF-search cache TTL, or a retry inside that
+    // window just replays the SAME stale "not found yet" result instead of a fresh
+    // lookup (found by HarbourMasterAgentIT: a customs/terminal probe spawned just
+    // before the vessel's REQUEST can lose this race — DF registration is async).
+    private static final long DF_RETRY_WALL_MS = 1200L;
+    // Placeholder "harbour entrance" point a contracted vessel is escorted FROM —
+    // no live per-vessel position channel exists yet (ADR-07); task 18's real map
+    // supersedes this, same placeholder spirit as BerthPositions.
+    private static final Position CHANNEL_ENTRY = new Position(700.0, 200.0, 180.0);
 
     public AutoFlowDispatcherBehaviour(Agent agent) {
         super(agent);
@@ -19,7 +74,163 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
 
     @Override
     public void action() {
-        log.debug("{} action stub", getClass().getSimpleName());
-        block();
+        ACLMessage msg = myAgent.receive(TEMPLATE);
+        if (msg == null) {
+            block();
+            return;
+        }
+        if (msg.getPerformative() != ACLMessage.REQUEST) {
+            logTerminalReply(msg);
+            return;
+        }
+        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
+
+        JsonNode content = TerminalJson.readTreeOrNull(msg.getContent());
+        if (content == null || !"request_berth".equals(text(content, "intent"))) {
+            refuse(msg, "malformed");
+            return;
+        }
+        VesselSpec spec = TerminalJson.treeToOrNull(content.get("vessel_spec"), VesselSpec.class);
+        if (spec == null) {
+            refuse(msg, "malformed");
+            return;
+        }
+        ServiceContract contract = hm.contracts().get(text(content, "contract"));
+        if (contract == null) {
+            refuse(msg, "unknown_contract");
+            return;
+        }
+
+        // RULE 4 (the design rules): the binding grant is gated by Prolog FIRST — nothing
+        // is sent to the vessel before this call succeeds.
+        if (!PrologQueries.isCompatible(contract.berthId(), spec.vesselType(), spec.draft(), spec.length(),
+                spec.tonnage())) {
+            refuse(msg, "incompatible");
+            return;
+        }
+
+        ACLMessage accept = MessageFactory.reply(msg, ACLMessage.ACCEPT_PROPOSAL);
+        accept.setContent(TerminalJson.write(Map.of(
+                "berth_id", contract.berthId(), "price", contract.contractedFee(),
+                "hours", contract.contractedHours())));
+        myAgent.send(accept);
+
+        String vesselId = spec.vesselId();
+        hm.activeVessels().put(vesselId, VesselTracking
+                .arriving(vesselId, spec, Channel.CONTRACTED, msg.getSender())
+                .withStage(Stage.AWAITING_TUG)
+                .withBerth(contract.berthId()));
+
+        int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());
+        if (tugsRequired > 0) {
+            Position berthPosition = BerthPositions.position(contract.berthId());
+            hm.cnpCoordinator().initiate(
+                    new CnpRequest(vesselId, msg.getSender(), CHANNEL_ENTRY, berthPosition, tugsRequired));
+        }
+
+        sendTerminalRequest(hm, spec, contract, DF_RETRY_ATTEMPTS);
+
+        if (PrologQueries.isHazmat(spec.cargoClass())) {
+            sendCustomsRequest(hm, spec, DF_RETRY_ATTEMPTS);
+        }
+
+        log.info("{}: ACCEPT berth {} (contract {}), tugsRequired={}",
+                vesselId, contract.berthId(), contract.contractId(), tugsRequired);
+    }
+
+    /**
+     * Broadcasts the 9-field {@link BerthRequest} to every registered terminal —
+     * fire-and-forget (no reply listener; the terminal's own "wrong_terminal"
+     * REFUSE already resolves the multi-terminal ambiguity, since no static
+     * berth-to-terminal registry exists outside each terminal's own
+     * {@code TerminalState}). Retries a few times (spaced past the DF-search cache
+     * TTL) if no terminal is visible yet — fleet spawn is async, so a terminal
+     * might not have registered by the moment the first contracted vessel arrives.
+     */
+    private void sendTerminalRequest(HarbourMasterAgent hm, VesselSpec spec, ServiceContract contract,
+                                     int attemptsLeft) {
+        List<AID> terminals = hm.serviceLocator().findAll("terminal");
+        if (terminals.isEmpty()) {
+            if (attemptsLeft <= 0) {
+                log.warn("no terminal registered in DF after retries; cannot request berth {}", contract.berthId());
+                return;
+            }
+            myAgent.addBehaviour(new WakerBehaviour(myAgent, DF_RETRY_WALL_MS) {
+                @Override
+                protected void onWake() {
+                    sendTerminalRequest(hm, spec, contract, attemptsLeft - 1);
+                }
+            });
+            return;
+        }
+        BerthRequest req = new BerthRequest(spec.vesselId(), spec.vesselType(), spec.draft(), spec.length(),
+                spec.tonnage(), contract.berthId(), contract.expectedArrivalSimMillis(),
+                contract.contractedHours(), spec.cargoClass());
+        ACLMessage request = MessageFactory.create(ACLMessage.REQUEST);
+        terminals.forEach(request::addReceiver);
+        request.setConversationId("term-" + spec.vesselId());
+        request.setProtocol(TERMINAL_BERTH_PROTOCOL);
+        request.setContent(TerminalJson.write(req));
+        myAgent.send(request);
+    }
+
+    /** Drains + logs a terminal's CONFIRM/REFUSE reply to the berth REQUEST above — see the class javadoc. */
+    private void logTerminalReply(ACLMessage reply) {
+        if (reply.getPerformative() == ACLMessage.CONFIRM) {
+            log.info("terminal CONFIRM ({}) <- {}", reply.getContent(), reply.getSender().getLocalName());
+        } else {
+            log.debug("terminal REFUSE ({}) <- {}", reply.getContent(), reply.getSender().getLocalName());
+        }
+    }
+
+    /**
+     * Sends the customs pre-clearance REQUEST with exactly the keys
+     * {@code HandleClearanceRequestBehaviour} reads ({@code vessel_type},
+     * {@code cargo_class}), and records the conversation so
+     * {@code HandleEmergencyBehaviour} can correlate the eventual reply back to a
+     * vesselId (no reply here carries one). Retries like {@link #sendTerminalRequest}
+     * for the same async-DF-registration reason.
+     */
+    private void sendCustomsRequest(HarbourMasterAgent hm, VesselSpec spec, int attemptsLeft) {
+        AID customsAid = hm.resolveCustomsAid();
+        if (customsAid == null) {
+            if (attemptsLeft <= 0) {
+                log.warn("no customs registered in DF after retries; skipping pre-clearance for {}", spec.vesselId());
+                return;
+            }
+            myAgent.addBehaviour(new WakerBehaviour(myAgent, DF_RETRY_WALL_MS) {
+                @Override
+                protected void onWake() {
+                    sendCustomsRequest(hm, spec, attemptsLeft - 1);
+                }
+            });
+            return;
+        }
+        String conversationId = "cust-" + spec.vesselId();
+        hm.pendingCustomsChecks().put(conversationId, spec.vesselId());
+        ACLMessage request = MessageFactory.create(ACLMessage.REQUEST);
+        request.addReceiver(customsAid);
+        request.setConversationId(conversationId);
+        // Lets HandleEmergencyBehaviour match the reply by protocol instead of
+        // sender AID (createReply() preserves it) — task 11 adversarial review.
+        request.setProtocol(HandleEmergencyBehaviour.CUSTOMS_CLEARANCE_PROTOCOL);
+        request.setContent(TerminalJson.write(Map.of(
+                "vessel_id", spec.vesselId(), "vessel_type", spec.vesselType(), "cargo_class", spec.cargoClass())));
+        myAgent.send(request);
+    }
+
+    private void refuse(ACLMessage original, String reason) {
+        ACLMessage reply = MessageFactory.reply(original, ACLMessage.REFUSE);
+        reply.setContent(TerminalJson.write(Map.of("reason", reason)));
+        myAgent.send(reply);
+        log.info("REFUSE {} -> {}", reason, original.getSender().getLocalName());
+    }
+
+    private static String text(JsonNode node, String field) {
+        if (node == null) {
+            return null;
+        }
+        JsonNode v = node.get(field);
+        return v == null ? null : v.asText();
     }
 }

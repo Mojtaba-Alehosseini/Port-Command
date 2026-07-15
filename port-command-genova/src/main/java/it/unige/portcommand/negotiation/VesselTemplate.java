@@ -36,6 +36,19 @@ public record VesselTemplate(
         return Personality.fromDistribution(personalityDistribution, r.nextDouble());
     }
 
+    /** Physical dims for a spawned {@code VesselSpec} (the Poisson spawner, task 11). */
+    public double sampleDraft(Random r) {
+        return uniform(draftRange, r);
+    }
+
+    public double sampleLength(Random r) {
+        return uniform(lengthRange, r);
+    }
+
+    public int sampleTonnage(Random r) {
+        return (int) Math.round(uniform(tonnageRange[0], tonnageRange[1], r));
+    }
+
     private static double uniform(double[] range, Random r) {
         return uniform(range[0], range[1], r);
     }
