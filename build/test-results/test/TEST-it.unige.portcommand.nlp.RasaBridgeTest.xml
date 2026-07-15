@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.RasaBridgeTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:28" hostname="MOJI" time="3.113">
+  <properties/>
+  <testcase name="parseAsyncCompletesOffTheCallingThread()" classname="it.unige.portcommand.nlp.RasaBridgeTest" time="0.016"/>
+  <testcase name="malformedJsonThrowsNlpServiceException()" classname="it.unige.portcommand.nlp.RasaBridgeTest" time="0.014"/>
+  <testcase name="tooLongTextRejectedWithoutNetworkCall()" classname="it.unige.portcommand.nlp.RasaBridgeTest" time="0.004"/>
+  <testcase name="clientErrorDoesNotRetry()" classname="it.unige.portcommand.nlp.RasaBridgeTest" time="0.012"/>
+  <testcase name="duplicateEntityNameLastWriteWins()" classname="it.unige.portcommand.nlp.RasaBridgeTest" time="0.012"/>
+  <testcase name="serverErrorRetriesOnceThenThrows()" classname="it.unige.portcommand.nlp.RasaBridgeTest" time="0.017"/>
+  <testcase name="blankTextRejectedWithoutNetworkCall()" classname="it.unige.portcommand.nlp.RasaBridgeTest" time="0.003"/>
+  <testcase name="requestTimeoutThrowsRasaTimeoutExceptionWithNoRetry()" classname="it.unige.portcommand.nlp.RasaBridgeTest" time="3.008"/>
+  <testcase name="connectionFailureEventuallyThrowsNlpServiceException()" classname="it.unige.portcommand.nlp.RasaBridgeTest" time="0.01"/>
+  <testcase name="parseSuccessMapsIntentEntitiesAndRanking()" classname="it.unige.portcommand.nlp.RasaBridgeTest" time="0.013"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

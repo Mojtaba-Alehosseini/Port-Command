@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.prolog.PrologQueriesTest" tests="22" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:31" hostname="MOJI" time="0.049">
+  <properties/>
+  <testcase name="tankerFitsBerth1ButNotBerth4OnDraft()" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.0"/>
+  <testcase name="findCompatibleBerthsIncludesBerth1ExcludesBerth4()" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.002"/>
+  <testcase name="priorityRank(emergency) = 1" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <testcase name="priorityRank(medical) = 2" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.0"/>
+  <testcase name="priorityRank(scheduled_ferry) = 3" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <testcase name="priorityRank(scheduled_arrival) = 4" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <testcase name="priorityRank(departure) = 5" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <testcase name="priorityRank(maintenance) = 6" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <testcase name="pureQuerySecondCallHitsCache()" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <testcase name="clearanceOkValidatesBothAtoms()" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.0"/>
+  <testcase name="isHazmatClassifiesCargo()" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.0"/>
+  <testcase name="clearanceOkFlipsWithBlacklistRoundTrip()" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <testcase name="unknownPriorityClassThrows()" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.002"/>
+  <testcase name="selectBestBidsHonoursScoreAndCount()" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <testcase name="inspectionProbability(tanker, hazmat_class_3) = 0.8" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.007"/>
+  <testcase name="inspectionProbability(cargo_vessel, general_cargo) = 0.2" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.0"/>
+  <testcase name="tugsRequired(ferry, 15000) = 0" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.003"/>
+  <testcase name="tugsRequired(tanker, 15000) = 2" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <testcase name="tugsRequired(tanker, 120000) = 2" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.003"/>
+  <testcase name="tugsRequired(cargo_vessel, 60000) = 2" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <testcase name="tugsRequired(container_vessel, 30000) = 2" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <testcase name="operationSafeChecksWindAndVisibility()" classname="it.unige.portcommand.prolog.PrologQueriesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

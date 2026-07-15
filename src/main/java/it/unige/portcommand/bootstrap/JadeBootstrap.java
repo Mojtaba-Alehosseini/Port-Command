@@ -19,6 +19,7 @@ import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.nlp.RasaBridge;
 import it.unige.portcommand.ontology.OntologyValidation;
 import it.unige.portcommand.prolog.PrologEngine;
+import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.RandomSource;
 import it.unige.portcommand.util.SimClock;
 import jade.core.AID;
@@ -67,6 +68,7 @@ public final class JadeBootstrap {
     private volatile List<AID> bootDfSelfCheck = List.of();
     private volatile RasaBridge rasaBridge;
     private volatile LLMBridge llmBridge;
+    private volatile EventBus eventBus;
 
     public void start(BootstrapConfig cfg) {
         lock.lock();
@@ -105,6 +107,10 @@ public final class JadeBootstrap {
             portStateArtifact = new PortStateArtifact();
             randomSource = new RandomSource(DEFAULT_RANDOM_SEED);
             marketHistory = new MarketHistoryArtifact();
+            // Single shared bus for every agent + the (future, task 17) GUI — one instance so a
+            // publish from one agent is visible to a subscriber on another (task 10 needs this
+            // for the Assistant; the real dispatcher arrives in task 17, this is still the stub).
+            eventBus = new EventBus();
             spawner = new JadeAgentSpawner(mainContainer);
 
             CountDownLatch ready = new CountDownLatch(1);
@@ -215,6 +221,11 @@ public final class JadeBootstrap {
     /** Shared market-history store (deal outcomes); {@code null} before start. */
     public MarketHistoryArtifact getMarketHistoryArtifact() {
         return marketHistory;
+    }
+
+    /** Single shared publish/subscribe bus for every agent + the GUI; {@code null} before start. */
+    public EventBus getEventBus() {
+        return eventBus;
     }
 
     public JadeAgentSpawner getSpawner() {

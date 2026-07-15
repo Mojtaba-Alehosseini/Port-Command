@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.negotiation.VesselTemplatesTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:21" hostname="MOJI" time="0.124">
+  <properties/>
+  <testcase name="unknownTypeThrows()" classname="it.unige.portcommand.negotiation.VesselTemplatesTest" time="0.114"/>
+  <testcase name="samplingStaysWithinRangeAndIsDeterministic()" classname="it.unige.portcommand.negotiation.VesselTemplatesTest" time="0.0"/>
+  <testcase name="everyTemplateIsInternallyConsistent()" classname="it.unige.portcommand.negotiation.VesselTemplatesTest" time="0.007"/>
+  <testcase name="allFiveVesselTypesPresent()" classname="it.unige.portcommand.negotiation.VesselTemplatesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

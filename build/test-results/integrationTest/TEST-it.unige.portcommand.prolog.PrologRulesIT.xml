@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="it.unige.portcommand.prolog.PrologRulesIT" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-07-14T20:08:07" hostname="MOJI" time="0.443">
+<testsuite name="it.unige.portcommand.prolog.PrologRulesIT" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:44:08" hostname="MOJI" time="0.191">
   <properties/>
-  <testcase name="PLUnit suite 'compatibility' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.294"/>
-  <testcase name="PLUnit suite 'customs' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.033"/>
-  <testcase name="PLUnit suite 'escort' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.029"/>
-  <testcase name="PLUnit suite 'priority' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.021"/>
-  <testcase name="PLUnit suite 'spawnability' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.033"/>
-  <testcase name="PLUnit suite 'weather' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.016"/>
-  <system-out><![CDATA[22:08:07.073 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1â€“R30)
+  <testcase name="PLUnit suite 'compatibility' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.145"/>
+  <testcase name="PLUnit suite 'customs' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.005"/>
+  <testcase name="PLUnit suite 'escort' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.009"/>
+  <testcase name="PLUnit suite 'priority' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.006"/>
+  <testcase name="PLUnit suite 'spawnability' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.009"/>
+  <testcase name="PLUnit suite 'weather' is all-green" classname="it.unige.portcommand.prolog.PrologRulesIT" time="0.007"/>
+  <system-out><![CDATA[00:44:08.886 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
 ]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

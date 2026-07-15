@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.NLPPipelineTest" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:23" hostname="MOJI" time="4.697">
+  <properties/>
+  <testcase name="cancelActionWithStandingOfferMapsToRejectProposal()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.028"/>
+  <testcase name="structuralIntentTheDcgAlreadyMissedNeedsClarification()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.012"/>
+  <testcase name="dcgHitRoutesWithoutEverCallingRasa()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.006"/>
+  <testcase name="dcgHitFailingValidationFallsBackToClarificationWithoutCallingRasa()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.006"/>
+  <testcase name="highConfidenceSetPolicyCarriesRawTextIgnoringEntities()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.014"/>
+  <testcase name="highConfidenceRejectDealRoutesToRejectProposal()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.012"/>
+  <testcase name="lowConfidenceNeedsClarification()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.009"/>
+  <testcase name="mediumConfidenceNeedsClarification()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.01"/>
+  <testcase name="processChatInputReturnsBeforeRasaResponds()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="1.513"/>
+  <testcase name="nullTextResolvesToErrorNotAnExceptionalFuture()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.006"/>
+  <testcase name="highConfidenceQueryStatusRoutesToQueryRef()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.012"/>
+  <testcase name="highConfidenceAcceptDealRoutesToAcceptProposal()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.011"/>
+  <testcase name="nonTimeoutRasaFailureResolvesToError()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.01"/>
+  <testcase name="cancelActionWithActiveNegotiationButNoStandingOfferMapsToInform()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.012"/>
+  <testcase name="rasaTimeoutResolvesToClarificationNotAnException()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="3.019"/>
+  <testcase name="cancelActionWithNoActiveNegotiationMapsToCancel()" classname="it.unige.portcommand.nlp.NLPPipelineTest" time="0.009"/>
+  <system-out><![CDATA[00:41:25.092 [pool-10-thread-1] [] WARN  i.unige.portcommand.nlp.NLPPipeline - pipeline failed to route chat input
+java.lang.NullPointerException: text
+	at java.base/java.util.Objects.requireNonNull(Objects.java:259)
+	at it.unige.portcommand.nlp.NLPPipeline.processSync(NLPPipeline.java:73)
+	at it.unige.portcommand.nlp.NLPPipeline.lambda$processChatInput$0(NLPPipeline.java:68)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncSupply.run(CompletableFuture.java:1768)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+00:41:25.130 [pool-13-thread-1] [] WARN  i.unige.portcommand.nlp.NLPPipeline - pipeline failed to route chat input
+it.unige.portcommand.nlp.NlpServiceException: rasa returned HTTP 400: {"error": "bad request"}
+	at it.unige.portcommand.nlp.RasaBridge.attempt(RasaBridge.java:131)
+	at it.unige.portcommand.nlp.RasaBridge.parse(RasaBridge.java:83)
+	at it.unige.portcommand.nlp.NLPPipeline.callRasaWithTimeout(NLPPipeline.java:106)
+	at it.unige.portcommand.nlp.NLPPipeline.processSync(NLPPipeline.java:82)
+	at it.unige.portcommand.nlp.NLPPipeline.lambda$processChatInput$0(NLPPipeline.java:68)
+	at java.base/java.util.concurrent.CompletableFuture$AsyncSupply.run(CompletableFuture.java:1768)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.artifacts.MarketHistoryArtifactTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:20" hostname="MOJI" time="0.289">
+  <properties/>
+  <testcase name="subscriberNotifiedOnRecord()" classname="it.unige.portcommand.artifacts.MarketHistoryArtifactTest" time="0.272"/>
+  <testcase name="lowConfidenceBelowTenSamples()" classname="it.unige.portcommand.artifacts.MarketHistoryArtifactTest" time="0.007"/>
+  <testcase name="meanStddevDealRateComputed()" classname="it.unige.portcommand.artifacts.MarketHistoryArtifactTest" time="0.001"/>
+  <testcase name="restoreReplacesStore()" classname="it.unige.portcommand.artifacts.MarketHistoryArtifactTest" time="0.0"/>
+  <testcase name="durationBandFiltersBeforeWindow()" classname="it.unige.portcommand.artifacts.MarketHistoryArtifactTest" time="0.0"/>
+  <testcase name="sevenDayWindowKeepsAllWhenLargerThanFiftyCap()" classname="it.unige.portcommand.artifacts.MarketHistoryArtifactTest" time="0.001"/>
+  <testcase name="lastNReturnsMostRecentInInsertionOrder()" classname="it.unige.portcommand.artifacts.MarketHistoryArtifactTest" time="0.001"/>
+  <testcase name="emptyQueryIsZeroLowConfidence()" classname="it.unige.portcommand.artifacts.MarketHistoryArtifactTest" time="0.001"/>
+  <testcase name="fiftyCapKeptWhenLargerThanSevenDaySet()" classname="it.unige.portcommand.artifacts.MarketHistoryArtifactTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.util.RandomSourceTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:31" hostname="MOJI" time="0.003">
+  <properties/>
+  <testcase name="setSeedResetsSequence()" classname="it.unige.portcommand.util.RandomSourceTest" time="0.001"/>
+  <testcase name="differentSeedsDiffer()" classname="it.unige.portcommand.util.RandomSourceTest" time="0.001"/>
+  <testcase name="sameSeedProducesSameSequence()" classname="it.unige.portcommand.util.RandomSourceTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

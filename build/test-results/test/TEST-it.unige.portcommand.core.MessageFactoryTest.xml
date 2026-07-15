@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.core.MessageFactoryTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:21" hostname="MOJI" time="0.019">
+  <properties/>
+  <testcase name="replyStampsEnvelopeAndPreservesConversation()" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.006"/>
+  <testcase name="createStampsEnvelopeAndPerformative()" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.0"/>
+  <testcase name="performative 16 carries the envelope" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.001"/>
+  <testcase name="performative 1 carries the envelope" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.0"/>
+  <testcase name="performative 14 carries the envelope" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.001"/>
+  <testcase name="performative 7 carries the envelope" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.0"/>
+  <testcase name="performative 3 carries the envelope" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.0"/>
+  <testcase name="performative 11 carries the envelope" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.0"/>
+  <testcase name="performative 0 carries the envelope" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.001"/>
+  <testcase name="performative 15 carries the envelope" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.0"/>
+  <testcase name="performative 6 carries the envelope" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.0"/>
+  <testcase name="performative 10 carries the envelope" classname="it.unige.portcommand.core.MessageFactoryTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

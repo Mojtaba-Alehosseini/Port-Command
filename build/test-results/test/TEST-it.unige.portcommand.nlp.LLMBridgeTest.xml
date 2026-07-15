@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.LLMBridgeTest" tests="17" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:21" hostname="MOJI" time="1.609">
+  <properties/>
+  <testcase name="resolveUrisUseDefaultPortWhenNoSystemProperty()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.002"/>
+  <testcase name="timeoutMsFromJsonReturnsNullWhenKeyMissing()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.006"/>
+  <testcase name="explainDoesNotBlockTheCallingThread()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="1.303"/>
+  <testcase name="isReadyCachesForFiveSecondsSoPollingDoesNotHammerTheSidecar()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.009"/>
+  <testcase name="resolveTimeoutMsDefaultsTo30000WhenNoConfigFilePresent()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.002"/>
+  <testcase name="explainSuccessReturnsTextAndValidated()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.018"/>
+  <testcase name="explainMalformedJsonCompletesExceptionallyWithNlpServiceException()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.012"/>
+  <testcase name="resolveUrisHonourPortSystemProperty()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.0"/>
+  <testcase name="explainValidatedNullMapsToFalse()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.012"/>
+  <testcase name="isReadyTrueWhenSidecarReports200()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.01"/>
+  <testcase name="timeoutMsFromJsonExtractsNestedKey()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.001"/>
+  <testcase name="isReadyFalseWhenSidecarReports503()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.01"/>
+  <testcase name="explainTimeoutCompletesExceptionallyWithLlmTimeoutException()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.202"/>
+  <testcase name="resolveTimeoutMsHonoursSystemPropertyOverride()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.0"/>
+  <testcase name="isReadyReturnsFalseRatherThanBlockingWhenSidecarIsUnreachable()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.005"/>
+  <testcase name="explainNon200StatusCompletesExceptionallyWithNlpServiceException()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.011"/>
+  <testcase name="timeoutMsFromJsonReturnsNullWhenNotNumeric()" classname="it.unige.portcommand.nlp.LLMBridgeTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -37,8 +37,12 @@ public final class PreprocessRegex {
     private static final Map<String, String> WORD_NUMBERS =
             Map.of("one", "1", "two", "2", "three", "3", "four", "4");
 
-    private static final Pattern DEADLINE = Pattern.compile(
-            "\\b(?:by|before|until)\\s+(\\d{1,2})(?::(\\d{2}))?\\s?(am|pm)?\\b", Pattern.CASE_INSENSITIVE);
+    // Both require a disambiguator (colon-minutes or am/pm) — a bare "by 5" is too easily a
+    // false positive ("reduce by 5 berths") to treat as a time, mirroring TIME_COLON/TIME_BARE_AMPM.
+    private static final Pattern DEADLINE_COLON = Pattern.compile(
+            "\\b(?:by|before|until)\\s+([01]?\\d|2[0-3]):([0-5]\\d)\\s?(am|pm)?\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DEADLINE_BARE_AMPM = Pattern.compile(
+            "\\b(?:by|before|until)\\s+(\\d{1,2})\\s?(am|pm)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern TIME_COLON =
             Pattern.compile("\\b([01]?\\d|2[0-3]):([0-5]\\d)\\s?(am|pm)?\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern TIME_BARE_AMPM =
@@ -68,12 +72,8 @@ public final class PreprocessRegex {
     }
 
     private static Optional<Double> extractPrice(String text) {
-        for (Pattern symbolOrWordForm : List.of(PRICE_SYMBOL_PREFIX, PRICE_SYMBOL_SUFFIX)) {
-            Matcher m = symbolOrWordForm.matcher(text);
-            if (m.find()) {
-                return Optional.of(parseNumber(m.group(1)));
-            }
-        }
+        // k-suffix and word-suffix are tried FIRST: for "$2k", the symbol pattern below would
+        // otherwise grab just "2" (stopping before the "k") and drop the x1000 multiplier.
         Matcher k = PRICE_K_SUFFIX.matcher(text);
         if (k.find()) {
             return Optional.of(parseNumber(k.group(1)) * 1000.0);
@@ -81,6 +81,12 @@ public final class PreprocessRegex {
         Matcher word = PRICE_WORD_SUFFIX.matcher(text);
         if (word.find()) {
             return Optional.of(parseNumber(word.group(1)));
+        }
+        for (Pattern symbolForm : List.of(PRICE_SYMBOL_PREFIX, PRICE_SYMBOL_SUFFIX)) {
+            Matcher m = symbolForm.matcher(text);
+            if (m.find()) {
+                return Optional.of(parseNumber(m.group(1)));
+            }
         }
         Matcher bare = PRICE_BARE.matcher(text);
         while (bare.find()) {
@@ -109,8 +115,15 @@ public final class PreprocessRegex {
     }
 
     private static Optional<LocalTime> extractDeadline(String text) {
-        Matcher m = DEADLINE.matcher(text);
-        return m.find() ? Optional.of(toLocalTime(m.group(1), m.group(2), m.group(3))) : Optional.empty();
+        Matcher colon = DEADLINE_COLON.matcher(text);
+        if (colon.find()) {
+            return Optional.of(toLocalTime(colon.group(1), colon.group(2), colon.group(3)));
+        }
+        Matcher bareAmPm = DEADLINE_BARE_AMPM.matcher(text);
+        if (bareAmPm.find()) {
+            return Optional.of(toLocalTime(bareAmPm.group(1), null, bareAmPm.group(2)));
+        }
+        return Optional.empty();
     }
 
     private static Optional<LocalTime> extractTime(String text) {

@@ -1,227 +1,227 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="it.unige.portcommand.agents.AgentStartupIT" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-14T20:04:27" hostname="MOJI" time="13.283">
+<testsuite name="it.unige.portcommand.agents.AgentStartupIT" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:36" hostname="MOJI" time="10.308">
   <properties/>
-  <testcase name="rosterRegistersEveryServiceWithExpectedCounts()" classname="it.unige.portcommand.agents.AgentStartupIT" time="7.073"/>
-  <testcase name="restartReRegistersCleanly()" classname="it.unige.portcommand.agents.AgentStartupIT" time="6.203"/>
-  <system-out><![CDATA[22:04:29.819 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
-22:04:29.819 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
-22:04:29.883 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
-22:04:31.909 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1â€“R30)
-22:04:31.916 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
-22:04:31.958 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent harbour_master spawned (class=HarbourMasterAgent)
-22:04:31.960 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - Starting agent harbour_master
-22:04:31.999 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - DF registered: type='harbour-master' name='harbour_master'
-22:04:32.019 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
-22:04:32.021 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
-22:04:32.033 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
-22:04:32.033 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
-22:04:32.036 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
-22:04:32.048 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent assistant_agent spawned (class=AssistantAgent)
-22:04:32.049 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
-22:04:32.051 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - Starting agent assistant_agent
-22:04:32.063 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - DF registered: type='assistant' name='assistant_agent'
-22:04:32.078 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
-22:04:32.079 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
-22:04:32.082 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
-22:04:32.083 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
-22:04:32.091 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
-22:04:32.098 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
-22:04:32.118 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
-22:04:32.119 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
-22:04:32.122 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_2 spawned (class=TugAgent)
-22:04:32.123 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_2
-22:04:32.126 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_3 spawned (class=TugAgent)
-22:04:32.127 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_3
-22:04:32.129 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_4 spawned (class=TugAgent)
-22:04:32.131 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
-22:04:32.131 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_4
-22:04:32.132 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
-22:04:32.141 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_2'
-22:04:32.146 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent df_census_probe spawned (class=DfCensusProbe)
-22:04:32.151 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_3'
-22:04:32.158 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_4'
-22:04:32.158 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:32.158 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:32.158 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:32.161 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:34.372 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
-22:04:34.517 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
-22:04:34.517 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
-22:04:34.530 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
-22:04:34.542 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
-22:04:34.548 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent harbour_master spawned (class=HarbourMasterAgent)
-22:04:34.548 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - Starting agent harbour_master
-22:04:34.552 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
-22:04:34.552 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
-22:04:34.554 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
-22:04:34.554 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
-22:04:34.554 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - DF registered: type='harbour-master' name='harbour_master'
-22:04:34.559 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent assistant_agent spawned (class=AssistantAgent)
-22:04:34.562 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - Starting agent assistant_agent
-22:04:34.562 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
-22:04:34.564 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
-22:04:34.568 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
-22:04:34.570 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
-22:04:34.573 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
-22:04:34.573 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - DF registered: type='assistant' name='assistant_agent'
-22:04:34.578 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_2 spawned (class=TugAgent)
-22:04:34.582 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
-22:04:34.581 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
-22:04:34.583 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
-22:04:34.584 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_3
-22:04:34.583 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_3 spawned (class=TugAgent)
-22:04:34.584 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_2
-22:04:34.589 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_4 spawned (class=TugAgent)
-22:04:34.590 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_4
-22:04:34.590 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
-22:04:34.592 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
-22:04:34.593 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent df_census_probe spawned (class=DfCensusProbe)
-22:04:34.595 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
-22:04:34.599 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
-22:04:34.600 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:34.601 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_3'
-22:04:34.601 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:34.603 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_2'
-22:04:34.604 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:34.606 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_4'
-22:04:34.607 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:37.533 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
-22:04:37.636 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
-22:04:37.637 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up â€” running DF self-check
-22:04:37.644 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
-22:04:37.656 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
-22:04:37.659 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent harbour_master spawned (class=HarbourMasterAgent)
-22:04:37.660 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - Starting agent harbour_master
-22:04:37.662 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
-22:04:37.664 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
-22:04:37.665 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
-22:04:37.665 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - DF registered: type='harbour-master' name='harbour_master'
-22:04:37.666 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
-22:04:37.669 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent assistant_agent spawned (class=AssistantAgent)
-22:04:37.669 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
-22:04:37.670 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - Starting agent assistant_agent
-22:04:37.673 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
-22:04:37.673 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
-22:04:37.674 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
-22:04:37.677 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
-22:04:37.677 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - DF registered: type='assistant' name='assistant_agent'
-22:04:37.678 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
-22:04:37.680 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
-22:04:37.680 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
-22:04:37.680 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
-22:04:37.682 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_2 spawned (class=TugAgent)
-22:04:37.684 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
-22:04:37.684 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_2
-22:04:37.686 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
-22:04:37.686 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_3 spawned (class=TugAgent)
-22:04:37.687 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_3
-22:04:37.687 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:37.689 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_4 spawned (class=TugAgent)
-22:04:37.689 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
-22:04:37.689 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_4
-22:04:37.689 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_2'
-22:04:37.690 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:37.692 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent df_census_probe spawned (class=DfCensusProbe)
-22:04:37.692 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_3'
-22:04:37.693 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:37.695 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_4'
-22:04:37.695 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
-22:04:40.626 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+  <testcase name="rosterRegistersEveryServiceWithExpectedCounts()" classname="it.unige.portcommand.agents.AgentStartupIT" time="4.22"/>
+  <testcase name="restartReRegistersCleanly()" classname="it.unige.portcommand.agents.AgentStartupIT" time="6.085"/>
+  <system-out><![CDATA[00:41:37.147 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:41:37.147 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+00:41:37.207 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:41:38.011 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+00:41:38.011 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:41:38.026 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent harbour_master spawned (class=HarbourMasterAgent)
+00:41:38.026 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - Starting agent harbour_master
+00:41:38.031 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - DF registered: type='harbour-master' name='harbour_master'
+00:41:38.044 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
+00:41:38.044 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
+00:41:38.044 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
+00:41:38.044 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+00:41:38.044 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+00:41:38.044 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+00:41:38.063 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent assistant_agent spawned (class=AssistantAgent)
+00:41:38.063 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - Starting agent assistant_agent
+00:41:38.063 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - DF registered: type='assistant' name='assistant_agent'
+00:41:38.081 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+00:41:38.081 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+00:41:38.081 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+00:41:38.081 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+00:41:38.081 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+00:41:38.081 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+00:41:38.103 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+00:41:38.103 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+00:41:38.103 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_2 spawned (class=TugAgent)
+00:41:38.103 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_2
+00:41:38.112 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_3 spawned (class=TugAgent)
+00:41:38.112 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_3
+00:41:38.112 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+00:41:38.112 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_4 spawned (class=TugAgent)
+00:41:38.112 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+00:41:38.112 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_4
+00:41:38.112 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_2'
+00:41:38.120 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_3'
+00:41:38.122 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_4'
+00:41:38.122 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent df_census_probe spawned (class=DfCensusProbe)
+00:41:38.125 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:38.125 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:38.125 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:38.125 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:40.207 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:41:40.274 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+00:41:40.278 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:41:40.282 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:41:40.290 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:41:40.292 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent harbour_master spawned (class=HarbourMasterAgent)
+00:41:40.292 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - Starting agent harbour_master
+00:41:40.292 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
+00:41:40.292 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
+00:41:40.298 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - DF registered: type='harbour-master' name='harbour_master'
+00:41:40.299 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+00:41:40.299 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+00:41:40.300 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent assistant_agent spawned (class=AssistantAgent)
+00:41:40.300 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
+00:41:40.301 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - Starting agent assistant_agent
+00:41:40.304 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+00:41:40.305 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+00:41:40.305 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+00:41:40.307 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - DF registered: type='assistant' name='assistant_agent'
+00:41:40.307 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+00:41:40.308 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+00:41:40.308 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+00:41:40.309 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+00:41:40.310 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+00:41:40.310 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+00:41:40.311 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_2 spawned (class=TugAgent)
+00:41:40.311 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_2
+00:41:40.313 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+00:41:40.316 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_3 spawned (class=TugAgent)
+00:41:40.316 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:40.316 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_3
+00:41:40.317 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_2'
+00:41:40.318 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_4 spawned (class=TugAgent)
+00:41:40.318 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:40.320 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+00:41:40.320 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_4
+00:41:40.322 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_3'
+00:41:40.323 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:40.323 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent df_census_probe spawned (class=DfCensusProbe)
+00:41:40.324 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_4'
+00:41:40.325 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:43.289 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:41:43.325 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+00:41:43.325 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:41:43.328 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:41:43.328 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:41:43.328 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent harbour_master spawned (class=HarbourMasterAgent)
+00:41:43.328 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - Starting agent harbour_master
+00:41:43.328 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
+00:41:43.328 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
+00:41:43.328 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+00:41:43.328 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - DF registered: type='harbour-master' name='harbour_master'
+00:41:43.328 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+00:41:43.328 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent assistant_agent spawned (class=AssistantAgent)
+00:41:43.328 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
+00:41:43.328 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - Starting agent assistant_agent
+00:41:43.342 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+00:41:43.342 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+00:41:43.345 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+00:41:43.346 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - DF registered: type='assistant' name='assistant_agent'
+00:41:43.346 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+00:41:43.347 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+00:41:43.348 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+00:41:43.349 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+00:41:43.349 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+00:41:43.351 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_2 spawned (class=TugAgent)
+00:41:43.351 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+00:41:43.352 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_2
+00:41:43.353 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+00:41:43.354 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:43.355 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_3 spawned (class=TugAgent)
+00:41:43.355 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_3
+00:41:43.356 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_2'
+00:41:43.356 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_4 spawned (class=TugAgent)
+00:41:43.356 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+00:41:43.356 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:43.357 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_3'
+00:41:43.357 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_4
+00:41:43.357 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:43.358 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent df_census_probe spawned (class=DfCensusProbe)
+00:41:43.359 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_4'
+00:41:43.360 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:46.320 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
 ]]></system-out>
-  <system-err><![CDATA[Jul 14, 2026 10:04:28 PM jade.core.Runtime beginContainer
+  <system-err><![CDATA[Jul 15, 2026 12:41:36 AM jade.core.Runtime beginContainer
 INFO: ----------------------------------
     This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
     downloaded in Open Source, under LGPL restrictions,
     at http://jade.tilab.com/
 ----------------------------------------
-Jul 14, 2026 10:04:28 PM jade.imtp.leap.LEAPIMTPManager initialize
+Jul 15, 2026 12:41:36 AM jade.imtp.leap.LEAPIMTPManager initialize
 INFO: Listening for intra-platform commands on address:
 - jicp://10.205.181.230:18099
 
-Jul 14, 2026 10:04:29 PM jade.core.BaseService init
+Jul 15, 2026 12:41:36 AM jade.core.BaseService init
 INFO: Service jade.core.management.AgentManagement initialized
-Jul 14, 2026 10:04:29 PM jade.core.BaseService init
+Jul 15, 2026 12:41:36 AM jade.core.BaseService init
 INFO: Service jade.core.messaging.Messaging initialized
-Jul 14, 2026 10:04:29 PM jade.core.BaseService init
+Jul 15, 2026 12:41:36 AM jade.core.BaseService init
 INFO: Service jade.core.resource.ResourceManagement initialized
-Jul 14, 2026 10:04:29 PM jade.core.BaseService init
+Jul 15, 2026 12:41:37 AM jade.core.BaseService init
 INFO: Service jade.core.mobility.AgentMobility initialized
-Jul 14, 2026 10:04:29 PM jade.core.BaseService init
+Jul 15, 2026 12:41:37 AM jade.core.BaseService init
 INFO: Service jade.core.event.Notification initialized
-Jul 14, 2026 10:04:29 PM jade.mtp.http.HTTPServer <init>
+Jul 15, 2026 12:41:37 AM jade.mtp.http.HTTPServer <init>
 INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
-Jul 14, 2026 10:04:29 PM jade.core.messaging.MessagingService boot
+Jul 15, 2026 12:41:37 AM jade.core.messaging.MessagingService boot
 INFO: MTP addresses:
 http://Moji:7778/acc
-Jul 14, 2026 10:04:29 PM jade.core.AgentContainerImpl joinPlatform
+Jul 15, 2026 12:41:37 AM jade.core.AgentContainerImpl joinPlatform
 INFO: --------------------------------------
 Agent container Main-Container@10.205.181.230 is ready.
 --------------------------------------------
-Jul 14, 2026 10:04:34 PM jade.core.messaging.MessageManager shutdown
+Jul 15, 2026 12:41:40 AM jade.core.messaging.MessageManager shutdown
 INFO: MessageManager shutting down ...
-Jul 14, 2026 10:04:34 PM jade.core.Runtime beginContainer
+Jul 15, 2026 12:41:40 AM jade.core.Runtime beginContainer
 INFO: ----------------------------------
     This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
     downloaded in Open Source, under LGPL restrictions,
     at http://jade.tilab.com/
 ----------------------------------------
-Jul 14, 2026 10:04:34 PM jade.imtp.leap.CommandDispatcher addICP
-WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@3e4f80cb[Cannot bind server socket to localhost port 18099].
-Jul 14, 2026 10:04:34 PM jade.imtp.leap.LEAPIMTPManager initialize
+Jul 15, 2026 12:41:40 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@1549bba7[Cannot bind server socket to localhost port 18099].
+Jul 15, 2026 12:41:40 AM jade.imtp.leap.LEAPIMTPManager initialize
 INFO: Listening for intra-platform commands on address:
 - jicp://10.205.181.230:18099
 
-Jul 14, 2026 10:04:34 PM jade.core.BaseService init
+Jul 15, 2026 12:41:40 AM jade.core.BaseService init
 INFO: Service jade.core.management.AgentManagement initialized
-Jul 14, 2026 10:04:34 PM jade.core.BaseService init
+Jul 15, 2026 12:41:40 AM jade.core.BaseService init
 INFO: Service jade.core.messaging.Messaging initialized
-Jul 14, 2026 10:04:34 PM jade.core.BaseService init
+Jul 15, 2026 12:41:40 AM jade.core.BaseService init
 INFO: Service jade.core.resource.ResourceManagement initialized
-Jul 14, 2026 10:04:34 PM jade.core.BaseService init
+Jul 15, 2026 12:41:40 AM jade.core.BaseService init
 INFO: Service jade.core.mobility.AgentMobility initialized
-Jul 14, 2026 10:04:34 PM jade.core.BaseService init
+Jul 15, 2026 12:41:40 AM jade.core.BaseService init
 INFO: Service jade.core.event.Notification initialized
-Jul 14, 2026 10:04:34 PM jade.mtp.http.HTTPServer <init>
+Jul 15, 2026 12:41:40 AM jade.mtp.http.HTTPServer <init>
 INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
-Jul 14, 2026 10:04:34 PM jade.core.messaging.MessagingService boot
+Jul 15, 2026 12:41:40 AM jade.core.messaging.MessagingService boot
 INFO: MTP addresses:
 http://Moji:7778/acc
-Jul 14, 2026 10:04:34 PM jade.core.AgentContainerImpl joinPlatform
+Jul 15, 2026 12:41:40 AM jade.core.AgentContainerImpl joinPlatform
 INFO: --------------------------------------
 Agent container Main-Container@10.205.181.230 is ready.
 --------------------------------------------
-Jul 14, 2026 10:04:37 PM jade.core.messaging.MessageManager shutdown
+Jul 15, 2026 12:41:43 AM jade.core.messaging.MessageManager shutdown
 INFO: MessageManager shutting down ...
-Jul 14, 2026 10:04:37 PM jade.core.Runtime beginContainer
+Jul 15, 2026 12:41:43 AM jade.core.Runtime beginContainer
 INFO: ----------------------------------
     This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
     downloaded in Open Source, under LGPL restrictions,
     at http://jade.tilab.com/
 ----------------------------------------
-Jul 14, 2026 10:04:37 PM jade.imtp.leap.LEAPIMTPManager initialize
+Jul 15, 2026 12:41:43 AM jade.imtp.leap.LEAPIMTPManager initialize
 INFO: Listening for intra-platform commands on address:
 - jicp://10.205.181.230:18099
 
-Jul 14, 2026 10:04:37 PM jade.core.BaseService init
+Jul 15, 2026 12:41:43 AM jade.core.BaseService init
 INFO: Service jade.core.management.AgentManagement initialized
-Jul 14, 2026 10:04:37 PM jade.core.BaseService init
+Jul 15, 2026 12:41:43 AM jade.core.BaseService init
 INFO: Service jade.core.messaging.Messaging initialized
-Jul 14, 2026 10:04:37 PM jade.core.BaseService init
+Jul 15, 2026 12:41:43 AM jade.core.BaseService init
 INFO: Service jade.core.resource.ResourceManagement initialized
-Jul 14, 2026 10:04:37 PM jade.core.BaseService init
+Jul 15, 2026 12:41:43 AM jade.core.BaseService init
 INFO: Service jade.core.mobility.AgentMobility initialized
-Jul 14, 2026 10:04:37 PM jade.core.BaseService init
+Jul 15, 2026 12:41:43 AM jade.core.BaseService init
 INFO: Service jade.core.event.Notification initialized
-Jul 14, 2026 10:04:37 PM jade.mtp.http.HTTPServer <init>
+Jul 15, 2026 12:41:43 AM jade.mtp.http.HTTPServer <init>
 INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
-Jul 14, 2026 10:04:37 PM jade.core.messaging.MessagingService boot
+Jul 15, 2026 12:41:43 AM jade.core.messaging.MessagingService boot
 INFO: MTP addresses:
 http://Moji:7778/acc
-Jul 14, 2026 10:04:37 PM jade.core.AgentContainerImpl joinPlatform
+Jul 15, 2026 12:41:43 AM jade.core.AgentContainerImpl joinPlatform
 INFO: --------------------------------------
 Agent container Main-Container@10.205.181.230 is ready.
 --------------------------------------------
-Jul 14, 2026 10:04:40 PM jade.core.messaging.MessageManager shutdown
+Jul 15, 2026 12:41:46 AM jade.core.messaging.MessageManager shutdown
 INFO: MessageManager shutting down ...
 ]]></system-err>
 </testsuite>

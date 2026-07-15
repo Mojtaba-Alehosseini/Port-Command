@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.ConfidenceGateTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:21" hostname="MOJI" time="0.014">
+  <properties/>
+  <testcase name="boundariesAreExhaustiveAndNonOverlapping()" classname="it.unige.portcommand.nlp.ConfidenceGateTest" time="0.0"/>
+  <testcase name="route(1.0) -&gt; A_HIGH_CONFIDENCE" classname="it.unige.portcommand.nlp.ConfidenceGateTest" time="0.006"/>
+  <testcase name="route(0.60) -&gt; A_HIGH_CONFIDENCE" classname="it.unige.portcommand.nlp.ConfidenceGateTest" time="0.001"/>
+  <testcase name="route(0.61) -&gt; A_HIGH_CONFIDENCE" classname="it.unige.portcommand.nlp.ConfidenceGateTest" time="0.001"/>
+  <testcase name="route(0.55) -&gt; B_MEDIUM_DCG_ONLY" classname="it.unige.portcommand.nlp.ConfidenceGateTest" time="0.0"/>
+  <testcase name="route(0.40) -&gt; B_MEDIUM_DCG_ONLY" classname="it.unige.portcommand.nlp.ConfidenceGateTest" time="0.0"/>
+  <testcase name="route(0.3999) -&gt; C_CLARIFICATION" classname="it.unige.portcommand.nlp.ConfidenceGateTest" time="0.0"/>
+  <testcase name="route(0.39) -&gt; C_CLARIFICATION" classname="it.unige.portcommand.nlp.ConfidenceGateTest" time="0.0"/>
+  <testcase name="route(0.0) -&gt; C_CLARIFICATION" classname="it.unige.portcommand.nlp.ConfidenceGateTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

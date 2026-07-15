@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.assistant.UrgencyCalculatorTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:21" hostname="MOJI" time="0.078">
+  <properties/>
+  <testcase name="openingOfferFloorsAtPointFour()" classname="it.unige.portcommand.assistant.UrgencyCalculatorTest" time="0.001"/>
+  <testcase name="rejectsNonPositiveTimeLimit()" classname="it.unige.portcommand.assistant.UrgencyCalculatorTest" time="0.001"/>
+  <testcase name="overrunInputsStillClampToOne()" classname="it.unige.portcommand.assistant.UrgencyCalculatorTest" time="0.0"/>
+  <testcase name="higherRoundsUsedNeverDecreasesUrgency()" classname="it.unige.portcommand.assistant.UrgencyCalculatorTest" time="0.001"/>
+  <testcase name="roundsUsed=0 -&gt; urgency in [0.4, 1.0]" classname="it.unige.portcommand.assistant.UrgencyCalculatorTest" time="0.018"/>
+  <testcase name="roundsUsed=1 -&gt; urgency in [0.4, 1.0]" classname="it.unige.portcommand.assistant.UrgencyCalculatorTest" time="0.001"/>
+  <testcase name="roundsUsed=2 -&gt; urgency in [0.4, 1.0]" classname="it.unige.portcommand.assistant.UrgencyCalculatorTest" time="0.0"/>
+  <testcase name="roundsUsed=3 -&gt; urgency in [0.4, 1.0]" classname="it.unige.portcommand.assistant.UrgencyCalculatorTest" time="0.0"/>
+  <testcase name="roundsUsed=4 -&gt; urgency in [0.4, 1.0]" classname="it.unige.portcommand.assistant.UrgencyCalculatorTest" time="0.0"/>
+  <testcase name="fullyExhaustedAndThreatenedCapsAtOne()" classname="it.unige.portcommand.assistant.UrgencyCalculatorTest" time="0.0"/>
+  <testcase name="rejectsNonPositiveRoundLimit()" classname="it.unige.portcommand.assistant.UrgencyCalculatorTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

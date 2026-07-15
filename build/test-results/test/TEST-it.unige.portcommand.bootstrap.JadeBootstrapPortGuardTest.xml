@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.bootstrap.JadeBootstrapPortGuardTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:21" hostname="MOJI" time="0.014">
+  <properties/>
+  <testcase name="startFailsFastWhenMainPortIsAlreadyHeld()" classname="it.unige.portcommand.bootstrap.JadeBootstrapPortGuardTest" time="0.014"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

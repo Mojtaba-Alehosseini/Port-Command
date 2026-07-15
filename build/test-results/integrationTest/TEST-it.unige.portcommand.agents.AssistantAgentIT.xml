@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.agents.AssistantAgentIT" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:49" hostname="MOJI" time="7.428">
+  <properties/>
+  <testcase name="explainRequestForUnknownDecisionIdNeverCallsTheLlm()" classname="it.unige.portcommand.agents.AssistantAgentIT" time="3.311"/>
+  <testcase name="hintButtonPublishesLlmPolishedTextWhenValidatorPasses()" classname="it.unige.portcommand.agents.AssistantAgentIT" time="0.412"/>
+  <testcase name="matchingPolicyShortCircuitsTheEvPath()" classname="it.unige.portcommand.agents.AssistantAgentIT" time="0.075"/>
+  <testcase name="hintButtonFallsBackToTemplateOnLlmTimeout()" classname="it.unige.portcommand.agents.AssistantAgentIT" time="0.023"/>
+  <testcase name="autopilotDoesNothingWhenDisabled()" classname="it.unige.portcommand.agents.AssistantAgentIT" time="0.003"/>
+  <testcase name="explainRequestRegeneratesPastDecisionFromCache()" classname="it.unige.portcommand.agents.AssistantAgentIT" time="0.013"/>
+  <testcase name="hintButtonOnlyDisplaysAndNeverDispatchesAPlayerCommand()" classname="it.unige.portcommand.agents.AssistantAgentIT" time="0.012"/>
+  <testcase name="assistantRegistersDfServiceOnRealBoot()" classname="it.unige.portcommand.agents.AssistantAgentIT" time="3.508"/>
+  <testcase name="hintButtonFallsBackToTemplateWhenLlmOutputFailsValidation()" classname="it.unige.portcommand.agents.AssistantAgentIT" time="0.016"/>
+  <testcase name="autopilotDispatchesPlayerCommandAndChatEventWhenEnabled()" classname="it.unige.portcommand.agents.AssistantAgentIT" time="0.014"/>
+  <system-out><![CDATA[00:41:49.339 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+00:41:53.162 [Test worker] [] INFO  i.u.p.b.a.AutopilotExecuteBehaviour - dlg-7: policy 'auto reject if price > 0' matched -> reject_silent
+00:41:53.953 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
+00:41:53.955 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:41:53.986 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:41:54.374 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:41:54.380 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent harbour_master spawned (class=HarbourMasterAgent)
+00:41:54.380 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - Starting agent harbour_master
+00:41:54.400 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - DF registered: type='harbour-master' name='harbour_master'
+00:41:54.417 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
+00:41:54.417 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
+00:41:54.424 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
+00:41:54.430 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent customs_agent spawned (class=CustomsAgent)
+00:41:54.432 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - Starting agent customs_agent
+00:41:54.436 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent assistant_agent spawned (class=AssistantAgent)
+00:41:54.437 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - Starting agent assistant_agent
+00:41:54.438 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - DF registered: type='customs' name='customs_agent'
+00:41:54.441 [assistant_agent] [assistant_agent] INFO  i.u.p.agents.AssistantAgent - DF registered: type='assistant' name='assistant_agent'
+00:41:54.486 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_container spawned (class=TerminalAgent)
+00:41:54.486 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_container
+00:41:54.489 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent terminal_general spawned (class=TerminalAgent)
+00:41:54.491 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - Starting agent terminal_general
+00:41:54.493 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_container'
+00:41:54.494 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - DF registered: type='terminal' name='terminal_general'
+00:41:54.544 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_1 spawned (class=TugAgent)
+00:41:54.545 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_1
+00:41:54.547 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_2 spawned (class=TugAgent)
+00:41:54.548 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_2
+00:41:54.548 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_3 spawned (class=TugAgent)
+00:41:54.550 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_3
+00:41:54.551 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_1'
+00:41:54.552 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent tug_4 spawned (class=TugAgent)
+00:41:54.553 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+00:41:54.553 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Starting agent tug_4
+00:41:54.554 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_2'
+00:41:54.556 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_3'
+00:41:54.558 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - DF registered: type='tug-escort' name='tug_4'
+00:41:54.571 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:54.571 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:54.571 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:54.571 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn
+00:41:54.581 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent df_census_probe spawned (class=DfCensusProbe)
+00:41:56.751 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+]]></system-out>
+  <system-err><![CDATA[INFO: MessageManager shutting down ...
+]]></system-err>
+</testsuite>

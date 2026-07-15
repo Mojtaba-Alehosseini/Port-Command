@@ -16,10 +16,13 @@ import it.unige.portcommand.agents.WeatherSnapshot;
 import it.unige.portcommand.agents.ContractedVesselAgent;
 import it.unige.portcommand.agents.WalkInVesselAgent;
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.negotiation.NegotiationEngine;
+import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.ontology.Position;
 import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.RandomSource;
 import it.unige.portcommand.util.SimClock;
 import jade.wrapper.AgentController;
@@ -53,12 +56,17 @@ public final class AgentRoster {
 
     public static void spawnSingletonsAndFleet(JadeAgentSpawner spawner, PortStateArtifact portState,
                                                SimClock simClock, RandomSource randomSource,
-                                               MarketHistoryArtifact marketHistory) {
+                                               MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
+                                               EventBus eventBus) {
         spawner.spawn("harbour_master", HarbourMasterAgent.class, null);
         spawner.spawn("weather_agent", WeatherAgent.class,
                 new Object[] {defaultWeatherInit(), randomSource, simClock});
         spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource});
-        spawner.spawn("assistant_agent", AssistantAgent.class, new Object[] {marketHistory});
+        // A fresh PolicyRegistryArtifact per boot: nothing else reads player autopilot policies
+        // yet (task 19's HUD is the first future consumer), so it is not JadeBootstrap-level
+        // shared state like portState/marketHistory/eventBus.
+        spawner.spawn("assistant_agent", AssistantAgent.class,
+                new Object[] {marketHistory, new PolicyRegistryArtifact(), llmBridge, eventBus});
 
         spawner.spawn("terminal_container", TerminalAgent.class, new Object[] {
                 new TerminalInitArgs("terminal_container", List.of("berth_2"), 4), portState, simClock});

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.prolog.PrologEngineTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:31" hostname="MOJI" time="0.202">
+  <properties/>
+  <testcase name="ruleKernelIsExactlyThirtyRules()" classname="it.unige.portcommand.prolog.PrologEngineTest" time="0.005"/>
+  <testcase name="concurrentQueriesDoNotDeadlockOrThrow()" classname="it.unige.portcommand.prolog.PrologEngineTest" time="0.189"/>
+  <testcase name="getInstanceIsSingletonAndInitialised()" classname="it.unige.portcommand.prolog.PrologEngineTest" time="0.001"/>
+  <testcase name="initConsultsAllSixFiles()" classname="it.unige.portcommand.prolog.PrologEngineTest" time="0.001"/>
+  <testcase name="manifestIsOntologyFirstThenFiveRuleModules()" classname="it.unige.portcommand.prolog.PrologEngineTest" time="0.002"/>
+  <testcase name="mainResourceDirHoldsExactlyTheFiveRuleModules()" classname="it.unige.portcommand.prolog.PrologEngineTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

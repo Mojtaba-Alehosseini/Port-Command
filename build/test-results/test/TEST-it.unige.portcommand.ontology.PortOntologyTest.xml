@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.ontology.PortOntologyTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:31" hostname="MOJI" time="0.009">
+  <properties/>
+  <testcase name="initStubIsCallable()" classname="it.unige.portcommand.ontology.PortOntologyTest" time="0.006"/>
+  <testcase name="getInstanceIsSingletonAndValidatesClasspath()" classname="it.unige.portcommand.ontology.PortOntologyTest" time="0.001"/>
+  <testcase name="consultOntologyFileResolvesToExistingPl()" classname="it.unige.portcommand.ontology.PortOntologyTest" time="0.001"/>
+  <system-out><![CDATA[00:41:31.344 [Test worker] [] INFO  i.u.p.ontology.PortOntology - PortOntology present at C:/Projects/SDAI and NLP joint Project/PortCommand/port-command-genova/build/resources/main/prolog/port_ontology.pl (consult owned by PrologEngine.init)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

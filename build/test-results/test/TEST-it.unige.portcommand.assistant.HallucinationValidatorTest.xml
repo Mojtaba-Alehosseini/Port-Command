@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.assistant.HallucinationValidatorTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:21" hostname="MOJI" time="0.013">
+  <properties/>
+  <testcase name="outputWithFabricatedExtraNumberFails()" classname="it.unige.portcommand.assistant.HallucinationValidatorTest" time="0.004"/>
+  <testcase name="outputWithFabricatedVesselNameFails()" classname="it.unige.portcommand.assistant.HallucinationValidatorTest" time="0.001"/>
+  <testcase name="blankOutputFails()" classname="it.unige.portcommand.assistant.HallucinationValidatorTest" time="0.0"/>
+  <testcase name="validOutputWithAllNumbersAndKnownEntitiesPasses()" classname="it.unige.portcommand.assistant.HallucinationValidatorTest" time="0.002"/>
+  <testcase name="outputOmittingOneRequiredNumberFails()" classname="it.unige.portcommand.assistant.HallucinationValidatorTest" time="0.001"/>
+  <testcase name="currencyAndThousandsFormattingAllNormaliseToTheSameFigure()" classname="it.unige.portcommand.assistant.HallucinationValidatorTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

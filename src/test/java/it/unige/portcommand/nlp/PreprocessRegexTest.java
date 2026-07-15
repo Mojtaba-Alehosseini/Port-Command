@@ -45,6 +45,13 @@ class PreprocessRegexTest {
         assertTrue(preprocess.extract("hello there").price().isEmpty());
     }
 
+    @Test
+    void currencySymbolCombinedWithKSuffixAppliesTheThousandsMultiplier() {
+        // Regression: the symbol pattern must not shadow the k-suffix and grab just "2" from "$2k".
+        assertEquals(2000.0, preprocess.extract("$2k for 5h").price().orElseThrow(), 1e-9);
+        assertEquals(1500.0, preprocess.extract("€1.5k for 5h").price().orElseThrow(), 1e-9);
+    }
+
     // --- duration: fused tokens + spaced variants ----------------------------------------------
 
     @ParameterizedTest(name = "duration in \"{0}\" -> {1}")
@@ -126,6 +133,21 @@ class PreprocessRegexTest {
         PreprocessRegex.Extracted extracted = preprocess.extract("out by 19:30");
         assertEquals(LocalTime.of(19, 30), extracted.deadline().orElseThrow());
         assertTrue(extracted.time().isEmpty());
+    }
+
+    @Test
+    void invalidMinuteInADeadlineClauseDoesNotThrowAndYieldsNoDeadline() {
+        // Regression: an out-of-range minute (typo, e.g. "8:75") must not blow up LocalTime.of;
+        // the pre-pass degrades to "no deadline found", never a crash.
+        assertTrue(preprocess.extract("out by 8:75").deadline().isEmpty());
+        assertTrue(preprocess.extract("leave by 12:60").deadline().isEmpty());
+    }
+
+    @Test
+    void bareHourAfterByWithNoDisambiguatorIsNotMistakenForADeadline() {
+        // Regression: "by 5" alone (no colon, no am/pm) is too easily a false positive
+        // ("reduce by 5 berths" is not a time) to treat as a deadline.
+        assertTrue(preprocess.extract("reduce by 5 berths").deadline().isEmpty());
     }
 
     // --- graceful misses -------------------------------------------------------------------------

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.assistant.RecommendationAlgorithmTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:21" hostname="MOJI" time="0.031">
+  <properties/>
+  <testcase name="lowSampleCountUsesIncomeRulesFallback()" classname="it.unige.portcommand.assistant.RecommendationAlgorithmTest" time="0.017"/>
+  <testcase name="incompatibleBerthOnlyLeavesRejectSilent()" classname="it.unige.portcommand.assistant.RecommendationAlgorithmTest" time="0.001"/>
+  <testcase name="chosenCandidateNeverHasLowerEvThanRejectSilent()" classname="it.unige.portcommand.assistant.RecommendationAlgorithmTest" time="0.002"/>
+  <testcase name="deterministicGivenSameInputs()" classname="it.unige.portcommand.assistant.RecommendationAlgorithmTest" time="0.001"/>
+  <testcase name="counterBeatsAcceptWhenOfferBarelyCoversMarginalCost()" classname="it.unige.portcommand.assistant.RecommendationAlgorithmTest" time="0.001"/>
+  <testcase name="round1OfferBelowMarginalCostStillAvoidsRejectSilentDueToUrgencyFloor()" classname="it.unige.portcommand.assistant.RecommendationAlgorithmTest" time="0.002"/>
+  <testcase name="acceptBeatsAnOverGreedyCounterNearTopOfBand()" classname="it.unige.portcommand.assistant.RecommendationAlgorithmTest" time="0.002"/>
+  <system-out><![CDATA[00:41:21.460 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

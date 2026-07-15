@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.negotiation.PersonalityTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:21" hostname="MOJI" time="0.002">
+  <properties/>
+  <testcase name="fromDistributionFallsBackToNeutralWhenUnderspecified()" classname="it.unige.portcommand.negotiation.PersonalityTest" time="0.001"/>
+  <testcase name="fromDistributionReadsCumulativeBuckets()" classname="it.unige.portcommand.negotiation.PersonalityTest" time="0.001"/>
+  <testcase name="openingModifiersOrderedAggressiveHighest()" classname="it.unige.portcommand.negotiation.PersonalityTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

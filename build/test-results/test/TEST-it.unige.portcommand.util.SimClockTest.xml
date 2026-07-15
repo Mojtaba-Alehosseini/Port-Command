@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.util.SimClockTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:31" hostname="MOJI" time="0.03">
+  <properties/>
+  <testcase name="concurrentAdvancesSumLikeSerial()" classname="it.unige.portcommand.util.SimClockTest" time="0.002"/>
+  <testcase name="pauseSuppressesAdvanceAndResumeDoesNotInflate()" classname="it.unige.portcommand.util.SimClockTest" time="0.001"/>
+  <testcase name="simHourMinuteGameDayDerivedFromSimMillis()" classname="it.unige.portcommand.util.SimClockTest" time="0.001"/>
+  <testcase name="isMidnightCrossedReturnsTrueExactlyOncePerDay()" classname="it.unige.portcommand.util.SimClockTest" time="0.001"/>
+  <testcase name="constructorRejectsNonPositiveRate()" classname="it.unige.portcommand.util.SimClockTest" time="0.002"/>
+  <testcase name="advanceToNextDayJumpsToBoundaryFromMidday()" classname="it.unige.portcommand.util.SimClockTest" time="0.001"/>
+  <testcase name="[1] 1000, 300, 288000" classname="it.unige.portcommand.util.SimClockTest" time="0.004"/>
+  <testcase name="[2] 400, 300, 115200" classname="it.unige.portcommand.util.SimClockTest" time="0.001"/>
+  <testcase name="[3] 100, 300, 28800" classname="it.unige.portcommand.util.SimClockTest" time="0.001"/>
+  <testcase name="[4] 1000, 600, 144000" classname="it.unige.portcommand.util.SimClockTest" time="0.001"/>
+  <testcase name="[5] 0, 300, 0" classname="it.unige.portcommand.util.SimClockTest" time="0.0"/>
+  <testcase name="advanceAccumulatesExactSimMillis()" classname="it.unige.portcommand.util.SimClockTest" time="0.0"/>
+  <testcase name="simSecondsToWallMsIsInverseOfAdvanceRate()" classname="it.unige.portcommand.util.SimClockTest" time="0.0"/>
+  <testcase name="resetClearsTimeAndMidnightState()" classname="it.unige.portcommand.util.SimClockTest" time="0.0"/>
+  <testcase name="pauseAndResumeAreIdempotent()" classname="it.unige.portcommand.util.SimClockTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

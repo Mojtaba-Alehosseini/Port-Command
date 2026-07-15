@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.PreprocessRegexTest" tests="35" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:28" hostname="MOJI" time="0.037">
+  <properties/>
+  <testcase name="deadlineClauseIsNotDoubleCountedAsPlainTime()" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="invalidMinuteInADeadlineClauseDoesNotThrowAndYieldsNoDeadline()" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <testcase name="currencySymbolCombinedWithKSuffixAppliesTheThousandsMultiplier()" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="price in &quot;I'll give you 2000 for 5 hours at berth 3&quot; -&gt; 2000.0" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.002"/>
+  <testcase name="price in &quot;€2000 for 5 hours&quot; -&gt; 2000.0" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="price in &quot;2000€ for 5 hours&quot; -&gt; 2000.0" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="price in &quot;$2000 for 5 hours&quot; -&gt; 2000.0" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="price in &quot;How about we start at 2k for 4 hours&quot; -&gt; 2000.0" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="price in &quot;I propose 1850 euros for 6 hours at pier 4&quot; -&gt; 1850.0" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <testcase name="price in &quot;Offering 2050 euros to dock for 5 hours&quot; -&gt; 2050.0" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <testcase name="price in &quot;My offer is 1600 for 6h&quot; -&gt; 1600.0" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="nullTextReturnsAllFieldsEmpty()" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <testcase name="extractsDeadlineFromByClause()" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <testcase name="noPriceCandidateIsEmptyNotException()" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="berth in &quot;at berth 3&quot; -&gt; berth_3" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="berth in &quot;at dock 1&quot; -&gt; berth_1" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <testcase name="berth in &quot;at quay 2&quot; -&gt; berth_2" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="berth in &quot;at pier 4&quot; -&gt; berth_4" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="berth in &quot;at slip 3&quot; -&gt; berth_3" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <testcase name="berth in &quot;at berth one&quot; -&gt; berth_1" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <testcase name="berth in &quot;For 4h at berth two I'll pay 2500&quot; -&gt; berth_2" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="berth in &quot;at berth #3&quot; -&gt; berth_3" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="vessel name in &quot;Genova Star: 2000 for 5h&quot; -&gt; Genova Star" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="vessel name in &quot;I will pay 1800 euros for berth 3 for the Maersk Genova&quot; -&gt; Maersk Genova" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <testcase name="vessel name in &quot;tell the Atlantic Carrier no&quot; -&gt; Atlantic Carrier" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="extractsColonTimeAsPlainTime()" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="extractsBareAmPmDeadline()" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <testcase name="bareHourAfterByWithNoDisambiguatorIsNotMistakenForADeadline()" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="duration in &quot;I'll give you 2000 for 5 hours at berth 3&quot; -&gt; 5" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.002"/>
+  <testcase name="duration in &quot;My offer is 1600 for 6h&quot; -&gt; 6" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="duration in &quot;I'm offering 2600 for 5 hrs&quot; -&gt; 5" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="duration in &quot;I'll do 3500 for 8h&quot; -&gt; 8" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="duration in &quot;Pay you 1900 for 8 hours at berth 3&quot; -&gt; 8" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.001"/>
+  <testcase name="noVesselNameCandidateIsEmpty()" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <testcase name="blankTextReturnsAllFieldsEmpty()" classname="it.unige.portcommand.nlp.PreprocessRegexTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

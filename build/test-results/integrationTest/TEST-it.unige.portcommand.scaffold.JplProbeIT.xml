@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="it.unige.portcommand.scaffold.JplProbeIT" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-07-14T20:08:11" hostname="MOJI" time="0.879">
+<testsuite name="it.unige.portcommand.scaffold.JplProbeIT" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:44:12" hostname="MOJI" time="0.45">
   <properties/>
-  <testcase name="jplBindsAndAnswersQueries()" classname="it.unige.portcommand.scaffold.JplProbeIT" time="0.879"/>
-  <system-out><![CDATA[22:08:12.291 [Test worker] [] INFO  i.u.portcommand.scaffold.JplProbe - JPL consult('C:/Projects/SDAI and NLP joint Project/PortCommand/port-command-genova/build/resources/test/prolog/smoke.pl') -> true
-22:08:12.321 [Test worker] [] INFO  i.u.portcommand.scaffold.JplProbe - JPL member(2, [1,2,3]) -> true
+  <testcase name="jplBindsAndAnswersQueries()" classname="it.unige.portcommand.scaffold.JplProbeIT" time="0.45"/>
+  <system-out><![CDATA[00:44:12.466 [Test worker] [] INFO  i.u.portcommand.scaffold.JplProbe - JPL consult('C:/Projects/SDAI and NLP joint Project/PortCommand/port-command-genova/build/resources/test/prolog/smoke.pl') -> true
+00:44:12.479 [Test worker] [] INFO  i.u.portcommand.scaffold.JplProbe - JPL member(2, [1,2,3]) -> true
 ]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

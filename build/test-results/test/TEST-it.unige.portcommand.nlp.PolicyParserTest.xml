@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.PolicyParserTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:28" hostname="MOJI" time="0.013">
+  <properties/>
+  <testcase name="acceptWithVesselTypeFilterMatchesOnlyThatType()" classname="it.unige.portcommand.nlp.PolicyParserTest" time="0.007"/>
+  <testcase name="rejectWithoutVesselTypeAppliesToEveryType()" classname="it.unige.portcommand.nlp.PolicyParserTest" time="0.001"/>
+  <testcase name="unknownVesselTypeWordFailsToParse()" classname="it.unige.portcommand.nlp.PolicyParserTest" time="0.002"/>
+  <testcase name="counterActionParsesPercentageAndAppliesToPrice()" classname="it.unige.portcommand.nlp.PolicyParserTest" time="0.001"/>
+  <testcase name="andJoinedConditionRequiresBothClauses()" classname="it.unige.portcommand.nlp.PolicyParserTest" time="0.001"/>
+  <testcase name="malformedTextFailsToParseAndPublishesNotification()" classname="it.unige.portcommand.nlp.PolicyParserTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

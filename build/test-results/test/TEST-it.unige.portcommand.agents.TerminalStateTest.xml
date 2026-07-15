@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.agents.TerminalStateTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:20" hostname="MOJI" time="0.013">
+  <properties/>
+  <testcase name="requestBerthConfirmsWithCraneAndComputesFreeTime()" classname="it.unige.portcommand.agents.TerminalStateTest" time="0.007"/>
+  <testcase name="dockReleaseAndCancelTransitions()" classname="it.unige.portcommand.agents.TerminalStateTest" time="0.001"/>
+  <testcase name="exhaustingCranesRefusesNoCrane()" classname="it.unige.portcommand.agents.TerminalStateTest" time="0.001"/>
+  <testcase name="secondRequestForSameBerthIsBusy()" classname="it.unige.portcommand.agents.TerminalStateTest" time="0.001"/>
+  <testcase name="confirmDockingOnlyFromProvisional()" classname="it.unige.portcommand.agents.TerminalStateTest" time="0.001"/>
+  <testcase name="managesReflectsOwnership()" classname="it.unige.portcommand.agents.TerminalStateTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

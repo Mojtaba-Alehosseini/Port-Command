@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.ontology.OntologyValidationTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:31" hostname="MOJI" time="0.005">
+  <properties/>
+  <testcase name="vesselSpecKnownSetMatchesOntology()" classname="it.unige.portcommand.ontology.OntologyValidationTest" time="0.002"/>
+  <testcase name="recognisesAllFourBerths()" classname="it.unige.portcommand.ontology.OntologyValidationTest" time="0.001"/>
+  <testcase name="rejectsUnknownVesselType()" classname="it.unige.portcommand.ontology.OntologyValidationTest" time="0.0"/>
+  <testcase name="recognisesAllFiveVesselTypes()" classname="it.unige.portcommand.ontology.OntologyValidationTest" time="0.0"/>
+  <testcase name="accessorsReturnUnmodifiableSets()" classname="it.unige.portcommand.ontology.OntologyValidationTest" time="0.001"/>
+  <testcase name="rejectsUnknownBerth()" classname="it.unige.portcommand.ontology.OntologyValidationTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
