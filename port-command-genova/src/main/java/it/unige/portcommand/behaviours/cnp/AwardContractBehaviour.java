@@ -45,6 +45,7 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
 
     @Override
     public void action() {
+        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
         Map<String, ACLMessage> bidsByTugId = new LinkedHashMap<>();
         List<TugBid> bids = new ArrayList<>(proposals.size());
         for (ACLMessage p : proposals) {
@@ -59,7 +60,7 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
             bidsByTugId.put(tugId, p);
         }
         if (bids.isEmpty()) {
-            holdVessel("no_bids");
+            holdVessel(hm, "no_bids");
             return;
         }
 
@@ -71,34 +72,32 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
                 ACLMessage accept = MessageFactory.reply(bid, ACLMessage.ACCEPT_PROPOSAL);
                 accept.setContent(TerminalJson.write(
                         Map.of("vessel_id", req.vesselId(), "berth_position", req.berthPosition())));
-                myAgent.send(accept);
+                hm.sendLogged(accept);
                 log.info("CNP for {}: ACCEPT -> {}", req.vesselId(), tugAid.getLocalName());
             } else {
-                myAgent.send(MessageFactory.reply(bid, ACLMessage.REJECT_PROPOSAL));
+                hm.sendLogged(MessageFactory.reply(bid, ACLMessage.REJECT_PROPOSAL));
                 log.info("CNP for {}: REJECT -> {}", req.vesselId(), tugAid.getLocalName());
             }
         }
 
-        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
         hm.activeVessels().computeIfPresent(req.vesselId(),
                 (id, tracking) -> tracking.withTugs(winners).withStage(Stage.IN_TRANSIT));
         hm.cnpRetryAttempts().remove(req.vesselId());
     }
 
-    private void holdVessel(String reason) {
+    private void holdVessel(HarbourMasterAgent hm, String reason) {
         ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);
         inform.addReceiver(req.vesselAid());
         inform.setContent(TerminalJson.write(Map.of("event", "tug_hold", "reason", reason)));
-        myAgent.send(inform);
+        hm.sendLogged(inform);
         log.info("CNP for {} held: {}", req.vesselId(), reason);
         if ("no_bids".equals(reason)) {
-            scheduleRetryIfWithinCap();
+            scheduleRetryIfWithinCap(hm);
         }
     }
 
     /** Schedules {@link CnpRetryBehaviour}, bounded at {@link CnpRetryBehaviour#MAX_RETRIES}. */
-    private void scheduleRetryIfWithinCap() {
-        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
+    private void scheduleRetryIfWithinCap(HarbourMasterAgent hm) {
         int attempt = hm.cnpRetryAttempts()
                 .computeIfAbsent(req.vesselId(), id -> new AtomicInteger(0))
                 .incrementAndGet();

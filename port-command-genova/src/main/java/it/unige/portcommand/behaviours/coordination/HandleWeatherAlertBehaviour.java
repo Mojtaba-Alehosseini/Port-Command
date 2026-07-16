@@ -53,7 +53,7 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
     @Override
     public void action() {
         HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
-        ACLMessage msg = myAgent.receive(TEMPLATE);
+        ACLMessage msg = hm.receiveLogged(TEMPLATE);
         if (msg == null) {
             block();
             return;
@@ -90,14 +90,14 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
                 ACLMessage cancel = MessageFactory.create(ACLMessage.CANCEL);
                 cancel.addReceiver(tugAid);
                 cancel.setContent(TerminalJson.write(Map.of("reason", "weather_hold")));
-                myAgent.send(cancel);
+                hm.sendLogged(cancel);
             });
         }
         ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);
         inform.addReceiver(tracking.aid());
         inform.setContent(TerminalJson.write(Map.of(
                 "event", "weather_hold", "wind_knots", windKnots, "swell", swell, "state", state)));
-        myAgent.send(inform);
+        hm.sendLogged(inform);
 
         hm.activeVessels().put(tracking.vesselId(), tracking.withTugs(List.of()).withStage(Stage.AWAITING_TUG));
         log.info("{}: weather HOLD (wind={} swell={} state={}) -> CANCEL {} tug(s)",

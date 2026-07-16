@@ -76,7 +76,8 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
 
     @Override
     public void action() {
-        ACLMessage msg = myAgent.receive(TEMPLATE);
+        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
+        ACLMessage msg = hm.receiveLogged(TEMPLATE);
         if (msg == null) {
             block();
             return;
@@ -85,21 +86,20 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
             logTerminalReply(msg);
             return;
         }
-        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
 
         JsonNode content = TerminalJson.readTreeOrNull(msg.getContent());
         if (content == null || !"request_berth".equals(text(content, "intent"))) {
-            refuse(msg, "malformed");
+            refuse(hm, msg, "malformed");
             return;
         }
         VesselSpec spec = TerminalJson.treeToOrNull(content.get("vessel_spec"), VesselSpec.class);
         if (spec == null) {
-            refuse(msg, "malformed");
+            refuse(hm, msg, "malformed");
             return;
         }
         ServiceContract contract = hm.contracts().get(text(content, "contract"));
         if (contract == null) {
-            refuse(msg, "unknown_contract");
+            refuse(hm, msg, "unknown_contract");
             return;
         }
 
@@ -107,7 +107,7 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
         // is sent to the vessel before this call succeeds.
         if (!PrologQueries.isCompatible(contract.berthId(), spec.vesselType(), spec.draft(), spec.length(),
                 spec.tonnage())) {
-            refuse(msg, "incompatible");
+            refuse(hm, msg, "incompatible");
             return;
         }
 
@@ -115,7 +115,7 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
         accept.setContent(TerminalJson.write(Map.of(
                 "berth_id", contract.berthId(), "price", contract.contractedFee(),
                 "hours", contract.contractedHours())));
-        myAgent.send(accept);
+        hm.sendLogged(accept);
 
         String vesselId = spec.vesselId();
         hm.activeVessels().put(vesselId, VesselTracking
@@ -173,7 +173,7 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
         request.setConversationId("term-" + spec.vesselId());
         request.setProtocol(TERMINAL_BERTH_PROTOCOL);
         request.setContent(TerminalJson.write(req));
-        myAgent.send(request);
+        hm.sendLogged(request);
     }
 
     /** Drains + logs a terminal's CONFIRM/REFUSE reply to the berth REQUEST above — see the class javadoc. */
@@ -218,13 +218,13 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
         request.setProtocol(HandleEmergencyBehaviour.CUSTOMS_CLEARANCE_PROTOCOL);
         request.setContent(TerminalJson.write(Map.of(
                 "vessel_id", spec.vesselId(), "vessel_type", spec.vesselType(), "cargo_class", spec.cargoClass())));
-        myAgent.send(request);
+        hm.sendLogged(request);
     }
 
-    private void refuse(ACLMessage original, String reason) {
+    private void refuse(HarbourMasterAgent hm, ACLMessage original, String reason) {
         ACLMessage reply = MessageFactory.reply(original, ACLMessage.REFUSE);
         reply.setContent(TerminalJson.write(Map.of("reason", reason)));
-        myAgent.send(reply);
+        hm.sendLogged(reply);
         log.info("REFUSE {} -> {}", reason, original.getSender().getLocalName());
     }
 

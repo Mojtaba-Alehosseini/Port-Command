@@ -99,6 +99,16 @@ tasks.withType<Test>().configureEach {
     jvmArgs("-Djava.library.path=${swiNativeDir()}")
     environment("SWI_HOME_DIR", swiHome())
     environment("PATH", nativePath)
+    // Task 17: structurally enforces "no test may require a display" rather than only
+    // promising it — java.awt.Window/Frame/JFrame construction throws HeadlessException
+    // under this flag, so a future test that accidentally tries to show a real window
+    // fails loudly instead of silently depending on whatever display happens to be
+    // available on the machine running `gradlew check`. EventBus's EDT dispatch
+    // (SwingUtilities.invokeLater/invokeAndWait) and plain JPanel construction are NOT
+    // gated by headless mode — only top-level Window/Frame realization is — so this does
+    // not affect the EventBusTest / GUI panel lifecycle tests. Does NOT apply to the
+    // `run` task, so `gradlew run --args="--gui"` still shows a real window normally.
+    jvmArgs("-Djava.awt.headless=true")
 }
 
 // Fast lane: unit tests only.

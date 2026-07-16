@@ -1,5 +1,7 @@
 package it.unige.portcommand.agents;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,6 +17,8 @@ import it.unige.portcommand.behaviours.coordination.HandleWeatherAlertBehaviour;
 import it.unige.portcommand.behaviours.coordination.PoissonSpawnBehaviour;
 import it.unige.portcommand.bootstrap.JadeAgentSpawner;
 import it.unige.portcommand.bootstrap.ServiceLocator;
+import it.unige.portcommand.commlog.Paraphraser;
+import it.unige.portcommand.gui.events.CommLogEvent;
 import it.unige.portcommand.harbourmaster.CnpCoordinator;
 import it.unige.portcommand.harbourmaster.RealCnpCoordinator;
 import it.unige.portcommand.harbourmaster.ReputationLedger;
@@ -25,6 +29,8 @@ import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.RandomSource;
 import it.unige.portcommand.util.SimClock;
 import jade.core.AID;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
 
 /**
  * Central coordinator and the player's proxy (there is no {@code PlayerAgent},
@@ -34,6 +40,10 @@ import jade.core.AID;
  * detects end-of-day, and drives Poisson-timed walk-in spawns. Every binding
  * decision is gated through {@link it.unige.portcommand.prolog.PrologQueries} first
  * (design rule 4) — see each behaviour's own javadoc for its specific gate.
+ * Every behaviour's ACL traffic is also the comm log's single source (task 17):
+ * {@link #sendLogged(ACLMessage)} / {@link #receiveLogged(MessageTemplate)} wrap the
+ * (final, unoverridable) {@code send}/{@code receive} to publish a {@code CommLogEvent}
+ * alongside every message this hub sends or receives.
  *
  * <p>{@code activeVessels}/{@code pendingCustomsChecks}/{@code negotiationBerths}/
  * {@code negotiationRounds} are {@link ConcurrentHashMap}s shared read/write across
@@ -105,7 +115,7 @@ public final class HarbourMasterAgent extends PortCommandAgent {
      * hand-constructed {@code Agent} can't call {@code send()} (no container
      * binding) — this is the one place a test can get a real, usable reference to
      * seed {@link #activeVessels()} directly or invoke a behaviour's public handler
-     * without round-tripping the (currently non-dispatching) EventBus stub.
+     * without needing a real subscriber round-trip on the shared EventBus.
      */
     @SuppressWarnings("unchecked")
     private void completeOptionalSelfFuture() {
@@ -203,5 +213,44 @@ public final class HarbourMasterAgent extends PortCommandAgent {
             getServiceLocator().findUnique("customs").ifPresent(aid -> customsAid = aid);
         }
         return customsAid;
+    }
+
+    /**
+     * Sends {@code message}, first publishing a {@link CommLogEvent} for it (task 17 §BUILD
+     * 4 — the HarbourMaster's send/receive path is the comm-log's single instrumentation
+     * point). {@code jade.core.Agent.send} is {@code final} (javap-verified against
+     * jade-4.6.0.jar — cannot be overridden), so every HM behaviour that used to call
+     * {@code myAgent.send(...)} directly now routes through this wrapper instead. Logged
+     * BEFORE the real send so a slow EventBus subscriber can never delay the wire send.
+     */
+    public void sendLogged(ACLMessage message) {
+        publishCommLog(message, getLocalName());
+        send(message);
+    }
+
+    /**
+     * Non-blocking poll variant of {@code receive(template)} (same contract: returns the next
+     * matching message or {@code null} immediately) that publishes a {@link CommLogEvent} for
+     * whatever it returns. Every HM/CNP behaviour that used to call
+     * {@code myAgent.receive(template)} directly now routes through this wrapper instead. See
+     * {@link #sendLogged(ACLMessage)}'s javadoc for why a wrapper (not an override) is needed.
+     */
+    public ACLMessage receiveLogged(MessageTemplate template) {
+        ACLMessage message = receive(template);
+        if (message != null) {
+            AID senderAid = message.getSender();
+            publishCommLog(message, senderAid != null ? senderAid.getLocalName() : "unknown");
+        }
+        return message;
+    }
+
+    private void publishCommLog(ACLMessage message, String sender) {
+        List<String> receivers = new ArrayList<>();
+        var it = message.getAllReceiver();
+        while (it.hasNext()) {
+            receivers.add(((AID) it.next()).getLocalName());
+        }
+        eventBus.publish(new CommLogEvent(simClock.nowSimMillis(), sender, receivers,
+                message.getPerformative(), Paraphraser.paraphrase(message), message.getConversationId()));
     }
 }

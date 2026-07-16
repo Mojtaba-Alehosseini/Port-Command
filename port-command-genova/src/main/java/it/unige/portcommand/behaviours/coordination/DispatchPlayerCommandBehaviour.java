@@ -25,8 +25,9 @@ import org.slf4j.LoggerFactory;
  * {@code WalkInVesselAgent}'s own construction) so the vessel's frozen task-07
  * negotiation behaviours pick them up. Subscribes to the EventBus ONCE
  * (INVARIANTS.md's established subscribe-once/public-handler pattern —
- * {@code onPlayerCommand} is also callable directly by tests, since real dispatch
- * is task 17).
+ * {@code onPlayerCommand} is also callable directly by tests, which several
+ * existing ITs still do to drive it deterministically on the calling thread
+ * rather than relying on the real bus's ASYNC delivery timing).
  */
 public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
 
@@ -63,7 +64,7 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
         };
         out.addReceiver(target);
         out.setConversationId(conversationId);
-        myAgent.send(out);
+        hm.sendLogged(out);
         log.info("PlayerCommand {} -> {} ({})", cmd.kind(), target.getLocalName(),
                 ACLMessage.getPerformative(out.getPerformative()));
     }

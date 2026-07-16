@@ -3,6 +3,7 @@ package it.unige.portcommand.agents;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -17,6 +18,7 @@ import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.CommLogEvent;
 import it.unige.portcommand.gui.events.EndOfDayEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
@@ -127,6 +129,88 @@ class HarbourMasterAgentIT {
         assertNotNull(r2);
         long acceptCount = List.of(r1, r2).stream().filter(m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL).count();
         assertEquals(Math.min(tugsRequired, 2), acceptCount, "exactly tugsRequired winner(s) among the 2 bids");
+    }
+
+    /**
+     * Task 17 §BUILD 4's gate: runs the same contracted auto-flow as
+     * {@link #contractedVesselCompatible_acceptsAndDispatchesDownstream} (a real terminal
+     * puppet that never replies, so no extra terminal-CONFIRM traffic muddies the count) and
+     * asserts the {@link CommLogEvent} sequence the HarbourMaster's instrumented
+     * send/receive path ({@code HarbourMasterAgent.sendLogged}/{@code .receiveLogged})
+     * produces: performative order for the deterministic prefix, every paraphrase non-blank,
+     * and the concurrent tug-bid tail present as an order-independent multiset (two real
+     * agent threads race to bid; the bus makes no cross-subscriber ordering promise either —
+     * EventBus's own javadoc).
+     */
+    @Test
+    void contractedAutoFlow_publishesCommLogEventSequence() throws Exception {
+        ServiceContract contract = new ServiceContract("CONTRACT-CL1", "CL001", "berth_1", 5200.0, 8, 0L);
+        VesselSpec spec = new VesselSpec("CL001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-CL1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe vessel = spawnProbe("cl_vessel", null);
+        Probe terminal = spawnProbe("cl_terminal", "terminal");
+        Probe tug1 = spawnProbe("cl_tug1", "tug-escort");
+        Probe tug2 = spawnProbe("cl_tug2", "tug-escort");
+
+        vessel.outbox.put(contractRequest(hm, "CONTRACT-CL1", spec, "cl_vessel"));
+
+        assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "setup: vessel must be accepted");
+        assertNotNull(pollUntil(terminal.inbox, m -> true, 5000), "setup: terminal must receive the berth REQUEST");
+        ACLMessage cfp1 = pollUntil(tug1.inbox, m -> true, 5000);
+        ACLMessage cfp2 = pollUntil(tug2.inbox, m -> true, 5000);
+        assertNotNull(cfp1, "setup: tug1 must receive the CFP");
+        assertNotNull(cfp2, "setup: tug2 must receive the CFP");
+
+        tug1.outbox.put(bidReply(cfp1, 100.0, 5.0, 0.9));
+        tug2.outbox.put(bidReply(cfp2, 200.0, 10.0, 0.5));
+        assertNotNull(pollUntil(tug1.inbox, m -> true, 10_000), "setup: tug1 must receive an award decision");
+        assertNotNull(pollUntil(tug2.inbox, m -> true, 10_000), "setup: tug2 must receive an award decision");
+
+        // Scoped to this test's own participants (adversarial review finding): the HM also runs
+        // PoissonSpawnBehaviour in real time, so an unrelated walk-in could in principle land its
+        // own CommLogEvents on the same shared bus mid-test — filtering by sender/receiver keeps
+        // this assertion robust to that, the same way the ACL-reply assertions above are already
+        // scoped to this test's own probes rather than reading a raw global count.
+        Set<String> participants = Set.of("cl_vessel", "cl_terminal", "cl_tug1", "cl_tug2");
+        List<CommLogEvent> commLog = EventBusProbe.published(boot.getEventBus()).stream()
+                .filter(CommLogEvent.class::isInstance)
+                .map(CommLogEvent.class::cast)
+                .filter(e -> participants.contains(e.sender()) || e.receivers().stream().anyMatch(participants::contains))
+                .toList();
+
+        assertEquals(8, commLog.size(), "REQUEST, ACCEPT_PROPOSAL, REQUEST, CFP, 2x PROPOSE, 2x award decision: "
+                + commLog);
+        for (CommLogEvent e : commLog) {
+            assertNotNull(e.paraphrase(), "every CommLogEvent must carry a paraphrase: " + e);
+            assertFalse(e.paraphrase().isBlank(), "every CommLogEvent's paraphrase must be non-blank: " + e);
+        }
+
+        List<Integer> performatives = commLog.stream().map(CommLogEvent::performative).toList();
+        assertEquals(List.of(ACLMessage.REQUEST, ACLMessage.ACCEPT_PROPOSAL, ACLMessage.REQUEST, ACLMessage.CFP),
+                performatives.subList(0, 4),
+                "deterministic prefix: vessel's REQUEST received, HM's grant sent, "
+                        + "HM's terminal REQUEST sent, HM's tug CFP sent (in that order)");
+        assertEquals("cl_vessel", commLog.get(0).sender(), "1st event is the vessel's inbound REQUEST");
+        assertTrue(commLog.get(1).paraphrase().contains("berth_1"), "the berth grant paraphrase names the berth");
+        assertEquals(List.of("cl_terminal"), commLog.get(2).receivers(), "3rd event addresses the terminal puppet");
+        assertEquals(List.of("cl_tug1", "cl_tug2"), commLog.get(3).receivers(),
+                "4th event is the ONE CFP broadcast to both tugs (not two separate sends)");
+
+        // Tail: two PROPOSE receipts then two award sends, tug order not guaranteed (two real
+        // agent threads race to bid) but each award must reuse its own bid's performative.
+        List<CommLogEvent> tail = commLog.subList(4, 8);
+        long proposeReceived = tail.subList(0, 2).stream().filter(e -> e.performative() == ACLMessage.PROPOSE).count();
+        assertEquals(2, proposeReceived, "events 5-6 must both be received bids: " + tail);
+        long awardsSent = tail.subList(2, 4).stream()
+                .filter(e -> e.performative() == ACLMessage.ACCEPT_PROPOSAL || e.performative() == ACLMessage.REJECT_PROPOSAL)
+                .count();
+        assertEquals(2, awardsSent, "events 7-8 must both be award decisions: " + tail);
+        // Same fixture as contractedVesselCompatible_acceptsAndDispatchesDownstream — reuse its
+        // own computed (not guessed) expectation rather than hardcoding a rule-kernel value here.
+        int tugsRequired = PrologQueries.tugsRequired("cargo_vessel", 30000, 150.0);
+        long acceptsSent = tail.subList(2, 4).stream().filter(e -> e.performative() == ACLMessage.ACCEPT_PROPOSAL).count();
+        assertEquals(Math.min(tugsRequired, 2), acceptsSent, "award count must match Prolog's tugsRequired");
     }
 
     @Test
@@ -358,8 +442,11 @@ class HarbourMasterAgentIT {
         assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
                 "setup: establishes activeVessels tracking with a real sender AID");
 
-        // EventBus doesn't dispatch yet (task 17) -> call the public handler directly,
-        // exactly like AssistantAgentIT does for the Assistant's OneShot behaviours.
+        // Call the public handler directly rather than publishing through the (now real, ASYNC)
+        // bus, so this test drives it deterministically on the calling thread instead of racing
+        // an async delivery — exactly like AssistantAgentIT does for the Assistant's OneShot
+        // behaviours. This standalone instance is never added to the agent (no addBehaviour), so
+        // its action() never runs and it never actually subscribes on the shared bus either.
         DispatchPlayerCommandBehaviour dispatch = new DispatchPlayerCommandBehaviour(hm);
 
         dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.PROPOSE, "P001",

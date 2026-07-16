@@ -55,7 +55,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
     @Override
     public void action() {
         HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
-        ACLMessage msg = myAgent.receive(TEMPLATE);
+        ACLMessage msg = hm.receiveLogged(TEMPLATE);
         if (msg == null) {
             block();
             return;
@@ -86,7 +86,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         if (berthId == null) {
             ACLMessage refuse = MessageFactory.reply(msg, ACLMessage.REFUSE);
             refuse.setContent(TerminalJson.write(Map.of("intent", "refuse", "reason", "no_compatible_berth")));
-            myAgent.send(refuse);
+            hm.sendLogged(refuse);
             hm.negotiationBerths().remove(dialogueId);
             log.info("{}: REFUSE opening offer (no compatible berth)", spec.vesselId());
             return;
@@ -133,7 +133,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             refuse.addReceiver(msg.getSender());
             refuse.setConversationId(berthConversationId);
             refuse.setContent(TerminalJson.write(Map.of("reason", "incompatible")));
-            myAgent.send(refuse);
+            hm.sendLogged(refuse);
             log.info("{}: REFUSE berth grant (incompatible)", spec.vesselId());
             return;
         }
@@ -142,7 +142,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         accept.addReceiver(msg.getSender());
         accept.setConversationId(berthConversationId);
         accept.setContent(TerminalJson.write(Map.of("berth_id", berthId, "price", price, "hours", hours)));
-        myAgent.send(accept);
+        hm.sendLogged(accept);
 
         hm.activeVessels().put(spec.vesselId(), tracking.withStage(Stage.AWAITING_TUG).withBerth(berthId));
         hm.negotiationBerths().remove(dialogueId);

@@ -3,6 +3,7 @@ package it.unige.portcommand.behaviours.cnp;
 import java.util.ArrayList;
 import java.util.List;
 
+import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.harbourmaster.CnpRequest;
 import jade.core.Agent;
 import jade.core.behaviours.CyclicBehaviour;
@@ -41,7 +42,8 @@ public final class BidCollectorBehaviour extends CyclicBehaviour {
 
     @Override
     public void action() {
-        ACLMessage msg = myAgent.receive(template);
+        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
+        ACLMessage msg = hm.receiveLogged(template);
         if (msg == null) {
             block();
             return;

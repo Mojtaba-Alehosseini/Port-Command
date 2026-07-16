@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.bootstrap.ServiceLocator;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.Settings;
@@ -50,10 +51,11 @@ public final class InitiateCNPBehaviour extends OneShotBehaviour {
 
     @Override
     public void action() {
+        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
         List<AID> tugs = serviceLocator.findAll("tug-escort");
         if (tugs.isEmpty()) {
             log.warn("no tug-escort registered in DF; holding vessel {}", req.vesselId());
-            holdVessel("no_tugs_registered");
+            holdVessel(hm, "no_tugs_registered");
             return;
         }
 
@@ -71,7 +73,7 @@ public final class InitiateCNPBehaviour extends OneShotBehaviour {
         cfp.setProtocol(CNP_PROTOCOL);
         cfp.setConversationId(cfpId);
         cfp.setContent(TerminalJson.write(content));
-        myAgent.send(cfp);
+        hm.sendLogged(cfp);
         log.info("CFP {} ({} tug(s) required) -> {} tug(s) on CNP {}",
                 req.vesselId(), req.tugsRequired(), tugs.size(), cfpId);
 
@@ -85,10 +87,10 @@ public final class InitiateCNPBehaviour extends OneShotBehaviour {
         });
     }
 
-    private void holdVessel(String reason) {
+    private void holdVessel(HarbourMasterAgent hm, String reason) {
         ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);
         inform.addReceiver(req.vesselAid());
         inform.setContent(TerminalJson.write(Map.of("event", "tug_hold", "reason", reason)));
-        myAgent.send(inform);
+        hm.sendLogged(inform);
     }
 }

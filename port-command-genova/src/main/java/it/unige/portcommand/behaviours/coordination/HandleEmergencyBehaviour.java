@@ -47,7 +47,7 @@ public final class HandleEmergencyBehaviour extends CyclicBehaviour {
     @Override
     public void action() {
         HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
-        ACLMessage msg = myAgent.receive(TEMPLATE);
+        ACLMessage msg = hm.receiveLogged(TEMPLATE);
         if (msg == null) {
             block();
             return;
