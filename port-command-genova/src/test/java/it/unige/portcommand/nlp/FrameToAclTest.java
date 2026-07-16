@@ -19,10 +19,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FrameToAclTest {
 
-    @ParameterizedTest(name = "frameName={0} -> performative={1}")
+    /** A commerce_sell frame carrying {@code move}, the shape the real grammar emits. */
+    private static Frame commerceSell(String move) {
+        return new Frame("commerce_sell", Map.of(Frame.MOVE, move));
+    }
+
+    @ParameterizedTest(name = "move={0} -> performative={1}")
     @MethodSource("moveTypeCases")
     void mapsEachDcgMoveTypeToItsPerformative(String moveType, int expectedPerformative) {
-        Frame frame = new Frame(moveType, Map.of("k", "v"));
+        Frame frame = new Frame("commerce_sell", Map.of(Frame.MOVE, moveType, "k", "v"));
 
         ACLMessage msg = FrameToAcl.build(frame, null, null);
 
@@ -40,15 +45,40 @@ class FrameToAclTest {
                 Arguments.of("ask", ACLMessage.QUERY_REF));
     }
 
+    /** 16-M2's imperative frame: no {@code move}, and REQUEST is the FIPA performative for
+     * "I want you to do this". Selected by frame NAME, not by a move element. */
+    @Test
+    void commandFrameMapsToRequest() {
+        Frame frame = new Frame("command", Map.of("action", "hold", "quantifier", "all"));
+
+        ACLMessage msg = FrameToAcl.build(frame, null, null);
+
+        assertEquals(ACLMessage.REQUEST, msg.getPerformative());
+    }
+
     @Test
     void unknownMoveTypeThrows() {
-        Frame frame = new Frame("bogus", Map.of());
+        Frame frame = commerceSell("bogus");
+        assertThrows(IllegalArgumentException.class, () -> FrameToAcl.build(frame, null, null));
+    }
+
+    /** The grammar always emits {@code move} first on a commerce_sell frame; a frame without one
+     * is a decoder/grammar bug and must fail loudly rather than pick an arbitrary performative. */
+    @Test
+    void commerceSellFrameWithoutAMoveThrows() {
+        Frame frame = new Frame("commerce_sell", Map.of("money", 2000));
+        assertThrows(IllegalArgumentException.class, () -> FrameToAcl.build(frame, null, null));
+    }
+
+    @Test
+    void nullFrameNameThrows() {
+        Frame frame = new Frame(null, Map.of(Frame.MOVE, "accept"));
         assertThrows(IllegalArgumentException.class, () -> FrameToAcl.build(frame, null, null));
     }
 
     @Test
     void stampsMessageFactoryEnvelope() {
-        Frame frame = new Frame("propose", Map.of("price", 2000));
+        Frame frame = new Frame("commerce_sell", Map.of(Frame.MOVE, "propose", "price", 2000));
 
         ACLMessage msg = FrameToAcl.build(frame, null, null);
 
@@ -58,7 +88,7 @@ class FrameToAclTest {
 
     @Test
     void contentIsJsonOfFrameElements() {
-        Frame frame = new Frame("propose", Map.of("berth_id", "berth_3"));
+        Frame frame = new Frame("commerce_sell", Map.of(Frame.MOVE, "propose", "berth", "berth_3"));
 
         ACLMessage msg = FrameToAcl.build(frame, null, null);
 
@@ -67,7 +97,7 @@ class FrameToAclTest {
 
     @Test
     void receiverAndConversationIdSetWhenProvided() {
-        Frame frame = new Frame("accept", Map.of());
+        Frame frame = commerceSell("accept");
         AID receiver = new AID("assistant_agent", AID.ISGUID); // ISGUID: no running platform to resolve a local name
 
         ACLMessage msg = FrameToAcl.build(frame, receiver, "conv-7");
@@ -78,7 +108,7 @@ class FrameToAclTest {
 
     @Test
     void receiverAndConversationIdLeftUnsetWhenNull() {
-        Frame frame = new Frame("accept", Map.of());
+        Frame frame = commerceSell("accept");
 
         ACLMessage msg = FrameToAcl.build(frame, null, null);
 

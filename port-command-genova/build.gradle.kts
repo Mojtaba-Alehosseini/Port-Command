@@ -63,6 +63,15 @@ dependencies {
     implementation("org.slf4j:slf4j-api:2.0.13")
     implementation("ch.qos.logback:logback-classic:1.5.6")
 
+    // WordNet lexical semantics (task 16; PROJECT_DEFINITION.md §2.2 "Lexical semantics · WordNet").
+    // extjwnl is the API; extjwnl-data-wn31 is the WordNet 3.1 database as a resource jar, which is
+    // what lets Dictionary.getDefaultResourceInstance() self-configure off the classpath with no
+    // external WordNet install or properties file (verified by running). The two artefacts are
+    // versioned INDEPENDENTLY — 2.0.5 and 1.2 are each the latest of their own line (checked
+    // against Maven Central's maven-metadata.xml, not assumed).
+    implementation("net.sf.extjwnl:extjwnl:2.0.5")
+    runtimeOnly("net.sf.extjwnl:extjwnl-data-wn31:1.2")
+
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     // Mockito: test-only NegotiationEngine mock for the walk-in vessel IT (task 07; the real engine is task 15).
     testImplementation("org.mockito:mockito-core:5.14.2")

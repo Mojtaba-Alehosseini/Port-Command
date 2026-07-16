@@ -19,8 +19,10 @@ import org.slf4j.LoggerFactory;
  * Orchestrates one chat turn through the canonical DCG-first pipeline (PROJECT_DEFINITION.md
  * §6.1): preprocess &rarr; DCG &rarr; (on a frame: validate &rarr; {@link FrameToAcl}) &rarr;
  * Rasa fallback &rarr; {@link ConfidenceGate} &rarr; clarification. A clean negotiation move
- * that the DCG parses never calls Rasa at all, so a Rasa outage never blocks it; today the DCG
- * is {@link NoOpDCGParser} (task 16 replaces it), so every turn currently falls through to Rasa.
+ * that the DCG parses never calls Rasa at all, so a Rasa outage never blocks it — since task 16
+ * the DCG slot holds the real {@link PrologDcgParser} over {@code dcg_negotiation.pl}, so that
+ * short-circuit is live rather than theoretical ({@link NoOpDCGParser} survives for tests that
+ * want to force the Rasa branch).
  *
  * <p><b>Never blocks the calling thread and never throws.</b> {@link #processChatInput} runs
  * entirely on the injected {@code executor} (typically {@code
@@ -44,9 +46,9 @@ public final class NLPPipeline {
     /**
      * @param frameValidator the frame-path "WordNet/validate" seam (planning/14): whatever the
      *                       DCG returns, this predicate gates whether {@link FrameToAcl} runs.
-     *                       Task 16 wires ontology validation here; until then a permissive
-     *                       {@code frame -> true} is fine since {@link NoOpDCGParser} never
-     *                       actually produces a frame for it to see.
+     *                       Production wires {@link OntologyValidator} here (task 16), so a frame
+     *                       naming an entity outside the ontology becomes a clarification rather
+     *                       than a malformed ACL.
      */
     public NLPPipeline(PreprocessRegex preprocess, RasaBridge rasa, ConfidenceGate gate,
                         DCGParser dcgParser, Predicate<Frame> frameValidator, ExecutorService executor) {

@@ -8,6 +8,8 @@ import java.net.http.HttpClient;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -15,7 +17,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.nlp.ConfidenceGate;
+import it.unige.portcommand.nlp.DcgTokenizer;
 import it.unige.portcommand.nlp.LLMBridge;
+import it.unige.portcommand.nlp.NLPPipeline;
+import it.unige.portcommand.nlp.OntologyValidator;
+import it.unige.portcommand.nlp.PreprocessRegex;
+import it.unige.portcommand.nlp.PrologDcgParser;
 import it.unige.portcommand.nlp.RasaBridge;
 import it.unige.portcommand.ontology.OntologyValidation;
 import it.unige.portcommand.prolog.PrologEngine;
@@ -69,6 +77,8 @@ public final class JadeBootstrap {
     private volatile RasaBridge rasaBridge;
     private volatile LLMBridge llmBridge;
     private volatile EventBus eventBus;
+    private volatile NLPPipeline nlpPipeline;
+    private volatile ExecutorService nlpExecutor;
 
     public void start(BootstrapConfig cfg) {
         lock.lock();
@@ -132,6 +142,30 @@ public final class JadeBootstrap {
             // of JADE (pure JPL); idempotent, so a restart cycle re-enters as a no-op.
             PrologEngine.getInstance().init();
 
+            // The NL chat pipeline (task 16). Constructed AFTER PrologEngine.init() because the
+            // DCG parser runs goals against the grammar that init() consults. This is the first
+            // production construction site: task 14 shipped NLPPipeline with a NoOp DCG stub and
+            // no caller at all, leaving the real wiring to this task. The DCG slot now holds the
+            // real grammar and the frame-validator seam holds the real ontology check, so a clean
+            // negotiation move routes WITHOUT Rasa (PROJECT_DEFINITION §6.1's DCG-first order).
+            // The GUI's ChatPanel (task 19) is the intended consumer.
+            // java.lang.Runtime spelled out: the bare name `Runtime` in this file is
+            // jade.core.Runtime (imported for the container lifecycle).
+            nlpExecutor = Executors.newFixedThreadPool(
+                    java.lang.Runtime.getRuntime().availableProcessors(),
+                    r -> {
+                        Thread t = new Thread(r, "nlp-pipeline");
+                        t.setDaemon(true); // must never hold the JVM up at shutdown
+                        return t;
+                    });
+            nlpPipeline = new NLPPipeline(
+                    new PreprocessRegex(),
+                    rasaBridge,
+                    new ConfidenceGate(),
+                    new PrologDcgParser(PrologEngine.getInstance(), new DcgTokenizer()),
+                    new OntologyValidator(),
+                    nlpExecutor);
+
             started = true;
             log.info("JADE Main Container up on port {}", cfg.mainPort());
         } finally {
@@ -191,6 +225,11 @@ public final class JadeBootstrap {
             } catch (StaleProxyException e) {
                 log.warn("main container kill raised", e);
             }
+            if (nlpExecutor != null) {
+                nlpExecutor.shutdownNow();
+                nlpExecutor = null;
+                nlpPipeline = null;
+            }
             Runtime.instance().shutDown();
             started = false;
             log.info("JADE Main Container down");
@@ -245,6 +284,15 @@ public final class JadeBootstrap {
     /** The Flask LLM sidecar client (port 5006); {@code null} before start. */
     public LLMBridge getLLMBridge() {
         return llmBridge;
+    }
+
+    /**
+     * The DCG-first NL chat pipeline (PROJECT_DEFINITION.md §6.1); {@code null} before start.
+     * Wired with the real {@code dcg_negotiation.pl} grammar and ontology validation (task 16),
+     * so a clean negotiation move routes to an ACL message without Rasa being up at all.
+     */
+    public NLPPipeline getNlpPipeline() {
+        return nlpPipeline;
     }
 
     public boolean isStarted() {

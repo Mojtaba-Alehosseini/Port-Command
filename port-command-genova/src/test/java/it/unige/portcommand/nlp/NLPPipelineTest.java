@@ -98,7 +98,10 @@ class NLPPipelineTest {
             rasaCalls.incrementAndGet();
             respond(ex, 200, "{\"intent\": {\"name\": \"reject_deal\", \"confidence\": 0.99}}");
         });
-        DCGParser dcg = (text, ctx) -> Optional.of(new Frame("propose", Map.of("price", 2000)));
+        // Task 16 reshaped the frame: the name is the FrameNet frame (commerce_sell) for all five
+        // negotiation moves, and the move type lives in the `move` element. See ADR-10.
+        DCGParser dcg = (text, ctx) ->
+                Optional.of(new Frame("commerce_sell", Map.of(Frame.MOVE, "propose", "price", 2000)));
 
         PipelineResult result = await(pipeline(rasa, dcg, f -> true).processChatInput(
                 "I will give you 2000 for 5 hours at berth 3", DialogueCtx.NONE));
@@ -115,7 +118,7 @@ class NLPPipelineTest {
             rasaCalls.incrementAndGet();
             respond(ex, 200, "{\"intent\": {\"name\": \"accept_deal\", \"confidence\": 0.9}}");
         });
-        DCGParser dcg = (text, ctx) -> Optional.of(new Frame("propose", Map.of()));
+        DCGParser dcg = (text, ctx) -> Optional.of(new Frame("commerce_sell", Map.of(Frame.MOVE, "propose")));
 
         PipelineResult result = await(pipeline(rasa, dcg, f -> false).processChatInput("anything", DialogueCtx.NONE));
 

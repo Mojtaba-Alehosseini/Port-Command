@@ -174,6 +174,35 @@ public final class PrologQueries {
                         "inspection_probability undefined for " + vesselType + "/" + cargoClass));
     }
 
+    // --- Ontology existence checks (task 16, for nlp.OntologyValidator) -----
+
+    /**
+     * True iff {@code berthId} names a berth instance in the ontology ({@code berth_1}..
+     * {@code berth_4}). Narrowed to berth subclasses so a vessel type can never answer it.
+     *
+     * <p><b>Deliberately NOT cached</b>, unlike the other read-only lookups here. {@code
+     * instance_of/2} is declared {@code dynamic} and is the very predicate {@link #isCompatible}
+     * / {@link #tugsRequired} / {@link #operationSafe} assert transient per-vessel facts under —
+     * so this goal reads a dynamic predicate, which INVARIANTS.md forbids caching. It happens to
+     * be safe today only because temp vessels live in a disjoint {@code tmp_v_<uuid>} namespace
+     * and the grammar only ever emits {@code berth_1}..{@code berth_4}; that is a coincidence of
+     * two unrelated conventions, not a guarantee, and it would break silently the day either
+     * changes. This runs once per typed chat line, so the cache would buy nothing measurable.
+     */
+    public static boolean berthExists(String berthId) {
+        return engine().hasSolution(
+                "( instance_of(" + quoteAtom(berthId) + ", C), subclass_of(C, berth) )");
+    }
+
+    /**
+     * True iff {@code vesselType} is one of the five ontology vessel types. {@code vessel_type/1}
+     * is a static generated fact (never dynamic, never asserted at runtime), so this one IS a
+     * genuinely pure goal → cached, same as {@link #isHazmat}.
+     */
+    public static boolean vesselTypeExists(String vesselType) {
+        return engine().hasSolutionCached("vessel_type(" + quoteAtom(vesselType) + ")");
+    }
+
     // --- Priority (R25–R30) ------------------------------------------------
 
     /** Rank of a priority class atom: 1 (emergency) … 6 (maintenance) (RULE R25). Pure → cached. */

@@ -30,8 +30,11 @@ class PrologRulesIT {
 
     // "spawnability" (task 07b) rides the same JPL lane as the five task-04 rule-module
     // suites, proving the spawnability gate green in-process, not just under standalone swipl.
+    // "dcg" (task 16) joins on the same terms: the negotiation grammar is consulted by
+    // PrologEngine.init() like everything else, so its corpus must be green through the real
+    // bridge, not only under the standalone swipl run used to author it.
     @ParameterizedTest(name = "PLUnit suite ''{0}'' is all-green")
-    @ValueSource(strings = {"compatibility", "customs", "escort", "priority", "spawnability", "weather"})
+    @ValueSource(strings = {"compatibility", "customs", "dcg", "escort", "priority", "spawnability", "weather"})
     void plunitSuitePasses(String suite) {
         PrologEngine e = PrologEngine.getInstance();
         String path = resolveTestSuite("/prolog/test_" + suite + ".pl");
