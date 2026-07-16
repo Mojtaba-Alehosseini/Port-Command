@@ -13,6 +13,7 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.WindowConstants;
 
+import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.gui.events.GuiReadyEvent;
 import it.unige.portcommand.util.EventBus;
 
@@ -41,17 +42,19 @@ public final class MainWindow extends JFrame {
     private static final int DEFAULT_HEIGHT = 800;
 
     /**
-     * @param eventBus the shared bus every panel subscribes through
-     * @param onClose  clean-shutdown hook run before the window disposes and the JVM exits
-     *                 (wired to {@code JadeBootstrap::shutdown} in {@code Main}) — kept as a
-     *                 {@code Runnable} rather than a concrete bootstrap type so this class has
-     *                 no dependency on the {@code bootstrap} package.
+     * @param eventBus          the shared bus every panel subscribes through
+     * @param portStateArtifact the shared berth/tug state {@code MapPanel} (task 18) reads and
+     *                          subscribes to — the only panel that needs it
+     * @param onClose           clean-shutdown hook run before the window disposes and the JVM
+     *                          exits (wired to {@code JadeBootstrap::shutdown} in {@code Main})
+     *                          — kept as a {@code Runnable} rather than a concrete bootstrap type
+     *                          so this class has no dependency on the {@code bootstrap} package.
      */
-    public MainWindow(EventBus eventBus, Runnable onClose) {
+    public MainWindow(EventBus eventBus, PortStateArtifact portStateArtifact, Runnable onClose) {
         super("Port Command Genova");
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE); // we drive shutdown ourselves
         setJMenuBar(buildMenuBar(onClose));
-        layOutPanels(eventBus);
+        layOutPanels(eventBus, portStateArtifact);
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
@@ -71,10 +74,10 @@ public final class MainWindow extends JFrame {
         setLocationRelativeTo(null);
     }
 
-    private void layOutPanels(EventBus eventBus) {
+    private void layOutPanels(EventBus eventBus, PortStateArtifact portStateArtifact) {
         setLayout(new GridBagLayout());
         add(new HUDPanel(eventBus), slot(0, 0, 3, 1.0, 0.0));
-        add(new MapPanel(eventBus), slot(0, 1, 1, 0.5, 1.0));
+        add(new MapPanel(eventBus, portStateArtifact), slot(0, 1, 1, 0.5, 1.0));
         add(new ChatPanel(eventBus), slot(1, 1, 1, 0.25, 1.0));
         add(new CommLogPanel(eventBus), slot(2, 1, 1, 0.25, 1.0));
         add(new NotificationStrip(eventBus), slot(0, 2, 3, 1.0, 0.0));

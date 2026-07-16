@@ -25,9 +25,9 @@ import it.unige.portcommand.agents.WalkInVesselAgent;
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
 import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.harbourmaster.TugBasePositions;
 import it.unige.portcommand.negotiation.NegotiationEngine;
 import it.unige.portcommand.nlp.LLMBridge;
-import it.unige.portcommand.ontology.Position;
 import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.util.EventBus;
@@ -51,13 +51,6 @@ import org.slf4j.LoggerFactory;
 public final class AgentRoster {
 
     private static final Logger log = LoggerFactory.getLogger(AgentRoster.class);
-    // Tug pier next to the breakwater — four berths stacked vertically (task 08 §8.6).
-    private static final Position[] TUG_BASES = {
-            new Position(50.0, 100.0, 0.0),
-            new Position(50.0, 150.0, 0.0),
-            new Position(50.0, 200.0, 0.0),
-            new Position(50.0, 250.0, 0.0),
-    };
     // Placeholder game-balance starting figures; task 20/24 own real calibration.
     private static final double HM_STARTING_WALLET = 50_000.0;
     private static final double HM_STARTING_REPUTATION = 70.0;
@@ -91,8 +84,11 @@ public final class AgentRoster {
             String id = "tug_" + i;
             // args[1]=portState, args[2]=simClock injected (not the serializable init record) —
             // same channel as the terminals, so the tug can publish position + drive sim-time motion.
+            // Base position from the canonical TugBasePositions table (task 18's map seeds idle
+            // dots from the same table — one source of truth, no duplicated coordinates).
             spawner.spawn(id, TugAgent.class, new Object[] {
-                    new TugInitArgs(id, TUG_BASES[i - 1], 350.0, 2.0, 12.0, 1.0), portState, simClock});
+                    new TugInitArgs(id, TugBasePositions.position(id), 350.0, 2.0, 12.0, 1.0),
+                    portState, simClock});
         }
 
         log.info("Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)");

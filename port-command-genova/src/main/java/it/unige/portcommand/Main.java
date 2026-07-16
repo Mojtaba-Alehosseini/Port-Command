@@ -33,7 +33,8 @@ public final class Main {
                 boot.getLLMBridge(), boot.getEventBus());
 
         if (guiRequested) {
-            SwingUtilities.invokeLater(() -> new MainWindow(boot.getEventBus(), boot::shutdown).setVisible(true));
+            SwingUtilities.invokeLater(() -> new MainWindow(boot.getEventBus(), boot.getPortStateArtifact(),
+                    boot::shutdown).setVisible(true));
         }
 
         // Block forever; the shutdown hook handles teardown on Ctrl+C / SIGTERM. The GUI's

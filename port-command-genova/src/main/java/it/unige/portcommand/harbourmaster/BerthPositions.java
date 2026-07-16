@@ -28,4 +28,13 @@ public final class BerthPositions {
     public static Position position(String berthId) {
         return BERTHS.get(berthId);
     }
+
+    /**
+     * The full {@code berth_id -> Position} table — the single canonical source for both the
+     * berth id list and coordinates (task 18's {@code MapModel} seeds its initial berth
+     * rectangles from this rather than hardcoding {@code "berth_1".."berth_4"} a second time).
+     */
+    public static Map<String, Position> all() {
+        return BERTHS;
+    }
 }
