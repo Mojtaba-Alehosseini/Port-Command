@@ -19,11 +19,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The "Hint" button plan (planning/10 §10.6). A {@link OneShotBehaviour} that registers an
- * {@link EventBus} subscription for {@link HintButtonEvent} once; the real reactive work is
- * {@link #onHintButton}, invoked by the bus whenever it dispatches. (The task-03 {@code EventBus}
- * stub does not dispatch yet — real dispatch arrives in task 17 — so {@link #onHintButton} is
- * also directly callable, which is how {@code AssistantAgentIT} exercises it today.)
+ * The "Hint" button plan (planning/10 §10.6). A {@link OneShotBehaviour} that subscribes to the
+ * {@link EventBus} ONCE for {@link HintButtonEvent} (INVARIANTS.md's established
+ * subscribe-once/public-handler pattern); the real reactive work is {@link #onHintButton}, invoked
+ * by the bus whenever it dispatches — {@code onHintButton} is also callable directly by tests,
+ * which {@code AssistantAgentIT} does today to drive it deterministically on the calling thread
+ * rather than relying on the real bus's ASYNC delivery timing.
  *
  * <p>Never blocks the agent thread: the LLM call is a {@link java.util.concurrent.CompletableFuture}
  * continuation, never {@code .get()}/{@code .join()}.
