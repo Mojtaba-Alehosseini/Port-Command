@@ -194,6 +194,7 @@ invalid_slot_case([i,will,give,you,2000,for,0,hours]).
 invalid_slot_case([i,will,give,you,2000,for,25,hours]).    % just past the boundary
 invalid_slot_case([we,offer,2200,by,'25:99']).             % not a clock time
 invalid_slot_case([we,offer,2200,by,'19:75']).             % minutes out of range
+invalid_slot_case([we,offer,2200,by,'10:5']).              % minutes not two digits ("10:05" is)
 invalid_slot_case([i,will,give,you,5,hours]).              % a duration, NOT a EUR 5 price
 
 test('a named-but-invalid slot fails the parse', [forall(invalid_slot_case(Tokens)), fail]) :-
@@ -206,6 +207,7 @@ boundary_case([i,will,give,you,2000,for,1,hour], [move=propose, money=price(2000
 boundary_case([i,will,give,you,2000,for,24,hours], [move=propose, money=price(2000,eur), duration=24]).
 boundary_case([we,offer,2200,by,'00:00'], [move=propose, money=price(2200,eur), deadline='00:00']).
 boundary_case([we,offer,2200,by,'23:59'], [move=propose, money=price(2200,eur), deadline='23:59']).
+boundary_case([we,offer,2200,by,'9:30'], [move=propose, money=price(2200,eur), deadline='9:30']).  % 1-digit hour ok
 
 test('boundary values still parse', [forall(boundary_case(Tokens, Expected))]) :-
     parse_move(Tokens, frame(commerce_sell, Elements)),

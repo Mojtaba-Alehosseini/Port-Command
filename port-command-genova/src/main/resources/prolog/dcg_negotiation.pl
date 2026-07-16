@@ -324,9 +324,14 @@ has_colon(T) :-
 % DCG: a real hh:mm clock. The tokeniser keeps "14:20" as ONE token (it strips punctuation
 % but preserves ':'), so splitting on the colon here is safe. Range-checked because
 % is_clock is the only thing standing between "by 25:99" and a nonsense deadline element.
+% Minutes must be written with two digits: "10:05" is a clock, "10:5" is not (it FAILS the
+% parse -> clarification, precision-first) — otherwise a downstream hh:mm reader mis-reads the
+% non-canonical atom, and "10:5" is as likely a typo as a genuine 10:05. The hour stays 1-or-2
+% digits so an everyday "9:30" still parses.
 is_clock(T) :-
     has_colon(T),
     sub_atom(T, Before, 1, After, ':'),
+    After =:= 2,                     % minutes are exactly two digits ("10:05", never "10:5")
     sub_atom(T, 0, Before, _, HourAtom),
     sub_atom(T, _, After, 0, MinuteAtom),
     atom_number(HourAtom, H),
