@@ -3,10 +3,12 @@ package it.unige.portcommand.behaviours.coordination;
 import java.util.List;
 import java.util.Random;
 
+import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.JadeAgentSpawner;
 import it.unige.portcommand.core.Settings;
+import it.unige.portcommand.harbourmaster.VesselTracking.Channel;
 import it.unige.portcommand.negotiation.RealNegotiationEngine;
 import it.unige.portcommand.negotiation.VesselTemplate;
 import it.unige.portcommand.negotiation.VesselTemplates;
@@ -36,12 +38,26 @@ import org.slf4j.LoggerFactory;
  * <p>No scenario config exists yet (task 23 owns that); the arrival rate is a
  * fixed default, isolated in one constant so wiring it to config later is a
  * one-line change.
+ *
+ * <p><b>Task 19 STEP 1 flood fix.</b> Two independent guards in {@link #onWake()},
+ * checked every wake regardless of whether this wake spawns: (1) no spawn while
+ * {@link SimClock#isPaused()} — "frozen" means explicitly paused, not merely
+ * "hasn't advanced since last check", since the live wall-clock advancer is task
+ * 24's and the clock never advances in today's build; gating on "hasn't advanced"
+ * would make walk-ins spawn zero times, ever. (2) a hard cap of
+ * {@link #MAX_ACTIVE_WALKINS} concurrent {@code WALK_IN} entries in the
+ * HarbourMaster's own {@code activeVessels()} — this is what actually kills the
+ * reported flood (hundreds of agents over a long session), independent of clock
+ * semantics. The behaviour still reschedules itself on a skipped wake, so it keeps
+ * checking rather than dying. The deeper "wall ticks assume sim-time lockstep"
+ * mismatch stays filed for task 24, exactly as planning/19 says.
  */
 public final class PoissonSpawnBehaviour extends WakerBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(PoissonSpawnBehaviour.class);
     private static final double DEFAULT_RATE_PER_SIM_HOUR = 0.5; // task 23: source from scenario config
     private static final String CARGO_CLASS = "general_cargo"; // task 23: sample a real cargo mix
+    private static final int MAX_ACTIVE_WALKINS = 3; // task 19 STEP 1: caps the reported spawn flood
 
     private final SimClock simClock;
     private final RandomSource randomSource;
@@ -67,8 +83,25 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
 
     @Override
     protected void onWake() {
-        spawnWalkIn();
+        if (canSpawnNow()) {
+            spawnWalkIn();
+        }
         reset(nextGapWallMs(simClock, draw));
+    }
+
+    /** @return true iff the clock isn't paused and fewer than {@link #MAX_ACTIVE_WALKINS}
+     * walk-ins are currently active. Public (not private) so {@code PoissonSpawnBehaviourIT}
+     * (parent {@code behaviours} test package — a test in this sub-package would shadow
+     * {@code BehaviourCatalogueTest}'s scan) can drive it directly without needing a full
+     * spawn round-trip to observe the outcome. */
+    public boolean canSpawnNow() {
+        if (simClock.isPaused()) {
+            return false;
+        }
+        long activeWalkIns = ((HarbourMasterAgent) myAgent).activeVessels().values().stream()
+                .filter(v -> v.channel() == Channel.WALK_IN)
+                .count();
+        return activeWalkIns < MAX_ACTIVE_WALKINS;
     }
 
     private void spawnWalkIn() {

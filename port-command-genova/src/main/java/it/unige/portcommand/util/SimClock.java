@@ -65,6 +65,11 @@ public final class SimClock {
         paused = false;
     }
 
+    /** Whether {@link #advance(long)} is currently a no-op. */
+    public boolean isPaused() {
+        return paused;
+    }
+
     /**
      * Jumps sim time to the next midnight boundary in one atomic step. Used by the
      * {@code DayRolloverCoordinator} (task 24). A subsequent {@link #isMidnightCrossed()}

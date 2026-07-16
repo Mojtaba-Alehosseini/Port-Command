@@ -98,8 +98,11 @@ public final class RealNegotiationEngine implements NegotiationEngine {
         return Decision.counter(clamp(ideal, min, target), "in_band_holding_out");
     }
 
+    /** Clamped to {@code [min, target*1.3]} and rounded to whole euros at the source
+     * (task 19 STEP 1 — same bug class/fix as the opening offer; a counter must never
+     * carry cents either). */
     private static double clamp(double ideal, double min, double target) {
         double upper = target * COUNTER_CLAMP_UPPER_MULTIPLIER;
-        return Math.min(Math.max(ideal, min), upper);
+        return Math.round(Math.min(Math.max(ideal, min), upper));
     }
 }

@@ -56,7 +56,10 @@ public final class WalkInVesselAgent extends BaseVesselAgent {
         this.conversationId = "nego-" + spec.vesselId();
         log.info("{} arrived (walk-in, {}) -> opening proposal", getLocalName(), personality);
 
-        addBehaviour(new OpeningProposalBehaviour(this, stateRef, conversationId, concluded));
+        // Isolated substream (task 19 STEP 1): a fresh draw here must never shift the
+        // "vessel-"+id stream's own sequence, which other tests/replication already depend on.
+        double openingRoll = randomSource.forStream("opening-" + spec.vesselId()).nextDouble();
+        addBehaviour(new OpeningProposalBehaviour(this, stateRef, conversationId, concluded, openingRoll));
         addBehaviour(new EvaluateCounterOfferBehaviour(this, stateRef, engine, conversationId, concluded));
         addBehaviour(new TimeoutWithdrawalBehaviour(this, simClock(), stateRef, conversationId, concluded));
     }
