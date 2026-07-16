@@ -25,6 +25,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -244,5 +245,93 @@ class NLPPipelineDcgIT {
         } finally {
             server.stop(0);
         }
+    }
+
+    // --- 16-M2: the context-carrying grammar, whole chain (tokeniser -> ctx codec -> grammar ->
+    //     OntologyValidator -> FrameToAcl -> addressee), Rasa still down -----------------------------
+
+    private static DialogueCtx m2ctx() {
+        return new DialogueCtx("C001",
+                new DialogueCtx.StandingOffer(new DialogueCtx.OfferView(2000.0, 5, "berth_3"),
+                        new DialogueCtx.OfferView(1500.0, 5, "berth_3")),
+                java.util.List.of(
+                        new DialogueCtx.RosterEntry("C001", "cargo_vessel", "Genoa Star", "berth_3", 5),
+                        new DialogueCtx.RosterEntry("T001", "tanker", "Carthago", "berth_2", 8)),
+                "berth_3");
+    }
+
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void aVocativeRoutesAndSurfacesTheResolvedAddressee() {
+        PipelineResult result = pipelineWithRasaDown.processChatInput("Genoa Star: deal", m2ctx()).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result,
+                "a vocative acceptance parses via the DCG with Rasa down");
+        assertEquals(ACLMessage.ACCEPT_PROPOSAL, routed.msg().getPerformative());
+        assertEquals("C001", routed.addressee(),
+                "the resolved addressee is surfaced so the caller can route between concurrent walk-ins");
+    }
+
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void anEllipsisCompletesFromContextAndValidatesThroughToAnAcl() {
+        PipelineResult result = pipelineWithRasaDown.processChatInput("make it 2200", m2ctx()).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result);
+        assertEquals(ACLMessage.PROPOSE, routed.msg().getPerformative(), "a counter is a PROPOSE");
+        assertTrue(routed.msg().getContent().contains("2200"), routed.msg().getContent());
+        assertTrue(routed.msg().getContent().contains("berth_3"),
+                "the berth completed from the standing offer must survive OntologyValidator: "
+                        + routed.msg().getContent());
+    }
+
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void anAmbiguousAnaphoraDegradesToClarificationNotAGuess() {
+        DialogueCtx twoTankers = new DialogueCtx(null, DialogueCtx.StandingOffer.NONE,
+                java.util.List.of(
+                        new DialogueCtx.RosterEntry("T001", "tanker", "Carthago", "berth_2", 8),
+                        new DialogueCtx.RosterEntry("T002", "tanker", "Aurora", "berth_1", 6)),
+                null);
+
+        PipelineResult result = pipelineWithRasaDown.processChatInput("accept the tanker", twoTankers).join();
+
+        // The DCG refuses the ambiguous reference and Rasa is down, so the turn DEGRADES (to
+        // clarification, or to an error on the refused connection) — the one thing it must NEVER do
+        // is Route a guess at which tanker. Same degradation shape as aDcgMissActuallyReaches…().
+        assertFalse(result instanceof PipelineResult.Routed,
+                "an ambiguous 'the tanker' must never be routed to a guessed vessel: " + result);
+        assertTrue(result instanceof PipelineResult.NeedsClarification || result instanceof PipelineResult.Error,
+                "it must degrade, not route: " + result);
+    }
+
+    private static DialogueCtx twoWalkInsNoFocus() {
+        return new DialogueCtx(null, DialogueCtx.StandingOffer.NONE,
+                java.util.List.of(
+                        new DialogueCtx.RosterEntry("C001", "cargo_vessel", "Genoa Star", "berth_3", 5),
+                        new DialogueCtx.RosterEntry("T001", "tanker", "Carthago", "berth_2", 8)),
+                null);
+    }
+
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void anUnaddressedMoveWithTwoActiveWalkInsAsksWhichOne() {
+        // "deal" parses fine, but with two walk-ins and no focus it is ambiguous — which vessel is it
+        // for? The routing question IS the clarification (never a guess).
+        PipelineResult result = pipelineWithRasaDown.processChatInput("deal", twoWalkInsNoFocus()).join();
+
+        assertInstanceOf(PipelineResult.NeedsClarification.class, result,
+                "an unaddressed accept with two active dialogues must ask, not route");
+    }
+
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void addressingTheMoveResolvesTheTwoWalkInAmbiguity() {
+        // The same two-walk-in context, but now the move names its target -> it routes.
+        PipelineResult result = pipelineWithRasaDown.processChatInput("Genoa Star: deal", twoWalkInsNoFocus()).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result);
+        assertEquals(ACLMessage.ACCEPT_PROPOSAL, routed.msg().getPerformative());
+        assertEquals("C001", routed.addressee());
     }
 }

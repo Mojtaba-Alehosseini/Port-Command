@@ -170,6 +170,49 @@ class FrameTest {
                 "an unmodelled shape must degrade to readable text, not blow up the boundary");
     }
 
+    @Test
+    void aNumericQuantifierDecodesToLongAndAnAllQuantifierToString() {
+        assertEquals(2L, Frame.fromProlog(term("frame(command, [action=send, quantifier=2, patient=tug])"))
+                .element("quantifier"));
+        assertEquals("all", Frame.fromProlog(term("frame(command, [action=hold, quantifier=all, patient=tanker])"))
+                .element("quantifier"));
+    }
+
+    @Test
+    void theNewM2NegotiationElementsDecodeAsStrings() {
+        Frame frame = Frame.fromProlog(term(
+                "frame(commerce_sell, [move=constrain, polarity=negative, bound=below, money=price(2000, eur)])"));
+
+        assertEquals("constrain", frame.move());
+        assertEquals("negative", frame.element("polarity"));
+        assertEquals("below", frame.element("bound"));
+        assertEquals(Map.of("amount", 2000L, "currency", "EUR"), frame.element("money"));
+    }
+
+    /**
+     * Determinism, extended to the 16-M2 command frame: the grammar's element order is preserved and
+     * {@link Frame#toJson} is byte-stable, exactly as for a commerce_sell frame — the wire format is
+     * a project-wide invariant regardless of frame name (INVARIANTS.md).
+     */
+    @Test
+    void commandFrameElementOrderAndJsonAreStable() {
+        Frame frame = Frame.fromProlog(term(
+                "frame(command, [action=hold, quantifier=all, patient=tanker, condition=until_wind_drop])"));
+
+        assertEquals(List.of("action", "quantifier", "patient", "condition"),
+                List.copyOf(frame.elements().keySet()));
+        assertEquals("{\"action\":\"hold\",\"quantifier\":\"all\",\"patient\":\"tanker\",\"condition\":\"until_wind_drop\"}",
+                frame.toJson());
+    }
+
+    @Test
+    void aBoundAddresseeDecodesAsAStringAndKeepsItsPlaceLast() {
+        Frame frame = Frame.fromProlog(term("frame(commerce_sell, [move=accept, addressee='C001'])"));
+
+        assertEquals("accept", frame.move());
+        assertEquals("C001", frame.element("addressee"));
+    }
+
     // --- malformed input ---------------------------------------------------------------------
 
     @Test

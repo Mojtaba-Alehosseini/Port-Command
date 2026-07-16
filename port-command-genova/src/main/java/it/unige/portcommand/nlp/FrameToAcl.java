@@ -1,5 +1,6 @@
 package it.unige.portcommand.nlp;
 
+import java.util.List;
 import java.util.Objects;
 
 import it.unige.portcommand.core.MessageFactory;
@@ -46,6 +47,20 @@ public final class FrameToAcl {
     }
 
     /**
+     * Fans a single (typically 16-M2 {@code command}) frame out to N receivers — one independent
+     * {@link MessageFactory}-built envelope each, so "hold all tankers" / "send two tugs" reaches
+     * every resolved agent. The caller resolves the frame's quantified patient
+     * ({@code quantifier}/{@code patient}) to the receiver AIDs; this method only fans out.
+     *
+     * @return one message per receiver, in receiver order (empty list for no receivers)
+     */
+    public static List<ACLMessage> buildAll(Frame frame, List<AID> receivers, String conversationId) {
+        Objects.requireNonNull(frame, "frame");
+        Objects.requireNonNull(receivers, "receivers");
+        return receivers.stream().map(r -> build(frame, r, conversationId)).toList();
+    }
+
+    /**
      * {@code propose}/{@code counter} -&gt; PROPOSE (a counter-offer is a fresh proposal in FIPA
      * terms — see {@code negotiation.Decision}'s COUNTER javadoc for the same rule),
      * {@code accept} -&gt; ACCEPT_PROPOSAL, {@code reject} -&gt; REJECT_PROPOSAL, {@code ask}
@@ -74,6 +89,9 @@ public final class FrameToAcl {
             case "accept" -> ACLMessage.ACCEPT_PROPOSAL;
             case "reject" -> ACLMessage.REJECT_PROPOSAL;
             case "ask" -> ACLMessage.QUERY_REF;
+            // 16-M2 negation block: "nothing below 2000" sets a constraint on the negotiation —
+            // REQUEST, matching Rasa's set_constraint routing (NLPPipeline.routeHighConfidence).
+            case "constrain" -> ACLMessage.REQUEST;
             default -> throw new IllegalArgumentException("unknown DCG move type: " + move);
         };
     }

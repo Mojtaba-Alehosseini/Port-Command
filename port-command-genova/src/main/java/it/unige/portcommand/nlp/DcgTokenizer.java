@@ -65,6 +65,12 @@ public final class DcgTokenizer {
      * this off a number that merely precedes an h-word ("2000 harbour" is untouched). */
     private static final Pattern HOUR_UNIT = Pattern.compile("(\\d)\\s*h(?:rs?|ours?)?\\b");
 
+    /** {@code 10%} -> {@code 10 percent} (16-M2 delta block: "10% less"). Runs BEFORE the
+     * stray-punctuation strip, which would otherwise delete the {@code %} and silently turn
+     * "10% less" into a "10 less" (subtract 10) — the same slot-corruption class the grammar's
+     * mention-guards prevent. The grammar's {@code percent} terminal then matches the word. */
+    private static final Pattern PERCENT_UNIT = Pattern.compile("(\\d)\\s*%");
+
     /** Everything outside this set becomes a separator. See the class javadoc for why
      * {@code :}, {@code '} and {@code .} survive. */
     private static final Pattern STRAY_PUNCTUATION = Pattern.compile("[^a-z0-9:'. ]");
@@ -97,6 +103,7 @@ public final class DcgTokenizer {
         t = USD_PREFIX.matcher(t).replaceAll("$1 usd");
         t = USD_SUFFIX.matcher(t).replaceAll("$1 usd");
         t = HOUR_UNIT.matcher(t).replaceAll("$1 h");
+        t = PERCENT_UNIT.matcher(t).replaceAll("$1 percent");
 
         t = STRAY_PUNCTUATION.matcher(t).replaceAll(" ");
         t = DOT_NOT_AFTER_DIGIT.matcher(t).replaceAll(" ");

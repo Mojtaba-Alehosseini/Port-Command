@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Predicate;
@@ -92,12 +93,27 @@ public final class NLPPipeline {
         }
     }
 
+    /** Per-dialogue negotiation moves — the ones that are ambiguous when two walk-ins are active and
+     * neither is addressed or focused. A command / constraint / query is not tied to one dialogue. */
+    private static final Set<String> PER_DIALOGUE_MOVES = Set.of("propose", "counter", "accept", "reject");
+
     private PipelineResult routeFrame(Frame frame, DialogueCtx ctx) {
         if (!frameValidator.test(frame)) {
             return clarification();
         }
+        // 16-M2 vocative: a "Genoa Star: …" binds an addressee; surface it so the caller can route
+        // between concurrent walk-ins. Absent (null) for an unaddressed turn.
+        Object addressee = frame.element("addressee");
+        // Routing question as clarification: an UNaddressed per-dialogue move, with two+ active
+        // dialogues and no focused one, is ambiguous — which walk-in is it for? Ask rather than guess.
+        // A bound addressee, a single dialogue, or an explicit focus all disambiguate (and the empty
+        // 16-M1 context has an empty roster, so this never fires there).
+        if (addressee == null && ctx.activeNegotiationId() == null && ctx.roster().size() >= 2
+                && PER_DIALOGUE_MOVES.contains(frame.move())) {
+            return clarification();
+        }
         ACLMessage msg = FrameToAcl.build(frame, null, ctx.activeNegotiationId());
-        return new PipelineResult.Routed(msg);
+        return new PipelineResult.Routed(msg, addressee == null ? null : String.valueOf(addressee));
     }
 
     /** Timeout -&gt; {@link Optional#empty()}, no exception propagated (planning/14 §Step 3).
@@ -161,7 +177,7 @@ public final class NLPPipeline {
         if (ctx.activeNegotiationId() == null) {
             return routed(ACLMessage.CANCEL, "{}", ctx);
         }
-        if (ctx.standingOffer() != null) {
+        if (ctx.hasStandingOffer()) {
             return routed(ACLMessage.REJECT_PROPOSAL, "{}", ctx);
         }
         return routed(ACLMessage.INFORM, "{}", ctx);

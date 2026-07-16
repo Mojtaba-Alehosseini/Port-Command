@@ -1,5 +1,6 @@
 package it.unige.portcommand.nlp;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -171,12 +172,15 @@ class DCGParserTest {
             "asdf qwer",
             "The weather is nice today",
             "I will give you",
-            "2000",                       // 16-M2 ellipsis
-            "make it 2200",               // 16-M2 ellipsis
-            "200 more",                   // 16-M2 delta
-            "split the difference",       // 16-M2 delta
-            "nothing below 2000",         // 16-M2 negation
-            "hold all tankers",           // 16-M2 command
+            // Ellipsis/delta need a standing offer, so with the empty context (parse(text) uses
+            // DialogueCtx.NONE) they correctly still miss; their positive parses are tested with a
+            // real context in the 16-M2 section below.
+            "2000",                       // 16-M2 ellipsis (needs a standing offer)
+            "make it 2200",               // 16-M2 ellipsis (needs a standing offer)
+            "200 more",                   // 16-M2 delta (needs a reference offer)
+            "split the difference",       // 16-M2 delta (needs both offers)
+            // "nothing below 2000" (negation) and "hold all tankers" (command) are ctx-FREE and now
+            // parse even under the empty context — moved to positive cases in the 16-M2 section.
     })
     void outOfGrammarInputMissesRatherThanGuessing(String utterance) {
         assertMiss(utterance);
@@ -250,5 +254,140 @@ class DCGParserTest {
     void aQuoteInTheUtteranceCannotBreakTheGoalString() {
         // Must not throw: the atom quoting has to survive an apostrophe reaching the goal.
         assertMiss("O'Brien says no'],fail,['");
+    }
+
+    // --- 16-M2: the context-carrying grammar, end to end (tokeniser + ctx codec + grammar) -------
+    // The fixture: Genoa Star (cargo) is the focus — vessel asked 2000, player bid 1500, over
+    // berth_3 for 5h — with one tanker (Carthago) also active. Names carry real case ("Genoa Star")
+    // to prove DialogueCtxTerm lower-cases them to match the tokeniser.
+
+    private static final DialogueCtx M2CTX = new DialogueCtx(
+            "C001",
+            new DialogueCtx.StandingOffer(new DialogueCtx.OfferView(2000.0, 5, "berth_3"),
+                    new DialogueCtx.OfferView(1500.0, 5, "berth_3")),
+            List.of(new DialogueCtx.RosterEntry("C001", "cargo_vessel", "Genoa Star", "berth_3", 5),
+                    new DialogueCtx.RosterEntry("T001", "tanker", "Carthago", "berth_2", 8)),
+            "berth_3");
+
+    private static Frame parseCtx(String utterance) {
+        Optional<Frame> frame = parser.parse(utterance, M2CTX);
+        assertTrue(frame.isPresent(), () -> "expected a parse for: " + utterance);
+        return frame.get();
+    }
+
+    private static Map<String, Object> eur(long amount) {
+        return Map.of("amount", amount, "currency", "EUR");
+    }
+
+    @Test
+    void ellipsisCompletesABareFragmentFromTheStandingOffer() {
+        Frame f = parseCtx("make it 2200");
+        assertEquals("counter", f.move());
+        assertEquals(eur(2200), f.element("money"));
+        assertEquals(5L, f.element("duration"), "duration copied from the standing offer");
+        assertEquals("berth_3", f.element("berth"), "berth copied from the standing offer");
+    }
+
+    @Test
+    void deltaDoesArithmeticOverTheReferenceOffer() {
+        assertEquals(eur(1700), parseCtx("200 more").element("money"));      // 1500 + 200
+        assertEquals(eur(1350), parseCtx("10% less").element("money"));      // % normalisation -> 1500*0.9
+        assertEquals(eur(1750), parseCtx("split the difference").element("money")); // midpoint(2000,1500)
+    }
+
+    @Test
+    void negationBuildsAPolarityConstraint() {
+        Frame f = parseCtx("nothing below 2000");
+        assertEquals("constrain", f.move());
+        assertEquals("negative", f.element("polarity"));
+        assertEquals("below", f.element("bound"));
+        assertEquals(eur(2000), f.element("money"));
+    }
+
+    @Test
+    void anaphoraResolvesTheDefiniteDescriptionToTheUniqueVessel() {
+        Frame f = parseCtx("accept the tanker");
+        assertEquals("accept", f.move());
+        assertEquals("T001", f.element("addressee"));
+    }
+
+    @Test
+    void anaphoraRefusesAnAmbiguousTheTankerWithTwoTankersActive() {
+        DialogueCtx twoTankers = new DialogueCtx(null, DialogueCtx.StandingOffer.NONE,
+                List.of(new DialogueCtx.RosterEntry("T001", "tanker", "Carthago", "berth_2", 8),
+                        new DialogueCtx.RosterEntry("T002", "tanker", "Aurora", "berth_1", 6)),
+                null);
+        assertEquals(Optional.empty(), parser.parse("accept the tanker", twoTankers),
+                "two tankers -> the reference is ambiguous -> refuse (never guess)");
+    }
+
+    @Test
+    void vocativeResolvesANameAcrossTheColonSeparator() {
+        // End to end this exercises the ':' tokenisation AND the roster name match ("Genoa Star").
+        Frame f = parseCtx("Genoa Star: deal");
+        assertEquals("accept", f.move());
+        assertEquals("C001", f.element("addressee"));
+    }
+
+    @Test
+    void vocativeTellFormRoutesToTheAddressedType() {
+        Frame f = parseCtx("tell the tanker no");
+        assertEquals("reject", f.move());
+        assertEquals("T001", f.element("addressee"));
+    }
+
+    @Test
+    void commandBuildsAQuantifiedImperativeWithACondition() {
+        Frame f = parseCtx("hold all tankers until the wind drops");
+        assertEquals("command", f.frameName());
+        assertEquals("hold", f.element("action"));
+        assertEquals("all", f.element("quantifier"));
+        assertEquals("tanker", f.element("patient"));
+        assertEquals("until_wind_drop", f.element("condition"));
+    }
+
+    @Test
+    void commandResolvesANamedTargetButStillMissesWithoutAQuantifier() {
+        assertEquals("T001", parseCtx("send two tugs to the Carthago").element("target"));
+        // no quantifier -> falls through to Rasa, exactly as in 16-M1 (regression seam)
+        assertEquals(Optional.empty(), parser.parse("cancel the tug", M2CTX));
+    }
+
+    /** Residue attacks per block: a meaningful tail must REFUSE, never silently bind the head. */
+    @ParameterizedTest(name = "[{0}] refuses its residue")
+    @ValueSource(strings = {
+            "make it 2200 but leave by 19:30",   // ellipsis + dropped condition
+            "200 more but only if you drop",     // delta + dropped condition
+            "accept the tanker but not the ferry", // anaphora + dropped exception
+    })
+    void aMeaningfulResidueIsRefusedNotSilentlyBound(String utterance) {
+        assertEquals(Optional.empty(), parser.parse(utterance, M2CTX),
+                () -> "expected NO parse (residue must not be dropped) for: " + utterance);
+    }
+
+    /** These parse ONLY with a context — under DialogueCtx.NONE they miss (proving ctx-dependence,
+     * which is what keeps parse_move/2 identical to 16-M1). */
+    @ParameterizedTest(name = "[{0}] needs a context")
+    @ValueSource(strings = {"make it 2200", "200 more", "split the difference", "accept the tanker"})
+    void theCtxDependentBlocksMissUnderTheEmptyContext(String utterance) {
+        assertTrue(parser.parse(utterance, M2CTX).isPresent(), () -> "should parse with ctx: " + utterance);
+        assertEquals(Optional.empty(), parser.parse(utterance, DialogueCtx.NONE),
+                () -> "should MISS without ctx: " + utterance);
+    }
+
+    /** The other half of the injection surface: a hostile vessel NAME in the context reaches the
+     * goal string via the roster term. It must stay an inert quoted atom — the parse resolves the
+     * tanker by TYPE (unaffected by the name), and the payload never runs. */
+    @Test
+    void aHostileVesselNameInTheContextCannotInjectAGoal() {
+        DialogueCtx hostile = new DialogueCtx("X", DialogueCtx.StandingOffer.NONE,
+                List.of(new DialogueCtx.RosterEntry("X", "tanker", "'), assertz(pwned(yes)), ('", "berth_1", 5)),
+                null);
+
+        Frame f = parser.parse("tell the tanker no", hostile).orElseThrow();
+        assertEquals("reject", f.move());
+        assertEquals("X", f.element("addressee"), "resolved by type, not by the hostile name");
+        // engine still sane — a plain parse works and no injected predicate poisoned it.
+        assertTrue(parser.parse("deal", DialogueCtx.NONE).isPresent());
     }
 }

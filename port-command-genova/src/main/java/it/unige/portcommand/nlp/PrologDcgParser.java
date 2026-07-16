@@ -41,9 +41,10 @@ public final class PrologDcgParser implements DCGParser {
     }
 
     /**
-     * @param ctx the v1.1 dialogue context. 16-M1 parses context-free via {@code parse_move/2};
-     *            16-M2 adds {@code parse_move/3} and threads {@code ctx} into the grammar. The
-     *            parameter is accepted now because it is already on the interface task 14 froze.
+     * @param ctx the v1.1 dialogue context, rendered to a Prolog {@code ctx(…)} term
+     *            ({@link DialogueCtxTerm}) and threaded into the grammar via {@code parse_move/3}
+     *            (16-M2). {@link DialogueCtx#NONE} renders as the empty context, under which the
+     *            phenomenon blocks are inert and the parse is identical to 16-M1's {@code parse_move/2}.
      */
     @Override
     public Optional<Frame> parse(String text, DialogueCtx ctx) {
@@ -51,7 +52,8 @@ public final class PrologDcgParser implements DCGParser {
         if (tokens.isEmpty()) {
             return Optional.empty();
         }
-        String goal = "parse_move(" + tokenizer.toPrologList(tokens) + ", Frame)";
+        String goal = "parse_move(" + tokenizer.toPrologList(tokens) + ", "
+                + DialogueCtxTerm.toPrologTerm(ctx) + ", Frame)";
         try {
             Optional<Map<String, Term>> solution = engine.oneSolution(goal);
             if (solution.isEmpty()) {

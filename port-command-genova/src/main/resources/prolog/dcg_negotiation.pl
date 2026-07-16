@@ -65,8 +65,20 @@
 % phrase/3, below the cut, so a genuinely ambiguous grammar still fails the suite.
 % Note the cut must come AFTER residue_ignorable/1, so a prefix parse with meaningful
 % residue can BACKTRACK into another move type rather than committing to the wrong one.
+% parse_move/2 — the empty-context entry, and the 16-M1 compatibility wrapper. Every M1 test calls
+% this unchanged. An empty context (no standing offer, empty roster, nothing mentioned) makes the
+% ctx-dependent phenomenon blocks (ellipsis/delta/anaphora/vocative) FAIL, so only the five plain
+% move rules can match — exactly the M1 grammar. This is THE regression guard.
 parse_move(Tokens, Frame) :-
-    phrase(negotiation_move(Frame), Tokens, Rest),
+    parse_move(Tokens, ctx(standing(none, none), [], none), Frame).
+
+% parse_move/3 — the context-carrying entry (16-M2). Ctx = ctx(StandingOffer, Roster, LastMentioned)
+% is built Java-side from WalkInDialogueSnapshot(s) observable fields only (nlp/DialogueCtxTerm,
+% P-04). Same residue-inspection and first-parse cut as /2: the cut sits AFTER residue_ignorable so
+% a prefix parse leaving meaningful residue backtracks into another move type or phenomenon block
+% rather than committing to a wrong reading.
+parse_move(Tokens, Ctx, Frame) :-
+    phrase(negotiation_move(Frame, Ctx), Tokens, Rest),
     residue_ignorable(Rest),
     !.
 
@@ -78,16 +90,37 @@ residue_ignorable([W | Ws]) :-
     filler_word(W),
     residue_ignorable(Ws).
 
-% --- Top nonterminal: a negotiation move is any one of the five move types ---
-% Clause order is precedence (first-solution semantics). propose is tried first and
-% fails within ~2 tokens on anything else, because counter/accept/reject/ask cues are
-% deliberately kept out of optional_lead and optional_filler.
+% --- Top nonterminal: a negotiation move carries the dialogue context (16-M2) ---
+% Clause order is precedence (first-solution semantics).
+%
+% PLAIN (16-M1) MOVES FIRST, then the phenomenon blocks — "plain-before-phenomenon" is load-
+% bearing: a plain counter ("how about 1800") must win over the ellipsis reading of the same
+% tokens, and this ordering is what lets the phenomenon blocks stay the precision-first fallback
+% (tried only once every plain move has missed). The five M1 rules are UNCHANGED and ignore the
+% context argument — that is why the entire M1 corpus parses identically under parse_move/2.
+%
+% Among the phenomenon blocks, most-distinctive lead first so none shadows another: vocative owns
+% the "Name :" / "tell …" frame, command an imperative verb, negation "nothing"/"not", delta its
+% arithmetic cue, then ellipsis and anaphora. Each is added as its own alternative below its rule
+% cluster. Every ctx-dependent block FAILS on the empty context, so parse_move/2 is pure M1.
 
-negotiation_move(F) --> propose_move(F).
-negotiation_move(F) --> counter_move(F).
-negotiation_move(F) --> accept_move(F).
-negotiation_move(F) --> reject_move(F).
-negotiation_move(F) --> ask_move(F).
+negotiation_move(F, _Ctx) --> propose_move(F).
+negotiation_move(F, _Ctx) --> counter_move(F).
+negotiation_move(F, _Ctx) --> accept_move(F).
+negotiation_move(F, _Ctx) --> reject_move(F).
+negotiation_move(F, _Ctx) --> ask_move(F).
+% 16-M2 phenomenon blocks (alternatives added next to each block's rules, further down):
+negotiation_move(F, Ctx) --> vocative_move(F, Ctx).
+negotiation_move(F, Ctx) --> command_move(F, Ctx).
+negotiation_move(F, Ctx) --> negation_move(F, Ctx).
+negotiation_move(F, Ctx) --> delta_move(F, Ctx).
+negotiation_move(F, Ctx) --> ellipsis_move(F, Ctx).
+negotiation_move(F, Ctx) --> anaphora_move(F, Ctx).
+
+% negotiation_move//1 — 16-M1 compatibility: test_dcg's "exactly one parse per utterance" probe
+% calls phrase(negotiation_move(F), …) directly. Delegating to the empty context keeps the
+% phenomenon blocks inert, so that ambiguity check still sees only the five plain moves (unchanged).
+negotiation_move(F) --> negotiation_move(F, ctx(standing(none, none), [], none)).
 
 % --- Move rules ---
 
@@ -431,3 +464,250 @@ topic_phrase(weather)          --> [the, weather].
 topic_phrase(weather)          --> [the, wind].
 topic_phrase(berth_assignment) --> [berth, do, i, get].
 topic_phrase(berth_assignment) --> [my, berth].
+
+% ============================================================================
+% 16-M2 — context-carrying grammar: six phenomenon blocks
+% ============================================================================
+% Ctx = ctx(StandingOffer, Roster, LastMentioned), built Java-side from observable
+% WalkInDialogueSnapshot fields (P-04). Each block is (a) a rule cluster, (b) a PURE
+% resolution predicate, (c) an explicit residue policy: the parse_move/3 residue cut
+% already refuses meaningful leftovers, and every block additionally FAILS rather than
+% guesses on an unresolvable or ambiguous reference — so the utterance falls through to
+% Rasa (precision over recall, PROJECT_DEFINITION §6.2 v1.1). Every ctx-dependent block
+% fails on the empty context, which is what keeps parse_move/2 identical to 16-M1.
+
+% --- Shared context accessors (pure) ---
+ctx_standing(ctx(S, _, _), S).
+ctx_roster(ctx(_, R, _), R).
+ctx_last_mentioned(ctx(_, _, L), L).
+
+% offer_price(+Offer, -Price): the price of a concrete offer(Price,Dur,Berth). Fails on `none`
+% or a price-less offer — the sentinel that makes delta/midpoint FAIL rather than invent a number.
+offer_price(offer(P, _, _), P) :- number(P).
+
+% reference_offer(+StandingOffer, -Offer): the offer a bare fragment revises — the player's last
+% bid if present, else the vessel's ask. Fails when neither side has offered (-> clarification).
+reference_offer(standing(_, P), P) :- P = offer(_, _, _), !.
+reference_offer(standing(V, _), V) :- V = offer(_, _, _).
+
+% complete_from(+RefOffer, +GivenSlots, -Slots): fill money/duration/berth left unspecified in
+% GivenSlots from RefOffer, in canonical order. A price is always required (given, or a number in
+% Ref) — a counter with no price is meaningless, so its absence FAILS. duration/berth are simply
+% absent when neither given nor available (never a placeholder).
+complete_from(offer(RP, RD, RB), Given, Slots) :-
+    resolve_slot(money, Given, price(RP, eur), number(RP), MoneySlot), MoneySlot \== [],
+    resolve_slot(duration, Given, RD, integer(RD), DurSlot),
+    resolve_slot(berth, Given, RB, berth_atom(RB), BerthSlot),
+    append([MoneySlot, DurSlot, BerthSlot], Slots).
+
+% resolve_slot(+Key, +Given, +RefValue, +RefValid, -Slot): [Key=V] from Given if present; else
+% [Key=RefValue] if the reference value passes RefValid; else []. Pure and deterministic.
+resolve_slot(Key, Given, _, _, [Key=V]) :- memberchk(Key=V, Given), !.
+resolve_slot(Key, _, RefValue, RefValid, [Key=RefValue]) :- call(RefValid), !.
+resolve_slot(_, _, _, _, []).
+
+berth_atom(B) :- atom(B), B \== none.
+
+% --- Block 1: ellipsis — a bare fragment completed from the standing offer ---
+% "make it 2200" / "2200" / "make it 5 hours" / "same but 5 hours" / "same but 2000". Missing slots
+% are copied from the reference offer. No standing offer -> reference_offer fails -> FAIL (never
+% invents slots). move=counter: a revised offer is a fresh proposal.
+ellipsis_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    make_it_lead, money_amount(M), ellipsis_more_duration(DurGiven),
+    { ctx_standing(Ctx, S), reference_offer(S, Ref),
+      append([money=M], DurGiven, Given), complete_from(Ref, Given, Slots) }.
+ellipsis_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    make_it_lead, duration_phrase(D),
+    { ctx_standing(Ctx, S), reference_offer(S, Ref), complete_from(Ref, [duration=D], Slots) }.
+ellipsis_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    [same, but], money_amount(M),
+    { ctx_standing(Ctx, S), reference_offer(S, Ref), complete_from(Ref, [money=M], Slots) }.
+ellipsis_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    [same, but], duration_phrase(D),
+    { ctx_standing(Ctx, S), reference_offer(S, Ref), complete_from(Ref, [duration=D], Slots) }.
+
+make_it_lead --> [make, it].
+make_it_lead --> [].
+
+ellipsis_more_duration([duration=D]) --> duration_phrase(D).
+ellipsis_more_duration([]) --> [].
+
+% --- Block 2: delta — arithmetic over the standing offer ---
+% "200 more" / "200 less" / "10 percent more" / "10 percent less" -> adjust the reference price.
+% "meet me in the middle" / "split the difference" -> midpoint of BOTH offers (why ctx carries
+% both). Missing referent, or a subtraction below zero, FAILS -> clarification.
+delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    price_term(N), [more],
+    { delta_apply(Ctx, add(N), Slots) }.
+delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    price_term(N), [less],
+    { delta_apply(Ctx, sub(N), Slots) }.
+delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    price_term(N), [percent, more],
+    { delta_apply(Ctx, pct(N, +1), Slots) }.
+delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    price_term(N), [percent, less],
+    { delta_apply(Ctx, pct(N, -1), Slots) }.
+delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    midpoint_phrase,
+    { ctx_standing(Ctx, S), midpoint(S, Mid), reference_offer(S, Ref),
+      complete_from(Ref, [money=price(Mid, eur)], Slots) }.
+
+% delta_apply(+Ctx, +Op, -Slots): compute the new price from the reference offer, complete the rest.
+delta_apply(Ctx, Op, Slots) :-
+    ctx_standing(Ctx, S), reference_offer(S, Ref), offer_price(Ref, P0),
+    delta_price(Op, P0, P1), P1 > 0,
+    complete_from(Ref, [money=price(P1, eur)], Slots).
+
+delta_price(add(N), P0, P1)      :- P1 is P0 + N.
+delta_price(sub(N), P0, P1)      :- P1 is P0 - N.
+delta_price(pct(N, Sign), P0, P1) :- P1 is round(P0 * (100 + Sign * N) / 100).
+
+% midpoint(+StandingOffer, -Mid): needs BOTH sides priced; fails if either is missing.
+midpoint(standing(V, P), Mid) :- offer_price(V, PV), offer_price(P, PP), Mid is round((PV + PP) / 2).
+
+midpoint_phrase --> [meet, me, in, the, middle].
+midpoint_phrase --> [meet, in, the, middle].
+midpoint_phrase --> [split, the, difference].
+
+% --- Block 3: negation — a polarity-bearing constraint ---
+% "nothing below 2000" / "nothing above 3000" / "not for less than 6 hours" / "not for more than
+% 8 hours". A constraint the player sets on the whole negotiation (move=constrain -> REQUEST).
+% Only these closed forms match, so a double negation ("not nothing below …") simply FAILS.
+% Ctx-free (a constraint needs no referent) but lives in the ctx grammar as negation_move//2.
+negation_move(frame(commerce_sell, [move=constrain, polarity=negative, bound=below, money=price(N, eur)]), _) -->
+    [nothing, below], price_term(N).
+negation_move(frame(commerce_sell, [move=constrain, polarity=negative, bound=above, money=price(N, eur)]), _) -->
+    [nothing, above], price_term(N).
+negation_move(frame(commerce_sell, [move=constrain, polarity=negative, bound=below, duration=D]), _) -->
+    [not, for, less, than], duration_count(D), time_unit.
+negation_move(frame(commerce_sell, [move=constrain, polarity=negative, bound=above, duration=D]), _) -->
+    [not, for, more, than], duration_count(D), time_unit.
+
+% --- Block 4: anaphora — resolve a demonstrative / pronoun / definite-description referent ---
+% "<price> for that berth" / "<price> for the same berth" -> berth = last-mentioned; none -> FAIL.
+anaphora_move(frame(commerce_sell, [move=counter, money=price(N, eur), berth=B]), Ctx) -->
+    money_amount(price(N, eur)), berth_prep, berth_demonstrative,
+    { ctx_last_mentioned(Ctx, B), berth_atom(B) }.
+% "accept the tanker" / "reject the tanker" -> address the decision to the UNIQUE vessel of that
+% type. Two tankers (or none) -> resolve_vessel_by_type FAILS -> clarification. Never guesses.
+anaphora_move(frame(commerce_sell, [move=accept, addressee=Id]), Ctx) -->
+    accept_phrase, [the], vessel_type_word(Type), { resolve_vessel_by_type(Ctx, Type, Id) }.
+anaphora_move(frame(commerce_sell, [move=reject, addressee=Id]), Ctx) -->
+    reject_bare, [the], vessel_type_word(Type), { resolve_vessel_by_type(Ctx, Type, Id) }.
+% "accept it" / "reject it" -> the pronoun demands a live antecedent (a standing offer). None -> FAIL.
+anaphora_move(frame(commerce_sell, [move=accept]), Ctx) -->
+    accept_phrase, [it], { ctx_standing(Ctx, S), S \= standing(none, none) }.
+anaphora_move(frame(commerce_sell, [move=reject]), Ctx) -->
+    reject_bare, [it], { ctx_standing(Ctx, S), S \= standing(none, none) }.
+
+berth_demonstrative --> [that, berth].
+berth_demonstrative --> [the, same, berth].
+berth_demonstrative --> [same, berth, as, before].
+
+reject_bare --> [reject].
+reject_bare --> [no].
+
+% resolve_vessel_by_type(+Ctx, +Type, -Id): the id of the roster vessel of Type, iff exactly one
+% exists. [] (none) or [_,_|_] (ambiguous) both FAIL — the two-tanker case the block must refuse.
+% `T == Type` (identity, not unification) so a roster entry with an unbound type field cannot match
+% every query — a real ctx never has one (DialogueCtxTerm emits concrete atoms), but the resolver
+% stays precision-first on any input.
+resolve_vessel_by_type(Ctx, Type, Id) :-
+    atom(Type),
+    ctx_roster(Ctx, R),
+    findall(I, (member(dialogue(I, T, _, _, _), R), T == Type), Ids),
+    Ids = [Id].
+
+% --- Block 5: vocative — bind an addressee, route between concurrent dialogues ---
+% "Genoa Star : <inner move>"   — everything before the ':' names the addressee.
+% "tell the tanker <inner move>" — definite description by type.
+% The inner move is any negotiation move; the resolved addressee is appended to its frame. An
+% unresolvable name or an ambiguous type FAILS (the clarification IS the routing question).
+vocative_move(F2, Ctx) -->
+    name_phrase(NameAtoms), [':'], negotiation_move(Inner, Ctx),
+    { resolve_name(NameAtoms, Ctx, Id), add_addressee(Inner, Id, F2) }.
+vocative_move(F2, Ctx) -->
+    [tell], [the], vessel_type_word(Type), negotiation_move(Inner, Ctx),
+    { resolve_vessel_by_type(Ctx, Type, Id), add_addressee(Inner, Id, F2) }.
+
+% One-or-more tokens up to (not including) the ':' separator. The required ':' after it fixes the
+% boundary, so the collected atoms are exactly the name.
+name_phrase([W]) --> [W], { W \== ':' }.
+name_phrase([W | Ws]) --> [W], { W \== ':' }, name_phrase(Ws).
+
+% resolve_name(+NameAtoms, +Ctx, -Id): the id of the roster vessel whose (lowercased, space-joined)
+% name equals NameAtoms, iff unique. None or ambiguous -> FAIL. `N == Name` (identity) so an unbound
+% roster name field cannot spuriously match — precision-first regardless of how the ctx was built.
+resolve_name(NameAtoms, Ctx, Id) :-
+    atomic_list_concat(NameAtoms, ' ', Name),
+    ctx_roster(Ctx, R),
+    findall(I, (member(dialogue(I, _, N, _, _), R), N == Name), Ids),
+    Ids = [Id].
+
+% add_addressee(+InnerFrame, +Id, -Framed): attach the addressee. Constrained to commerce_sell — you
+% address a NEGOTIATION move to a specific walk-in; a fleet command ("hold all tankers") is not
+% addressed to one vessel, so "Genoa Star: hold all tankers" is a category error that FAILS here and
+% falls through to Rasa (precision over recall), rather than emitting a command tagged to one ship.
+add_addressee(frame(commerce_sell, Elements), Id, frame(commerce_sell, Elements2)) :-
+    append(Elements, [addressee=Id], Elements2).
+
+% --- Block 6: command — imperative, quantified NPs fan out to N receivers ---
+% "hold all tankers until the wind drops" / "send two tugs to the Carthago". A quantifier is
+% REQUIRED (all/any/numeral), which is what keeps "cancel the tug" (no quantifier) falling through
+% to Rasa exactly as in 16-M1. FrameToAcl.buildAll fans the resolved patient set out to N receivers.
+command_move(frame(command, Elements), Ctx) -->
+    imperative_verb(Action), quantified_patient(QSlots), command_tail(TailSlots, Ctx),
+    { append([[action=Action], QSlots, TailSlots], Elements) }.
+
+imperative_verb(hold) --> [hold].
+imperative_verb(send) --> [send].
+imperative_verb(dispatch) --> [dispatch].
+imperative_verb(cancel) --> [cancel].
+imperative_verb(clear) --> [clear].
+imperative_verb(route) --> [route].
+
+quantified_patient([quantifier=all, patient=P]) --> [all], patient_word(P).
+quantified_patient([quantifier=any, patient=P]) --> [any], patient_word(P).
+quantified_patient([quantifier=N, patient=P]) --> numeral(N), patient_word(P).
+
+% a named target ("to the Carthago") OR a condition ("until the wind drops"), never both — matching
+% the two canonical forms. A named target resolves against the roster; unresolved -> FAIL.
+command_tail([target=Id], Ctx) --> target_prep, [the], name_phrase(Name), { resolve_name(Name, Ctx, Id) }.
+command_tail([condition=C], _) --> command_condition(C).
+command_tail([], _) --> [].
+
+target_prep --> [to].
+target_prep --> [for].
+
+command_condition(until_wind_drop)  --> [until, the, wind, drops].
+command_condition(until_storm_pass) --> [until, the, storm, passes].
+command_condition(when_wind_drops)  --> [when, the, wind, drops].
+
+patient_word(tanker)           --> [tankers].
+patient_word(tanker)           --> [tanker].
+patient_word(tug)              --> [tugs].
+patient_word(tug)              --> [tug].
+patient_word(container_vessel) --> [container, vessels].
+patient_word(container_vessel) --> [container, vessel].
+patient_word(cargo_vessel)     --> [cargo, vessels].
+patient_word(cargo_vessel)     --> [cargo, vessel].
+patient_word(ferry)            --> [ferries].
+patient_word(ferry)            --> [ferry].
+patient_word(cruise_ship)      --> [cruise, ships].
+patient_word(cruise_ship)      --> [cruise, ship].
+
+numeral(1) --> [one].
+numeral(2) --> [two].
+numeral(3) --> [three].
+numeral(N) --> [N], { integer(N), N >= 1 }.
+
+% vessel_type_word (definite-description head, shared by anaphora + vocative).
+vessel_type_word(tanker)           --> [tanker].
+vessel_type_word(container_vessel) --> [container, vessel].
+vessel_type_word(container_vessel) --> [container].
+vessel_type_word(cargo_vessel)     --> [cargo, vessel].
+vessel_type_word(cargo_vessel)     --> [cargo].
+vessel_type_word(ferry)            --> [ferry].
+vessel_type_word(cruise_ship)      --> [cruise, ship].
+vessel_type_word(cruise_ship)      --> [cruise].

@@ -42,7 +42,39 @@ class FrameToAclTest {
                 Arguments.of("counter", ACLMessage.PROPOSE),
                 Arguments.of("accept", ACLMessage.ACCEPT_PROPOSAL),
                 Arguments.of("reject", ACLMessage.REJECT_PROPOSAL),
-                Arguments.of("ask", ACLMessage.QUERY_REF));
+                Arguments.of("ask", ACLMessage.QUERY_REF),
+                // 16-M2 negation block: a constraint on the negotiation -> REQUEST.
+                Arguments.of("constrain", ACLMessage.REQUEST));
+    }
+
+    /** 16-M2 command fan-out: a quantified imperative ("send two tugs") must reach every resolved
+     * receiver, each as its own MessageFactory-stamped REQUEST addressed to exactly one agent. */
+    @Test
+    void buildAllFansAQuantifiedCommandOutToOneEnvelopePerReceiver() {
+        Frame command = new Frame("command", Map.of("action", "send", "quantifier", 2L, "patient", "tug"));
+        AID tug1 = new AID("tug_1", AID.ISGUID); // ISGUID: no running platform to resolve a local name
+        AID tug2 = new AID("tug_2", AID.ISGUID);
+
+        var messages = FrameToAcl.buildAll(command, java.util.List.of(tug1, tug2), "conv-9");
+
+        assertEquals(2, messages.size(), "one envelope per receiver");
+        for (ACLMessage msg : messages) {
+            assertEquals(ACLMessage.REQUEST, msg.getPerformative());
+            assertEquals("port_command_v1", msg.getOntology(), "each envelope is MessageFactory-stamped");
+            assertEquals("conv-9", msg.getConversationId());
+            var receivers = msg.getAllReceiver();
+            assertTrue(receivers.hasNext(), "each envelope addresses exactly one agent");
+            receivers.next();
+            assertFalse(receivers.hasNext(), "a single receiver per envelope, not a broadcast");
+        }
+        assertEquals("tug_1", ((AID) messages.get(0).getAllReceiver().next()).getLocalName());
+        assertEquals("tug_2", ((AID) messages.get(1).getAllReceiver().next()).getLocalName());
+    }
+
+    @Test
+    void buildAllWithNoReceiversIsAnEmptyList() {
+        Frame command = new Frame("command", Map.of("action", "hold", "quantifier", "all", "patient", "tanker"));
+        assertTrue(FrameToAcl.buildAll(command, java.util.List.of(), "conv-9").isEmpty());
     }
 
     /** 16-M2's imperative frame: no {@code move}, and REQUEST is the FIPA performative for
