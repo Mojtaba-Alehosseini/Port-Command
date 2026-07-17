@@ -281,31 +281,48 @@ class RealNegotiationEngineTest {
     // ==================== concession mechanics ====================
 
     @Test
-    void concessionAlwaysMakesWholeEuroProgressAndCapsAtTheTarget() {
-        RealNegotiationEngine engine = engineWithFixedRoll(0.99);
-        // A near-closed gap: 6999 -> 7000 with AGGRESSIVE 0.10 rounds to a 0 step; the €1
-        // minimum keeps visible progress, and the cap stops exactly at the demand.
+    void concessionReachingTheDemandIsAgreementNotAnEchoCounter() {
+        // Checkpoint-#5 minor 2 (WALKIN-14): 6999 -> 7000 with AGGRESSIVE 0.10 rounds to a 0
+        // step; the €1 minimum reaches the demand exactly. Pre-fix this came back as a COUNTER
+        // at the player's own number — "I'll pay 7000" in reply to "give me 7000". A step that
+        // reaches the demand (with workable hours) is agreement.
+        RealNegotiationEngine engine = engineWithFixedRoll(0.99); // hold-out roll — the CAP accepts, not the roll
         WalkInState nearClosed = stateAt(2, 6999.0, Personality.AGGRESSIVE);
 
         Decision decision = engine.evaluate(7000.0, PREFERRED, nearClosed);
 
-        assertEquals(Decision.Type.COUNTER, decision.type());
-        assertEquals(7000.0, decision.newCounter(), 0.001, "min €1 step, capped at the demand");
-        assertEquals(Math.rint(decision.newCounter()), decision.newCounter(), "whole euros only");
+        assertEquals(Decision.Type.ACCEPT, decision.type());
+        assertEquals("concession_reached_demand", decision.reason());
+        assertEquals(PREFERRED, decision.newHours());
     }
 
     @Test
-    void aCapHitAgainstAFractionalDemandStillReturnsWholeEuros() {
-        // Adversarial review M1: when the €1-min step would overshoot a FRACTIONAL demand, the cap
-        // must floor it — a bare min(toward, ...) would leak the player's cents onto the wire.
+    void aCapHitAgainstAFractionalDemandAcceptsWhenHoursWork() {
+        // €0.50 apart with workable hours is a closed deal, not a haggle (checkpoint-#5 minor 2).
         RealNegotiationEngine engine = engineWithFixedRoll(0.99);
         WalkInState nearClosed = stateAt(2, 6482.0, Personality.AGGRESSIVE); // step -> €1 -> 6483, overshoots
 
         Decision decision = engine.evaluate(6482.50, PREFERRED, nearClosed); // player typed cents
 
+        assertEquals(Decision.Type.ACCEPT, decision.type());
+        assertEquals("concession_reached_demand", decision.reason());
+    }
+
+    @Test
+    void aCapHitCounterStillReturnsWholeEurosWhenTheHoursBlock() {
+        // Adversarial review M1 (task 19b): when the €1-min step would overshoot a FRACTIONAL
+        // demand, the cap must floor it — a bare min(toward, ...) would leak the player's cents
+        // onto the wire. The counter path is now reachable at the cap only when the HOURS still
+        // block the deal (the floor pushback), which is exactly where a priced counter goes out.
+        RealNegotiationEngine engine = engineWithFixedRoll(0.99);
+        WalkInState nearClosed = stateAt(2, 6482.0, Personality.AGGRESSIVE);
+
+        Decision decision = engine.evaluate(6482.50, 3, nearClosed); // 3 < FLOOR(5); player typed cents
+
         assertEquals(Decision.Type.COUNTER, decision.type());
         assertEquals(6482.0, decision.newCounter(), 0.001, "floored to the whole euro at or below the demand");
         assertEquals(Math.rint(decision.newCounter()), decision.newCounter(), "whole euros only");
+        assertEquals(FLOOR, decision.newHours(), "the counter exists to carry the floor pushback");
     }
 
     @Test

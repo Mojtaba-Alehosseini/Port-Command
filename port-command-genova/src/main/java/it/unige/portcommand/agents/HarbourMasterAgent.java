@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.behaviours.SimClockTickPublisherBehaviour;
 import it.unige.portcommand.behaviours.coordination.AutoFlowDispatcherBehaviour;
 import it.unige.portcommand.behaviours.coordination.DispatchPlayerCommandBehaviour;
 import it.unige.portcommand.behaviours.coordination.EndOfDayDetectBehaviour;
@@ -26,6 +27,7 @@ import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.harbourmaster.WalletLedger;
 import it.unige.portcommand.harbourmaster.financial.LedgerCoordinator;
 import it.unige.portcommand.harbourmaster.financial.PerformativeCounter;
+import it.unige.portcommand.lifecycle.DayRolloverCoordinator;
 import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.RandomSource;
@@ -70,6 +72,7 @@ public final class HarbourMasterAgent extends PortCommandAgent {
     private ReputationLedger reputationLedger;
     private LedgerCoordinator ledgerCoordinator;
     private PerformativeCounter performativeCounter;
+    private DayRolloverCoordinator dayRolloverCoordinator;
     private SimClock simClock;
     private RandomSource randomSource;
     private EventBus eventBus;
@@ -98,6 +101,10 @@ public final class HarbourMasterAgent extends PortCommandAgent {
         // Plain bus subscribers, not JADE behaviours — the catalogue stays locked at 51 (ADR-01).
         this.ledgerCoordinator = new LedgerCoordinator(eventBus, walletLedger, reputationLedger);
         this.performativeCounter = new PerformativeCounter(eventBus);
+        // Task 24: the EOD owner. Constructed here (LedgerCoordinator precedent) because every
+        // collaborator is agent-owned; it subscribes to EndOfDayDetectBehaviour's EndOfDayEvent.
+        this.dayRolloverCoordinator = new DayRolloverCoordinator(eventBus, simClock, walletLedger,
+                reputationLedger, performativeCounter);
         this.contracts = contractsArg();
         JadeAgentSpawner spawner = argAt(5, JadeAgentSpawner.class);
         MarketHistoryArtifact marketHistory = argAt(6, MarketHistoryArtifact.class);
@@ -110,6 +117,9 @@ public final class HarbourMasterAgent extends PortCommandAgent {
         addBehaviour(new HandleWeatherAlertBehaviour(this));
         addBehaviour(new EndOfDayDetectBehaviour(this, simClock));
         addBehaviour(new PoissonSpawnBehaviour(this, simClock, randomSource, spawner, marketHistory));
+        // Task 24: the single SimClockTickEvent publisher (Option B) — uncounted parent-package
+        // behaviour, so the 51-catalogue is untouched.
+        addBehaviour(new SimClockTickPublisherBehaviour(this, simClock, eventBus));
 
         completeOptionalSelfFuture();
     }
@@ -125,6 +135,9 @@ public final class HarbourMasterAgent extends PortCommandAgent {
      */
     @Override
     protected void onTakeDown() {
+        if (dayRolloverCoordinator != null) {
+            dayRolloverCoordinator.close();
+        }
         if (ledgerCoordinator != null) {
             ledgerCoordinator.close();
         }
@@ -236,6 +249,11 @@ public final class HarbourMasterAgent extends PortCommandAgent {
 
     public ReputationLedger reputationLedger() {
         return reputationLedger;
+    }
+
+    /** The task-24 EOD owner — exposed so integration tests can drive/inspect it directly. */
+    public DayRolloverCoordinator dayRolloverCoordinator() {
+        return dayRolloverCoordinator;
     }
 
     /**

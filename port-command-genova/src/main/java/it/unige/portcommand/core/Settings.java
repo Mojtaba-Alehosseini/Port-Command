@@ -26,6 +26,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * <p>{@code dailyTargetEur} was added by task 20 (the canonical €5,000 daily target,
  * {@code planning/20} "Notes"); it lives here rather than in a financial-only config because the
  * HUD and the EOD summary both read it, and this record is the designed cross-task home.
+ *
+ * <p>{@code bankruptcyFloorEur} was added by task 24 (session brief, 2026-07-17; ADR-14): the
+ * game-over rule is "wallet below this floor at end-of-day for 3 CONSECUTIVE days", −€20,000
+ * canonical — NOT planning/24's older "any negative wallet at EOD", which would bankrupt a
+ * zero-deal day-1 run on the €5,200 fixed cost alone. {@code GameOverGuard} is the sole consumer.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Settings(
@@ -40,7 +45,8 @@ public record Settings(
         @JsonProperty("withdrawalPenaltyEur") double withdrawalPenaltyEur,
         @JsonProperty("cnpReplyBySimSeconds") int cnpReplyBySimSeconds,
         @JsonProperty("cnpRetryAfterSimSeconds") int cnpRetryAfterSimSeconds,
-        @JsonProperty("dailyTargetEur") double dailyTargetEur) {
+        @JsonProperty("dailyTargetEur") double dailyTargetEur,
+        @JsonProperty("bankruptcyFloorEur") double bankruptcyFloorEur) {
 
     private static final Set<String> VALID_DIFFICULTIES = Set.of("EASY", "NORMAL", "HARD");
     private static final Settings CACHED = readFromClasspath();
@@ -58,12 +64,15 @@ public record Settings(
         if (dailyTargetEur <= 0) {
             throw new IllegalArgumentException("dailyTargetEur must be > 0: " + dailyTargetEur);
         }
+        if (bankruptcyFloorEur >= 0) {
+            throw new IllegalArgumentException("bankruptcyFloorEur must be < 0: " + bankruptcyFloorEur);
+        }
     }
 
     /** The hard-coded fallback values (task-15 brief, §15.1) — also what ships in defaults.json. */
     public static Settings defaults() {
         return new Settings(4, 60, false, "NORMAL", 300L, 30, true,
-                "microsoft/Phi-4-mini-instruct", 500.0, 5, 30, 5_000.0);
+                "microsoft/Phi-4-mini-instruct", 500.0, 5, 30, 5_000.0, -20_000.0);
     }
 
     /** The classpath-loaded settings, read once and cached (mirrors {@code VesselTemplates}). */

@@ -59,7 +59,10 @@ class VesselTemplatesTest {
         // same seed -> same draw
         assertEquals(tanker.sampleTargetPrice(new Random(7)), tanker.sampleTargetPrice(new Random(7)));
         int wait = tanker.sampleMaxWaitMinutes(new Random(3));
-        assertTrue(wait >= 15 && wait <= 30, "wait sampled in range: " + wait);
+        // Task 24 (2026-07-17): patience recalibrated for live time — tanker band is now
+        // [240,420] sim-minutes (~50-88 wall-s at the default mapping); the stub-era [15,30]
+        // predates a clock that actually advances. See vessel_templates.json's dated header.
+        assertTrue(wait >= 240 && wait <= 420, "wait sampled in range: " + wait);
         Personality p = tanker.samplePersonality(new Random(1));
         assertEquals(p, tanker.samplePersonality(new Random(1)));
     }

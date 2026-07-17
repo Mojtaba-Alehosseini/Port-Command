@@ -27,6 +27,7 @@ import it.unige.portcommand.nlp.ClarificationButtons;
 import it.unige.portcommand.nlp.DialogueCtx;
 import it.unige.portcommand.nlp.PipelineResult;
 import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.SimClock;
 import jade.lang.acl.ACLMessage;
 
 /**
@@ -46,6 +47,9 @@ final class DialogueTabView extends JPanel {
     private final NegotiationTabRegistry registry;
     private final EventBus eventBus;
     private final ChatInputProcessor processor;
+    private final SimClock simClock;
+    /** Sim instant this dialogue's tab opened — the countdown's zero point (task 24). */
+    private final long openedAtSimMillis;
 
     private final JTextPane transcriptPane = new JTextPane();
     private final JLabel offerStripLabel = new JLabel();
@@ -55,12 +59,14 @@ final class DialogueTabView extends JPanel {
     private final ClarificationButtonsPanel clarificationPanel;
 
     DialogueTabView(String dialogueId, NegotiationTabRegistry registry, EventBus eventBus,
-                    ChatInputProcessor processor) {
+                    ChatInputProcessor processor, SimClock simClock) {
         super(new BorderLayout(4, 4));
         this.dialogueId = dialogueId;
         this.registry = registry;
         this.eventBus = eventBus;
         this.processor = processor;
+        this.simClock = simClock;
+        this.openedAtSimMillis = simClock.nowSimMillis();
 
         transcriptPane.setContentType("text/html");
         transcriptPane.setEditable(false);
@@ -109,20 +115,44 @@ final class DialogueTabView extends JPanel {
         clarificationPanel.setVisible(!closed);
     }
 
+    /** Re-renders ONLY the offer strip — the per-sim-minute clock tick calls this ~5×/s at the
+     * default day length, and re-rendering the whole HTML transcript at that rate would flicker
+     * and churn (task 24). */
+    void refreshStrip() {
+        DialogueTabModel tab = registry.tab(dialogueId);
+        if (tab != null) {
+            offerStripLabel.setText(offerStripText(tab, tab.isClosed()));
+        }
+    }
+
     /** Task 19b: both §7.3 dimensions on the strip — their €X for Yh / your €A for Bh. The
      * player's hours fall back to the hours under discussion until they name their own. */
-    private static String offerStripText(DialogueTabModel tab, boolean closed) {
+    private String offerStripText(DialogueTabModel tab, boolean closed) {
         if (closed) {
             return "Negotiation closed.";
         }
         WalkInDialogueSnapshot s = tab.snapshot();
         int playerHours = tab.lastPlayerHours() != null ? tab.lastPlayerHours() : s.durationHours();
         int roundLimit = Settings.load().roundLimit();
-        long remaining = Math.max(0L, Settings.load().timeLimitSeconds() - Math.round(s.timeUsedSec()));
         return String.format(
                 "Their offer: €%.0f for %dh  |  Your offer: €%.0f for %dh  |  Round %d of %d  |  ~%ds remaining",
                 s.lastVesselOffer(), s.durationHours(), s.lastPlayerOffer(), playerHours,
-                s.roundsUsed(), roundLimit, remaining);
+                s.roundsUsed(), roundLimit, remainingSeconds());
+    }
+
+    /**
+     * The "~Ns remaining" countdown (task 24, live for the first time — the pre-task-24 value
+     * was a static stub off {@code WalkInDialogueSnapshot.timeUsedSec}, which is still published
+     * as {@code 0.0}). Counts down {@code Settings.timeLimitSeconds} — the PUBLIC nominal
+     * negotiation window, deliberately approximate — in REAL seconds, converting the elapsed sim
+     * time since this tab opened through the clock's own day-length mapping. The true per-vessel
+     * deadline is the hidden {@code maxWaitMinutes} belief (P-04: never shown), whose
+     * template ranges task 24 recalibrated to land around this same nominal window.
+     */
+    private long remainingSeconds() {
+        long elapsedSimMs = Math.max(0L, simClock.nowSimMillis() - openedAtSimMillis);
+        double elapsedRealSec = elapsedSimMs * (double) simClock.realSecondsPerGameDay() / 86_400_000.0;
+        return Math.max(0L, Settings.load().timeLimitSeconds() - Math.round(elapsedRealSec));
     }
 
     private void onSend() {
@@ -332,6 +362,11 @@ final class DialogueTabView extends JPanel {
     /** Test-only accessors. */
     JTextField inputFieldForTest() {
         return inputField;
+    }
+
+    /** Test-only: the offer strip's current text (task-24 countdown assertions). */
+    String offerStripTextForTest() {
+        return offerStripLabel.getText();
     }
 
     boolean clarificationVisibleForTest() {

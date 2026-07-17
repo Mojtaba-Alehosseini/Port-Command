@@ -4,33 +4,51 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.swing.AbstractAction;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.KeyStroke;
 import javax.swing.WindowConstants;
 
 import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.gui.events.DebugWeatherEvent;
+import it.unige.portcommand.gui.events.EndOfDayCompletedEvent;
 import it.unige.portcommand.gui.events.GuiReadyEvent;
 import it.unige.portcommand.harbourmaster.financial.EndOfDaySummary;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
 import it.unige.portcommand.harbourmaster.financial.PerformativeCounter;
+import it.unige.portcommand.lifecycle.GameLifecycle;
+import it.unige.portcommand.lifecycle.GameMode;
+import it.unige.portcommand.lifecycle.events.GameOverEvent;
+import it.unige.portcommand.lifecycle.events.GamePausedEvent;
+import it.unige.portcommand.lifecycle.events.GameResumedEvent;
 import it.unige.portcommand.nlp.ChatInputProcessor;
+import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
 
 /**
  * The Swing shell (task 17): a {@code JFrame} with five panel slots laid out
  * per planning/17 §Step 17.3 — HUD across the top, Map/Chat/CommLog sharing
  * the middle row (~50/25/25 width split), a notification strip along the
- * bottom. Every panel is a placeholder; real content arrives in tasks 18-21.
- * {@code GridBagLayout} is pinned (planning/17: "MigLayout ... keep
+ * bottom. {@code GridBagLayout} is pinned (planning/17: "MigLayout ... keep
  * GridBagLayout").
+ *
+ * <p>Task 24 additions: the Game menu drives {@link GameLifecycle}
+ * (Pause/Resume/Quit — Quit is confirmed, then routed through
+ * {@code GameOverGuard} via {@code lifecycle.quit()}), Esc toggles pause, a
+ * translucent {@link PauseOverlay} glass pane mirrors the PAUSED state, and
+ * {@link GameOverDialog} opens on the run's {@code GameOverEvent}.
  *
  * <p><b>Single EDT rule.</b> This class and every panel it holds must only be
  * constructed and mutated on the EDT — {@code Main} constructs and shows it
@@ -39,39 +57,83 @@ import it.unige.portcommand.util.EventBus;
  *
  * <p><b>Agents never reach this class.</b> The only channel from agents to the
  * GUI is {@link EventBus} (INVARIANTS.md: "GUI ↔ agents only through
- * EventBus"); nothing here is ever called directly from an agent or behaviour
- * thread, and nothing under {@code agents/} or {@code behaviours/} may import
- * {@code java.awt}/{@code javax.swing} (grep-gated, planning/17).
+ * EventBus"); the {@link GameLifecycle}/{@code SimClock} references flow the
+ * OTHER way only (GUI → lifecycle control, GUI → read-only clock queries),
+ * and nothing under {@code agents/}, {@code behaviours/} or
+ * {@code harbourmaster/} may import {@code java.awt}/{@code javax.swing}
+ * (grep-gated, planning/17).
  */
 public final class MainWindow extends JFrame {
 
     private static final int DEFAULT_WIDTH = 1280;
     private static final int DEFAULT_HEIGHT = 800;
 
+    private final GameLifecycle lifecycle;
     private final Leaderboard leaderboard;
     private final EndOfDaySummaryDialog endOfDayDialog;
+    private final GameOverDialog gameOverDialog;
+    private final PauseOverlay pauseOverlay;
+    private JMenuItem pauseItem;
+    private JMenuItem resumeItem;
+    private JMenuItem quitItem;
+
+    /** The latest REAL settled summary — the Debug menu re-shows it once one exists. */
+    private EndOfDaySummary latestSummary;
+    /** Whether the CURRENT pause was taken for the EOD report (vs. by the player). */
+    private boolean pausedForEndOfDay;
 
     /**
      * @param eventBus          the shared bus every panel subscribes through
      * @param portStateArtifact the shared berth/tug state {@code MapPanel} (task 18) reads and
      *                          subscribes to — the only panel that needs it
-     * @param chatInputProcessor the NLP pipeline seam (task 19) {@code ChatPanel} calls on Send —
-     *                          a functional interface rather than the concrete {@code NLPPipeline}
-     *                          so this class stays decoupled from the {@code nlp} package's
-     *                          construction details (mirrors the {@code onClose Runnable} seam)
+     * @param chatInputProcessor the NLP pipeline seam (task 19) {@code ChatPanel} calls on Send
+     * @param lifecycle         the task-24 game-loop orchestrator this shell's menu drives; also
+     *                          the read-only source of the shared {@code SimClock} for countdowns
+     * @param leaderboard       the ONE shared board ({@code Main} constructs it) — the same
+     *                          instance {@code GameOverGuard} records into, so the dialogs render
+     *                          scores the moment they land
      * @param onClose           clean-shutdown hook run before the window disposes and the JVM
      *                          exits (wired to {@code JadeBootstrap::shutdown} in {@code Main})
-     *                          — kept as a {@code Runnable} rather than a concrete bootstrap type
-     *                          so this class has no dependency on the {@code bootstrap} package.
      */
     public MainWindow(EventBus eventBus, PortStateArtifact portStateArtifact,
-                      ChatInputProcessor chatInputProcessor, Runnable onClose) {
+                      ChatInputProcessor chatInputProcessor, GameLifecycle lifecycle,
+                      Leaderboard leaderboard, Runnable onClose) {
         super("Port Command Genova");
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE); // we drive shutdown ourselves
-        this.leaderboard = new Leaderboard();
-        this.endOfDayDialog = new EndOfDaySummaryDialog(this, eventBus, leaderboard);
-        setJMenuBar(buildMenuBar(onClose));
+        this.lifecycle = lifecycle;
+        this.leaderboard = leaderboard;
+        this.pauseOverlay = new PauseOverlay(this::toggleMenuResume);
+        setGlassPane(pauseOverlay);
+        setJMenuBar(buildMenuBar(eventBus, onClose));
         layOutPanels(eventBus, portStateArtifact, chatInputProcessor);
+        installEscBinding();
+
+        // Lifecycle mirror: the overlay + menu enablement follow the bus, never poll. The
+        // EndOfDayCompletedEvent handler is subscribed BEFORE the dialog is constructed so the
+        // world freezes before the modal report opens (adversarial review m2 — otherwise the
+        // clock kept running behind the dialog and walk-ins timed out while the player read it);
+        // the dialog's componentHidden unfreezes it, but only if THIS handler paused (a manual
+        // pause, or a game-over racing the same settlement, is left alone).
+        eventBus.subscribe(GamePausedEvent.class, e -> reflectMode(), DeliveryMode.EDT);
+        eventBus.subscribe(GameResumedEvent.class, e -> reflectMode(), DeliveryMode.EDT);
+        eventBus.subscribe(GameOverEvent.class, e -> reflectMode(), DeliveryMode.EDT);
+        eventBus.subscribe(EndOfDayCompletedEvent.class, e -> {
+            latestSummary = e.summary();
+            pausedForEndOfDay = lifecycle.pauseIfRunning();
+        }, DeliveryMode.EDT);
+        this.endOfDayDialog = new EndOfDaySummaryDialog(this, eventBus, leaderboard);
+        this.endOfDayDialog.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentHidden(java.awt.event.ComponentEvent e) {
+                if (pausedForEndOfDay) {
+                    pausedForEndOfDay = false;
+                    lifecycle.resumeIfPaused();
+                }
+            }
+        });
+        this.gameOverDialog = new GameOverDialog(this, eventBus, leaderboard, () -> shutdownAndExit(onClose));
+        reflectMode();
+
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
@@ -96,7 +158,7 @@ public final class MainWindow extends JFrame {
         setLayout(new GridBagLayout());
         add(new HUDPanel(eventBus), slot(0, 0, 3, 1.0, 0.0));
         add(new MapPanel(eventBus, portStateArtifact), slot(0, 1, 1, 0.5, 1.0));
-        add(new ChatPanel(eventBus, chatInputProcessor), slot(1, 1, 1, 0.25, 1.0));
+        add(new ChatPanel(eventBus, chatInputProcessor, lifecycle.simClock()), slot(1, 1, 1, 0.25, 1.0));
         add(new CommLogPanel(eventBus), slot(2, 1, 1, 0.25, 1.0));
         add(new NotificationStrip(eventBus), slot(0, 2, 3, 1.0, 0.0));
     }
@@ -113,31 +175,98 @@ public final class MainWindow extends JFrame {
         return c;
     }
 
-    private JMenuBar buildMenuBar(Runnable onClose) {
+    private JMenuBar buildMenuBar(EventBus eventBus, Runnable onClose) {
         JMenuBar bar = new JMenuBar();
         JMenu game = new JMenu("Game");
+        pauseItem = new JMenuItem("Pause");
+        pauseItem.addActionListener(e -> lifecycle.pause());
+        resumeItem = new JMenuItem("Resume");
+        resumeItem.addActionListener(e -> lifecycle.resume());
+        quitItem = new JMenuItem("Quit Game…");
+        quitItem.addActionListener(e -> confirmQuit());
         JMenuItem exit = new JMenuItem("Exit");
         exit.addActionListener(e -> shutdownAndExit(onClose));
+        game.add(pauseItem);
+        game.add(resumeItem);
+        game.addSeparator();
+        game.add(quitItem);
+        game.addSeparator();
         game.add(exit);
         bar.add(game);
-        bar.add(buildDebugMenu());
+        bar.add(buildDebugMenu(eventBus));
         return bar;
     }
 
     /**
-     * The Debug menu (task 20). "Show End-of-Day Summary" opens the real dialog from a synthetic
-     * {@code EndOfDaySummary} — the only way to see it today, because the live trigger is task
-     * 24's {@code DayRolloverCoordinator} and the sim clock has no wall-clock tick driver yet, so
-     * midnight never arrives in a running game. It drives the same {@code show(...)} the real
-     * {@code EndOfDayCompletedEvent} path calls, not a demo-only replica.
-     *
-     * <p>Remove this item once task 24 makes midnight reachable.
+     * Game → Quit: confirm, then end the run through the single game-over authority
+     * ({@code lifecycle.quit()} → {@code QuitEvent} → {@code GameOverGuard} →
+     * {@code GameOverEvent} → {@link GameOverDialog}). planning/24's "ask about the active
+     * negotiation" is folded into one always-on confirm — with up to 3 concurrent walk-in
+     * dialogues a separate per-negotiation prompt would just stack dialogs.
      */
-    private JMenu buildDebugMenu() {
+    private void confirmQuit() {
+        int choice = JOptionPane.showConfirmDialog(this,
+                "End this run? The final score goes to the leaderboard.",
+                "Quit Game", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (choice == JOptionPane.OK_OPTION) {
+            lifecycle.quit();
+        }
+    }
+
+    /** Esc toggles pause/resume — bound WHEN_IN_FOCUSED_WINDOW so it works from any panel. */
+    private void installEscBinding() {
+        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "toggle-pause");
+        getRootPane().getActionMap().put("toggle-pause", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                toggleMenuResume();
+            }
+        });
+    }
+
+    private void toggleMenuResume() {
+        if (lifecycle.mode() == GameMode.RUNNING) {
+            lifecycle.pause();
+        } else if (lifecycle.mode() == GameMode.PAUSED) {
+            lifecycle.resume();
+        }
+    }
+
+    /** One place maps {@link GameMode} → overlay visibility + menu enablement. */
+    private void reflectMode() {
+        GameMode mode = lifecycle.mode();
+        pauseOverlay.setVisible(mode == GameMode.PAUSED);
+        pauseItem.setEnabled(mode == GameMode.RUNNING);
+        resumeItem.setEnabled(mode == GameMode.PAUSED);
+        quitItem.setEnabled(mode == GameMode.RUNNING || mode == GameMode.PAUSED);
+    }
+
+    /**
+     * The Debug menu (task 20). Since task 24 the item shows the LATEST REAL settled summary once
+     * a midnight has passed; before the first rollover it falls back to the task-20 synthetic day
+     * (still useful for layout checks minutes into a fresh run). One code path either way — the
+     * same {@code show(...)} the live {@code EndOfDayCompletedEvent} subscription drives.
+     */
+    private JMenu buildDebugMenu(EventBus eventBus) {
         JMenu debug = new JMenu("Debug");
-        JMenuItem showEod = new JMenuItem("Show End-of-Day Summary (synthetic)");
-        showEod.addActionListener(e -> endOfDayDialog.show(syntheticSummary(), leaderboard));
+        JMenuItem showEod = new JMenuItem("Show End-of-Day Summary (latest)");
+        showEod.addActionListener(e ->
+                endOfDayDialog.show(latestSummary != null ? latestSummary : syntheticSummary(), leaderboard));
         debug.add(showEod);
+        debug.addSeparator();
+        // Checkpoint-#5 request: storms are rare by design (steady-state ≈4%) — these force the
+        // WeatherAgent's snapshot so the full hold → clear → re-dispatch cascade can be shown on
+        // demand. Everything downstream (alerts, holds, chip, notifications) runs the REAL
+        // pipeline; the next broadcast tick (~3 s at default speed) picks the override up.
+        JMenuItem forceStorm = new JMenuItem("Force storm (42 kn, stormy)");
+        forceStorm.addActionListener(e ->
+                eventBus.publish(new DebugWeatherEvent(42, "poor", 5.0, "stormy")));
+        debug.add(forceStorm);
+        JMenuItem clearWeather = new JMenuItem("Clear weather (15 kn, sunny)");
+        clearWeather.addActionListener(e ->
+                eventBus.publish(new DebugWeatherEvent(15, "good", 0.5, "sunny")));
+        debug.add(clearWeather);
         return debug;
     }
 

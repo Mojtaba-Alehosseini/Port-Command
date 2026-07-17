@@ -11,15 +11,18 @@ import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingConstants;
 
+import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.gui.model.NegotiationTabRegistry;
 import it.unige.portcommand.nlp.ChatInputProcessor;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.SimClock;
 import it.unige.portcommand.util.Subscription;
 
 /**
@@ -41,22 +44,42 @@ public final class ChatPanel extends JPanel {
     private final NegotiationTabRegistry registry = new NegotiationTabRegistry();
     private final EventBus eventBus;
     private final ChatInputProcessor processor;
+    private final SimClock simClock;
     private final JTabbedPane tabbedPane = new JTabbedPane();
     private final Map<String, DialogueTabView> views = new LinkedHashMap<>();
 
     private final Subscription<NegotiationOpenedEvent> openedSubscription;
     private final Subscription<NegotiationClosedEvent> closedSubscription;
     private final Subscription<AssistantChatEvent> assistantSubscription;
+    private final Subscription<SimClockTickEvent> clockSubscription;
 
-    public ChatPanel(EventBus eventBus, ChatInputProcessor processor) {
+    /**
+     * Headless-test convenience: a private frozen clock (nothing advances it), so the countdown
+     * simply shows the full window. PRODUCTION MUST use the 3-arg constructor with the boot's
+     * shared {@code SimClock} — {@code MainWindow} does.
+     */
+    ChatPanel(EventBus eventBus, ChatInputProcessor processor) {
+        this(eventBus, processor, new SimClock(Settings.load().realSecondsPerGameDay()));
+    }
+
+    public ChatPanel(EventBus eventBus, ChatInputProcessor processor, SimClock simClock) {
         super(new BorderLayout());
         this.eventBus = eventBus;
         this.processor = processor;
+        this.simClock = simClock;
         add(new JLabel("Waiting for a walk-in…", SwingConstants.CENTER), BorderLayout.CENTER);
 
         this.openedSubscription = eventBus.subscribe(NegotiationOpenedEvent.class, this::onNegotiationOpened, DeliveryMode.EDT);
         this.closedSubscription = eventBus.subscribe(NegotiationClosedEvent.class, this::onNegotiationClosed, DeliveryMode.EDT);
         this.assistantSubscription = eventBus.subscribe(AssistantChatEvent.class, this::onAssistantChat, DeliveryMode.EDT);
+        // Task 24: the per-sim-minute tick re-renders every open tab's offer strip so the
+        // "~Ns remaining" hint counts down for real (~5 Hz wall at the default day length —
+        // strip-label-only refresh, never the full transcript re-render).
+        this.clockSubscription = eventBus.subscribe(SimClockTickEvent.class, this::onClockTick, DeliveryMode.EDT);
+    }
+
+    private void onClockTick(SimClockTickEvent event) {
+        views.values().forEach(DialogueTabView::refreshStrip);
     }
 
     private void onNegotiationOpened(NegotiationOpenedEvent event) {
@@ -79,7 +102,7 @@ public final class ChatPanel extends JPanel {
             tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
             add(tabbedPane, BorderLayout.CENTER);
         }
-        DialogueTabView view = new DialogueTabView(dialogueId, registry, eventBus, processor);
+        DialogueTabView view = new DialogueTabView(dialogueId, registry, eventBus, processor, simClock);
         views.put(dialogueId, view);
         tabbedPane.addTab(tabTitle(event), view);
         revalidate();
@@ -123,6 +146,7 @@ public final class ChatPanel extends JPanel {
         openedSubscription.cancel();
         closedSubscription.cancel();
         assistantSubscription.cancel();
+        clockSubscription.cancel();
     }
 
     /** Test-only: the shared model backing every tab. */

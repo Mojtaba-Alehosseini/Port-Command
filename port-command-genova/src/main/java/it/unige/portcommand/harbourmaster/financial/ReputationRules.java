@@ -51,8 +51,21 @@ public final class ReputationRules {
             Deal.Outcome.PLAYER_REFUSED, "player_refused");
 
     private static final Map<Deal.Outcome, Double> DELTAS = readFromClasspath();
+    private static final double DAILY_TARGET_BONUS = readDailyTargetBonus();
 
     private ReputationRules() {
+    }
+
+    /**
+     * The reputation bonus for closing a day at or above {@code Settings.dailyTargetEur} net
+     * (task 24, session brief 2026-07-17 — "+2 on hit, the table's row"). Lives in the same
+     * {@code defaults.json} {@code reputation} block as the outcome deltas but NOT in
+     * {@link #table()}: hitting a daily target is not a {@link Deal.Outcome}, and folding it in
+     * would break the table's exhaustive-by-outcome contract. Sole consumer:
+     * {@code DayRolloverCoordinator}'s EOD sequence.
+     */
+    public static double dailyTargetBonus() {
+        return DAILY_TARGET_BONUS;
     }
 
     /**
@@ -85,6 +98,23 @@ public final class ReputationRules {
         table.put(Deal.Outcome.TIMEOUT, -3.0);
         table.put(Deal.Outcome.PLAYER_REFUSED, 0.0);
         return Collections.unmodifiableMap(table);
+    }
+
+    private static double readDailyTargetBonus() {
+        try (InputStream in = ReputationRules.class.getResourceAsStream("/data/defaults.json")) {
+            if (in == null) {
+                throw new IllegalStateException("defaults.json not found on classpath (/data/)");
+            }
+            JsonNode block = new ObjectMapper().readTree(in).get("reputation");
+            JsonNode value = block == null ? null : block.get("daily_target");
+            if (value == null || !value.isNumber()) {
+                throw new IllegalStateException(
+                        "defaults.json reputation block is missing a numeric \"daily_target\" (task 24)");
+            }
+            return value.doubleValue();
+        } catch (IOException e) {
+            throw new IllegalStateException("failed to load defaults.json", e);
+        }
     }
 
     private static Map<Deal.Outcome, Double> readFromClasspath() {

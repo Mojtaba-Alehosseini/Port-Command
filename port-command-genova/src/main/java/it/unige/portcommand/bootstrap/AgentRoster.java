@@ -51,9 +51,14 @@ import org.slf4j.LoggerFactory;
 public final class AgentRoster {
 
     private static final Logger log = LoggerFactory.getLogger(AgentRoster.class);
-    // Placeholder game-balance starting figures; task 20/24 own real calibration.
-    private static final double HM_STARTING_WALLET = 50_000.0;
-    private static final double HM_STARTING_REPUTATION = 70.0;
+    /**
+     * The HarbourMaster's starting wallet/reputation. Public since task 24: {@code Main}
+     * seeds {@code GameOverGuard}'s pre-first-event fallback stats from the SAME constants
+     * that feed {@code HarbourMasterInitArgs}, so a quit-before-any-money game-over reports
+     * the true opening figures rather than a second, driftable copy.
+     */
+    public static final double STARTING_WALLET = 50_000.0;
+    public static final double STARTING_REPUTATION = 70.0;
 
     private AgentRoster() {
     }
@@ -63,10 +68,10 @@ public final class AgentRoster {
                                                MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
                                                EventBus eventBus) {
         spawner.spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
-                new HarbourMasterInitArgs(HM_STARTING_WALLET, HM_STARTING_REPUTATION),
+                new HarbourMasterInitArgs(STARTING_WALLET, STARTING_REPUTATION),
                 simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory});
         spawner.spawn("weather_agent", WeatherAgent.class,
-                new Object[] {defaultWeatherInit(), randomSource, simClock});
+                new Object[] {defaultWeatherInit(), randomSource, simClock, eventBus});
         spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource});
         // A fresh PolicyRegistryArtifact per boot: nothing else reads player autopilot policies
         // yet (task 19's HUD is the first future consumer), so it is not JadeBootstrap-level

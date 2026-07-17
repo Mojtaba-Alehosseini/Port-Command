@@ -141,7 +141,16 @@ public final class RealNegotiationEngine implements NegotiationEngine {
                         ? Decision.accept(playerHours, "in_band_roll_or_last_round")
                         : Decision.counter(Math.floor(playerPrice), hoursTerm, REASON_TOO_SHORT);
             }
-            return Decision.counter(concede(own, playerPrice, state.personality()), hoursTerm,
+            double conceded = concede(own, playerPrice, state.personality());
+            // Checkpoint-#5 minor 2 (WALKIN-14): a concession step that REACHES the demand is
+            // agreement, not a counter — "I'll pay 5583" in reply to "give me 5583" read as a
+            // haggle over nothing. Only when the hours also work (otherwise the counter below
+            // still carries the meaningful floor pushback). The roll above stays consumed
+            // either way, so task-19's seeded round sequences are unchanged.
+            if (hoursOk && conceded >= Math.floor(playerPrice)) {
+                return Decision.accept(playerHours, "concession_reached_demand");
+            }
+            return Decision.counter(conceded, hoursTerm,
                     hoursOk ? "conceding_toward_demand" : "conceding_toward_demand+" + REASON_TOO_SHORT);
         }
         // 5. Beyond our budget: creep toward the ceiling and hope the player comes down.
