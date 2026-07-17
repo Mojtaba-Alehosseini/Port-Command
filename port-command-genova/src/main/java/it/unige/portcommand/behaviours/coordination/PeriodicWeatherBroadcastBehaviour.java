@@ -18,16 +18,23 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Broadcasts the current weather to all {@code weather-subscriber} agents every 60
- * sim-seconds, and — when the wind crosses a discrete limit (30/35/40/45 kn) — sends
+ * Broadcasts the current weather to all {@code weather-subscriber} agents every 15
+ * sim-minutes, and — when the wind crosses a discrete limit (30/35/40/45 kn) — sends
  * an additional {@code priority=high} INFORM to the HarbourMaster. The current
  * snapshot is shared (read-only here) with {@code WeatherEvolutionBehaviour} via the
  * {@link AtomicReference}.
+ *
+ * <p><b>Task 19 cadence fix.</b> The tick was 60 sim-seconds, which at the default
+ * 300-real-second game day compresses to ~0.2&nbsp;s of wall time — hundreds of
+ * broadcasts per real second, needless load. It is now 15 sim-minutes (~3&nbsp;s wall),
+ * still finer-grained than {@code WeatherEvolutionBehaviour}'s 60-sim-minute evolution
+ * so no weather change is ever missed between broadcasts, while the threshold-alert rate
+ * (which is what reaches the comm log) drops to at most one per weather change.
  */
 public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(PeriodicWeatherBroadcastBehaviour.class);
-    private static final long TICK_SIM_MILLIS = 60_000L; // 60 sim-seconds
+    private static final long TICK_SIM_MILLIS = 900_000L; // 15 sim-minutes
     // Wind-based limits (kn). Intentionally state-agnostic: the alert fires on the wind
     // crossing, so a cloudy step into [30,32] trips it too — not only "stormy" weather.
     private static final int[] WIND_THRESHOLDS = {30, 35, 40, 45};

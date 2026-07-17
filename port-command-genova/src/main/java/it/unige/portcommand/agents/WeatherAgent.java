@@ -13,8 +13,9 @@ import it.unige.portcommand.util.SimClock;
 /**
  * Weather service. Holds the current {@link WeatherSnapshot} (shared with its two
  * behaviours via an {@link AtomicReference}); evolves it on a seeded Markov chain
- * every 5 sim-minutes and broadcasts it every 60 sim-seconds. The master RNG and
- * sim clock are injected via the {@code Object[]} args channel (args[1], args[2]).
+ * every 60 sim-minutes and broadcasts it every 15 sim-minutes (task-19 cadence fix —
+ * see the two behaviours' javadocs). The master RNG and sim clock are injected via the
+ * {@code Object[]} args channel (args[1], args[2]).
  */
 public final class WeatherAgent extends PortCommandAgent {
 
