@@ -1,3 +1,11 @@
+// Canonical walk-in economy = PROJECT_DEFINITION §7.5 (task 07b; keys are wire/save-stable).
+// Buyer semantics (2026-07-17, task 19 / ADR-13): the vessel is the BUYER of berth time.
+//   target_price_range        = the hidden BUDGET CEILING (top the vessel will pay; a player
+//                               fee demand is accepted only at or below it).
+//   min_acceptable_price_range = the OPENING-ASK basis (vessel opens low at ~0.70-0.85 x target;
+//                               the player negotiates the fee UPWARD toward the ceiling).
+// The original task-15 engine read these seller-inverted; RealNegotiationEngine was rewritten.
+// Values are unchanged — only the reading is corrected.
 {
   "tanker": {
     "personality_distribution": {"AGGRESSIVE": 0.30, "NEUTRAL": 0.55, "DESPERATE": 0.15},

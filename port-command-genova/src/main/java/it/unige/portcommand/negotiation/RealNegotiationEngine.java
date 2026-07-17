@@ -10,56 +10,56 @@ import java.util.Random;
  * never mutates {@code state}; it only reads {@link WalkInState#round()} to derive
  * {@code roundsRemaining} for itself.
  *
- * <p>Branch order (task-15 session brief, reconciled against
- * {@code planning/15_negotiation_engine.md} §15.2/§15.3 where the brief was silent — see the
- * in-band counter formula note below):
+ * <p><b>Task 19 rewrite — the vessel is the BUYER.</b> The canonical economy
+ * (PROJECT_DEFINITION §7.5: berth fees are port INCOME; {@code Frame}'s commerce_sell
+ * contract: "the player SELLS berth/escort services and RECEIVES the money") makes the
+ * walk-in the buyer of berth time and the player the seller quoting a fee. The original
+ * task-15 implementation had the comparisons seller-side-inverted — it ACCEPTED any
+ * demand {@code >= targetPrice} (so demanding an absurd fee closed instantly at that fee)
+ * and countered UP past its own opening ask (ask €5744, player bids €6000, vessel "counters"
+ * €6120) — indefensible for a payer, but unobservable until the first human actually
+ * negotiated (task 19's play-test). Per the design rules' authority order PROJECT_DEFINITION
+ * beats planning/15's §15.2/§15.3 formulas, so the branch table is now coherent
+ * buyer mechanics:
  * <ol>
- *   <li>{@code playerPrice >= targetPrice} -&gt; ACCEPT, always.
- *   <li>Rounds exhausted ({@code roundsRemaining <= 0}, the last possible call) -&gt; ACCEPT if the
- *       price is still in-band (graceful fallback), else WITHDRAW("over_priced").
- *   <li>{@code playerPrice < minAcceptablePrice} -&gt; COUNTER at
- *       {@code (min+target)/2 * REJECT_COUNTER_MOD[personality]}.
- *   <li>In-band: a seeded roll against {@code ACCEPT_THRESHOLD[personality]} decides ACCEPT vs.
- *       COUNTER, with a forced ACCEPT at {@code roundsRemaining == 1} (the last round the vessel
- *       can still afford to hold out). The in-band COUNTER formula is
- *       {@code playerPrice * (1 + COUNTER_UP_PCT[personality])} — from §15.2's
- *       {@code COUNTER_UP_PCT}, NOT the below-minimum formula in branch 3 (an earlier draft reused
- *       branch 3's formula here, which makes the vessel undercut its own last offer near the
- *       target price; caught in design review).
+ *   <li>{@code playerPrice <= lastOwnOffer} — the demand is within what the vessel already
+ *       has on the table -&gt; ACCEPT (at the demand; a seller undercutting the standing
+ *       offer just gets taken up on it).</li>
+ *   <li>Rounds exhausted ({@code roundsRemaining <= 0}, the last possible call) -&gt; ACCEPT
+ *       if the demand is still within budget ({@code <= targetPrice}), else
+ *       WITHDRAW("over_priced") — the reason string finally means what it says: the player
+ *       priced the vessel out.</li>
+ *   <li>Affordable ({@code playerPrice <= targetPrice}): a seeded roll against
+ *       {@code ACCEPT_THRESHOLD[personality]} decides settle-now vs. hold out, with a forced
+ *       ACCEPT at {@code roundsRemaining == 1} (the last round it can still afford to close
+ *       on its own terms). Holding out CONCEDES UPWARD from its standing offer toward the
+ *       demand by {@link Personality#concessionRate()} — monotone, whole euros, never past
+ *       the demand.</li>
+ *   <li>Beyond budget ({@code playerPrice > targetPrice}): concede toward the CEILING only
+ *       ({@code targetPrice} is a hard walk-away line — no demand above it is ever accepted),
+ *       hoping the player comes down before the rounds run out.</li>
  * </ol>
- * Every counter is clamped to {@code [minAcceptablePrice, targetPrice * 1.3]} — the upper bound
- * keeps a pathological personality modifier from producing an absurd counter.
+ *
+ * <p>{@code minAcceptablePrice} is no longer read by the engine (it was the inverted
+ * design's floor); it stays in {@link WalkInState} as sampled data — the §7.5 band is
+ * canonical (INVARIANTS: templates = §7.5 = task-20 IncomeRules) and task 20's income
+ * calibration consumes it. {@code Personality.concessionRate}, declared in task 07 "for
+ * task 15" but never consumed by the inverted engine, is finally load-bearing.
  *
  * <p>{@code roundsRemaining} is derived as {@code roundLimit + 1 - state.round()}, mirroring
  * {@code WalkInVesselAgent}'s own (private) formula. Because {@code WalkInState.round()} is
- * already incremented by {@code recordPlayerCounter} BEFORE {@code evaluate} is ever called, this
- * engine only ever observes {@code roundsRemaining} in {@code {roundLimit-1, ..., 0}} — one lower
- * than {@code planning/15}'s own §15.3 numbering, which assumed the engine itself decrements
- * rounds (it doesn't; that stays task-07's job). Both numbering schemes describe the same dialogue
- * moments under this offset; do not "correct" this back to a literal copy of the planning doc's
- * thresholds.
+ * already incremented by {@code recordPlayerCounter} BEFORE {@code evaluate} is ever called,
+ * this engine only ever observes {@code roundsRemaining} in {@code {roundLimit-1, ..., 0}}.
  */
 public final class RealNegotiationEngine implements NegotiationEngine {
 
     /** The only reason string an engine-originated WITHDRAW ever carries (see class javadoc). */
     public static final String REASON_OVER_PRICED = "over_priced";
 
-    private static final double COUNTER_CLAMP_UPPER_MULTIPLIER = 1.3;
-
     private static final Map<Personality, Double> ACCEPT_THRESHOLD = Map.of(
             Personality.AGGRESSIVE, 0.30,
             Personality.NEUTRAL, 0.55,
             Personality.DESPERATE, 0.80);
-
-    private static final Map<Personality, Double> REJECT_COUNTER_MOD = Map.of(
-            Personality.AGGRESSIVE, 1.10,
-            Personality.NEUTRAL, 1.00,
-            Personality.DESPERATE, 0.95);
-
-    private static final Map<Personality, Double> COUNTER_UP_PCT = Map.of(
-            Personality.AGGRESSIVE, 0.08,
-            Personality.NEUTRAL, 0.04,
-            Personality.DESPERATE, 0.02);
 
     private final int roundLimit;
     private final Random roll;
@@ -71,38 +71,47 @@ public final class RealNegotiationEngine implements NegotiationEngine {
 
     @Override
     public Decision evaluate(double playerPrice, WalkInState state) {
-        double min = state.minAcceptablePrice();
-        double target = state.targetPrice();
+        double own = state.lastOwnOffer();
+        double ceiling = state.targetPrice();
         int roundsRemaining = Math.max(0, roundLimit + 1 - state.round());
 
-        if (playerPrice >= target) {
-            return Decision.accept("at_or_above_target");
+        // 1. The demand is within what we already offered: take it.
+        if (playerPrice <= own) {
+            return Decision.accept("at_or_below_our_offer");
         }
+        // 2. Last call: affordable -> settle; priced out -> leave.
         if (roundsRemaining <= 0) {
-            return playerPrice >= min
-                    ? Decision.accept("rounds_exhausted_in_band")
+            return playerPrice <= ceiling
+                    ? Decision.accept("rounds_exhausted_affordable")
                     : Decision.withdraw(REASON_OVER_PRICED);
         }
-        if (playerPrice < min) {
-            double ideal = (min + target) / 2.0 * REJECT_COUNTER_MOD.get(state.personality());
-            return Decision.counter(clamp(ideal, min, target), "below_minimum");
+        // 3. Affordable: roll to settle now (forced on the last open round), else concede upward.
+        if (playerPrice <= ceiling) {
+            double drawn = roll.nextDouble();
+            if (drawn < ACCEPT_THRESHOLD.get(state.personality()) || roundsRemaining == 1) {
+                return Decision.accept("in_band_roll_or_last_round");
+            }
+            return Decision.counter(concede(own, playerPrice, state.personality()), "conceding_toward_demand");
         }
-
-        // In-band: min <= playerPrice < target, roundsRemaining >= 1.
-        double drawn = roll.nextDouble();
-        double threshold = ACCEPT_THRESHOLD.get(state.personality());
-        if (drawn < threshold || roundsRemaining == 1) {
-            return Decision.accept("in_band_roll_or_last_round");
-        }
-        double ideal = playerPrice * (1 + COUNTER_UP_PCT.get(state.personality()));
-        return Decision.counter(clamp(ideal, min, target), "in_band_holding_out");
+        // 4. Beyond our budget: creep toward the ceiling and hope the player comes down.
+        return Decision.counter(concede(own, ceiling, state.personality()), "conceding_toward_ceiling");
     }
 
-    /** Clamped to {@code [min, target*1.3]} and rounded to whole euros at the source
-     * (task 19 STEP 1 — same bug class/fix as the opening offer; a counter must never
-     * carry cents either). */
-    private static double clamp(double ideal, double min, double target) {
-        double upper = target * COUNTER_CLAMP_UPPER_MULTIPLIER;
-        return Math.round(Math.min(Math.max(ideal, min), upper));
+    /**
+     * Buyer concession: move UP from the vessel's standing offer toward {@code toward} by the
+     * personality's concession rate — at least €1 (guaranteed visible progress), whole euros
+     * (task 19 STEP 1: the player never sees cents), never past {@code toward} (a buyer
+     * approaches the demand/ceiling from below; it does not overshoot).
+     *
+     * <p>The cap is {@code floor(toward)}, not {@code toward}: when the step would overshoot, a
+     * bare {@code min(toward, …)} would return {@code toward} verbatim, which is fractional both
+     * when the player types cents (branch 3, {@code toward = playerPrice}) and always in branch 4
+     * ({@code toward = targetPrice}, an unrounded uniform sample — flooring it also keeps the hidden
+     * ceiling off the wire). Flooring keeps the result whole and still {@code <= toward} (adversarial
+     * review M1, 2026-07-17).
+     */
+    private static double concede(double own, double toward, Personality personality) {
+        double step = Math.max(1.0, Math.round(personality.concessionRate() * (toward - own)));
+        return Math.min(Math.floor(toward), own + step);
     }
 }

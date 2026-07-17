@@ -194,12 +194,14 @@ class WalkInVesselAgentIT {
     }
 
     /**
-     * Task 15: the REAL engine withdraws when the player never comes above the vessel's
-     * minimum -- this is the known-dead branch task 07 left unreachable (over_priced ->
-     * WITHDRAW_PRICE), now proven live end-to-end.
+     * Task 19 (buyer-semantics rewrite): the REAL engine withdraws when the player's demanded
+     * fee stays ABOVE the vessel's budget ({@code targetPrice}, its hard ceiling) through every
+     * round — over_priced -> WITHDRAW_PRICE, meaning what it says: the player priced the vessel
+     * out. (The pre-rewrite version of this test drove the withdrawal with a LOWBALL demand,
+     * which under coherent buyer mechanics is an instant bargain-accept instead.)
      */
     @Test
-    void walkInWithRealEngine_withdrawsOverPricedWhenPlayerStaysBelowMinimum() throws Exception {
+    void walkInWithRealEngine_withdrawsOverPricedWhenPlayerDemandsAboveItsBudget() throws Exception {
         boot = new JadeBootstrap();
         boot.start(new BootstrapConfig(TEST_PORT, false, "realtime", 300));
 
@@ -215,14 +217,14 @@ class WalkInVesselAgentIT {
         Personality personality = template.samplePersonality(r);
         double min = template.sampleMinAcceptablePrice(r);
         double target = template.sampleTargetPrice(r);
-        double belowMinimumCounter = min * 0.5;
+        double aboveBudgetDemand = target * 3.0; // far beyond the ceiling on every round
 
         NegotiationEngine engine = new RealNegotiationEngine(
                 Settings.load().roundLimit(), boot.getRandomSource().forStream("nego-" + vesselId));
 
         BlockingQueue<ACLMessage> hmInbox = new LinkedBlockingQueue<>();
         boot.getSpawner().spawn("fake_hm_withdraw", CounterOfferHarbourMaster.class,
-                new Object[] {hmInbox, belowMinimumCounter, 10, berthId});
+                new Object[] {hmInbox, aboveBudgetDemand, 10, berthId});
 
         AgentRoster.spawnWalkIn(boot.getSpawner(), spec, boot.getSimClock(),
                 boot.getMarketHistoryArtifact(), boot.getRandomSource(), engine);

@@ -81,6 +81,11 @@ public final class WalkInVesselAgent extends BaseVesselAgent {
         return s == null ? 0 : s.maxWaitMinutes();
     }
 
+    // TODO(2026-07-17, adversarial review L4): MAX_ROUNDS is hardcoded 4 while
+    // RealNegotiationEngine derives roundsRemaining from Settings.roundLimit() (valid 2..8).
+    // These disagree if roundLimit != 4. No correctness impact today — this accessor feeds only
+    // display/urgency, never control flow — but source the limit from Settings when task 20/21
+    // wire a live Settings control.
     int roundsRemaining() {
         WalkInState s = stateRef.get();
         return s == null ? MAX_ROUNDS : Math.max(0, MAX_ROUNDS + 1 - s.round());
