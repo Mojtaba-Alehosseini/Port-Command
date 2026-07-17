@@ -74,14 +74,30 @@ class LedgerCoordinatorTest {
 
     @Test
     void eachWithdrawalOutcomeAppliesItsCanonicalPenalty() {
-        bus.publish(new WithdrawalEvent("V1", Deal.Outcome.WITHDRAW_PRICE, 1_000L));
+        bus.publish(new WithdrawalEvent("V1", Deal.Outcome.WITHDRAW_PRICE, true, 1_000L));
         assertEquals(48.0, reputation.score(), EPS);
 
-        bus.publish(new WithdrawalEvent("V2", Deal.Outcome.TIMEOUT, 1_000L));
+        bus.publish(new WithdrawalEvent("V2", Deal.Outcome.TIMEOUT, true, 1_000L)); // engaged -> −3
         assertEquals(45.0, reputation.score(), EPS);
 
-        bus.publish(new WithdrawalEvent("V3", Deal.Outcome.PLAYER_REFUSED, 1_000L));
+        bus.publish(new WithdrawalEvent("V3", Deal.Outcome.PLAYER_REFUSED, false, 1_000L));
         assertEquals(45.0, reputation.score(), EPS, "refusing a bad deal is a legitimate move");
+    }
+
+    /**
+     * Task 24 (Moji's balance call): the TIMEOUT penalty splits by engagement — a walk-in the
+     * player never even countered is the gentler −1; one they negotiated then abandoned is the
+     * full −3. Only TIMEOUT reads the bit; the ledger reason string names the split.
+     */
+    @Test
+    void aNeverEngagedTimeoutIsTheGentlerPenalty() {
+        bus.publish(new WithdrawalEvent("V1", Deal.Outcome.TIMEOUT, false, 1_000L));
+        assertEquals(49.0, reputation.score(), EPS, "never-engaged timeout costs −1, not −3");
+        assertEquals("timeout_unengaged", reputation.history().get(0).reason());
+
+        bus.publish(new WithdrawalEvent("V2", Deal.Outcome.TIMEOUT, true, 1_000L));
+        assertEquals(46.0, reputation.score(), EPS, "engaged-then-abandoned timeout costs −3");
+        assertEquals("timeout", reputation.history().get(1).reason());
     }
 
     /**
@@ -94,7 +110,7 @@ class LedgerCoordinatorTest {
     void aWithdrawalPenaltyIsStampedWithItsRealSimTime() {
         long day3 = 2 * 86_400_000L + 5_000L;
 
-        bus.publish(new WithdrawalEvent("V1", Deal.Outcome.WITHDRAW_PRICE, day3));
+        bus.publish(new WithdrawalEvent("V1", Deal.Outcome.WITHDRAW_PRICE, true, day3));
 
         assertEquals(day3, reputation.history().get(0).simTime(), "not 0L");
         assertEquals(3, it.unige.portcommand.util.SimClock.gameDayOf(
@@ -103,7 +119,7 @@ class LedgerCoordinatorTest {
 
     @Test
     void aWithdrawalMovesNoMoney() {
-        bus.publish(new WithdrawalEvent("V1", Deal.Outcome.WITHDRAW_PRICE, 1_000L));
+        bus.publish(new WithdrawalEvent("V1", Deal.Outcome.WITHDRAW_PRICE, true, 1_000L));
 
         assertEquals(10_000.0, wallet.balance(), EPS);
         assertEquals(List.of(), wallet.incomeHistory());
@@ -201,8 +217,8 @@ class LedgerCoordinatorTest {
         bus.publish(new DealClosedEvent(deal("V1", 2_200.0)));
         bus.publish(new ContractedFeeEarnedEvent("CONTRACT-1", "C001", "berth_1", 5_200.0, 8, 0L));
         bus.publish(new ContractedFeeEarnedEvent("CONTRACT-1", "C001", "berth_1", 5_200.0, 8, 0L));
-        bus.publish(new WithdrawalEvent("V2", Deal.Outcome.TIMEOUT, 1_000L));
-        bus.publish(new WithdrawalEvent("V2", Deal.Outcome.TIMEOUT, 1_000L));
+        bus.publish(new WithdrawalEvent("V2", Deal.Outcome.TIMEOUT, true, 1_000L));
+        bus.publish(new WithdrawalEvent("V2", Deal.Outcome.TIMEOUT, true, 1_000L));
 
         assertEquals(10_000.0 + 2_200.0 + 5_200.0, wallet.balance(), EPS);
         assertEquals(2, wallet.incomeHistory().size());

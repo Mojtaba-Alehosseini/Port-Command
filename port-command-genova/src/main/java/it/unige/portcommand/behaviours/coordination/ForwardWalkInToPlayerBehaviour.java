@@ -211,7 +211,11 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         try {
             String vesselId = tracking != null ? tracking.vesselId() : msg.getSender().getLocalName();
             Deal.Outcome outcome = WithdrawalBehaviour.outcomeFor(reason);
-            hm.eventBus().publish(new WithdrawalEvent(vesselId, outcome, hm.simClock().nowSimMillis()));
+            // Task 24: the vessel-computed engagement bit (absent on a legacy/malformed message
+            // reads as false — a never-engaged timeout, the gentler penalty; a genuine engaged
+            // withdrawal always carries it). Only TIMEOUT's delta depends on it.
+            boolean engaged = content.path("engaged").asBoolean(false);
+            hm.eventBus().publish(new WithdrawalEvent(vesselId, outcome, engaged, hm.simClock().nowSimMillis()));
             hm.eventBus().publish(new NegotiationClosedEvent(dialogueId, vesselId, outcome));
         } catch (IllegalArgumentException e) {
             log.warn("withdraw from {} carried an unrecognised reason '{}' -- GUI tab left as-is", msg.getSender().getLocalName(), reason);

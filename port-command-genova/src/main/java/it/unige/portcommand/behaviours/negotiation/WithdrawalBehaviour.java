@@ -46,12 +46,19 @@ public final class WithdrawalBehaviour extends OneShotBehaviour {
     public void action() {
         BaseVesselAgent vessel = (BaseVesselAgent) myAgent;
         WalkInState state = stateRef.get();
+        // Task 24 (checkpoint #5, Moji's balance call): did the player ever counter in this
+        // dialogue? round() starts at 1 and increments only in WalkInState.recordPlayerCounter
+        // (called synchronously when a player counter is processed, before any vessel response),
+        // so round() > 1 is a race-free "player engaged" signal. It rides the withdraw INFORM so
+        // the HM can split the TIMEOUT reputation penalty (−1 never-engaged vs −3 abandoned).
+        boolean playerEngaged = state != null && state.round() > 1;
         Optional<AID> hm = vessel.serviceLocator().findUnique("harbour-master");
         if (hm.isPresent()) {
             ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);
             inform.addReceiver(hm.get());
             inform.setConversationId(conversationId);
-            inform.setContent(TerminalJson.write(Map.of("intent", "withdraw", "reason", reason)));
+            inform.setContent(TerminalJson.write(Map.of(
+                    "intent", "withdraw", "reason", reason, "engaged", playerEngaged)));
             myAgent.send(inform);
         }
         double lastPrice = state == null ? 0.0 : state.lastOwnOffer();

@@ -122,15 +122,23 @@ public final class LedgerCoordinator {
                 deal.vesselId(), deal.closedAtSimMillis());
     }
 
-    /** A walk-in left without a deal: no money, and the reputation cost of the outcome. */
+    /**
+     * A walk-in left without a deal: no money, and the reputation cost of the outcome. Task 24
+     * (Moji's balance call) splits the TIMEOUT penalty by engagement — a never-engaged timeout
+     * (the player never even countered) is the gentler −1, an abandoned one −3; every other
+     * outcome ignores the bit. The ledger reason string names the split so the audit history and
+     * the EOD breakdown stay legible.
+     */
     public void onWithdrawal(WithdrawalEvent event) {
         if (!penalisedWithdrawals.add(event.vesselId())) {
             log.warn("duplicate WithdrawalEvent for {} — already penalised, ignoring", event.vesselId());
             return;
         }
-        reputation.adjust(ReputationRules.deltaFor(event.outcome()),
-                event.outcome().name().toLowerCase(java.util.Locale.ROOT), event.vesselId(),
-                event.simTimeMillis());
+        double delta = ReputationRules.withdrawalDelta(event.outcome(), event.playerEngaged());
+        String reason = event.outcome() == Deal.Outcome.TIMEOUT && !event.playerEngaged()
+                ? "timeout_unengaged"
+                : event.outcome().name().toLowerCase(java.util.Locale.ROOT);
+        reputation.adjust(delta, reason, event.vesselId(), event.simTimeMillis());
     }
 
     /**

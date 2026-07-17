@@ -51,7 +51,8 @@ public final class ReputationRules {
             Deal.Outcome.PLAYER_REFUSED, "player_refused");
 
     private static final Map<Deal.Outcome, Double> DELTAS = readFromClasspath();
-    private static final double DAILY_TARGET_BONUS = readDailyTargetBonus();
+    private static final double DAILY_TARGET_BONUS = readReputationScalar("daily_target");
+    private static final double TIMEOUT_UNENGAGED_DELTA = readReputationScalar("timeout_unengaged");
 
     private ReputationRules() {
     }
@@ -66,6 +67,31 @@ public final class ReputationRules {
      */
     public static double dailyTargetBonus() {
         return DAILY_TARGET_BONUS;
+    }
+
+    /**
+     * The reputation delta for a walk-in that left without a deal, split by ENGAGEMENT for the
+     * {@code TIMEOUT} outcome only (task 24, visual checkpoint #5 — Moji's balance call). A
+     * walk-in the player never even countered (a never-engaged timeout) costs the gentler
+     * {@link #timeoutUnengagedDelta()} (−1); one the player negotiated and then abandoned costs
+     * the full {@code deltaFor(TIMEOUT)} (−3). Every other outcome ignores {@code playerEngaged}
+     * and returns its canonical table value: {@code WITHDRAW_PRICE}/{@code WITHDRAW_DURATION}
+     * necessarily engaged (the engine only ever evaluates a player counter), {@code PLAYER_REFUSED}
+     * is 0 either way. This is the ONLY reputation path that reads engagement — the €5,200/day
+     * pressure was making an untouched day bleed ~−24 reputation, so a passive walk-in the player
+     * had no chance to reach is now a lighter touch than one they engaged and dropped.
+     */
+    public static double withdrawalDelta(Deal.Outcome outcome, boolean playerEngaged) {
+        if (outcome == Deal.Outcome.TIMEOUT && !playerEngaged) {
+            return TIMEOUT_UNENGAGED_DELTA;
+        }
+        return deltaFor(outcome);
+    }
+
+    /** The never-engaged timeout penalty (−1), a {@code reputation}-block scalar like the bonus,
+     * NOT a {@link Deal.Outcome} row (there is one TIMEOUT outcome; engagement is a modifier). */
+    public static double timeoutUnengagedDelta() {
+        return TIMEOUT_UNENGAGED_DELTA;
     }
 
     /**
@@ -100,16 +126,18 @@ public final class ReputationRules {
         return Collections.unmodifiableMap(table);
     }
 
-    private static double readDailyTargetBonus() {
+    /** Reads one numeric scalar from the {@code reputation} block (the non-{@link Deal.Outcome}
+     * keys task 24 added: {@code daily_target}, {@code timeout_unengaged}). */
+    private static double readReputationScalar(String key) {
         try (InputStream in = ReputationRules.class.getResourceAsStream("/data/defaults.json")) {
             if (in == null) {
                 throw new IllegalStateException("defaults.json not found on classpath (/data/)");
             }
             JsonNode block = new ObjectMapper().readTree(in).get("reputation");
-            JsonNode value = block == null ? null : block.get("daily_target");
+            JsonNode value = block == null ? null : block.get(key);
             if (value == null || !value.isNumber()) {
                 throw new IllegalStateException(
-                        "defaults.json reputation block is missing a numeric \"daily_target\" (task 24)");
+                        "defaults.json reputation block is missing a numeric \"" + key + "\" (task 24)");
             }
             return value.doubleValue();
         } catch (IOException e) {

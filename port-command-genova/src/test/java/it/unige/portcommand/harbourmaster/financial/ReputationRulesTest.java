@@ -39,6 +39,36 @@ class ReputationRulesTest {
     }
 
     /**
+     * Task 24 (checkpoint #5, Moji's balance call): {@code withdrawalDelta} splits ONLY TIMEOUT
+     * by engagement — a never-engaged timeout is the gentler −1, everything else is its canonical
+     * table value regardless of the bit.
+     */
+    @ParameterizedTest(name = "{0} engaged={1} -> {2}")
+    @CsvSource({
+        // TIMEOUT is the only outcome the engagement bit moves.
+        "TIMEOUT,           true,  -3.0",
+        "TIMEOUT,           false, -1.0",
+        // Everything else ignores it (both columns land on the table value).
+        "WITHDRAW_PRICE,    true,  -2.0",
+        "WITHDRAW_PRICE,    false, -2.0",
+        "WITHDRAW_DURATION, false, -2.0",
+        "PLAYER_REFUSED,    false,  0.0",
+        "PLAYER_REFUSED,    true,   0.0"
+    })
+    void withdrawalDeltaSplitsOnlyTimeoutByEngagement(Deal.Outcome outcome, boolean engaged, double expected) {
+        assertEquals(expected, ReputationRules.withdrawalDelta(outcome, engaged), EPS);
+    }
+
+    @Test
+    void theUnengagedTimeoutScalarIsMinusOneAndGentlerThanTheEngagedRow() {
+        assertEquals(-1.0, ReputationRules.timeoutUnengagedDelta(), EPS);
+        assertEquals(-1.0, ReputationRules.withdrawalDelta(Deal.Outcome.TIMEOUT, false), EPS);
+        org.junit.jupiter.api.Assertions.assertTrue(
+                ReputationRules.timeoutUnengagedDelta() > ReputationRules.deltaFor(Deal.Outcome.TIMEOUT),
+                "an ignored walk-in must cost LESS than one engaged and abandoned");
+    }
+
+    /**
      * The reconciliation that pinned this table, re-derived. {@code docs/DEMO_SCRIPT_DRAFT.md}
      * shows Day 1 as "50 (start) → 51 (end, +1 net)" over 4 served + 1 over-priced withdrawal.
      * That only closes at +1 if the three WALK-IN deals earn +1 each and the CONTRACTED vessel
