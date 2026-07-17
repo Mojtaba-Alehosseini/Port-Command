@@ -24,7 +24,12 @@ public final class SimClock {
     private static final long MILLIS_PER_MINUTE = 60_000L;
     private static final long SECONDS_PER_DAY = 86_400L;
 
-    private final long realSecondsPerGameDay;
+    /**
+     * Volatile, not final, since task 22: {@link #restore} may adopt a save file's rate
+     * (the sim↔wall mapping is sim state — a save made at 300&nbsp;s/day must not speed up
+     * to a --day-length 75 relaunch). Written only at construction and in {@code restore}.
+     */
+    private volatile long realSecondsPerGameDay;
     private final AtomicLong simMillisSinceStart = new AtomicLong(0);
     private final AtomicLong lastObservedDay = new AtomicLong(1);
     private volatile boolean paused;
@@ -84,6 +89,27 @@ public final class SimClock {
         simMillisSinceStart.set(0);
         lastObservedDay.set(1);
         paused = false;
+    }
+
+    /**
+     * Adopts a persisted clock state (task 22 load). Sets sim time and the mapping rate, and
+     * — load-bearing — seeds {@code lastObservedDay} to the restored instant's own day so
+     * {@link #isMidnightCrossed()} does not fire a phantom crossing for days that settled
+     * before the save. Leaves the clock paused; the load orchestrator resumes it once the
+     * rebuilt world is ready.
+     */
+    public void restore(long simMillis, long realSecondsPerGameDay) {
+        if (simMillis < 0) {
+            throw new IllegalArgumentException("simMillis must be >= 0, got " + simMillis);
+        }
+        if (realSecondsPerGameDay <= 0) {
+            throw new IllegalArgumentException(
+                    "realSecondsPerGameDay must be > 0, got " + realSecondsPerGameDay);
+        }
+        paused = true;
+        this.realSecondsPerGameDay = realSecondsPerGameDay;
+        simMillisSinceStart.set(simMillis);
+        lastObservedDay.set(gameDayOf(simMillis));
     }
 
     public long nowSimMillis() {

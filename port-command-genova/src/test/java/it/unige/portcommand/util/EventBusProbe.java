@@ -18,4 +18,9 @@ public final class EventBusProbe {
     public static List<Event> published(EventBus bus) {
         return bus.publishedEvents();
     }
+
+    /** Live subscriber count for one event type — task 22's stale-subscriber trap assertions. */
+    public static int subscriberCount(EventBus bus, Class<? extends Event> type) {
+        return bus.subscriberCount(type);
+    }
 }

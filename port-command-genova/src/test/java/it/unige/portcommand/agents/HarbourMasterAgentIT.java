@@ -556,21 +556,26 @@ class HarbourMasterAgentIT {
         assertEquals("nego-P001", propose.getConversationId());
         assertEquals(4800.0, content(propose).get("price").asDouble());
 
+        // Each poll filters for the EXPECTED performative (task-22 session deflake): the staged
+        // grant also fires a zero-tug Contract Net whose asynchronous tug_hold INFORM can land
+        // between any two dispatches under load — an `m -> true` poll would swallow it as the
+        // reply and fail on the performative. Filtering makes each step assert "the dispatch
+        // produced this message", which is what the test means; the stray INFORM stays queued.
         dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.ACCEPT, "P001", Map.of()));
-        assertEquals(ACLMessage.ACCEPT_PROPOSAL,
-                pollUntil(vessel.inbox, m -> true, 5000).getPerformative());
+        assertNotNull(pollUntil(vessel.inbox,
+                m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 5000));
 
         dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.REJECT, "P001", Map.of()));
-        assertEquals(ACLMessage.REJECT_PROPOSAL,
-                pollUntil(vessel.inbox, m -> true, 5000).getPerformative());
+        assertNotNull(pollUntil(vessel.inbox,
+                m -> m.getPerformative() == ACLMessage.REJECT_PROPOSAL, 5000));
 
         dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.ASK, "P001", Map.of()));
-        assertEquals(ACLMessage.QUERY_REF,
-                pollUntil(vessel.inbox, m -> true, 5000).getPerformative());
+        assertNotNull(pollUntil(vessel.inbox,
+                m -> m.getPerformative() == ACLMessage.QUERY_REF, 5000));
 
         dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.WITHDRAW, "P001", Map.of()));
-        assertEquals(ACLMessage.CANCEL,
-                pollUntil(vessel.inbox, m -> true, 5000).getPerformative());
+        assertNotNull(pollUntil(vessel.inbox,
+                m -> m.getPerformative() == ACLMessage.CANCEL, 5000));
     }
 
     /**

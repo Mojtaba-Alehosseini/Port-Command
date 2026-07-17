@@ -90,6 +90,17 @@ public final class GameOverGuard {
                         DeliveryMode.CALLER_THREAD));
     }
 
+    /**
+     * Seeds the bankruptcy streak and day counter from a save file (task 22 load): a run
+     * saved two deep-debt days into the three-day streak must not get a fresh streak for
+     * free on reload. Called once, right after construction, before any event flows.
+     */
+    public void restoreProgress(int currentDay, int consecutiveDeepDebtDays, int lastDeepDebtDay) {
+        this.lastKnownDay = currentDay;
+        this.consecutiveDeepDebtDays = consecutiveDeepDebtDays;
+        this.lastDeepDebtDay = lastDeepDebtDay;
+    }
+
     /** Public so tests drive the handlers directly (task-10 precedent). */
     public void onEndOfDayCompleted(EndOfDayCompletedEvent event) {
         EndOfDaySummary summary = event.summary();
@@ -143,6 +154,16 @@ public final class GameOverGuard {
         log.info("GAME OVER ({}): wallet={} day={} reputation={} highScore={}",
                 reason, finalWallet, finalDay, finalReputation, highScore);
         eventBus.publish(new GameOverEvent(reason, finalWallet, finalDay, finalReputation));
+    }
+
+    /** The live streak length — read by task 22's snapshot (on the HM thread, like the writes). */
+    public int consecutiveDeepDebtDays() {
+        return consecutiveDeepDebtDays;
+    }
+
+    /** The last deep-debt day number — read by task 22's snapshot alongside the streak. */
+    public int lastDeepDebtDay() {
+        return lastDeepDebtDay;
     }
 
     /** Test seam + symmetry with the other bus subscribers. */

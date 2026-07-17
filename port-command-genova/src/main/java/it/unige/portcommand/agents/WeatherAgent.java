@@ -21,9 +21,11 @@ import it.unige.portcommand.util.SimClock;
  * added by task 24 for the {@code WeatherChangeEvent}/{@code NotificationEvent} GUI
  * publishes).
  */
-public final class WeatherAgent extends PortCommandAgent {
+public final class WeatherAgent extends PortCommandAgent
+        implements it.unige.portcommand.persistence.Mementoable {
 
     private final AtomicReference<WeatherSnapshot> current = new AtomicReference<>();
+    private DebugWeatherOverrideBehaviour debugOverride;
 
     @Override
     protected void registerServices() {
@@ -51,7 +53,41 @@ public final class WeatherAgent extends PortCommandAgent {
         addBehaviour(new PeriodicWeatherBroadcastBehaviour(this, simClock, current, getServiceLocator(),
                 eventBus));
         // Task 24: Debug-menu storm trigger (checkpoint demos) — uncounted parent-pkg behaviour.
-        addBehaviour(new DebugWeatherOverrideBehaviour(this, current, simClock, eventBus));
+        debugOverride = new DebugWeatherOverrideBehaviour(this, current, simClock, eventBus);
+        addBehaviour(debugOverride);
+
+        // Task 22 restore: a persisted current snapshot (appended by the restore-aware roster)
+        // replaces the init-args starting weather — evolution continues from it with fresh
+        // seeded draws (the Markov stream has no persistable cursor; dated note, planning/22).
+        WeatherSnapshot restored = optionalArgOfType(WeatherSnapshot.class);
+        if (restored != null) {
+            current.set(restored);
+            log.info("{}: restored weather {} kn / {} / {}", getLocalName(),
+                    restored.wind(), restored.visibility(), restored.state());
+        }
+    }
+
+    /** Unsubscribes the debug-override plan (task 22) — same rationale as the other takedowns. */
+    @Override
+    protected void onTakeDown() {
+        if (debugOverride != null) {
+            debugOverride.cancelSubscription();
+        }
+    }
+
+    public it.unige.portcommand.persistence.dto.WeatherStateDTO snapshotDto() {
+        return new it.unige.portcommand.persistence.dto.WeatherStateDTO(current.get());
+    }
+
+    @Override
+    public com.fasterxml.jackson.databind.JsonNode snapshot() {
+        return persistenceMapper().valueToTree(snapshotDto());
+    }
+
+    @Override
+    public void restore(com.fasterxml.jackson.databind.JsonNode node) {
+        current.set(persistenceMapper()
+                .convertValue(node, it.unige.portcommand.persistence.dto.WeatherStateDTO.class).current());
     }
 
     private <T> T argAt(int index, Class<T> type) {

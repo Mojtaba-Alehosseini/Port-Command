@@ -16,6 +16,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.nlp.ConfidenceGate;
 import it.unige.portcommand.nlp.DcgTokenizer;
@@ -72,6 +73,7 @@ public final class JadeBootstrap {
     private volatile PortStateArtifact portStateArtifact;
     private volatile RandomSource randomSource;
     private volatile MarketHistoryArtifact marketHistory;
+    private volatile PolicyRegistryArtifact policyRegistry;
     private volatile JadeAgentSpawner spawner;
     private volatile List<AID> bootDfSelfCheck = List.of();
     private volatile RasaBridge rasaBridge;
@@ -113,14 +115,34 @@ public final class JadeBootstrap {
             }
             jadeBootedInThisJvm = true; // registry now persists in this JVM; skip the probe on restart
 
-            simClock = new SimClock(cfg.realSecondsPerGameDay());
-            portStateArtifact = new PortStateArtifact();
-            randomSource = new RandomSource(DEFAULT_RANDOM_SEED);
-            marketHistory = new MarketHistoryArtifact();
+            // Task 22: the shared services are CREATE-IF-ABSENT so a save/load restart cycle
+            // (shutdown() then start()) keeps the SAME instances — the GUI holds references to
+            // the bus/clock/artifacts from the first boot, and the loader restores their state
+            // in place. Only the container-bound spawner is rebuilt each start.
+            if (simClock == null) {
+                simClock = new SimClock(cfg.realSecondsPerGameDay());
+            }
+            if (portStateArtifact == null) {
+                portStateArtifact = new PortStateArtifact();
+            }
+            if (randomSource == null) {
+                randomSource = new RandomSource(DEFAULT_RANDOM_SEED);
+            }
+            if (marketHistory == null) {
+                marketHistory = new MarketHistoryArtifact();
+            }
+            if (policyRegistry == null) {
+                // Promoted from AgentRoster's per-boot construction (task 22): the save file
+                // persists the registry's triggers, so the instance must survive the reload
+                // (the loader clears + re-parses into it on a cross-JVM load).
+                policyRegistry = new PolicyRegistryArtifact();
+            }
             // Single shared bus for every agent + the (future, task 17) GUI — one instance so a
             // publish from one agent is visible to a subscriber on another (task 10 needs this
             // for the Assistant; the real dispatcher arrives in task 17, this is still the stub).
-            eventBus = new EventBus();
+            if (eventBus == null) {
+                eventBus = new EventBus();
+            }
             spawner = new JadeAgentSpawner(mainContainer);
 
             CountDownLatch ready = new CountDownLatch(1);
@@ -132,11 +154,14 @@ public final class JadeBootstrap {
 
             // One shared HttpClient for both NLP bridges (thread-safe; planning/14's own
             // note). Single Rasa pipeline on port 5005 — there is no second instance.
-            HttpClient sharedHttpClient = RasaBridge.newClientBuilder().build();
-            ObjectMapper sharedJson = new ObjectMapper();
-            rasaBridge = new RasaBridge(RasaBridge.resolveParseUri(), sharedHttpClient, sharedJson);
-            llmBridge = new LLMBridge(LLMBridge.resolveExplainUri(), LLMBridge.resolveHealthUri(),
-                    sharedHttpClient, sharedJson);
+            // Create-if-absent since task 22 (restart cycle keeps the GUI's captured refs).
+            if (rasaBridge == null) {
+                HttpClient sharedHttpClient = RasaBridge.newClientBuilder().build();
+                ObjectMapper sharedJson = new ObjectMapper();
+                rasaBridge = new RasaBridge(RasaBridge.resolveParseUri(), sharedHttpClient, sharedJson);
+                llmBridge = new LLMBridge(LLMBridge.resolveExplainUri(), LLMBridge.resolveHealthUri(),
+                        sharedHttpClient, sharedJson);
+            }
 
             // Prolog kernel up before any agent makes a binding decision. Independent
             // of JADE (pure JPL); idempotent, so a restart cycle re-enters as a no-op.
@@ -151,20 +176,25 @@ public final class JadeBootstrap {
             // The GUI's ChatPanel (task 19) is the intended consumer.
             // java.lang.Runtime spelled out: the bare name `Runtime` in this file is
             // jade.core.Runtime (imported for the container lifecycle).
-            nlpExecutor = Executors.newFixedThreadPool(
-                    java.lang.Runtime.getRuntime().availableProcessors(),
-                    r -> {
-                        Thread t = new Thread(r, "nlp-pipeline");
-                        t.setDaemon(true); // must never hold the JVM up at shutdown
-                        return t;
-                    });
-            nlpPipeline = new NLPPipeline(
-                    new PreprocessRegex(),
-                    rasaBridge,
-                    new ConfidenceGate(),
-                    new PrologDcgParser(PrologEngine.getInstance(), new DcgTokenizer()),
-                    new OntologyValidator(),
-                    nlpExecutor);
+            // Create-if-absent since task 22: MainWindow captured a method reference to THIS
+            // pipeline at first boot; recreating it on a load-restart would leave chat wired
+            // to a dead executor.
+            if (nlpPipeline == null) {
+                nlpExecutor = Executors.newFixedThreadPool(
+                        java.lang.Runtime.getRuntime().availableProcessors(),
+                        r -> {
+                            Thread t = new Thread(r, "nlp-pipeline");
+                            t.setDaemon(true); // must never hold the JVM up at shutdown
+                            return t;
+                        });
+                nlpPipeline = new NLPPipeline(
+                        new PreprocessRegex(),
+                        rasaBridge,
+                        new ConfidenceGate(),
+                        new PrologDcgParser(PrologEngine.getInstance(), new DcgTokenizer()),
+                        new OntologyValidator(),
+                        nlpExecutor);
+            }
 
             started = true;
             log.info("JADE Main Container up on port {}", cfg.mainPort());
@@ -225,11 +255,10 @@ public final class JadeBootstrap {
             } catch (StaleProxyException e) {
                 log.warn("main container kill raised", e);
             }
-            if (nlpExecutor != null) {
-                nlpExecutor.shutdownNow();
-                nlpExecutor = null;
-                nlpPipeline = null;
-            }
+            // Task 22: the NLP executor is NOT shut down here any more — shutdown() is also the
+            // save/load restart teardown, and the pipeline (with MainWindow's captured method
+            // reference into it) must survive the cycle. Its threads are daemons; JVM exit
+            // reaps them.
             Runtime.instance().shutDown();
             started = false;
             log.info("JADE Main Container down");
@@ -260,6 +289,11 @@ public final class JadeBootstrap {
     /** Shared market-history store (deal outcomes); {@code null} before start. */
     public MarketHistoryArtifact getMarketHistoryArtifact() {
         return marketHistory;
+    }
+
+    /** Session-stable autopilot policy registry (task 22 promotion); {@code null} before start. */
+    public PolicyRegistryArtifact getPolicyRegistryArtifact() {
+        return policyRegistry;
     }
 
     /** Single shared publish/subscribe bus for every agent + the GUI; {@code null} before start. */

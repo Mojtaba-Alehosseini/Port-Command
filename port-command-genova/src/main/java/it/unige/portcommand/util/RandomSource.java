@@ -24,6 +24,25 @@ public final class RandomSource {
         random.setSeed(seed);
     }
 
+    /** The live master seed — what {@link #forStream} derives from. Captured by task 22's save. */
+    public long currentSeed() {
+        return seed;
+    }
+
+    /**
+     * The seed a save taken at {@code simMillis} stores (task 22; task-09's deferred
+     * "save-seed support"). A <b>pure read</b> — no draw, so taking a save never shifts any
+     * live stream — yet it evolves with the save instant: a game loaded from it derives
+     * fresh {@link #forStream} sequences instead of replaying the from-boot ones (the
+     * streams cannot literally continue mid-sequence — {@link Random} exposes no cursor —
+     * so "continue deterministically" means: a deterministic function of the save file,
+     * identical across repeated loads). Same state + same instant → same seed, which is
+     * what keeps the round-trip byte-diff test exact.
+     */
+    public long saveSeedAt(long simMillis) {
+        return seed ^ stableHash("save@" + simMillis);
+    }
+
     /**
      * A deterministic, independent child RNG for a named sub-stream — seeded from
      * the master seed XORed with a stable 64-bit hash of {@code name}. Adding or

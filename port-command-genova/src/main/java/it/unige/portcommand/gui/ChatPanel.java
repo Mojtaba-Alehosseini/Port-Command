@@ -76,6 +76,20 @@ public final class ChatPanel extends JPanel {
         // "~Ns remaining" hint counts down for real (~5 Hz wall at the default day length —
         // strip-label-only refresh, never the full transcript re-render).
         this.clockSubscription = eventBus.subscribe(SimClockTickEvent.class, this::onClockTick, DeliveryMode.EDT);
+        // Task 22: a loaded game never carries an open negotiation (saves drop/refuse them),
+        // so the pre-load world's tabs are stale — clean slate on the loaded-marker event.
+        eventBus.subscribe(it.unige.portcommand.persistence.events.GameLoadedEvent.class,
+                this::onGameLoaded, DeliveryMode.EDT);
+    }
+
+    private void onGameLoaded(it.unige.portcommand.persistence.events.GameLoadedEvent event) {
+        registry.reset();
+        views.clear();
+        tabbedPane.removeAll();
+        removeAll();
+        add(new JLabel("Waiting for a walk-in…", SwingConstants.CENTER), BorderLayout.CENTER);
+        revalidate();
+        repaint();
     }
 
     private void onClockTick(SimClockTickEvent event) {

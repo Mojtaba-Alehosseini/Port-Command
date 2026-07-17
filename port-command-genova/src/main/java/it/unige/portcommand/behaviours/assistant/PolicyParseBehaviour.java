@@ -6,6 +6,7 @@ import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.PolicyParsedEvent;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
 import jade.core.Agent;
 import jade.core.behaviours.OneShotBehaviour;
 import org.slf4j.Logger;
@@ -29,10 +30,23 @@ public final class PolicyParseBehaviour extends OneShotBehaviour {
         this.eventBus = eventBus;
     }
 
+    /** Held so AssistantAgent cancels on takedown (task 22): the bus outlives the agent,
+     * and a respawn would otherwise leave this handler subscribed alongside the new one,
+     * double-firing every reaction. */
+    private volatile Subscription<PolicyParsedEvent> subscription;
+
     @Override
     public void action() {
-        eventBus.subscribe(PolicyParsedEvent.class, this::onPolicyParsed, DeliveryMode.ASYNC);
+        subscription = eventBus.subscribe(PolicyParsedEvent.class, this::onPolicyParsed, DeliveryMode.ASYNC);
         log.debug("subscribed to PolicyParsedEvent");
+    }
+
+    /** Cancels the bus subscription; safe if {@link #action()} never ran. */
+    public void cancelSubscription() {
+        Subscription<PolicyParsedEvent> s = subscription;
+        if (s != null) {
+            s.cancel();
+        }
     }
 
     public void onPolicyParsed(PolicyParsedEvent event) {

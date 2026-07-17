@@ -68,17 +68,36 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
 
     public PoissonSpawnBehaviour(Agent agent, SimClock simClock, RandomSource randomSource,
                                  JadeAgentSpawner spawner, MarketHistoryArtifact marketHistory) {
-        this(agent, simClock, randomSource, spawner, marketHistory, randomSource.forStream("poisson-spawn"));
+        this(agent, simClock, randomSource, spawner, marketHistory, 0);
+    }
+
+    /**
+     * Task 22 restore: continue the walk-in id sequence from a save's persisted count, so
+     * post-load spawns get fresh {@code WALKIN-<n>} ids (and fresh per-vessel RNG stream
+     * names) instead of colliding with restored vessels.
+     */
+    public PoissonSpawnBehaviour(Agent agent, SimClock simClock, RandomSource randomSource,
+                                 JadeAgentSpawner spawner, MarketHistoryArtifact marketHistory,
+                                 int startingSpawnCount) {
+        this(agent, simClock, randomSource, spawner, marketHistory,
+                randomSource.forStream("poisson-spawn"), startingSpawnCount);
     }
 
     private PoissonSpawnBehaviour(Agent agent, SimClock simClock, RandomSource randomSource,
-                                  JadeAgentSpawner spawner, MarketHistoryArtifact marketHistory, Random draw) {
+                                  JadeAgentSpawner spawner, MarketHistoryArtifact marketHistory, Random draw,
+                                  int startingSpawnCount) {
         super(agent, nextGapWallMs(simClock, draw));
         this.simClock = simClock;
         this.randomSource = randomSource;
         this.spawner = spawner;
         this.marketHistory = marketHistory;
         this.draw = draw;
+        this.spawnCount = startingSpawnCount;
+    }
+
+    /** The walk-in id counter — persisted by task 22's snapshot. */
+    public int spawnCount() {
+        return spawnCount;
     }
 
     @Override
@@ -118,7 +137,8 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
 
         RealNegotiationEngine engine = new RealNegotiationEngine(
                 Settings.load().roundLimit(), randomSource.forStream("nego-" + vesselId));
-        AgentRoster.spawnWalkIn(spawner, spec, simClock, marketHistory, randomSource, engine);
+        AgentRoster.spawnWalkIn(spawner, spec, simClock, marketHistory, randomSource, engine,
+                ((HarbourMasterAgent) myAgent).directory());
         log.info("Poisson spawn: {} ({}) draft={} length={} tonnage={}",
                 vesselId, vesselType, draft, length, tonnage);
     }

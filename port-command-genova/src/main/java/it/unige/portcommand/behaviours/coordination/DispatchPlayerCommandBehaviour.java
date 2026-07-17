@@ -10,6 +10,7 @@ import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.harbourmaster.PlayerCommand;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.Subscription;
 import jade.core.AID;
 import jade.core.Agent;
 import jade.core.behaviours.OneShotBehaviour;
@@ -47,6 +48,12 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
     private static final Logger log = LoggerFactory.getLogger(DispatchPlayerCommandBehaviour.class);
 
     private final HarbourMasterAgent hm;
+    /** Held so the OWNING AGENT can cancel on takedown (task 22): the bus outlives the agent,
+     * and a HarbourMaster respawn (save/load teardown-rebuild) would otherwise leave this
+     * handler — with its dead {@code hm} reference — subscribed alongside the new agent's,
+     * double-dispatching every player command. Written on the agent thread in {@link #action()};
+     * volatile because {@code onTakeDown} may run after a kill from another thread. */
+    private volatile Subscription<PlayerCommandEvent> subscription;
 
     public DispatchPlayerCommandBehaviour(Agent agent) {
         super(agent);
@@ -55,8 +62,16 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
 
     @Override
     public void action() {
-        hm.eventBus().subscribe(PlayerCommandEvent.class, this::onPlayerCommand, DeliveryMode.ASYNC);
+        subscription = hm.eventBus().subscribe(PlayerCommandEvent.class, this::onPlayerCommand, DeliveryMode.ASYNC);
         log.debug("subscribed to PlayerCommandEvent");
+    }
+
+    /** Cancels the bus subscription; safe if {@link #action()} never ran. HM's takedown calls this. */
+    public void cancelSubscription() {
+        Subscription<PlayerCommandEvent> s = subscription;
+        if (s != null) {
+            s.cancel();
+        }
     }
 
     public void onPlayerCommand(PlayerCommandEvent event) {

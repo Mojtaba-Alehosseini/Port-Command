@@ -27,9 +27,16 @@ import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.harbourmaster.TugBasePositions;
 import it.unige.portcommand.negotiation.NegotiationEngine;
+import it.unige.portcommand.negotiation.NoOpNegotiationEngine;
 import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.persistence.AgentDirectory;
+import it.unige.portcommand.persistence.GameState;
+import it.unige.portcommand.persistence.HarbourMasterRestoreState;
+import it.unige.portcommand.persistence.dto.TerminalStateDTO;
+import it.unige.portcommand.persistence.dto.TugStateDTO;
+import it.unige.portcommand.persistence.dto.VesselStateDTO;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.RandomSource;
 import it.unige.portcommand.util.SimClock;
@@ -67,23 +74,39 @@ public final class AgentRoster {
                                                SimClock simClock, RandomSource randomSource,
                                                MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
                                                EventBus eventBus) {
+        // Pre-task-22 signature, kept for the existing ITs: no live-agent directory, and a
+        // fresh PolicyRegistryArtifact per boot (nothing persisted it before task 22).
+        spawnSingletonsAndFleet(spawner, portState, simClock, randomSource, marketHistory,
+                llmBridge, eventBus, null, new PolicyRegistryArtifact());
+    }
+
+    /**
+     * Task 22 signature: {@code directory} (nullable) rides the args channel so every agent
+     * self-registers for the save snapshot; {@code policyRegistry} is the SESSION-stable
+     * instance ({@code JadeBootstrap} owns it since task 22 — the save persists its triggers,
+     * so a per-boot instance would silently drop the player's policies on reload).
+     */
+    public static void spawnSingletonsAndFleet(JadeAgentSpawner spawner, PortStateArtifact portState,
+                                               SimClock simClock, RandomSource randomSource,
+                                               MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
+                                               EventBus eventBus, AgentDirectory directory,
+                                               PolicyRegistryArtifact policyRegistry) {
         spawner.spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
                 new HarbourMasterInitArgs(STARTING_WALLET, STARTING_REPUTATION),
-                simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory});
+                simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory,
+                null, directory});
         spawner.spawn("weather_agent", WeatherAgent.class,
-                new Object[] {defaultWeatherInit(), randomSource, simClock, eventBus});
-        spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource});
-        // A fresh PolicyRegistryArtifact per boot: nothing else reads player autopilot policies
-        // yet (task 19's HUD is the first future consumer), so it is not JadeBootstrap-level
-        // shared state like portState/marketHistory/eventBus.
+                new Object[] {defaultWeatherInit(), randomSource, simClock, eventBus, directory});
+        spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource, directory});
         spawner.spawn("assistant_agent", AssistantAgent.class,
-                new Object[] {marketHistory, new PolicyRegistryArtifact(), llmBridge, eventBus});
+                new Object[] {marketHistory, policyRegistry, llmBridge, eventBus, directory});
 
         spawner.spawn("terminal_container", TerminalAgent.class, new Object[] {
-                new TerminalInitArgs("terminal_container", List.of("berth_2"), 4), portState, simClock});
+                new TerminalInitArgs("terminal_container", List.of("berth_2"), 4), portState, simClock,
+                directory});
         spawner.spawn("terminal_general", TerminalAgent.class, new Object[] {
                 new TerminalInitArgs("terminal_general", List.of("berth_1", "berth_3", "berth_4"), 6),
-                portState, simClock});
+                portState, simClock, directory});
 
         for (int i = 1; i <= 4; i++) {
             String id = "tug_" + i;
@@ -93,10 +116,83 @@ public final class AgentRoster {
             // dots from the same table — one source of truth, no duplicated coordinates).
             spawner.spawn(id, TugAgent.class, new Object[] {
                     new TugInitArgs(id, TugBasePositions.position(id), 350.0, 2.0, 12.0, 1.0),
-                    portState, simClock});
+                    portState, simClock, directory});
         }
 
         log.info("Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)");
+    }
+
+    /**
+     * Task 22: rebuilds the fleet FROM A SAVE. Same 10 fixed agents, in the planning/22
+     * load order (HM first so the coordination hub exists before anything greets it;
+     * service agents next; restored vessels LAST), each with its persisted DTO appended to
+     * the standard args (found by type — the index-based required args are untouched).
+     * {@code reconciledTerminals} is the loader's occupancy list already filtered against
+     * the restored vessel set (no berth leaks to ghosts).
+     */
+    public static void respawnFromSave(JadeAgentSpawner spawner, PortStateArtifact portState,
+                                       SimClock simClock, RandomSource randomSource,
+                                       MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
+                                       EventBus eventBus, AgentDirectory directory,
+                                       PolicyRegistryArtifact policyRegistry, GameState state,
+                                       List<TerminalStateDTO> reconciledTerminals,
+                                       java.util.concurrent.CompletableFuture<HarbourMasterAgent> hmReady) {
+        // The existing task-20 self-future seam at args[7] (adversarial review #3): agent
+        // spawning is async, and the loader must not declare the world live before the HM —
+        // the coordination anchor and the directory's first entry — finished its setup.
+        spawner.spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
+                new HarbourMasterInitArgs(state.wallet(), state.reputation()),
+                simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory,
+                hmReady, directory,
+                new HarbourMasterRestoreState(state.agents().harbourMaster(),
+                        state.agents().activeVessels())});
+        spawner.spawn("weather_agent", WeatherAgent.class, new Object[] {
+                defaultWeatherInit(), randomSource, simClock, eventBus, directory,
+                state.agents().weather().current()});
+        spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {
+                randomSource, directory, state.agents().customs()});
+        spawner.spawn("assistant_agent", AssistantAgent.class,
+                new Object[] {marketHistory, policyRegistry, llmBridge, eventBus, directory});
+
+        spawner.spawn("terminal_container", TerminalAgent.class, new Object[] {
+                new TerminalInitArgs("terminal_container", List.of("berth_2"), 4), portState, simClock,
+                directory, terminalDto(reconciledTerminals, "terminal_container")});
+        spawner.spawn("terminal_general", TerminalAgent.class, new Object[] {
+                new TerminalInitArgs("terminal_general", List.of("berth_1", "berth_3", "berth_4"), 6),
+                portState, simClock, directory, terminalDto(reconciledTerminals, "terminal_general")});
+
+        Map<String, TugStateDTO> tugDtos = state.agents().tugs().stream()
+                .collect(Collectors.toMap(TugStateDTO::tugId, t -> t));
+        for (int i = 1; i <= 4; i++) {
+            String id = "tug_" + i;
+            spawner.spawn(id, TugAgent.class, new Object[] {
+                    new TugInitArgs(id, TugBasePositions.position(id), 350.0, 2.0, 12.0, 1.0),
+                    portState, simClock, directory, tugDtos.get(id)});
+        }
+
+        for (VesselStateDTO dto : state.agents().activeVessels()) {
+            VesselSpec spec = new VesselSpec(dto.id(), dto.vesselType(), dto.draft(), dto.length(),
+                    dto.tonnage(), dto.cargoClass(), dto.etaArrivalSimMillis());
+            if (VesselStateDTO.CHANNEL_WALK_IN.equals(dto.channel())) {
+                // A restored walk-in never negotiates again (open negotiations are not
+                // persisted) — the engine slot is filled with the no-op binding.
+                spawner.spawn(vesselLocalName(spec), WalkInVesselAgent.class, new Object[] {
+                        spec, simClock, marketHistory, new NoOpNegotiationEngine(), randomSource,
+                        directory, dto});
+            } else {
+                spawner.spawn(vesselLocalName(spec), ContractedVesselAgent.class, new Object[] {
+                        spec, simClock, marketHistory,
+                        dto.contractRef() == null ? "restored" : dto.contractRef(), directory, dto});
+            }
+        }
+
+        log.info("Roster respawned from save: 10 fixed agents + {} restored vessel(s)",
+                state.agents().activeVessels().size());
+    }
+
+    private static TerminalStateDTO terminalDto(List<TerminalStateDTO> terminals, String terminalId) {
+        return terminals.stream().filter(t -> terminalId.equals(t.terminalId())).findFirst()
+                .orElse(new TerminalStateDTO(terminalId, List.of()));
     }
 
     /**
@@ -106,8 +202,18 @@ public final class AgentRoster {
     public static AgentController spawnContractedVessel(JadeAgentSpawner spawner, VesselSpec spec,
                                                         String contractId, SimClock simClock,
                                                         MarketHistoryArtifact marketHistory) {
+        return spawnContractedVessel(spawner, spec, contractId, simClock, marketHistory, null);
+    }
+
+    /** Task 22 overload: {@code directory} (nullable) appended so contracted vessels register
+     * for the save snapshot — without it a save cannot capture their flow position (task 23's
+     * live spawner must use this form). */
+    public static AgentController spawnContractedVessel(JadeAgentSpawner spawner, VesselSpec spec,
+                                                        String contractId, SimClock simClock,
+                                                        MarketHistoryArtifact marketHistory,
+                                                        AgentDirectory directory) {
         return spawner.spawn(vesselLocalName(spec), ContractedVesselAgent.class,
-                new Object[] {spec, simClock, marketHistory, contractId});
+                new Object[] {spec, simClock, marketHistory, contractId, directory});
     }
 
     /**
@@ -119,12 +225,22 @@ public final class AgentRoster {
     public static AgentController spawnWalkIn(JadeAgentSpawner spawner, VesselSpec spec, SimClock simClock,
                                               MarketHistoryArtifact marketHistory, RandomSource randomSource,
                                               NegotiationEngine engine) {
-        return spawner.spawn(vesselLocalName(spec), WalkInVesselAgent.class,
-                new Object[] {spec, simClock, marketHistory, engine, randomSource});
+        return spawnWalkIn(spawner, spec, simClock, marketHistory, randomSource, engine, null);
     }
 
-    /** A JADE-legal local name ({@code ^[a-z][a-z0-9_]*$}) derived from the vessel id. */
-    private static String vesselLocalName(VesselSpec spec) {
+    /** Task 22 overload: {@code directory} (nullable) appended so live-spawned walk-ins
+     * self-register and are captured by the save snapshot like every other agent. */
+    public static AgentController spawnWalkIn(JadeAgentSpawner spawner, VesselSpec spec, SimClock simClock,
+                                              MarketHistoryArtifact marketHistory, RandomSource randomSource,
+                                              NegotiationEngine engine, AgentDirectory directory) {
+        return spawner.spawn(vesselLocalName(spec), WalkInVesselAgent.class,
+                new Object[] {spec, simClock, marketHistory, engine, randomSource, directory});
+    }
+
+    /** A JADE-legal local name ({@code ^[a-z][a-z0-9_]*$}) derived from the vessel id. Public
+     * since task 22: the HarbourMaster's tracking restore and the loader both rebuild AIDs
+     * from this SAME derivation — determinism of the name is what makes that legal. */
+    public static String vesselLocalName(VesselSpec spec) {
         return "vessel_" + spec.vesselId().toLowerCase().replaceAll("[^a-z0-9_]", "_");
     }
 

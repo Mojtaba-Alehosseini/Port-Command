@@ -12,6 +12,7 @@ import it.unige.portcommand.negotiation.Personality;
 import it.unige.portcommand.negotiation.VesselTemplate;
 import it.unige.portcommand.negotiation.VesselTemplates;
 import it.unige.portcommand.negotiation.WalkInState;
+import it.unige.portcommand.persistence.dto.VesselStateDTO;
 import it.unige.portcommand.util.RandomSource;
 
 /**
@@ -41,6 +42,55 @@ public final class WalkInVesselAgent extends BaseVesselAgent {
         this.engine = argAt(3, NegotiationEngine.class);
         this.randomSource = argAt(4, RandomSource.class);
         super.onSetup();
+    }
+
+    /**
+     * Task 22 restore: hidden beliefs are adopted VERBATIM from the save — never re-rolled
+     * from {@code vessel_templates.json} (planning/22 "Notes": re-rolling would defeat the
+     * seed). Only post-deal walk-ins are ever persisted (open negotiations are dropped at
+     * save), so the dialogue is marked concluded and NO negotiation behaviour re-attaches:
+     * the beliefs are carried for determinism and the privacy round-trip, not for play.
+     */
+    @Override
+    protected void onRestore(VesselStateDTO dto) {
+        this.conversationId = "nego-" + spec.vesselId();
+        this.concluded.set(true);
+        stateRef.set(new WalkInState(
+                spec.vesselType(),
+                dto.minAcceptablePrice() == null ? 0.0 : dto.minAcceptablePrice(),
+                dto.targetPrice() == null ? 0.0 : dto.targetPrice(),
+                dto.personality() == null ? Personality.NEUTRAL : Personality.valueOf(dto.personality()),
+                dto.maxWaitMinutes() == null ? 0 : dto.maxWaitMinutes(),
+                dto.minDurationHours() == null ? 1 : dto.minDurationHours(),
+                dto.negotiationRound() == null ? 1 : dto.negotiationRound(),
+                dto.negotiationStartedAtSimMillis() == null ? 0L : dto.negotiationStartedAtSimMillis(),
+                0.0, 0.0, 0, dto.dealHours(), dto.dealHours()));
+    }
+
+    /**
+     * The flat persisted record, walk-in side (task 22): flow position + deal + position +
+     * the hidden beliefs, verbatim. HM-side tracking fields (stage, tugs, holds) are filled
+     * by {@code GameStateBuilder} from {@code VesselTracking} — this agent does not know them.
+     */
+    @Override
+    public VesselStateDTO snapshotDto() {
+        WalkInState s = stateRef.get();
+        return new VesselStateDTO(
+                spec.vesselId(), spec.vesselType(), VesselStateDTO.CHANNEL_WALK_IN,
+                spec.draft(), spec.length(), spec.tonnage(), spec.cargoClass(),
+                spec.etaArrivalSimMillis(),
+                null, flowPhase() == null ? null : flowPhase().name(), phaseDeadlineSimMillis(),
+                assignedBerth(), dealPrice(), dealHours(),
+                null, false, false,
+                position().x(), position().y(), position().headingDeg(),
+                null,
+                s == null ? null : s.personality().name(),
+                s == null ? null : s.minAcceptablePrice(),
+                s == null ? null : s.targetPrice(),
+                s == null ? null : s.maxWaitMinutes(),
+                s == null ? null : s.minDurationHours(),
+                s == null ? null : s.round(),
+                s == null ? null : s.negotiationStartedAtSimMillis());
     }
 
     @Override

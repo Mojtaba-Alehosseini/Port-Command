@@ -22,8 +22,19 @@ public final class TransitToBerthBehaviour extends SimTickerBehaviour {
     private final long arriveBySimMillis;
 
     public TransitToBerthBehaviour(Agent agent, SimClock simClock) {
+        this(agent, simClock, simClock.nowSimMillis() + TRANSIT_SIM_MILLIS);
+    }
+
+    /** Task 22 resume: re-enter the transit with the SAVED absolute deadline, not a fresh leg. */
+    public static TransitToBerthBehaviour resuming(Agent agent, SimClock simClock, long arriveBySimMillis) {
+        return new TransitToBerthBehaviour(agent, simClock, arriveBySimMillis);
+    }
+
+    private TransitToBerthBehaviour(Agent agent, SimClock simClock, long arriveBySimMillis) {
         super(agent, simClock, TICK_SIM_MILLIS);
-        this.arriveBySimMillis = simClock.nowSimMillis() + TRANSIT_SIM_MILLIS;
+        this.arriveBySimMillis = arriveBySimMillis;
+        // Task 22: report the flow position so the save snapshot knows where this vessel is.
+        ((BaseVesselAgent) agent).reportPhase(BaseVesselAgent.FlowPhase.TRANSIT, arriveBySimMillis);
     }
 
     @Override

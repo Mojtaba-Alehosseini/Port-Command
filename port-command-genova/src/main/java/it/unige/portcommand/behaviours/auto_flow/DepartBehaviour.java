@@ -28,8 +28,18 @@ public final class DepartBehaviour extends SimTickerBehaviour {
     private boolean informed = false;
 
     public DepartBehaviour(Agent agent, SimClock simClock) {
+        this(agent, simClock, simClock.nowSimMillis() + DEPART_SIM_MILLIS);
+    }
+
+    /** Task 22 resume: finish the departure against the SAVED deadline. */
+    public static DepartBehaviour resuming(Agent agent, SimClock simClock, long departedBySimMillis) {
+        return new DepartBehaviour(agent, simClock, departedBySimMillis);
+    }
+
+    private DepartBehaviour(Agent agent, SimClock simClock, long departedBySimMillis) {
         super(agent, simClock, TICK_SIM_MILLIS);
-        this.departedBySimMillis = simClock.nowSimMillis() + DEPART_SIM_MILLIS;
+        this.departedBySimMillis = departedBySimMillis;
+        ((BaseVesselAgent) agent).reportPhase(BaseVesselAgent.FlowPhase.DEPARTING, departedBySimMillis);
     }
 
     @Override

@@ -13,6 +13,7 @@ import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.nlp.LLMRequest;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
 import jade.core.Agent;
 import jade.core.behaviours.OneShotBehaviour;
 import org.slf4j.Logger;
@@ -47,10 +48,23 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
         this.cache = cache;
     }
 
+    /** Held so AssistantAgent cancels on takedown (task 22): the bus outlives the agent,
+     * and a respawn would otherwise leave this handler subscribed alongside the new one,
+     * double-firing every reaction. */
+    private volatile Subscription<HintButtonEvent> subscription;
+
     @Override
     public void action() {
-        eventBus.subscribe(HintButtonEvent.class, this::onHintButton, DeliveryMode.ASYNC);
+        subscription = eventBus.subscribe(HintButtonEvent.class, this::onHintButton, DeliveryMode.ASYNC);
         log.debug("subscribed to HintButtonEvent");
+    }
+
+    /** Cancels the bus subscription; safe if {@link #action()} never ran. */
+    public void cancelSubscription() {
+        Subscription<HintButtonEvent> s = subscription;
+        if (s != null) {
+            s.cancel();
+        }
     }
 
     /** Run the algorithm, ask the LLM to polish it, validate, publish — falling back to the

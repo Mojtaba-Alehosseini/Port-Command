@@ -136,6 +136,28 @@ public final class PerformativeCounter {
         return Collections.unmodifiableMap(out);
     }
 
+    /**
+     * Seeds today's counts from a save file (task 22 load), keyed by the canonical display
+     * names {@link #snapshot()} renders. Unknown names are ignored; non-canonical performatives
+     * counted-but-not-reported before the save (e.g. QUERY_REF) are not round-tripped — they
+     * never appear in the EOD table, so nothing observable changes (dated note, planning/22).
+     */
+    public void restore(Map<String, Integer> byCanonicalName) {
+        dayBoundary.writeLock().lock();
+        try {
+            ConcurrentHashMap<Integer, AtomicInteger> fresh = new ConcurrentHashMap<>();
+            for (int performative : CANONICAL_ORDER) {
+                Integer count = byCanonicalName.get(ACLMessage.getPerformative(performative));
+                if (count != null && count > 0) {
+                    fresh.put(performative, new AtomicInteger(count));
+                }
+            }
+            counts.set(fresh);
+        } finally {
+            dayBoundary.writeLock().unlock();
+        }
+    }
+
     /** Stops counting. For symmetry with the GUI panels' lifecycle; production never cancels. */
     public void close() {
         subscription.cancel();

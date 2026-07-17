@@ -140,6 +140,13 @@ public final class NegotiationTabRegistry {
         return Optional.of(event.dialogueId());
     }
 
+    /** Task 22: a loaded game has no open dialogues — drop every tab and mapping. */
+    public void reset() {
+        tabs.clear();
+        dialogueIdByVesselId.clear();
+        onChange.run();
+    }
+
     public DialogueTabModel tab(String dialogueId) {
         return tabs.get(dialogueId);
     }

@@ -34,6 +34,8 @@ import it.unige.portcommand.lifecycle.events.GameOverEvent;
 import it.unige.portcommand.lifecycle.events.GamePausedEvent;
 import it.unige.portcommand.lifecycle.events.GameResumedEvent;
 import it.unige.portcommand.nlp.ChatInputProcessor;
+import it.unige.portcommand.persistence.GameSession;
+import it.unige.portcommand.persistence.events.GameLoadedEvent;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
 
@@ -70,12 +72,18 @@ public final class MainWindow extends JFrame {
 
     private final GameLifecycle lifecycle;
     private final Leaderboard leaderboard;
+    private final GameSession session;
     private final EndOfDaySummaryDialog endOfDayDialog;
     private final GameOverDialog gameOverDialog;
     private final PauseOverlay pauseOverlay;
     private JMenuItem pauseItem;
     private JMenuItem resumeItem;
     private JMenuItem quitItem;
+    private JMenuItem saveItem;
+    private JMenuItem loadItem;
+    private JMenuItem loadAutosaveItem;
+    /** True while a load worker thread owns the world — menus disabled, no re-entry. */
+    private boolean loadInProgress;
 
     /** The latest REAL settled summary — the Debug menu re-shows it once one exists. */
     private EndOfDaySummary latestSummary;
@@ -97,11 +105,12 @@ public final class MainWindow extends JFrame {
      */
     public MainWindow(EventBus eventBus, PortStateArtifact portStateArtifact,
                       ChatInputProcessor chatInputProcessor, GameLifecycle lifecycle,
-                      Leaderboard leaderboard, Runnable onClose) {
+                      Leaderboard leaderboard, GameSession session, Runnable onClose) {
         super("Port Command Genova");
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE); // we drive shutdown ourselves
         this.lifecycle = lifecycle;
         this.leaderboard = leaderboard;
+        this.session = session;
         this.pauseOverlay = new PauseOverlay(this::toggleMenuResume);
         setGlassPane(pauseOverlay);
         setJMenuBar(buildMenuBar(eventBus, onClose));
@@ -117,6 +126,13 @@ public final class MainWindow extends JFrame {
         eventBus.subscribe(GamePausedEvent.class, e -> reflectMode(), DeliveryMode.EDT);
         eventBus.subscribe(GameResumedEvent.class, e -> reflectMode(), DeliveryMode.EDT);
         eventBus.subscribe(GameOverEvent.class, e -> reflectMode(), DeliveryMode.EDT);
+        // Task 22: after a load the previous world's settled summary no longer describes
+        // this timeline — the Debug re-show falls back to the synthetic day until the
+        // restored run settles its own first midnight.
+        eventBus.subscribe(GameLoadedEvent.class, e -> {
+            latestSummary = null;
+            reflectMode();
+        }, DeliveryMode.EDT);
         eventBus.subscribe(EndOfDayCompletedEvent.class, e -> {
             latestSummary = e.summary();
             pausedForEndOfDay = lifecycle.pauseIfRunning();
@@ -182,6 +198,14 @@ public final class MainWindow extends JFrame {
         pauseItem.addActionListener(e -> lifecycle.pause());
         resumeItem = new JMenuItem("Resume");
         resumeItem.addActionListener(e -> lifecycle.resume());
+        // Task 22: the two fixed slots (savegame.json / autosave.json). A file picker is
+        // task 21's SaveLoadDialog; fixed-path items are the planned v1 surface here.
+        saveItem = new JMenuItem("Save Game");
+        saveItem.addActionListener(e -> saveGame());
+        loadItem = new JMenuItem("Load Game");
+        loadItem.addActionListener(e -> confirmAndLoad(session.saveLoadManager().savegamePath()));
+        loadAutosaveItem = new JMenuItem("Load Autosave");
+        loadAutosaveItem.addActionListener(e -> confirmAndLoad(session.saveLoadManager().autosavePath()));
         quitItem = new JMenuItem("Quit Game…");
         quitItem.addActionListener(e -> confirmQuit());
         JMenuItem exit = new JMenuItem("Exit");
@@ -189,12 +213,92 @@ public final class MainWindow extends JFrame {
         game.add(pauseItem);
         game.add(resumeItem);
         game.addSeparator();
+        game.add(saveItem);
+        game.add(loadItem);
+        game.add(loadAutosaveItem);
+        game.addSeparator();
         game.add(quitItem);
         game.addSeparator();
         game.add(exit);
         bar.add(game);
         bar.add(buildDebugMenu(eventBus));
         return bar;
+    }
+
+    /**
+     * Game → Save Game: quiesce + snapshot + atomic write on a WORKER thread (adversarial
+     * review #5 — the bounded snapshot wait is normally milliseconds, but a wedged
+     * HarbourMaster thread must freeze the save, not the whole UI); polite dialog if
+     * refused (22.7). The menu item disables for the duration, so no double-save.
+     */
+    private void saveGame() {
+        saveItem.setEnabled(false);
+        Thread worker = new Thread(() -> {
+            String info = null;
+            String error = null;
+            try {
+                info = "Game saved to " + session.saveNow() + ".";
+            } catch (it.unige.portcommand.persistence.SaveNotAllowedException e) {
+                info = e.getMessage();
+            } catch (Exception e) {
+                error = "Save failed: " + e.getMessage();
+            }
+            String infoMessage = info;
+            String errorMessage = error;
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                reflectMode();
+                if (errorMessage != null) {
+                    JOptionPane.showMessageDialog(this, errorMessage, "Save Game", JOptionPane.ERROR_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(this, infoMessage, "Save Game", JOptionPane.INFORMATION_MESSAGE);
+                }
+            });
+        }, "game-saver");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    /**
+     * Game → Load: confirm (the running world is replaced), then run the teardown/rebuild
+     * on a worker thread — it takes seconds and must never block the EDT. The GUI refreshes
+     * itself from the loader's events; menus re-enable when the worker finishes.
+     */
+    private void confirmAndLoad(java.nio.file.Path source) {
+        if (loadInProgress) {
+            return;
+        }
+        if (!java.nio.file.Files.exists(source)) {
+            JOptionPane.showMessageDialog(this, "No save file at " + source + " yet.",
+                    "Load Game", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        int choice = JOptionPane.showConfirmDialog(this,
+                "Load " + source.getFileName() + "? The current game will be replaced.",
+                "Load Game", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        loadInProgress = true;
+        reflectMode();
+        Thread worker = new Thread(() -> {
+            Exception failure = null;
+            try {
+                session.loadGame(source);
+            } catch (Exception e) {
+                failure = e;
+            }
+            Exception reported = failure;
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                loadInProgress = false;
+                reflectMode();
+                if (reported != null) {
+                    JOptionPane.showMessageDialog(this, reported.getMessage(),
+                            "Load Game", JOptionPane.ERROR_MESSAGE);
+                }
+            });
+        }, "game-loader");
+        worker.setDaemon(true);
+        worker.start();
     }
 
     /**
@@ -237,9 +341,15 @@ public final class MainWindow extends JFrame {
     private void reflectMode() {
         GameMode mode = lifecycle.mode();
         pauseOverlay.setVisible(mode == GameMode.PAUSED);
-        pauseItem.setEnabled(mode == GameMode.RUNNING);
-        resumeItem.setEnabled(mode == GameMode.PAUSED);
-        quitItem.setEnabled(mode == GameMode.RUNNING || mode == GameMode.PAUSED);
+        pauseItem.setEnabled(!loadInProgress && mode == GameMode.RUNNING);
+        resumeItem.setEnabled(!loadInProgress && mode == GameMode.PAUSED);
+        quitItem.setEnabled(!loadInProgress && (mode == GameMode.RUNNING || mode == GameMode.PAUSED));
+        boolean live = mode == GameMode.RUNNING || mode == GameMode.PAUSED;
+        saveItem.setEnabled(!loadInProgress && live);
+        // Loading is legal from a live game AND from GAME_OVER (continue from the autosave).
+        boolean loadable = live || mode == GameMode.GAME_OVER;
+        loadItem.setEnabled(!loadInProgress && loadable);
+        loadAutosaveItem.setEnabled(!loadInProgress && loadable);
     }
 
     /**

@@ -54,6 +54,7 @@ public final class HandleCancelBehaviour extends CyclicBehaviour {
             tug.removeBehaviour(active); // remove the *movement* behaviour, not this cyclic one
         }
         tug.clearJob();
+        tug.setPickupTarget(null); // task 22: else a save after a CANCEL persists a stale pickup
         ReturnToBaseBehaviour ret = new ReturnToBaseBehaviour(tug);
         tug.setActiveMovement(ret);
         tug.setStatus(TugStatus.RETURNING);

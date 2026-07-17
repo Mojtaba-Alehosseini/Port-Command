@@ -28,6 +28,11 @@ public final class AssistantAgent extends PortCommandAgent {
 
     private final AtomicBoolean autopilotEnabled = new AtomicBoolean(false);
 
+    private RecommendOnDemandBehaviour recommendPlan;
+    private AutopilotExecuteBehaviour autopilotPlan;
+    private PolicyParseBehaviour policyPlan;
+    private ExplainEventBehaviour explainPlan;
+
     @Override
     protected void registerServices() {
         registerDfService("assistant", getLocalName());
@@ -43,11 +48,37 @@ public final class AssistantAgent extends PortCommandAgent {
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(marketHistory);
         RecommendationCache cache = new RecommendationCache();
 
-        addBehaviour(new RecommendOnDemandBehaviour(this, algorithm, llmBridge, eventBus, cache));
-        addBehaviour(new AutopilotExecuteBehaviour(this, algorithm, policyRegistry, eventBus, cache,
-                autopilotEnabled));
-        addBehaviour(new PolicyParseBehaviour(this, policyRegistry, eventBus));
-        addBehaviour(new ExplainEventBehaviour(this, cache, llmBridge, eventBus));
+        recommendPlan = new RecommendOnDemandBehaviour(this, algorithm, llmBridge, eventBus, cache);
+        autopilotPlan = new AutopilotExecuteBehaviour(this, algorithm, policyRegistry, eventBus, cache,
+                autopilotEnabled);
+        policyPlan = new PolicyParseBehaviour(this, policyRegistry, eventBus);
+        explainPlan = new ExplainEventBehaviour(this, cache, llmBridge, eventBus);
+        addBehaviour(recommendPlan);
+        addBehaviour(autopilotPlan);
+        addBehaviour(policyPlan);
+        addBehaviour(explainPlan);
+    }
+
+    /**
+     * Unsubscribes the four subscribe-once plans (task 22). Load-bearing, same rationale as
+     * {@code HarbourMasterAgent.onTakeDown}: the bus outlives the agent, so an Assistant
+     * respawn (save/load teardown-rebuild) would otherwise double-fire every Hint reply,
+     * autopilot action, policy registration and explanation.
+     */
+    @Override
+    protected void onTakeDown() {
+        if (recommendPlan != null) {
+            recommendPlan.cancelSubscription();
+        }
+        if (autopilotPlan != null) {
+            autopilotPlan.cancelSubscription();
+        }
+        if (policyPlan != null) {
+            policyPlan.cancelSubscription();
+        }
+        if (explainPlan != null) {
+            explainPlan.cancelSubscription();
+        }
     }
 
     /**

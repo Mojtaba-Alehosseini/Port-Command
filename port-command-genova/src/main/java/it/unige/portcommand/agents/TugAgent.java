@@ -6,9 +6,13 @@ import java.util.Map;
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.behaviours.cnp.BidInCNPBehaviour;
 import it.unige.portcommand.behaviours.cnp.HandleAcceptRejectBehaviour;
+import it.unige.portcommand.behaviours.coordination.EscortToBerthBehaviour;
 import it.unige.portcommand.behaviours.coordination.HandleCancelBehaviour;
 import it.unige.portcommand.behaviours.coordination.RefuelIfLowBehaviour;
+import it.unige.portcommand.behaviours.coordination.ReturnToBaseBehaviour;
+import it.unige.portcommand.behaviours.coordination.TransitToVesselBehaviour;
 import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.persistence.dto.TugStateDTO;
 import it.unige.portcommand.util.SimClock;
 import jade.core.behaviours.Behaviour;
 
@@ -33,7 +37,7 @@ import jade.core.behaviours.Behaviour;
  * {@link TugMath} (the single conversion boundary). {@link #fuelState} is a 0..1
  * fraction; € is never computed here — {@code WalletLedger} (task 20) invoices fuel.
  */
-public final class TugAgent extends PortCommandAgent {
+public final class TugAgent extends PortCommandAgent implements it.unige.portcommand.persistence.Mementoable {
 
     /** A leg consumes this many fuel units per km (200 km empties a full tank). */
     public static final double FUEL_DECAY_PER_KM = 0.005;
@@ -49,14 +53,19 @@ public final class TugAgent extends PortCommandAgent {
     private PortStateArtifact portState;
     private SimClock simClock;
 
-    // --- live, mutable, agent-thread-only state ---
-    private double fuelState;
-    private Position position;
-    private TugStatus status = TugStatus.IDLE;
-    private TugJob currentJob;
+    // --- live, mutable state: single WRITER (the agent thread), but volatile since task 22 —
+    // GameStateBuilder reads these fields from the HarbourMaster thread at snapshot time and
+    // needs the happens-before edge (adversarial review #2). Writes stay lock-free.
+    private volatile double fuelState;
+    private volatile Position position;
+    private volatile TugStatus status = TugStatus.IDLE;
+    private volatile TugJob currentJob;
     private Behaviour activeMovement;
     /** Outstanding bids by CNP conversation-id → the vessel pickup point we quoted. */
     private final Map<String, Position> pendingBids = new HashMap<>();
+    /** The pickup the EN_ROUTE_TO_VESSEL leg is heading to — persisted by task 22 so a
+     * loaded tug can resume the leg (the pickup otherwise lives only in the consumed bid). */
+    private volatile Position pickupTarget;
 
     @Override
     protected void registerServices() {
@@ -86,8 +95,92 @@ public final class TugAgent extends PortCommandAgent {
         addBehaviour(new HandleCancelBehaviour(this));
         addBehaviour(new RefuelIfLowBehaviour(this));
 
-        pushState(); // register the tug's initial IDLE-at-base snapshot with the artefact
-        log.info("Tug {} ready: base={} fuel={} topSpeed={}kn", tugId, basePosition, fuelState, topSpeedKnots);
+        TugStateDTO restored = optionalArgOfType(TugStateDTO.class);
+        if (restored != null) {
+            restoreFrom(restored);
+        }
+
+        pushState(); // register the tug's initial (or restored) snapshot with the artefact
+        log.info("Tug {} ready: base={} fuel={} topSpeed={}kn status={}",
+                tugId, basePosition, fuelState, topSpeedKnots, status);
+    }
+
+    /**
+     * Task 22 restore: adopt fuel/position/job and RESUME the movement leg the save caught
+     * this tug in. No re-bid, no re-award — the job (and its charge) happened in the saved
+     * timeline; the ledger never sees a second {@code TugJobAwardedEvent} for it, which is
+     * what keeps the mid-transit round-trip charged exactly once. REFUELING and BIDDING
+     * normalise to IDLE ({@code RefuelIfLowBehaviour} re-triggers off the persisted low
+     * tank; an un-awarded bid's Contract Net died with the save).
+     */
+    private void restoreFrom(TugStateDTO dto) {
+        this.fuelState = dto.fuelState();
+        this.position = dto.position() != null ? dto.position() : basePosition;
+        this.pickupTarget = dto.pickupTarget();
+        if (dto.job() != null) {
+            // The client AID is always the HarbourMaster; rebuilt by local name inside the
+            // live container (AID.ISLOCALNAME is container-resolved — the task-20 unit-test
+            // caveat does not apply here).
+            this.currentJob = new TugJob(dto.job().vesselId(), dto.job().berthPosition(),
+                    new jade.core.AID("harbour_master", jade.core.AID.ISLOCALNAME),
+                    dto.job().conversationId());
+        }
+        TugStatus restoredStatus = TugStatus.valueOf(dto.status());
+        switch (restoredStatus) {
+            case EN_ROUTE_TO_VESSEL -> {
+                if (currentJob != null && pickupTarget != null) {
+                    this.status = TugStatus.EN_ROUTE_TO_VESSEL;
+                    TransitToVesselBehaviour leg = new TransitToVesselBehaviour(this, pickupTarget);
+                    setActiveMovement(leg);
+                    addBehaviour(leg);
+                } else {
+                    this.status = TugStatus.IDLE; // job/pickup incoherent — fail safe to idle
+                    this.currentJob = null;
+                }
+            }
+            case ESCORTING -> {
+                if (currentJob != null) {
+                    this.status = TugStatus.ESCORTING;
+                    EscortToBerthBehaviour leg = new EscortToBerthBehaviour(this);
+                    setActiveMovement(leg);
+                    addBehaviour(leg);
+                } else {
+                    this.status = TugStatus.IDLE;
+                }
+            }
+            case RETURNING -> {
+                this.status = TugStatus.RETURNING;
+                this.currentJob = null;
+                ReturnToBaseBehaviour leg = new ReturnToBaseBehaviour(this);
+                setActiveMovement(leg);
+                addBehaviour(leg);
+            }
+            default -> {
+                this.status = TugStatus.IDLE;
+                this.currentJob = null;
+            }
+        }
+        log.info("{} restored: status={} fuel={} job={}", tugId, status, fuelState,
+                currentJob == null ? "-" : currentJob.vesselId());
+    }
+
+    /** The persisted tug record (task 22). BIDDING normalises to IDLE — see {@link TugStateDTO}. */
+    public TugStateDTO snapshotDto() {
+        TugStatus persistedStatus = status == TugStatus.BIDDING ? TugStatus.IDLE : status;
+        TugStateDTO.TugJobDTO job = currentJob == null ? null
+                : new TugStateDTO.TugJobDTO(currentJob.vesselId(), currentJob.berthPosition(),
+                        currentJob.conversationId());
+        return new TugStateDTO(tugId, persistedStatus.name(), position, fuelState, job, pickupTarget);
+    }
+
+    @Override
+    public com.fasterxml.jackson.databind.JsonNode snapshot() {
+        return persistenceMapper().valueToTree(snapshotDto());
+    }
+
+    @Override
+    public void restore(com.fasterxml.jackson.databind.JsonNode node) {
+        restoreFrom(persistenceMapper().convertValue(node, TugStateDTO.class));
     }
 
     private <T> T argAt(int index, Class<T> type) {
@@ -155,6 +248,15 @@ public final class TugAgent extends PortCommandAgent {
 
     public void rememberBid(String conversationId, Position pickup) {
         pendingBids.put(conversationId, pickup);
+    }
+
+    /** The pickup the current EN_ROUTE leg targets; set on job take, cleared at pickup arrival. */
+    public Position pickupTarget() {
+        return pickupTarget;
+    }
+
+    public void setPickupTarget(Position pickup) {
+        this.pickupTarget = pickup;
     }
 
     /** Removes and returns the remembered pickup for a conversation, or {@code null} if we never bid / already consumed it. */

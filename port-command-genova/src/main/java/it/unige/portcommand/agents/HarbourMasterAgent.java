@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.behaviours.RestoreDispatchBehaviour;
 import it.unige.portcommand.behaviours.SimClockTickPublisherBehaviour;
 import it.unige.portcommand.behaviours.coordination.AutoFlowDispatcherBehaviour;
 import it.unige.portcommand.behaviours.coordination.DispatchPlayerCommandBehaviour;
@@ -16,6 +17,7 @@ import it.unige.portcommand.behaviours.coordination.ForwardWalkInToPlayerBehavio
 import it.unige.portcommand.behaviours.coordination.HandleEmergencyBehaviour;
 import it.unige.portcommand.behaviours.coordination.HandleWeatherAlertBehaviour;
 import it.unige.portcommand.behaviours.coordination.PoissonSpawnBehaviour;
+import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.JadeAgentSpawner;
 import it.unige.portcommand.bootstrap.ServiceLocator;
 import it.unige.portcommand.commlog.Paraphraser;
@@ -29,6 +31,9 @@ import it.unige.portcommand.harbourmaster.financial.LedgerCoordinator;
 import it.unige.portcommand.harbourmaster.financial.PerformativeCounter;
 import it.unige.portcommand.lifecycle.DayRolloverCoordinator;
 import it.unige.portcommand.ontology.ServiceContract;
+import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.persistence.HarbourMasterRestoreState;
+import it.unige.portcommand.persistence.dto.VesselStateDTO;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.RandomSource;
 import it.unige.portcommand.util.SimClock;
@@ -60,7 +65,8 @@ import jade.lang.acl.MessageTemplate;
  * see {@code HandleEmergencyBehaviour}/{@code HandleWeatherAlertBehaviour}'s
  * javadoc for why an AID-based design was replaced, adversarial review finding).
  */
-public final class HarbourMasterAgent extends PortCommandAgent {
+public final class HarbourMasterAgent extends PortCommandAgent
+        implements it.unige.portcommand.persistence.Mementoable {
 
     private final ConcurrentHashMap<String, VesselTracking> activeVessels = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> pendingCustomsChecks = new ConcurrentHashMap<>();
@@ -79,6 +85,10 @@ public final class HarbourMasterAgent extends PortCommandAgent {
     private Map<String, ServiceContract> contracts;
     private CnpCoordinator cnpCoordinator;
     private volatile AID customsAid;
+    /** Task 22: held so takedown can cancel its bus subscription and the snapshot can read
+     * the walk-in spawn counter. */
+    private DispatchPlayerCommandBehaviour dispatchPlayerCommand;
+    private PoissonSpawnBehaviour poissonSpawn;
 
     @Override
     protected void registerServices() {
@@ -110,18 +120,59 @@ public final class HarbourMasterAgent extends PortCommandAgent {
         MarketHistoryArtifact marketHistory = argAt(6, MarketHistoryArtifact.class);
         this.cnpCoordinator = new RealCnpCoordinator(this, serviceLocator(), simClock);
 
+        // Task 22 restore: the loader appends a HarbourMasterRestoreState (found by type).
+        // Ledger BALANCES arrived via HarbourMasterInitArgs; here the in-progress day's
+        // history, counters, pending customs and tracking entries are seeded, and the
+        // dispatcher below re-drives what the save interrupted.
+        HarbourMasterRestoreState restore = optionalArgOfType(HarbourMasterRestoreState.class);
+        int startingSpawnCount = 0;
+        if (restore != null) {
+            walletLedger.restoreHistory(restore.harbourMaster().dayIncome(),
+                    restore.harbourMaster().dayExpense());
+            performativeCounter.restore(restore.harbourMaster().performativeCounts());
+            pendingCustomsChecks.putAll(restore.harbourMaster().pendingCustomsChecks());
+            startingSpawnCount = restore.harbourMaster().walkInSpawnCount();
+            restoreTracking(restore.activeVessels());
+        }
+
         addBehaviour(new AutoFlowDispatcherBehaviour(this));
         addBehaviour(new ForwardWalkInToPlayerBehaviour(this));
-        addBehaviour(new DispatchPlayerCommandBehaviour(this));
+        this.dispatchPlayerCommand = new DispatchPlayerCommandBehaviour(this);
+        addBehaviour(dispatchPlayerCommand);
         addBehaviour(new HandleEmergencyBehaviour(this));
         addBehaviour(new HandleWeatherAlertBehaviour(this));
         addBehaviour(new EndOfDayDetectBehaviour(this, simClock));
-        addBehaviour(new PoissonSpawnBehaviour(this, simClock, randomSource, spawner, marketHistory));
+        this.poissonSpawn = new PoissonSpawnBehaviour(this, simClock, randomSource, spawner,
+                marketHistory, startingSpawnCount);
+        addBehaviour(poissonSpawn);
         // Task 24: the single SimClockTickEvent publisher (Option B) — uncounted parent-package
         // behaviour, so the 51-catalogue is untouched.
         addBehaviour(new SimClockTickPublisherBehaviour(this, simClock, eventBus));
+        if (restore != null) {
+            addBehaviour(new RestoreDispatchBehaviour(this));
+        }
 
         completeOptionalSelfFuture();
+    }
+
+    /**
+     * Rebuilds {@link #activeVessels} from persisted DTOs (task 22). AIDs are reconstructed
+     * from the DETERMINISTIC vessel local names ({@code AgentRoster.vesselLocalName}) —
+     * resolution happens at send time inside the live container, so the entries are valid
+     * before the vessel agents themselves finish spawning.
+     */
+    private void restoreTracking(java.util.List<VesselStateDTO> vessels) {
+        for (VesselStateDTO dto : vessels) {
+            VesselSpec spec = new VesselSpec(dto.id(), dto.vesselType(), dto.draft(), dto.length(),
+                    dto.tonnage(), dto.cargoClass(), dto.etaArrivalSimMillis());
+            VesselTracking.Channel channel = VesselStateDTO.CHANNEL_WALK_IN.equals(dto.channel())
+                    ? VesselTracking.Channel.WALK_IN : VesselTracking.Channel.CONTRACTED;
+            AID aid = new AID(AgentRoster.vesselLocalName(spec), AID.ISLOCALNAME);
+            activeVessels.put(dto.id(), new VesselTracking(dto.id(), spec, channel,
+                    VesselTracking.Stage.valueOf(dto.stage()), aid, dto.assignedBerth(),
+                    dto.assignedTugs(), dto.blocked(), dto.weatherHeld()));
+        }
+        log.info("restored {} tracked vessel(s)", vessels.size());
     }
 
     /**
@@ -144,6 +195,53 @@ public final class HarbourMasterAgent extends PortCommandAgent {
         if (performativeCounter != null) {
             performativeCounter.close();
         }
+        // Task 22: the player-command dispatcher subscribes-once on the shared bus; without
+        // this cancel a respawned HM would double-dispatch every command (and the dead
+        // handler would double-count comm-log traffic through the new PerformativeCounter).
+        if (dispatchPlayerCommand != null) {
+            dispatchPlayerCommand.cancelSubscription();
+        }
+    }
+
+    /**
+     * The HM-owned slice of the save file (task 22): the IN-PROGRESS day's ledger entries
+     * (what the next EOD aggregates), today's performative tally, pending customs
+     * conversations (sorted — the serialized-map determinism rule) and the walk-in spawn
+     * counter. Wallet balance and reputation live at the {@code GameState} root.
+     */
+    public it.unige.portcommand.persistence.dto.HarbourMasterStateDTO snapshotDto() {
+        int day = SimClock.gameDayOf(simClock.nowSimMillis());
+        java.util.List<it.unige.portcommand.harbourmaster.IncomeEvent> dayIncome =
+                walletLedger.incomeHistory().stream()
+                        .filter(e -> SimClock.gameDayOf(e.simTime()) == day)
+                        .toList();
+        java.util.List<it.unige.portcommand.harbourmaster.ExpenseEvent> dayExpense =
+                walletLedger.expenseHistory().stream()
+                        .filter(e -> SimClock.gameDayOf(e.simTime()) == day)
+                        .toList();
+        java.util.Map<String, String> pendingSorted = new java.util.LinkedHashMap<>();
+        pendingCustomsChecks.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(e -> pendingSorted.put(e.getKey(), e.getValue()));
+        return new it.unige.portcommand.persistence.dto.HarbourMasterStateDTO(
+                dayIncome, dayExpense, performativeCounter.snapshot(), pendingSorted,
+                poissonSpawn == null ? 0 : poissonSpawn.spawnCount());
+    }
+
+    @Override
+    public com.fasterxml.jackson.databind.JsonNode snapshot() {
+        return persistenceMapper().valueToTree(snapshotDto());
+    }
+
+    /** Restore flows through the args channel ({@code HarbourMasterRestoreState}) at setup;
+     * this live entry point exists for {@code Mementoable} completeness and tests. */
+    @Override
+    public void restore(com.fasterxml.jackson.databind.JsonNode node) {
+        var dto = persistenceMapper().convertValue(node,
+                it.unige.portcommand.persistence.dto.HarbourMasterStateDTO.class);
+        walletLedger.restoreHistory(dto.dayIncome(), dto.dayExpense());
+        performativeCounter.restore(dto.performativeCounts());
+        pendingCustomsChecks.putAll(dto.pendingCustomsChecks());
     }
 
     /**
@@ -263,6 +361,12 @@ public final class HarbourMasterAgent extends PortCommandAgent {
      */
     public ServiceLocator serviceLocator() {
         return getServiceLocator();
+    }
+
+    /** Public wrapper for the same cross-package reason: {@code PoissonSpawnBehaviour}
+     * threads the session's live-agent registry into every walk-in spawn (task 22). */
+    public it.unige.portcommand.persistence.AgentDirectory directory() {
+        return agentDirectory();
     }
 
     /**

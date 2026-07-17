@@ -1,60 +1,60 @@
 package it.unige.portcommand;
 
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
 import javax.swing.SwingUtilities;
 
-import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
 import it.unige.portcommand.gui.MainWindow;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
-import it.unige.portcommand.lifecycle.GameLifecycle;
-import it.unige.portcommand.lifecycle.GameOverGuard;
+import it.unige.portcommand.persistence.GameSession;
+import it.unige.portcommand.persistence.SaveLoadManager;
 
 /**
- * Application entry point. Boots the JADE Main Container, spawns the fleet,
- * starts the game lifecycle (task 24 — live sim clock via the wall-clock
- * advancer), and blocks; the shutdown hook tears JADE down cleanly on Ctrl+C.
+ * Application entry point. Builds the {@link GameSession} (which owns the JADE boot, the
+ * fleet, the game lifecycle and — task 22 — save/load), starts a fresh run or loads a
+ * save, and blocks; the shutdown hook tears JADE down cleanly on Ctrl+C.
  *
  * <p>Flags: {@code --gui} opens the Swing shell (task 17); {@code --day-length
- * <seconds>} overrides how many real seconds one game day lasts (task 24 —
- * maps to the {@code simclock.real.seconds.per.day} system property that
- * {@link BootstrapConfig#fromSystemProperties()} reads; default 300).
+ * <seconds>} overrides how many real seconds one game day lasts (task 24 — maps to the
+ * {@code simclock.real.seconds.per.day} system property that
+ * {@link BootstrapConfig#fromSystemProperties()} reads; default 300); {@code --load
+ * <path>} (task 22) boots FROM a save file instead of starting fresh.
  */
 public final class Main {
 
     private Main() {
     }
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws Exception {
         List<String> argList = Arrays.asList(args);
         boolean guiRequested = argList.contains("--gui");
         applyDayLengthOverride(argList);
+        Path loadPath = loadPathArg(argList);
 
         BootstrapConfig cfg = BootstrapConfig.fromSystemProperties();
         JadeBootstrap boot = new JadeBootstrap();
         Runtime.getRuntime().addShutdownHook(new Thread(boot::shutdown, "JadeShutdownHook"));
-        boot.start(cfg);
-        AgentRoster.spawnSingletonsAndFleet(boot.getSpawner(), boot.getPortStateArtifact(),
-                boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact(),
-                boot.getLLMBridge(), boot.getEventBus());
 
-        // Task 24: the game lifecycle + the single game-over authority. One shared Leaderboard
-        // instance backs both the guard's game-over upsert and the GUI dialogs — two instances
-        // would read/write the same scores.json with diverging in-memory views.
-        GameLifecycle lifecycle = new GameLifecycle(boot.getSimClock(), boot.getEventBus());
+        // Task 24 wiring, now session-owned: one shared Leaderboard instance backs the
+        // guard's game-over upsert and the GUI dialogs (two instances would read/write the
+        // same scores.json with diverging in-memory views).
         Leaderboard leaderboard = new Leaderboard();
-        GameOverGuard guard = new GameOverGuard(boot.getEventBus(), lifecycle, leaderboard,
-                AgentRoster.STARTING_WALLET, AgentRoster.STARTING_REPUTATION);
-        // There is no menu screen yet (tasks 21/23) — boot straight into a running game, the
-        // pre-task-24 behaviour plus a live clock.
-        lifecycle.startNewGame();
+        GameSession session = new GameSession(boot, cfg, new SaveLoadManager(), leaderboard);
+        if (loadPath != null) {
+            session.loadGame(loadPath); // SchemaVersion/CorruptSave surface on the console
+        } else {
+            // There is no menu screen yet (tasks 21/23) — boot straight into a running game.
+            session.startNewGame();
+        }
 
         if (guiRequested) {
             SwingUtilities.invokeLater(() -> new MainWindow(boot.getEventBus(), boot.getPortStateArtifact(),
-                    boot.getNlpPipeline()::processChatInput, lifecycle, leaderboard, boot::shutdown)
+                    boot.getNlpPipeline()::processChatInput, session.lifecycle(), leaderboard,
+                    session, boot::shutdown)
                     .setVisible(true));
         }
 
@@ -83,5 +83,17 @@ public final class Main {
             throw new IllegalArgumentException("--day-length must be > 0, got " + seconds);
         }
         System.setProperty("simclock.real.seconds.per.day", String.valueOf(seconds));
+    }
+
+    /** {@code --load <path>} → the save file to boot from, or null for a fresh game (task 22). */
+    private static Path loadPathArg(List<String> argList) {
+        int at = argList.indexOf("--load");
+        if (at < 0) {
+            return null;
+        }
+        if (at + 1 >= argList.size()) {
+            throw new IllegalArgumentException("--load requires a path (e.g. save/autosave.json)");
+        }
+        return Path.of(argList.get(at + 1));
     }
 }

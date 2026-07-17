@@ -14,10 +14,14 @@ import java.util.Set;
  * <pre>
  * MENU      → LOADING
  * LOADING   → RUNNING | MENU
- * RUNNING   → PAUSED | GAME_OVER
- * PAUSED    → RUNNING | GAME_OVER
- * GAME_OVER → MENU
+ * RUNNING   → PAUSED | GAME_OVER | LOADING
+ * PAUSED    → RUNNING | GAME_OVER | LOADING
+ * GAME_OVER → MENU | LOADING
  * </pre>
+ *
+ * <p>The three {@code → LOADING} edges from live/ended states were added by task 22
+ * (2026-07-17): Game → Load replaces the running world, and loading the autosave after
+ * a game-over is the natural "continue from where the run ended" move.
  */
 public enum GameMode {
     MENU,
@@ -29,9 +33,9 @@ public enum GameMode {
     private static final Map<GameMode, Set<GameMode>> LEGAL = Map.of(
             MENU, Set.of(LOADING),
             LOADING, Set.of(RUNNING, MENU),
-            RUNNING, Set.of(PAUSED, GAME_OVER),
-            PAUSED, Set.of(RUNNING, GAME_OVER),
-            GAME_OVER, Set.of(MENU));
+            RUNNING, Set.of(PAUSED, GAME_OVER, LOADING),
+            PAUSED, Set.of(RUNNING, GAME_OVER, LOADING),
+            GAME_OVER, Set.of(MENU, LOADING));
 
     /** Whether {@code from → to} is a legal mode transition. */
     public static boolean canTransition(GameMode from, GameMode to) {

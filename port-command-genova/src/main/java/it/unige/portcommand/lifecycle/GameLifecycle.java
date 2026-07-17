@@ -89,6 +89,32 @@ public final class GameLifecycle {
     }
 
     /**
+     * Enters LOADING for a save-file load (task 22): freezes the clock and holds the mode
+     * while the world is torn down and rebuilt. Legal from RUNNING, PAUSED and GAME_OVER
+     * (the load-after-game-over "continue from the autosave" path). The advancer keeps
+     * ticking the paused clock harmlessly — {@code SimClock.advance} is a no-op while paused.
+     */
+    public synchronized void beginLoading() {
+        transition(GameMode.LOADING);
+        simClock.pause();
+    }
+
+    /** LOADING → RUNNING once the rebuilt world is ready: clock resumes, advancer ensured live. */
+    public synchronized void completeLoading() {
+        transition(GameMode.RUNNING);
+        simClock.resume();
+        advancer.start(); // idempotent; also revives the post-game-over path (gameOver() stopped it)
+        eventBus.publish(new GameResumedEvent());
+    }
+
+    /** LOADING → MENU on a failed load: the old world is gone, nothing playable is up. */
+    public synchronized void failLoading() {
+        transition(GameMode.MENU);
+        simClock.pause();
+        advancer.stop();
+    }
+
+    /**
      * {@link #pause()} if RUNNING, no-op otherwise; returns whether a pause happened. For
      * callers reacting to events that may race a game-over (the end-of-day dialog): a plain
      * {@code pause()} would throw from GAME_OVER.

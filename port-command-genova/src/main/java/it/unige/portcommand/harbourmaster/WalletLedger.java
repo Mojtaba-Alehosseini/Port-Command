@@ -75,6 +75,18 @@ public final class WalletLedger {
         }
     }
 
+    /**
+     * Seeds history from a save file (task 22 load) WITHOUT touching the balance or publishing:
+     * the persisted balance (this ledger's constructor arg on the restore path) already includes
+     * every restored entry, so applying them again would double-count. Only the in-progress
+     * day's entries are restored — that is exactly what {@code IncomeRules.aggregateForDay}/
+     * {@code ExpenseRules.variableForDay} read at the next end-of-day; settled days feed nothing.
+     */
+    public synchronized void restoreHistory(List<IncomeEvent> income, List<ExpenseEvent> expense) {
+        incomeHistory.addAll(income);
+        expenseHistory.addAll(expense);
+    }
+
     /** Every income ever recorded, in order. Snapshot — safe to iterate while writes continue. */
     public List<IncomeEvent> incomeHistory() {
         return List.copyOf(incomeHistory);

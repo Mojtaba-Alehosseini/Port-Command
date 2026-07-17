@@ -7,6 +7,7 @@ import it.unige.portcommand.gui.events.DebugWeatherEvent;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.SimClock;
+import it.unige.portcommand.util.Subscription;
 import jade.core.Agent;
 import jade.core.behaviours.OneShotBehaviour;
 import org.slf4j.Logger;
@@ -31,6 +32,10 @@ public final class DebugWeatherOverrideBehaviour extends OneShotBehaviour {
     private final SimClock simClock;
     private final EventBus eventBus;
     private final String agentName;
+    /** Held so the owning WeatherAgent cancels on takedown (task 22): after a save/load
+     * teardown-rebuild the old handler would keep writing the DEAD agent's snapshot cell
+     * and pile one extra subscriber onto the shared bus per reload. */
+    private volatile Subscription<DebugWeatherEvent> subscription;
 
     public DebugWeatherOverrideBehaviour(Agent agent, AtomicReference<WeatherSnapshot> current,
                                          SimClock simClock, EventBus eventBus) {
@@ -43,7 +48,15 @@ public final class DebugWeatherOverrideBehaviour extends OneShotBehaviour {
 
     @Override
     public void action() {
-        eventBus.subscribe(DebugWeatherEvent.class, this::onOverride, DeliveryMode.CALLER_THREAD);
+        subscription = eventBus.subscribe(DebugWeatherEvent.class, this::onOverride, DeliveryMode.CALLER_THREAD);
+    }
+
+    /** Cancels the bus subscription; safe if {@link #action()} never ran. */
+    public void cancelSubscription() {
+        Subscription<DebugWeatherEvent> s = subscription;
+        if (s != null) {
+            s.cancel();
+        }
     }
 
     /** Public so tests drive it directly (task-10 precedent). Safe off the agent thread. */

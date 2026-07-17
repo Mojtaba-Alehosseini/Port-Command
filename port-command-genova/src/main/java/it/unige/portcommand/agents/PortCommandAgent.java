@@ -2,6 +2,7 @@ package it.unige.portcommand.agents;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.unige.portcommand.bootstrap.ServiceLocator;
+import it.unige.portcommand.persistence.AgentDirectory;
 import jade.core.Agent;
 import jade.domain.DFService;
 import jade.domain.FIPAException;
@@ -27,6 +28,7 @@ public abstract class PortCommandAgent extends Agent {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
     private ServiceLocator serviceLocator;
+    private AgentDirectory agentDirectory;
 
     @Override
     protected final void setup() {
@@ -36,12 +38,22 @@ public abstract class PortCommandAgent extends Agent {
         // is a JADE instance handle (verified via javap), not a static registry —
         // honours the constructor-arg/no-static-DI rule (ADR-02).
         this.serviceLocator = new ServiceLocator(getContainerController(), this);
+        // Task 22: if the spawner threaded an AgentDirectory through the args channel
+        // (position-independent — scanned by type), self-register so the save snapshot can
+        // reach this agent's beliefs (jade.wrapper deliberately hides the Agent object).
+        this.agentDirectory = optionalArgOfType(AgentDirectory.class);
+        if (agentDirectory != null) {
+            agentDirectory.register(this);
+        }
         registerServices();
         onSetup();
     }
 
     @Override
     protected final void takeDown() {
+        if (agentDirectory != null) {
+            agentDirectory.unregister(this);
+        }
         try {
             DFService.deregister(this);
         } catch (FIPAException e) {
@@ -95,5 +107,36 @@ public abstract class PortCommandAgent extends Agent {
         }
         Object first = args[0];
         return type.isInstance(first) ? type.cast(first) : MAPPER.convertValue(first, type);
+    }
+
+    /**
+     * The first spawn argument that IS an instance of {@code type}, or {@code null} — a
+     * position-independent read for OPTIONAL args (task 22's restore DTOs and the
+     * {@link AgentDirectory}), so appending them never disturbs the index-based required
+     * args or the tests that pass shorter arrays.
+     */
+    protected final <T> T optionalArgOfType(Class<T> type) {
+        Object[] args = getArguments();
+        if (args == null) {
+            return null;
+        }
+        for (Object arg : args) {
+            if (type.isInstance(arg)) {
+                return type.cast(arg);
+            }
+        }
+        return null;
+    }
+
+    /** Shared mapper for the agents' {@code Mementoable} JsonNode round-trips (task 22). */
+    protected static ObjectMapper persistenceMapper() {
+        return MAPPER;
+    }
+
+    /** The session's live-agent registry, or {@code null} when not threaded through the args
+     * channel. The HarbourMaster forwards it to the walk-in spawner so dynamically spawned
+     * vessels register too (task 22). */
+    protected final AgentDirectory agentDirectory() {
+        return agentDirectory;
     }
 }
