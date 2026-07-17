@@ -9,7 +9,7 @@ package it.unige.portcommand.negotiation;
 public final class NoOpNegotiationEngine implements NegotiationEngine {
 
     @Override
-    public Decision evaluate(double playerPrice, WalkInState state) {
+    public Decision evaluate(double playerPrice, int playerHours, WalkInState state) {
         throw new UnsupportedOperationException(
                 "NegotiationEngine not wired (task 15). NoOpNegotiationEngine must never decide a real negotiation.");
     }

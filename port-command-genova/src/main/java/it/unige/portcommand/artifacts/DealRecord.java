@@ -13,7 +13,7 @@ import it.unige.portcommand.ontology.Deal;
  * @param durationHours service duration negotiated
  * @param price         agreed price (DEAL) or last offer (withdrawal)
  * @param simTime       sim-millis the outcome was recorded
- * @param outcome       DEAL / WITHDRAW_PRICE / TIMEOUT / PLAYER_REFUSED
+ * @param outcome       DEAL / WITHDRAW_PRICE / WITHDRAW_DURATION / TIMEOUT / PLAYER_REFUSED
  */
 public record DealRecord(
         @JsonProperty("vessel_type") String vesselType,

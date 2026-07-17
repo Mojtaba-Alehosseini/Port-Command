@@ -25,6 +25,10 @@ public record Deal(
         DEAL,
         /** Vessel withdrew because the price never met its threshold (incl. rounds exhausted). */
         WITHDRAW_PRICE,
+        /** Vessel withdrew because the player never granted its physically required stay length
+         * (task 19b, §7.3 duration bargaining): the fee was affordable at the final call, but the
+         * proposed hours were still below the vessel's hidden cargo-handling floor. */
+        WITHDRAW_DURATION,
         /** Negotiation timed out with no agreement. */
         TIMEOUT,
         /** The player (HarbourMaster) explicitly refused. */

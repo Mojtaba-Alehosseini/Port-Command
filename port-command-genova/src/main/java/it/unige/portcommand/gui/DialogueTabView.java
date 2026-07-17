@@ -99,7 +99,7 @@ final class DialogueTabView extends JPanel {
         }
         transcriptPane.setText(ChatMessageRenderer.renderTranscript(tab.transcript()));
         boolean closed = tab.isClosed();
-        offerStripLabel.setText(offerStripText(tab.snapshot(), closed));
+        offerStripLabel.setText(offerStripText(tab, closed));
         inputField.setEnabled(!closed);
         sendButton.setEnabled(!closed);
         hintButton.setVisible(!closed && !Settings.load().autopilotEnabled());
@@ -109,14 +109,20 @@ final class DialogueTabView extends JPanel {
         clarificationPanel.setVisible(!closed);
     }
 
-    private static String offerStripText(WalkInDialogueSnapshot s, boolean closed) {
+    /** Task 19b: both §7.3 dimensions on the strip — their €X for Yh / your €A for Bh. The
+     * player's hours fall back to the hours under discussion until they name their own. */
+    private static String offerStripText(DialogueTabModel tab, boolean closed) {
         if (closed) {
             return "Negotiation closed.";
         }
+        WalkInDialogueSnapshot s = tab.snapshot();
+        int playerHours = tab.lastPlayerHours() != null ? tab.lastPlayerHours() : s.durationHours();
         int roundLimit = Settings.load().roundLimit();
         long remaining = Math.max(0L, Settings.load().timeLimitSeconds() - Math.round(s.timeUsedSec()));
-        return String.format("Their offer: €%.0f  |  Your offer: €%.0f  |  Round %d of %d  |  ~%ds remaining",
-                s.lastVesselOffer(), s.lastPlayerOffer(), s.roundsUsed(), roundLimit, remaining);
+        return String.format(
+                "Their offer: €%.0f for %dh  |  Your offer: €%.0f for %dh  |  Round %d of %d  |  ~%ds remaining",
+                s.lastVesselOffer(), s.durationHours(), s.lastPlayerOffer(), playerHours,
+                s.roundsUsed(), roundLimit, remaining);
     }
 
     private void onSend() {
@@ -177,21 +183,14 @@ final class DialogueTabView extends JPanel {
         Map<String, Object> content = toVesselProtocol(frameElements);
         if (kind == PlayerCommandKind.PROPOSE && content.get("price") instanceof Number price) {
             // The offer strip + DialogueCtx standing offer need the player's side; no event
-            // carries it back (the HM doesn't track it), so record it at the send.
+            // carries it back (the HM doesn't track it), so record it at the send. Task 19b:
+            // the proposed HOURS ride along (null when the utterance named none — the standing
+            // value holds). The task-19 "only the fee is negotiable" note is gone: duration is
+            // a real §7.3 dimension now, and the bargaining feedback is the vessel's own reply
+            // ("they need at least Nh" on a floor pushback — see the registry's offerSummary).
+            Integer proposedHours = content.get("hours") instanceof Number n ? n.intValue() : null;
             registry.dialogueIdForVessel(targetVesselId)
-                    .ifPresent(id -> registry.recordPlayerOffer(id, price.doubleValue()));
-        }
-        // Price-only negotiation is by design (the vessel NEEDS its stay length; planning/15) —
-        // but silently ignoring a proposed duration read as a bug in the play-test ("I want to
-        // reduce the time but it's not happening"). Say so, in the tab it applies to.
-        DialogueTabModel typingTab = registry.tab(dialogueId);
-        if (kind == PlayerCommandKind.PROPOSE && typingTab != null
-                && targetVesselId.equals(typingTab.vesselId())
-                && content.get("hours") instanceof Number hours
-                && hours.intValue() != typingTab.snapshot().durationHours()) {
-            appendSystem("They need " + typingTab.snapshot().durationHours()
-                    + "h of berth time (their cargo handling takes that long) — only the fee is negotiable. "
-                    + "Your price still went through.");
+                    .ifPresent(id -> registry.recordPlayerOffer(id, price.doubleValue(), proposedHours));
         }
         eventBus.publish(new PlayerCommandEvent(kind, targetVesselId, content));
         // Echo how the NL was INTERPRETED (task 19 play-test: Rasa read a bare "so?" as an
@@ -271,7 +270,9 @@ final class DialogueTabView extends JPanel {
         String target = targetVesselId.equals(typingVesselId) ? "" : " (to " + targetVesselId + ")";
         return switch (kind) {
             case PROPOSE -> content.get("price") instanceof Number price
-                    ? String.format("→ Demanding €%.0f%s.", price.doubleValue(), target)
+                    ? (content.get("hours") instanceof Number hours
+                            ? String.format("→ Demanding €%.0f for %dh%s.", price.doubleValue(), hours.intValue(), target)
+                            : String.format("→ Demanding €%.0f%s.", price.doubleValue(), target))
                     : "→ Making an offer" + target + ".";
             case ACCEPT -> "→ Accepting their offer" + target + ".";
             case REJECT -> "→ Turning them away" + target + ".";

@@ -74,7 +74,7 @@ public final class NegotiationTabRegistry {
             }
             tab.updateSnapshot(snapshot);
         }
-        tab.appendVesselMessage(offerSummary(snapshot));
+        tab.appendVesselMessage(offerSummary(snapshot, tab.lastPlayerHours()));
         tabs.put(dialogueId, tab);
 
         onChange.run();
@@ -82,17 +82,24 @@ public final class NegotiationTabRegistry {
     }
 
     /**
-     * Records the player's outgoing PROPOSE price on the dialogue it targeted (task 19
+     * Records the player's outgoing PROPOSE terms on the dialogue it targeted (task 19
      * play-test fix: the offer strip showed "Your offer: €0" forever, and the DialogueCtx
      * standing offer never carried the player side — no event carries it, because the HM's
      * snapshots don't track the player's offers; the GUI is that price's only witness).
+     * {@code hours} is the player's proposed stay, or {@code null} when the utterance named
+     * none (task 19b). A null resolves to the hours currently under discussion (the vessel's
+     * last announced term, {@code snapshot.durationHours()}) — EXACTLY what the vessel side
+     * resolves an absent {@code hours} key to ({@code lastOwnHours}), so the strip and the
+     * floor-pushback note always reflect what the engine actually heard: a price-only reply
+     * to a "we need at least Nh" counter implicitly concedes the Nh.
      */
-    public void recordPlayerOffer(String dialogueId, double price) {
+    public void recordPlayerOffer(String dialogueId, double price, Integer hours) {
         DialogueTabModel tab = tabs.get(dialogueId);
         if (tab == null || tab.isClosed()) {
             return;
         }
         tab.updateSnapshot(withPlayerOffer(tab.snapshot(), price));
+        tab.recordPlayerHours(hours != null ? hours : tab.snapshot().durationHours());
         onChange.run();
     }
 
@@ -112,6 +119,7 @@ public final class NegotiationTabRegistry {
         String summary = switch (event.outcome()) {
             case DEAL -> "Deal closed.";
             case WITHDRAW_PRICE -> "Vessel withdrew (price never met).";
+            case WITHDRAW_DURATION -> "Vessel withdrew (you never granted the hours it needs).";
             case TIMEOUT -> "Vessel withdrew (negotiation timed out).";
             case PLAYER_REFUSED -> "You turned them away.";
         };
@@ -166,9 +174,20 @@ public final class NegotiationTabRegistry {
         return DialogueCtx.from(rosterSnapshots(), focusVesselId);
     }
 
-    private static String offerSummary(WalkInDialogueSnapshot snapshot) {
+    /**
+     * The vessel's transcript line for an opening/counter. Task 19b: when the vessel's hours
+     * term came back ABOVE the player's own proposed stay, this counter is the duration floor
+     * pushing back — say so ("they need at least Nh"), the §7.3 bargaining reply. Derived
+     * entirely from observable terms on the wire (the two hours values); no hidden belief is
+     * read — the floor's VALUE is public exactly when, and because, the vessel counters at it.
+     */
+    private static String offerSummary(WalkInDialogueSnapshot snapshot, Integer playerHours) {
         String verb = snapshot.roundsUsed() <= 1 ? "Opens at" : "Counters at";
-        return verb + " €" + Math.round(snapshot.lastVesselOffer()) + " for "
+        String line = verb + " €" + Math.round(snapshot.lastVesselOffer()) + " for "
                 + snapshot.durationHours() + "h at " + snapshot.berthId();
+        if (playerHours != null && snapshot.durationHours() > playerHours) {
+            line += " — they need at least " + snapshot.durationHours() + "h";
+        }
+        return line;
     }
 }

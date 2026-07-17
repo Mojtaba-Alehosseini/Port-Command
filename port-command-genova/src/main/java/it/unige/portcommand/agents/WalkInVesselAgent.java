@@ -52,7 +52,13 @@ public final class WalkInVesselAgent extends BaseVesselAgent {
         double target = template.sampleTargetPrice(r);
         int wait = template.sampleMaxWaitMinutes(r);
         int hours = 6 + r.nextInt(13); // 6..18 sim-hours of desired service
-        stateRef.set(WalkInState.initial(spec.vesselType(), min, target, personality, wait, hours));
+        // Task 19b: the hidden cargo floor, from its own ISOLATED substream (same rationale as
+        // the opening roll below — the "vessel-"+id sequence is replay-pinned), clamped to the
+        // announced preferred stay so a vessel never opens below its own floor.
+        int floorDraw = template.sampleMinDurationHours(randomSource.forStream("duration-" + spec.vesselId()));
+        int minDurationHours = Math.min(floorDraw, hours);
+        stateRef.set(WalkInState.initial(spec.vesselType(), min, target, personality, wait, hours,
+                minDurationHours));
         this.conversationId = "nego-" + spec.vesselId();
         log.info("{} arrived (walk-in, {}) -> opening proposal", getLocalName(), personality);
 

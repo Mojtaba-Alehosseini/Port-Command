@@ -12,8 +12,11 @@ import it.unige.portcommand.ontology.VesselSpec;
  * far, and how long the dialogue has run.
  *
  * <p><b>v1.1 hard constraint (P-04):</b> this type must NOT expose {@code minAcceptablePrice},
- * {@code targetPrice}, {@code maxWaitMinutes}, or {@code personality} — those are the walk-in's
- * HIDDEN beliefs (see {@code negotiation.WalkInState}, INVARIANTS.md "Agents / behaviours").
+ * {@code targetPrice}, {@code maxWaitMinutes}, {@code personality}, or {@code minDurationHours}
+ * (task 19b's cargo-handling floor) — those are the walk-in's HIDDEN beliefs (see
+ * {@code negotiation.WalkInState}, INVARIANTS.md "Agents / behaviours"). {@code durationHours}
+ * here is the OBSERVABLE hours term on the wire (the vessel announces its preferred stay and
+ * every counter carries its current hours), not the floor.
  * Reading them here would be the exact oral-exam attack rehearsed in job5 §5.4 Q2.
  * {@link WalkInDialogueSnapshotPrivacyTest} guards this reflectively.
  *

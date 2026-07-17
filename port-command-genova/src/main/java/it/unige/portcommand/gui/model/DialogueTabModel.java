@@ -28,6 +28,7 @@ public final class DialogueTabModel {
     private final String dialogueId;
     private final List<ChatEntry> transcript = new ArrayList<>();
     private WalkInDialogueSnapshot snapshot;
+    private Integer lastPlayerHours; // task 19b: the player's last PROPOSED stay; null until they name one
     private boolean closed;
     private Deal.Outcome outcome;
 
@@ -50,6 +51,25 @@ public final class DialogueTabModel {
 
     public void updateSnapshot(WalkInDialogueSnapshot newSnapshot) {
         this.snapshot = Objects.requireNonNull(newSnapshot, "newSnapshot");
+    }
+
+    /**
+     * The stay length the player's last PROPOSE effectively carried, or {@code null} before
+     * their first offer (task 19b — §7.3's second dimension). GUI-local for the same reason as
+     * the registry's player-offer carry-over: the HM's snapshots never track the player's side,
+     * so this model is the value's only witness. The registry resolves a duration-less
+     * utterance to the hours under discussion before recording — mirroring how the vessel
+     * resolves an absent {@code hours} key — so this is always what the engine actually heard.
+     */
+    public Integer lastPlayerHours() {
+        return lastPlayerHours;
+    }
+
+    /** Records the player's effective proposed stay ({@code null} guard kept for safety). */
+    public void recordPlayerHours(Integer hours) {
+        if (hours != null) {
+            this.lastPlayerHours = hours;
+        }
     }
 
     public List<ChatEntry> transcript() {

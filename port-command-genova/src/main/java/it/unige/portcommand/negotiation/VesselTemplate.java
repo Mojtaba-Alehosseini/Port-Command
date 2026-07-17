@@ -16,12 +16,19 @@ public record VesselTemplate(
         @JsonProperty("min_acceptable_price_range") double[] minAcceptablePriceRange,
         @JsonProperty("target_price_range") double[] targetPriceRange,
         @JsonProperty("max_wait_minutes_range") int[] maxWaitMinutesRange,
+        @JsonProperty("min_duration_range") int[] minDurationRange,
         @JsonProperty("draft_range") double[] draftRange,
         @JsonProperty("length_range") double[] lengthRange,
         @JsonProperty("tonnage_range") int[] tonnageRange) {
 
     public double sampleMinAcceptablePrice(Random r) {
         return uniform(minAcceptablePriceRange, r);
+    }
+
+    /** Task 19b: the hidden cargo-handling floor (hours) — the spawner clamps the draw to the
+     * vessel's announced preferred stay so the pair is always coherent. */
+    public int sampleMinDurationHours(Random r) {
+        return (int) Math.round(uniform(minDurationRange[0], minDurationRange[1], r));
     }
 
     public double sampleTargetPrice(Random r) {

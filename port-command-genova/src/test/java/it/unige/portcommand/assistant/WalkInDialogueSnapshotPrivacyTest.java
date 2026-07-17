@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WalkInDialogueSnapshotPrivacyTest {
 
     private static final List<String> FORBIDDEN_TOKENS = List.of(
-            "minacceptable", "targetprice", "maxwait", "personality");
+            "minacceptable", "targetprice", "maxwait", "personality", "minduration");
 
     @Test
     void recordComponentsContainNoHiddenBeliefFields() {

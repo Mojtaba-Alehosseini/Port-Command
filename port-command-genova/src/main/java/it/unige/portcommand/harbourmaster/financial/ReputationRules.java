@@ -46,6 +46,7 @@ public final class ReputationRules {
     private static final Map<Deal.Outcome, String> JSON_KEYS = Map.of(
             Deal.Outcome.DEAL, "deal_closed",
             Deal.Outcome.WITHDRAW_PRICE, "withdraw_price",
+            Deal.Outcome.WITHDRAW_DURATION, "withdraw_duration",
             Deal.Outcome.TIMEOUT, "timeout",
             Deal.Outcome.PLAYER_REFUSED, "player_refused");
 
@@ -76,6 +77,11 @@ public final class ReputationRules {
         Map<Deal.Outcome, Double> table = new EnumMap<>(Deal.Outcome.class);
         table.put(Deal.Outcome.DEAL, 1.0);
         table.put(Deal.Outcome.WITHDRAW_PRICE, -2.0);
+        // Task 19b: same shape of failure as a price withdrawal — a vessel left unserved over
+        // terms that never met — so it carries the same penalty. No canonical source names it
+        // (the outcome is new with §7.3's duration leg); mirroring withdraw_price is the
+        // conservative reading, and the demo-script arithmetic above is untouched.
+        table.put(Deal.Outcome.WITHDRAW_DURATION, -2.0);
         table.put(Deal.Outcome.TIMEOUT, -3.0);
         table.put(Deal.Outcome.PLAYER_REFUSED, 0.0);
         return Collections.unmodifiableMap(table);

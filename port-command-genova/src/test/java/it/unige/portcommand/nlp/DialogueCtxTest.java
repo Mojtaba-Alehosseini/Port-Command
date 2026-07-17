@@ -91,7 +91,8 @@ class DialogueCtxTest {
     @Test
     void ctxConstructionReadsNoHiddenBelief() throws IOException {
         String source = Files.readString(Path.of("src/main/java/it/unige/portcommand/nlp/DialogueCtx.java"));
-        for (String accessor : List.of(".minAcceptablePrice(", ".targetPrice(", ".maxWaitMinutes(", ".personality(")) {
+        for (String accessor : List.of(".minAcceptablePrice(", ".targetPrice(", ".maxWaitMinutes(",
+                ".personality(", ".minDurationHours(")) {
             assertFalse(source.contains(accessor),
                     "DialogueCtx must not read a hidden belief during context construction: " + accessor);
         }

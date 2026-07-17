@@ -21,8 +21,10 @@ import org.slf4j.LoggerFactory;
  * Ends a walk-in negotiation: INFORM the HarbourMaster of the withdrawal, record the
  * outcome in {@link it.unige.portcommand.artifacts.MarketHistoryArtifact} with the
  * canonical {@link Deal.Outcome} for the reason, then {@code doDelete()}. Fired from the
- * counter-eval (task 15's engine only ever withdraws with {@code over_priced}) and the
- * timeout ticker ({@code timeout}).
+ * counter-eval (the engine withdraws with {@code over_priced}, or — task 19b —
+ * {@code too_short} when the fee was affordable at the final call but the player never
+ * granted the cargo-handling floor), the player-refuse path ({@code player_refused}),
+ * and the timeout ticker ({@code timeout}).
  */
 public final class WithdrawalBehaviour extends OneShotBehaviour {
 
@@ -53,7 +55,7 @@ public final class WithdrawalBehaviour extends OneShotBehaviour {
             myAgent.send(inform);
         }
         double lastPrice = state == null ? 0.0 : state.lastOwnOffer();
-        int hours = state == null ? 0 : state.dealHours();
+        int hours = state == null ? 0 : state.lastOwnHours(); // the standing hours term (19b), = dealHours pre-counter
         vessel.marketHistory().record(new DealRecord(
                 vessel.spec().vesselType(), hours, lastPrice,
                 vessel.simClock().nowSimMillis(), outcomeFor(reason)));
@@ -61,10 +63,12 @@ public final class WithdrawalBehaviour extends OneShotBehaviour {
         myAgent.doDelete();
     }
 
-    /** Maps a withdrawal reason to its canonical {@link Deal.Outcome} (task-07 §164). */
+    /** Maps a withdrawal reason to its canonical {@link Deal.Outcome} (task-07 §164;
+     * {@code too_short} added by task 19b for the duration dimension's terminal case). */
     public static Deal.Outcome outcomeFor(String reason) {
         return switch (reason) {
             case "over_priced" -> Deal.Outcome.WITHDRAW_PRICE;
+            case "too_short" -> Deal.Outcome.WITHDRAW_DURATION;
             case "timeout" -> Deal.Outcome.TIMEOUT;
             case "player_refused" -> Deal.Outcome.PLAYER_REFUSED;
             default -> throw new IllegalArgumentException("unknown withdrawal reason: " + reason);

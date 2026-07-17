@@ -18,6 +18,7 @@ class WithdrawalBehaviourTest {
     @Test
     void mapsEachReasonToItsCanonicalOutcome() {
         assertEquals(Deal.Outcome.WITHDRAW_PRICE, WithdrawalBehaviour.outcomeFor("over_priced"));
+        assertEquals(Deal.Outcome.WITHDRAW_DURATION, WithdrawalBehaviour.outcomeFor("too_short"));
         assertEquals(Deal.Outcome.TIMEOUT, WithdrawalBehaviour.outcomeFor("timeout"));
         assertEquals(Deal.Outcome.PLAYER_REFUSED, WithdrawalBehaviour.outcomeFor("player_refused"));
     }

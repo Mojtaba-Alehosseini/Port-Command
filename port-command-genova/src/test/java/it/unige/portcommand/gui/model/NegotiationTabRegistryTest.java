@@ -75,7 +75,7 @@ class NegotiationTabRegistryTest {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
 
-        registry.recordPlayerOffer("nego-W001", 5000.0);
+        registry.recordPlayerOffer("nego-W001", 5000.0, 10);
 
         assertEquals(5000.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001,
                 "the offer strip reads lastPlayerOffer from the snapshot — it was stuck at €0 before");
@@ -88,7 +88,7 @@ class NegotiationTabRegistryTest {
     void aRoundUpdateCarriesThePlayerOfferForward() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
-        registry.recordPlayerOffer("nego-W001", 5000.0);
+        registry.recordPlayerOffer("nego-W001", 5000.0, 10);
 
         // The HM builds every snapshot with lastPlayerOffer=0.0 (it never tracks the player's
         // side) — a vessel counter must not wipe the GUI's record of the player's standing offer.
@@ -105,8 +105,8 @@ class NegotiationTabRegistryTest {
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
         registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL));
 
-        registry.recordPlayerOffer("nego-W001", 5000.0); // closed
-        registry.recordPlayerOffer("nego-GHOST", 5000.0); // unknown
+        registry.recordPlayerOffer("nego-W001", 5000.0, 10); // closed
+        registry.recordPlayerOffer("nego-GHOST", 5000.0, 10); // unknown
 
         assertEquals(0.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001,
                 "a closed dialogue's snapshot must not mutate");
@@ -186,11 +186,75 @@ class NegotiationTabRegistryTest {
         assertEquals(3, changes[0]);
     }
 
+    // ==================== task 19b: the duration dimension in the tab model ====================
+
+    @Test
+    void aVesselCounterAboveThePlayersHoursGetsTheFloorPushbackNote() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.recordPlayerOffer("nego-W001", 1300.0, 4); // player proposed a 4h stay
+
+        // The vessel's counter comes back at 6h — its hours term ABOVE the player's proposal is
+        // the duration floor pushing back, and the transcript line must say so.
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 2, 1400.0));
+
+        List<DialogueTabModel.ChatEntry> transcript = registry.tab("nego-W001").transcript();
+        String counterLine = transcript.get(transcript.size() - 1).text();
+        assertTrue(counterLine.contains("they need at least 6h"),
+                "the floor pushback must be legible bargaining feedback, got: " + counterLine);
+    }
+
+    @Test
+    void aVesselCounterEchoingThePlayersHoursGetsNoPushbackNote() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.recordPlayerOffer("nego-W001", 1300.0, 6); // matches the snapshot's 6h
+
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 2, 1400.0));
+
+        List<DialogueTabModel.ChatEntry> transcript = registry.tab("nego-W001").transcript();
+        String counterLine = transcript.get(transcript.size() - 1).text();
+        assertFalse(counterLine.contains("they need at least"),
+                "an hours-agreed counter is not a pushback: " + counterLine);
+    }
+
+    @Test
+    void aPriceOnlyCounterResolvesToTheHoursUnderDiscussionLikeTheVesselDoes() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+
+        registry.recordPlayerOffer("nego-W001", 1300.0, 10);
+        registry.recordPlayerOffer("nego-W001", 1400.0, null); // a price-only counter names no hours
+
+        // The vessel resolves an absent hours key to ITS standing term (the snapshot's 6h here),
+        // not to the player's earlier 10 — a price-only reply implicitly concedes the hours on
+        // the table. The GUI must record what the engine actually heard, or the strip and the
+        // floor-pushback note drift from the real negotiation state.
+        assertEquals(6, registry.tab("nego-W001").lastPlayerHours(),
+                "a duration-less utterance resolves to the hours under discussion (the vessel-side rule)");
+        assertEquals(1400.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001);
+    }
+
+    @Test
+    void aDurationWithdrawalClosesWithItsOwnHonestSummary() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+
+        registry.onNegotiationClosed(
+                new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.WITHDRAW_DURATION));
+
+        List<DialogueTabModel.ChatEntry> transcript = registry.tab("nego-W001").transcript();
+        String closeLine = transcript.get(transcript.size() - 1).text();
+        assertTrue(closeLine.contains("hours"),
+                "a duration withdrawal must not masquerade as a price one: " + closeLine);
+    }
+
     /** P-04: neither this registry nor the tab model may ever read a walk-in's hidden
      * beliefs — mirrors {@code DialogueCtxTest}'s own source-text grep gate. */
     @Test
     void neitherRegistryNorTabModelReadsAHiddenBelief() throws IOException {
-        List<String> forbidden = List.of(".minAcceptablePrice(", ".targetPrice(", ".maxWaitMinutes(", ".personality(");
+        List<String> forbidden = List.of(".minAcceptablePrice(", ".targetPrice(", ".maxWaitMinutes(",
+                ".personality(", ".minDurationHours(");
         for (Path file : List.of(
                 Path.of("src/main/java/it/unige/portcommand/gui/model/NegotiationTabRegistry.java"),
                 Path.of("src/main/java/it/unige/portcommand/gui/model/DialogueTabModel.java"))) {

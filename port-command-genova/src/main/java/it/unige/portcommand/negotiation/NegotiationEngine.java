@@ -9,9 +9,11 @@ package it.unige.portcommand.negotiation;
 public interface NegotiationEngine {
 
     /**
-     * Decide how the vessel responds to {@code playerPrice} given its hidden
-     * {@code state}. Pure with respect to the agent — must not mutate {@code state}
-     * or perform I/O.
+     * Decide how the vessel responds to the player's demanded fee {@code playerPrice} for a
+     * {@code playerHours}-long stay, given its hidden {@code state} (task 19b: §7.3 negotiates
+     * price AND duration; the caller resolves an utterance with no stated duration to the
+     * standing hours term BEFORE calling — the engine always sees a concrete proposal). Pure
+     * with respect to the agent — must not mutate {@code state} or perform I/O.
      */
-    Decision evaluate(double playerPrice, WalkInState state);
+    Decision evaluate(double playerPrice, int playerHours, WalkInState state);
 }

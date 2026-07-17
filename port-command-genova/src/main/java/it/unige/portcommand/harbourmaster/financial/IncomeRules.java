@@ -74,14 +74,18 @@ public final class IncomeRules {
      * time it gets here (the negotiation engine for a walk-in, {@code contracts.json} for a
      * contract), and this class does not re-price it.
      *
-     * <p><strong>The task-19b seam (2026-07-17).</strong> {@code hours} is accepted and
-     * deliberately IGNORED — fees are per-deal FLAT amounts today, because §7.3's duration leg is
-     * not built yet (the deal's duration is fixed at the vessel's required stay). Task 19b is
-     * APPROVED and lands immediately after task 20; when it makes duration negotiable, the
-     * fee-per-hours interaction belongs HERE, in this method's body, and nowhere else. Everything
-     * downstream — the ledgers, the events, the EOD aggregation, the §7.5 calibration — consumes
-     * only this method's return value, so 19b changes this body plus its table-driven test and
-     * nothing else. Do not add an hours term to any other method.
+     * <p><strong>The task-19b seam (2026-07-17; RESOLVED by 19b the same day).</strong>
+     * {@code hours} is accepted and deliberately IGNORED — fees stay per-deal FLAT amounts.
+     * 19b made duration a real §7.3 bargaining dimension (the {@code hours} arriving here is
+     * now genuinely negotiated, no longer pinned to the vessel's preferred stay), and it
+     * KEPT the flat fee on purpose: the 19b spec's fee-per-hours idea was a sketch, its
+     * acceptance criteria never touch income, and with the frozen clock (until task 24) a
+     * shorter stay buys the player nothing — so re-pricing by hours would change §7.5
+     * calibration for no gameplay gain. If a fee-per-hours model is ever wanted (task 24+,
+     * when berth throughput becomes real), it belongs HERE, in this method's body, and
+     * nowhere else. Everything downstream — the ledgers, the events, the EOD aggregation,
+     * the §7.5 calibration — consumes only this method's return value, so that change stays
+     * this body plus its table-driven test. Do not add an hours term to any other method.
      *
      * @param vesselType one of the 5 canonical types, or {@code null} when the caller does not
      *                   know it. Validated only when supplied — a typo must not price silently,

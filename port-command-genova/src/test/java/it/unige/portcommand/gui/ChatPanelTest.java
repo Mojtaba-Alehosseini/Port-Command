@@ -397,9 +397,11 @@ class ChatPanelTest {
 
     @Test
     @Timeout(5)
-    void aProposeWithDifferentHoursExplainsThatDurationIsFixed() throws Exception {
-        // Price-only negotiation is by design; ignoring a proposed duration SILENTLY read as a
-        // bug in the play-test. The price must still dispatch — only accompanied by the note.
+    void aProposeWithHoursDispatchesBothDimensionsAndDropsTheFixedDurationNote() throws Exception {
+        // Task 19b: duration is a REAL §7.3 dimension now. The task-19 "only the fee is
+        // negotiable" honest-note must be gone — the bargaining feedback is the vessel's own
+        // floor-pushback reply (NegotiationTabRegistryTest pins that line) — and the echo must
+        // show both dimensions so the routed interpretation stays legible.
         EventBus bus = new EventBus();
         StubProcessor processor = new StubProcessor();
         ChatPanel panel = new ChatPanel(bus, processor);
@@ -411,12 +413,18 @@ class ChatPanelTest {
         SwingUtilities.invokeAndWait(() -> { });
 
         List<DialogueTabModel.ChatEntry> transcript = panel.registry().tab("nego-A").transcript();
+        assertFalse(transcript.stream().anyMatch(e -> e.text().contains("only the fee is negotiable")),
+                "the task-19 duration-is-fixed note must be GONE: " + transcript);
         assertTrue(transcript.stream().anyMatch(e -> e.speaker() == DialogueTabModel.Speaker.SYSTEM
-                        && e.text().contains("only the fee is negotiable")),
-                "the duration-is-fixed note must appear: " + transcript);
+                        && e.text().contains("€2000") && e.text().contains("10h")),
+                "the interpretation echo must carry both dimensions: " + transcript);
         List<PlayerCommandEvent> events = published(bus, PlayerCommandEvent.class);
-        assertEquals(1, events.size(), "the priced offer must still go through");
+        assertEquals(1, events.size(), "the two-dimension offer must go through");
         assertEquals(2000.0, ((Number) events.get(0).content().get("price")).doubleValue(), 0.001);
+        assertEquals(10, ((Number) events.get(0).content().get("hours")).intValue(),
+                "the proposed duration must survive onto the wire");
+        assertEquals(10, panel.registry().tab("nego-A").lastPlayerHours(),
+                "the tab records the player's proposed stay for the strip and the pushback note");
     }
 
     @Test

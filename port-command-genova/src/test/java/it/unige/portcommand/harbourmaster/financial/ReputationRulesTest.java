@@ -15,10 +15,11 @@ class ReputationRulesTest {
 
     @ParameterizedTest(name = "{0} -> {1}")
     @CsvSource({
-        "DEAL,            1.0",
-        "WITHDRAW_PRICE, -2.0",
-        "TIMEOUT,        -3.0",
-        "PLAYER_REFUSED,  0.0"
+        "DEAL,               1.0",
+        "WITHDRAW_PRICE,    -2.0",
+        "WITHDRAW_DURATION, -2.0", // 19b: same failure shape as a price withdrawal, same penalty
+        "TIMEOUT,           -3.0",
+        "PLAYER_REFUSED,     0.0"
     })
     void tableMatchesTheCanonicalDeltas(Deal.Outcome outcome, double expected) {
         assertEquals(expected, ReputationRules.deltaFor(outcome), EPS);

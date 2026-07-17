@@ -285,6 +285,44 @@ class NLPPipelineDcgIT {
                         + routed.msg().getContent());
     }
 
+    // --- 19b: the duration dimension through the whole chain, Rasa still down ------------------
+
+    /**
+     * A DURATION-ONLY ellipsis counter ("make it 13 hours"): the price completes from the
+     * standing offer, the new hours ride the frame as {@code duration} — the key
+     * {@code DialogueTabView.toVesselProtocol} bridges to the vessel protocol's {@code hours}
+     * (pinned GUI-side by {@code ChatPanelTest}). Until 19b the vessel dropped this dimension;
+     * now it is a real §7.3 move, so the parse path earns its own gate.
+     */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void aDurationOnlyEllipsisCounterRoutesWithThePriceCompletedFromContext() {
+        PipelineResult result = pipelineWithRasaDown.processChatInput("make it 13 hours", m2ctx()).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result);
+        assertEquals(ACLMessage.PROPOSE, routed.msg().getPerformative(), "an hours counter is a PROPOSE");
+        String content = routed.msg().getContent();
+        assertTrue(content.contains("\"duration\":13") || content.contains("\"duration\": 13"),
+                "the new stay must ride the frame's duration slot: " + content);
+        assertTrue(content.contains("1500"),
+                "the price must complete from the standing offer (the player's own last bid): " + content);
+    }
+
+    /** A COMBINED price+hours counter ("1300 for 12 hours") — both §7.3 dimensions in one move. */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void aCombinedPriceAndHoursCounterCarriesBothDimensions() {
+        PipelineResult result = pipelineWithRasaDown
+                .processChatInput("how about 1300 for 12 hours", m2ctx()).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result);
+        assertEquals(ACLMessage.PROPOSE, routed.msg().getPerformative());
+        String content = routed.msg().getContent();
+        assertTrue(content.contains("1300"), "the fee: " + content);
+        assertTrue(content.contains("\"duration\":12") || content.contains("\"duration\": 12"),
+                "the stay: " + content);
+    }
+
     @Test
     @Timeout(value = 30, unit = TimeUnit.SECONDS)
     void anAmbiguousAnaphoraDegradesToClarificationNotAGuess() {

@@ -76,7 +76,8 @@ public final class OpeningProposalBehaviour extends OneShotBehaviour {
         propose.setContent(TerminalJson.write(content));
         myAgent.send(propose);
 
-        stateRef.set(state.markStarted(vessel.simClock().nowSimMillis()).recordOwnOffer(opening));
+        stateRef.set(state.markStarted(vessel.simClock().nowSimMillis())
+                .recordOwnOffer(opening, state.dealHours()));
         log.info("{} opened at {} ({}h) -> harbour-master", myAgent.getLocalName(), opening, state.dealHours());
     }
 
