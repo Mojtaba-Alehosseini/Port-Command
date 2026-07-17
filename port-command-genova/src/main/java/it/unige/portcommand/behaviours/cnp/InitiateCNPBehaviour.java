@@ -56,6 +56,8 @@ public final class InitiateCNPBehaviour extends OneShotBehaviour {
         if (tugs.isEmpty()) {
             log.warn("no tug-escort registered in DF; holding vessel {}", req.vesselId());
             holdVessel(hm, "no_tugs_registered");
+            // Terminal path with no collector spawned — release the serialized-CNP queue (B2).
+            hm.cnpCoordinator().completed();
             return;
         }
 

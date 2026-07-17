@@ -26,7 +26,11 @@ import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
+import it.unige.portcommand.gui.events.TugJobAwardedEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
+import it.unige.portcommand.harbourmaster.VesselTracking;
+import it.unige.portcommand.harbourmaster.financial.ExpenseRules;
+import it.unige.portcommand.harbourmaster.financial.IncomeRules;
 import it.unige.portcommand.ontology.Deal;
 import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.ontology.VesselSpec;
@@ -43,6 +47,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -662,6 +667,197 @@ class HarbourMasterAgentIT {
         assertNeverArrives(scene.tug.inbox, ACLMessage.CANCEL, 3000);
     }
 
+    /**
+     * Task 24's negative IT for the previously-permanent strand: hold under storm, then the
+     * weather-clear signal, then the FULL re-dispatch cascade — fresh CFP (fresh cfpId), bid,
+     * award, vessel resume — with tug charging exactly once per escort job and no phantom
+     * extra-tug surcharge (same tug re-awarded).
+     */
+    @Test
+    void weatherClear_redispatchesHeldVesselExactlyOnce() throws Exception {
+        InTransitFixture scene = getVesselInTransit("t14");
+        String vesselId = "V-t14";
+        Probe weatherProbe = spawnProbe("t14_weather", "weather");
+
+        // HOLD: a storm past every limit cancels the escort and marks the vessel weather-held.
+        weatherProbe.outbox.put(thresholdAlert(scene.hm, 55, "poor", 6.0, "stormy"));
+        assertNotNull(pollUntil(scene.tug.inbox, m -> m.getPerformative() == ACLMessage.CANCEL, 10_000),
+                "the hold must CANCEL the in-transit tug");
+        VesselTracking held = pollTracking(scene.hm, vesselId, VesselTracking::weatherHeld, 10_000);
+        assertNotNull(held, "the hold must mark the tracking weatherHeld");
+        assertEquals(VesselTracking.Stage.AWAITING_TUG, held.stage());
+        assertTrue(held.assignedTugs().isEmpty(), "the cancelled escort must be dropped");
+        ACLMessage holdInform = pollUntil(scene.vessel.inbox,
+                m -> m.getPerformative() == ACLMessage.INFORM
+                        && m.getContent() != null && m.getContent().contains("weather_hold"), 10_000);
+        assertNotNull(holdInform, "the vessel must be told about the hold");
+
+        // CLEAR: recovered conditions -> the HM re-runs the Prolog gate and re-initiates the CNP.
+        weatherProbe.outbox.put(clearAlert(scene.hm, 12, "good", 0.5, "sunny"));
+        ACLMessage cfp2 = pollUntil(scene.tug.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
+        assertNotNull(cfp2, "the weather-clear signal must re-initiate the tug CNP");
+        scene.tug.outbox.put(bidReply(cfp2, 120.0, 6.0, 0.8));
+        ACLMessage award2 = pollUntil(scene.tug.inbox,
+                m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000);
+        assertNotNull(award2, "the re-dispatched CNP must award the lone bidder");
+
+        ACLMessage resume = pollUntil(scene.vessel.inbox,
+                m -> m.getPerformative() == ACLMessage.INFORM
+                        && m.getContent() != null && m.getContent().contains("weather_resume"), 10_000);
+        assertNotNull(resume, "the vessel must be told the escort resumes");
+
+        VesselTracking resumed = pollTracking(scene.hm, vesselId,
+                t -> t.stage() == VesselTracking.Stage.IN_TRANSIT, 10_000);
+        assertNotNull(resumed, "the award must move the vessel back to IN_TRANSIT");
+        assertFalse(resumed.weatherHeld(), "the held flag must clear on re-dispatch");
+        assertEquals(List.of("t14_tug"), resumed.assignedTugs());
+
+        // Exactly-once charging: two awards (two genuine escort jobs) under two DISTINCT cfpIds
+        // -> two (conversationId, tugId) ledger keys -> exactly two tug_job expenses; and the
+        // SAME tug re-awarded means the vessel's distinct-tug set never grows past one -> no
+        // extra-tug surcharge.
+        List<TugJobAwardedEvent> awards = EventBusProbe.published(boot.getEventBus()).stream()
+                .filter(TugJobAwardedEvent.class::isInstance).map(TugJobAwardedEvent.class::cast)
+                .filter(e -> vesselId.equals(e.vesselId()))
+                .toList();
+        assertEquals(2, awards.size(), "one award per escort job, hold->clear = two jobs");
+        assertNotEquals(awards.get(0).conversationId(), awards.get(1).conversationId(),
+                "the re-dispatch must mint a FRESH cfpId — reusing the cancelled one would dedupe the charge");
+        assertEquals(2, scene.hm.walletLedger().expenseHistory().stream()
+                        .filter(e -> ExpenseRules.SOURCE_TUG_JOB.equals(e.source())).count(),
+                "exactly one charge per escort job — never zero, never doubled");
+        assertTrue(scene.hm.walletLedger().incomeHistory().stream()
+                        .noneMatch(e -> IncomeRules.SOURCE_EXTRA_TUG.equals(e.source())),
+                "re-awarding the same tug must not bill the vessel an extra-tug surcharge");
+
+        // A second clear with nothing held left must be a no-op (the weatherHeld flag is the
+        // exactly-once guard on the dispatch side).
+        weatherProbe.outbox.put(clearAlert(scene.hm, 12, "good", 0.5, "sunny"));
+        assertNeverArrives(scene.tug.inbox, ACLMessage.CFP, 3000);
+    }
+
+    /**
+     * Checkpoint-#5 B1 (GHOST VESSELS): a departed vessel's tracking entry must die with the
+     * agent — the observed run held three ALREADY-DEPARTED walk-ins on a storm and then
+     * re-dispatched real (charged) escorts for all three on the clear.
+     */
+    @Test
+    void departedVessel_isNeverHeldNorRedispatchedNorCharged() throws Exception {
+        InTransitFixture scene = getVesselInTransit("t16");
+        String vesselId = "V-t16";
+        Probe weatherProbe = spawnProbe("t16_weather", "weather");
+        long chargesAfterAward = scene.hm.walletLedger().expenseHistory().stream()
+                .filter(e -> ExpenseRules.SOURCE_TUG_JOB.equals(e.source())).count();
+        assertEquals(1, chargesAfterAward, "setup: the original escort award was charged once");
+
+        // The vessel leaves (DepartBehaviour's wire shape) — the HM must close the tracking.
+        ACLMessage departed = MessageFactory.create(ACLMessage.INFORM);
+        departed.addReceiver(scene.hm.getAID());
+        departed.setContent(TerminalJson.write(Map.of("intent", "departed", "vessel_id", vesselId)));
+        scene.vessel.outbox.put(departed);
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (scene.hm.activeVessels().containsKey(vesselId) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20); // bounded poll — the documented no-Awaitility exception pattern
+        }
+        assertFalse(scene.hm.activeVessels().containsKey(vesselId),
+                "departure must remove the tracking entry");
+
+        // A storm now finds nothing to hold; a clear finds nothing to re-dispatch.
+        weatherProbe.outbox.put(thresholdAlert(scene.hm, 55, "poor", 6.0, "stormy"));
+        assertNeverArrives(scene.tug.inbox, ACLMessage.CANCEL, 3000);
+        weatherProbe.outbox.put(clearAlert(scene.hm, 12, "good", 0.5, "sunny"));
+        assertNeverArrives(scene.tug.inbox, ACLMessage.CFP, 3000);
+        assertEquals(chargesAfterAward, scene.hm.walletLedger().expenseHistory().stream()
+                        .filter(e -> ExpenseRules.SOURCE_TUG_JOB.equals(e.source())).count(),
+                "a ghost must never generate a tug charge");
+    }
+
+    /**
+     * Checkpoint-#5 B2 (CONCURRENT CNP TRIPLE-BOOKING): same-instant re-dispatches used to put
+     * every CFP on the wire before any award, so the best tugs won every contract at once. The
+     * coordinator now serializes sessions — the next CFP goes out only after the previous award,
+     * so a busy tug can REFUSE and the assignments come out disjoint.
+     */
+    @Test
+    void simultaneousRedispatches_serializeIntoDisjointTugAssignments() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe tugA = spawnProbe("t17_tug_a", "tug-escort");
+        Probe tugB = spawnProbe("t17_tug_b", "tug-escort");
+        Probe weatherProbe = spawnProbe("t17_weather", "weather");
+        // 15,000 t cargo needs exactly ONE tug (R9 <20000 -> 1; cargo has no type minimum), so
+        // each session awards one winner and the second session must find a DIFFERENT free tug.
+        VesselSpec spec1 = new VesselSpec("T17V1", "cargo_vessel", 9.0, 150.0, 15000, "general_cargo", 0L);
+        VesselSpec spec2 = new VesselSpec("T17V2", "cargo_vessel", 9.0, 150.0, 15000, "general_cargo", 0L);
+        assertEquals(1, PrologQueries.tugsRequired("cargo_vessel", 15000, 150.0),
+                "fixture sanity: one tug per vessel");
+        // Two weather-held vessels (the sanctioned direct-seed seam) — one clear alert fires
+        // both re-dispatches in the same behaviour pass, the exact triple-booking shape.
+        hm.activeVessels().put("T17V1", VesselTracking
+                .arriving("T17V1", spec1, VesselTracking.Channel.WALK_IN, hm.getAID())
+                .withStage(VesselTracking.Stage.AWAITING_TUG).withBerth("berth_1").withWeatherHeld(true));
+        hm.activeVessels().put("T17V2", VesselTracking
+                .arriving("T17V2", spec2, VesselTracking.Channel.WALK_IN, hm.getAID())
+                .withStage(VesselTracking.Stage.AWAITING_TUG).withBerth("berth_3").withWeatherHeld(true));
+
+        weatherProbe.outbox.put(clearAlert(hm, 12, "good", 0.5, "sunny"));
+
+        // Session 1: both tugs bid; A's cheaper bid wins (R13 score).
+        ACLMessage cfp1atA = pollUntil(tugA.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
+        ACLMessage cfp1atB = pollUntil(tugB.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
+        assertNotNull(cfp1atA);
+        assertNotNull(cfp1atB);
+        assertEquals(cfp1atA.getConversationId(), cfp1atB.getConversationId(), "one session, one cfpId");
+        tugA.outbox.put(bidReply(cfp1atA, 100.0, 5.0, 0.9));
+        tugB.outbox.put(bidReply(cfp1atB, 200.0, 5.0, 0.9));
+
+        // THE serialization assertion: tug A's NEXT message must be session 1's ACCEPT — before
+        // the fix both CFPs raced out together, so the next message was session 2's CFP.
+        ACLMessage nextAtA = pollUntil(tugA.inbox, m -> true, 10_000);
+        assertNotNull(nextAtA);
+        assertEquals(ACLMessage.ACCEPT_PROPOSAL, nextAtA.getPerformative(),
+                "the award must land before any further CFP reaches the tug");
+        assertEquals(cfp1atA.getConversationId(), nextAtA.getConversationId());
+
+        // Session 2 only now goes out. A is busy (its real TugAgent would REFUSE on
+        // currentJob != null — the probe simulates exactly that); B wins.
+        ACLMessage cfp2atA = pollUntil(tugA.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
+        assertNotNull(cfp2atA, "the queued session must launch after the first award");
+        assertNotEquals(cfp1atA.getConversationId(), cfp2atA.getConversationId(), "fresh cfpId per session");
+        tugA.outbox.put(MessageFactory.reply(cfp2atA, ACLMessage.REFUSE));
+        ACLMessage cfp2atB = pollUntil(tugB.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
+        assertNotNull(cfp2atB);
+        tugB.outbox.put(bidReply(cfp2atB, 200.0, 5.0, 0.9));
+        ACLMessage acceptAtB = pollUntil(tugB.inbox,
+                m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000);
+        assertNotNull(acceptAtB, "the free tug must win the queued session");
+        assertEquals(cfp2atB.getConversationId(), acceptAtB.getConversationId());
+
+        // Disjoint assignments, one per vessel; money matches assignments exactly. Which vessel
+        // got which tug depends on the clear-sweep's ConcurrentHashMap iteration order — assert
+        // order-insensitively (the task-20 DF-order lesson: never couple to an unordered
+        // collection's iteration).
+        VesselTracking v1 = pollTracking(hm, "T17V1",
+                t -> t.stage() == VesselTracking.Stage.IN_TRANSIT, 10_000);
+        VesselTracking v2 = pollTracking(hm, "T17V2",
+                t -> t.stage() == VesselTracking.Stage.IN_TRANSIT, 10_000);
+        assertNotNull(v1);
+        assertNotNull(v2);
+        assertEquals(1, v1.assignedTugs().size(), "one tug per vessel");
+        assertEquals(1, v2.assignedTugs().size(), "one tug per vessel");
+        assertEquals(Set.of("t17_tug_a", "t17_tug_b"),
+                Set.of(v1.assignedTugs().get(0), v2.assignedTugs().get(0)),
+                "disjoint single-tug assignments covering both vessels");
+        List<TugJobAwardedEvent> awards = EventBusProbe.published(boot.getEventBus()).stream()
+                .filter(TugJobAwardedEvent.class::isInstance).map(TugJobAwardedEvent.class::cast)
+                .toList();
+        assertEquals(2, awards.size(), "one award per vessel — never a double-booking");
+        assertEquals(2, awards.stream().map(TugJobAwardedEvent::tugId).distinct().count());
+        assertEquals(300.0, hm.walletLedger().expenseHistory().stream()
+                        .filter(e -> ExpenseRules.SOURCE_TUG_JOB.equals(e.source()))
+                        .mapToDouble(it.unige.portcommand.harbourmaster.ExpenseEvent::amount).sum(), 0.001,
+                "charges match the two real assignments (100 + 200), nothing doubled");
+    }
+
     // ==================== Customs (task-09's deferred note) ====================
 
     @Test
@@ -715,8 +911,14 @@ class HarbourMasterAgentIT {
             assertEquals(1, count, "exactly once per midnight crossing");
             Thread.sleep(20);
         }
-        assertEquals(startingBalance, hm.walletLedger().balance(), 0.0001,
-                "detect-only: the HarbourMaster must never touch the wallet itself");
+        // Task 24: this crossing is no longer wallet-silent — the HM-constructed
+        // DayRolloverCoordinator settles the day synchronously (the ONE €5,200 fixed charge).
+        // Detect-only still holds for the BEHAVIOUR (INVARIANTS, tasks 11/20): the only
+        // mutations after a zero-deal day are the coordinator's five fixed lines.
+        assertEquals(startingBalance - ExpenseRules.dailyFixed(), hm.walletLedger().balance(), 0.0001,
+                "an empty day settles at exactly the fixed daily cost, nothing else");
+        assertEquals(5, hm.walletLedger().expenseHistory().size(),
+                "exactly the five fixed lines — no behaviour-attributed ledger writes");
     }
 
     // ==================== shared fixtures / helpers ====================
@@ -831,6 +1033,33 @@ class HarbourMasterAgentIT {
         // the alert directly rather than going through PeriodicWeatherBroadcastBehaviour).
         alert.setProtocol(HandleWeatherAlertBehaviour.WEATHER_ALERT_PROTOCOL);
         return alert;
+    }
+
+    /** The task-24 recovery signal — same protocol/shape, {@code event=weather_clear}, no priority. */
+    private static ACLMessage clearAlert(HarbourMasterAgent hm, int windKnots, String visibility, double swell,
+                                         String state) {
+        ACLMessage alert = MessageFactory.create(ACLMessage.INFORM);
+        alert.addReceiver(hm.getAID());
+        alert.setContent(TerminalJson.write(Map.of(
+                "event", "weather_clear", "wind_knots", windKnots, "visibility", visibility,
+                "swell", swell, "state", state)));
+        alert.setProtocol(HandleWeatherAlertBehaviour.WEATHER_ALERT_PROTOCOL);
+        return alert;
+    }
+
+    /** Bounded poll on the HM's tracking map until {@code condition} holds for {@code vesselId}. */
+    private static VesselTracking pollTracking(HarbourMasterAgent hm, String vesselId,
+                                               Predicate<VesselTracking> condition, long totalMillis)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + totalMillis;
+        while (System.currentTimeMillis() < deadline) {
+            VesselTracking tracking = hm.activeVessels().get(vesselId);
+            if (tracking != null && condition.test(tracking)) {
+                return tracking;
+            }
+            Thread.sleep(20); // bounded poll — the documented no-Awaitility exception pattern
+        }
+        return null;
     }
 
     private static void assertEnvelope(ACLMessage m, int performative) {

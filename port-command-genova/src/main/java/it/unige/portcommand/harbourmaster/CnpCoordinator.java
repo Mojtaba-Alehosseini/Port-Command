@@ -11,7 +11,18 @@ public interface CnpCoordinator {
     /**
      * Starts a Contract Net for tug escort. Implementations must add a
      * {@code Behaviour} rather than sending directly, so this is safe to call from
-     * within another behaviour's {@code action()} on the same agent thread.
+     * within another behaviour's {@code action()} on the same agent thread. Since task 24
+     * (checkpoint-#5 B2) the real implementation SERIALIZES sessions — a call while one is in
+     * flight queues until that session reports {@link #completed()}.
      */
     void initiate(CnpRequest req);
+
+    /**
+     * A Contract Net session reached a terminal state (awards sent, zero-bid hold, or no tugs
+     * in DF) — the implementation may launch the next queued session. Called by
+     * {@code InitiateCNPBehaviour}/{@code AwardContractBehaviour} on every terminal path.
+     * Default no-op so test fakes only implementing {@link #initiate} keep compiling.
+     */
+    default void completed() {
+    }
 }

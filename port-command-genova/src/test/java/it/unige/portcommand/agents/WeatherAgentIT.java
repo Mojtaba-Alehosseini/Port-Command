@@ -48,7 +48,7 @@ class WeatherAgentIT {
         WeatherInitArgs args = new WeatherInitArgs(
                 new WeatherSnapshot(18, "good", 0.5, "sunny", 0L), TransitionMatrix.defaults(), overrides);
         boot.getSpawner().spawn("weather_agent", WeatherAgent.class,
-                new Object[] {args, boot.getRandomSource(), boot.getSimClock()});
+                new Object[] {args, boot.getRandomSource(), boot.getSimClock(), boot.getEventBus()});
     }
 
     @Test

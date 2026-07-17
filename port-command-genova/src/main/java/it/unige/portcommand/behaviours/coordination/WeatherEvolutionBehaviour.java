@@ -59,6 +59,9 @@ public final class WeatherEvolutionBehaviour extends SimTickerBehaviour {
 
     @Override
     protected void onSimTick() {
+        if (simClock().isPaused()) {
+            return; // pause gate (task 24): weather does not evolve while the game is paused
+        }
         long now = simClock().nowSimMillis();
         int simMinute = (int) (now / SIM_MILLIS_PER_MINUTE);
 

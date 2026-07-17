@@ -62,6 +62,9 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
         }
         if (bids.isEmpty()) {
             holdVessel(hm, "no_bids");
+            // Terminal path (the retry, if scheduled, re-enters through the queue) — release
+            // the serialized-CNP queue (B2).
+            hm.cnpCoordinator().completed();
             return;
         }
 
@@ -96,6 +99,10 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
         hm.activeVessels().computeIfPresent(req.vesselId(),
                 (id, tracking) -> tracking.withTugs(winners).withStage(Stage.IN_TRANSIT));
         hm.cnpRetryAttempts().remove(req.vesselId());
+        // Awards are on the wire (before any queued CFP, per-pair FIFO) — the winning tugs will
+        // set currentJob before they see the next session's CFP, which is what makes their
+        // busy-REFUSE guard effective. Release the serialized-CNP queue (B2).
+        hm.cnpCoordinator().completed();
     }
 
     private void holdVessel(HarbourMasterAgent hm, String reason) {

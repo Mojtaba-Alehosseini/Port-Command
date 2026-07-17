@@ -169,7 +169,8 @@ public final class Paraphraser {
      * INFORM shapes discriminate on whichever of three top-level keys is present —
      * {@code intent} (withdraw/departed/service_complete — vessel-originated),
      * {@code event} (tug_hold/escort_complete/flagged/routine_inspection/weather_hold/
-     * weather_threshold), or {@code notice} (handling_complete) — plus the routine weather
+     * weather_threshold/weather_clear/weather_resume), or {@code notice} (handling_complete)
+     * — plus the routine weather
      * broadcast, which has none of the three. {@code priority=high} is an ACL envelope
      * parameter (weather threshold + customs flagged), never JSON content, so it is read off
      * {@code msg} directly.
@@ -198,6 +199,12 @@ public final class Paraphraser {
                 case "weather_hold" -> "weather hold (wind " + moneyText(content, "wind_knots") + "kn)";
                 case "weather_threshold" ->
                         "weather alert (wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state") + ")";
+                // Task 24: the recovery-direction signals (weather_clear = agent→HM crossing
+                // alert; weather_resume = HM→vessel re-dispatch notice). Deliberately calm
+                // wording — only worsening alerts carry priority=high/URGENT.
+                case "weather_clear" ->
+                        "weather clearing (wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state") + ")";
+                case "weather_resume" -> "weather cleared — resuming escort for " + orVessel(content);
                 default -> humanize(event);
             };
         }

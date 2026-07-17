@@ -74,7 +74,29 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             case "opening_offer", "counter_offer" -> handleOffer(hm, msg, content);
             case "deal_confirmed" -> handleDealConfirmed(hm, msg, content);
             case "withdraw" -> handleWithdraw(hm, msg, content);
+            case "departed" -> handleDeparted(hm, content);
             default -> log.debug("unrecognised walk-in intent '{}' from {}", intent, msg.getSender().getLocalName());
+        }
+    }
+
+    /**
+     * Terminal tracking cleanup (task 24, visual-checkpoint-#5 B1 — the GHOST-VESSEL bug).
+     * Both channels' {@code DepartBehaviour} INFORMs {@code {intent:departed, vessel_id}} on the
+     * way out, and before this handler NOTHING consumed it: the {@code VesselTracking} entry
+     * outlived its agent forever (a walk-in never even leaves IN_TRANSIT — the ADR-09 parity
+     * gap), so a later storm "held" long-gone vessels and the clear then re-dispatched REAL tug
+     * escorts (~€1,900 of charges for ghosts in the observed run). Departure now closes the
+     * entry; the weather sweeps additionally filter by live stage as defence in depth.
+     */
+    private void handleDeparted(HarbourMasterAgent hm, JsonNode content) {
+        String vesselId = text(content, "vessel_id");
+        if (vesselId == null) {
+            return;
+        }
+        VesselTracking removed = hm.activeVessels().remove(vesselId);
+        if (removed != null) {
+            log.info("{}: departed — tracking closed (was {}, {} tug(s) assigned)",
+                    vesselId, removed.stage(), removed.assignedTugs().size());
         }
     }
 

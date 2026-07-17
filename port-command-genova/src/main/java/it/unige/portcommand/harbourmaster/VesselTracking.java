@@ -21,6 +21,13 @@ import jade.core.AID;
  * {@code blocked} likewise extend the task file's original field list — both are
  * needed to correlate inbound messages (no {@code vessel_id} on every reply) and to
  * record a customs-flagged hold.
+ *
+ * <p>{@code weatherHeld} (task 24, ADR-14): marks a vessel whose escort was
+ * CANCELled by a weather hold, so the weather-CLEAR re-dispatch sweeps exactly
+ * those. Without it a held vessel is indistinguishable from one whose FIRST tug
+ * CNP is still in flight ({@code AWAITING_TUG} + empty tug list in both cases),
+ * and a clear-signal sweep would fire a duplicate CFP at fresh vessels —
+ * double-award, double-charge.
  */
 public record VesselTracking(
         String vesselId,
@@ -30,7 +37,8 @@ public record VesselTracking(
         AID aid,
         String assignedBerth,
         List<String> assignedTugs,
-        boolean blocked) {
+        boolean blocked,
+        boolean weatherHeld) {
 
     public enum Channel { CONTRACTED, WALK_IN }
 
@@ -41,7 +49,7 @@ public record VesselTracking(
     }
 
     public static VesselTracking arriving(String vesselId, VesselSpec spec, Channel channel, AID aid) {
-        return new VesselTracking(vesselId, spec, channel, Stage.ARRIVING, aid, null, List.of(), false);
+        return new VesselTracking(vesselId, spec, channel, Stage.ARRIVING, aid, null, List.of(), false, false);
     }
 
     /** Convenience accessor matching the task file's "type" field name. */
@@ -50,18 +58,27 @@ public record VesselTracking(
     }
 
     public VesselTracking withStage(Stage newStage) {
-        return new VesselTracking(vesselId, spec, channel, newStage, aid, assignedBerth, assignedTugs, blocked);
+        return new VesselTracking(vesselId, spec, channel, newStage, aid, assignedBerth, assignedTugs,
+                blocked, weatherHeld);
     }
 
     public VesselTracking withBerth(String berthId) {
-        return new VesselTracking(vesselId, spec, channel, stage, aid, berthId, assignedTugs, blocked);
+        return new VesselTracking(vesselId, spec, channel, stage, aid, berthId, assignedTugs,
+                blocked, weatherHeld);
     }
 
     public VesselTracking withTugs(List<String> tugs) {
-        return new VesselTracking(vesselId, spec, channel, stage, aid, assignedBerth, tugs, blocked);
+        return new VesselTracking(vesselId, spec, channel, stage, aid, assignedBerth, tugs,
+                blocked, weatherHeld);
     }
 
     public VesselTracking withBlocked(boolean newBlocked) {
-        return new VesselTracking(vesselId, spec, channel, stage, aid, assignedBerth, assignedTugs, newBlocked);
+        return new VesselTracking(vesselId, spec, channel, stage, aid, assignedBerth, assignedTugs,
+                newBlocked, weatherHeld);
+    }
+
+    public VesselTracking withWeatherHeld(boolean newWeatherHeld) {
+        return new VesselTracking(vesselId, spec, channel, stage, aid, assignedBerth, assignedTugs,
+                blocked, newWeatherHeld);
     }
 }

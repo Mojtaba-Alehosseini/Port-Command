@@ -144,6 +144,17 @@ public final class PrologQueries {
         return engine().hasSolutionCached("weather_state_unsafe(" + quoteAtom(state) + ")");
     }
 
+    /**
+     * True iff {@code visibility} ({@code good|fair|poor}) is adequate for operations
+     * (RULE R16). Pure lookup against the static {@code visibility_adequate/1} facts →
+     * cached. Added by task 24 (adversarial review M1): {@code WeatherAlertPolicy} needs
+     * the visibility dimension of {@code operation_safe} as a standalone transition
+     * check, through the same rule the HarbourMaster's hold gate evaluates.
+     */
+    public static boolean visibilityOk(String visibility) {
+        return engine().hasSolutionCached("visibility_ok(" + quoteAtom(visibility) + ")");
+    }
+
     // --- Customs (R21–R24) -------------------------------------------------
 
     /**
