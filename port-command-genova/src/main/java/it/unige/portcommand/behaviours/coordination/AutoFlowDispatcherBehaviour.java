@@ -8,6 +8,7 @@ import it.unige.portcommand.agents.BerthRequest;
 import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.ContractedFeeEarnedEvent;
 import it.unige.portcommand.harbourmaster.BerthPositions;
 import it.unige.portcommand.harbourmaster.CnpRequest;
 import it.unige.portcommand.harbourmaster.VesselTracking;
@@ -116,6 +117,14 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
                 "berth_id", contract.berthId(), "price", contract.contractedFee(),
                 "hours", contract.contractedHours())));
         hm.sendLogged(accept);
+        // Task 20: the contracted path's counterpart to the walk-in path's DealClosedEvent, which
+        // fires only from ForwardWalkInToPlayerBehaviour. Without this the fees in contracts.json
+        // reached the wire (just above) and the wallet could never earn them. Published at the
+        // GRANT — the Prolog-gated binding commitment — not at service-complete/departure, whose
+        // INFORMs are unhandled today and which a granted contract is owed regardless of.
+        hm.eventBus().publish(new ContractedFeeEarnedEvent(
+                contract.contractId(), spec.vesselId(), contract.berthId(), contract.contractedFee(),
+                contract.contractedHours(), hm.simClock().nowSimMillis()));
 
         String vesselId = spec.vesselId();
         hm.activeVessels().put(vesselId, VesselTracking

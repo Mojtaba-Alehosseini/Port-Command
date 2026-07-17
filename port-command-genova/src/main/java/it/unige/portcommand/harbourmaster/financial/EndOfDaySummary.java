@@ -5,27 +5,54 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Minimal stub, sized only from {@code planning/24_game_loop_integration.md}'s own usage
- * sketch — created here (task 17) because {@code gui.events.EndOfDayCompletedEvent} needs a
- * typed payload before task 20 (Phase 5) exists to own the real EOD dashboard math; task 20
- * refines/finalizes this shape (dated ownership note, same pattern as {@link IncomeRules} /
- * {@link ExpenseRules}, task 10). {@code performativeCounts} uses
- * {@code Collections.unmodifiableMap(new LinkedHashMap<>(...))}, not {@code Map.copyOf} — this
- * codebase's established rule (INVARIANTS.md) against per-JVM-launch iteration-order drift.
+ * One game day's settled figures — the payload of {@code EndOfDayCompletedEvent} and the thing
+ * {@code EndOfDaySummaryDialog} renders. Finalised by task 20 (it was a task-17 stub sized from
+ * planning/24's usage sketch).
  *
- * @param gameDay            the day that just ended
+ * <p><strong>This is a DTO, not a calculator.</strong> It is BUILT by
+ * {@code DayRolloverCoordinator} (task 24), which owns the EOD math (design rule 6 /
+ * INVARIANTS); task 20 owns the shape and the display. Nothing here computes anything the
+ * coordinator did not already settle — the one derived accessor, {@link #net()}, is arithmetic on
+ * fields it was handed.
+ *
+ * <p><strong>Shape decision (2026-07-17).</strong> {@code planning/20}'s file table specifies
+ * {@code Map<Integer,Integer> performativeCounts}; the task-17 stub used {@code Map<String,Integer>}.
+ * Kept as {@code String}: it matches {@link PerformativeCounter#snapshot()}'s output, it is what
+ * the demo transcript's report actually shows ("REQUEST: 2 | INFORM: 7 | …"), and it keeps the raw
+ * {@code ACLMessage} int constants out of a display DTO. planning/20's table is the stale one.
+ *
+ * <p>{@code performativeCounts} is copied through {@code LinkedHashMap} +
+ * {@code unmodifiableMap}, never {@code Map.copyOf} — INVARIANTS' determinism rule. Here it is
+ * load-bearing for a visible reason rather than a wire-format one: {@code Map.copyOf} randomises
+ * iteration order per JVM launch, so the report's performative columns would shuffle between runs.
+ *
+ * @param gameDay            the day that just ended (1-based)
  * @param income             total income recorded this day
- * @param totalExpense       variable + the fixed €5200 daily cost, summed
+ * @param totalExpense       variable expenses + the fixed €5200, summed
  * @param endingWallet       wallet balance after this day's settlement
- * @param endingReputation   reputation after this day's settlement
- * @param performativeCounts FIPA performative name -&gt; count observed this day
+ * @param endingReputation   reputation after this day's settlement, 0..100
+ * @param performativeCounts FIPA performative name -&gt; count observed this day (all 10, in
+ *                           canonical order, zeroes included)
  */
 public record EndOfDaySummary(int gameDay, double income, double totalExpense, double endingWallet,
                                int endingReputation, Map<String, Integer> performativeCounts) {
 
     public EndOfDaySummary {
+        if (gameDay < 1) {
+            throw new IllegalArgumentException("gameDay must be >= 1 (1-based): " + gameDay);
+        }
         performativeCounts = performativeCounts == null
                 ? Map.of()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(performativeCounts));
+    }
+
+    /** The day's net margin — what the §7.5 calibration targets at +€8,000–12,000 on a default day. */
+    public double net() {
+        return income - totalExpense;
+    }
+
+    /** Total FIPA messages the HarbourMaster exchanged this day (the demo's "MAS messages" line). */
+    public int totalMessages() {
+        return performativeCounts.values().stream().mapToInt(Integer::intValue).sum();
     }
 }

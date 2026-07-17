@@ -199,8 +199,15 @@ class HarbourMasterAgentIT {
         assertEquals("cl_vessel", commLog.get(0).sender(), "1st event is the vessel's inbound REQUEST");
         assertTrue(commLog.get(1).paraphrase().contains("berth_1"), "the berth grant paraphrase names the berth");
         assertEquals(List.of("cl_terminal"), commLog.get(2).receivers(), "3rd event addresses the terminal puppet");
-        assertEquals(List.of("cl_tug1", "cl_tug2"), commLog.get(3).receivers(),
+        // Order-insensitive on purpose (2026-07-17, task 20): the CFP's receiver list is built from
+        // ServiceLocator's DF search, whose result order JADE does not guarantee — asserting
+        // List.of("cl_tug1","cl_tug2") made this fail whenever the DF returned tug2 first, which is
+        // a coupling the assertion never meant to have (its own next comment already concedes the
+        // two tug threads race). The INTENT is unchanged and still fully pinned: exactly ONE CFP
+        // event, carrying exactly BOTH tugs — not two separate sends.
+        assertEquals(Set.of("cl_tug1", "cl_tug2"), Set.copyOf(commLog.get(3).receivers()),
                 "4th event is the ONE CFP broadcast to both tugs (not two separate sends)");
+        assertEquals(2, commLog.get(3).receivers().size(), "both tugs, each exactly once");
 
         // Tail: two PROPOSE receipts then two award sends, tug order not guaranteed (two real
         // agent threads race to bid) but each award must reuse its own bid's performative.

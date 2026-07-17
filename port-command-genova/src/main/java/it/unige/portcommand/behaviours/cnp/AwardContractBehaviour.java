@@ -11,6 +11,7 @@ import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.TugJobAwardedEvent;
 import it.unige.portcommand.harbourmaster.CnpRequest;
 import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
 import it.unige.portcommand.harbourmaster.cnp.CnpRetryBehaviour;
@@ -64,6 +65,9 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
             return;
         }
 
+        Map<String, Double> costByTugId = new LinkedHashMap<>();
+        bids.forEach(b -> costByTugId.put(b.tugId(), b.cost()));
+
         List<String> winners = PrologQueries.selectBestBids(bids, req.tugsRequired());
         for (Map.Entry<String, ACLMessage> entry : bidsByTugId.entrySet()) {
             ACLMessage bid = entry.getValue();
@@ -74,6 +78,15 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
                         Map.of("vessel_id", req.vesselId(), "berth_position", req.berthPosition())));
                 hm.sendLogged(accept);
                 log.info("CNP for {}: ACCEPT -> {}", req.vesselId(), tugAid.getLocalName());
+                // Task 20: the winning bid's cost dies here otherwise — the ACCEPT above carries
+                // only vessel_id + berth_position, and the later escort_complete INFORM carries no
+                // cost either. Publishing it is what lets the wallet pay the price Prolog actually
+                // chose, so a cheaper bid really does save the port money. Charge-point is AWARD
+                // (Moji, 2026-07-17); the ledger dedupes on (conversationId, tugId) because two
+                // co-winning tugs share this one cfpId. See TugJobAwardedEvent's javadoc.
+                hm.eventBus().publish(new TugJobAwardedEvent(
+                        req.vesselId(), entry.getKey(), costByTugId.get(entry.getKey()),
+                        bid.getConversationId(), hm.simClock().nowSimMillis()));
             } else {
                 hm.sendLogged(MessageFactory.reply(bid, ACLMessage.REJECT_PROPOSAL));
                 log.info("CNP for {}: REJECT -> {}", req.vesselId(), tugAid.getLocalName());

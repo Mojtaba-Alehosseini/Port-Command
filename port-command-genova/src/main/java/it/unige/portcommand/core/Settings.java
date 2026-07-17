@@ -17,9 +17,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * deliberately NOT a field — it lives on {@code GameState} (task 22) and is captured in the save
  * file.
  *
- * <p>{@code defaults.json} also carries an unrelated {@code llm.timeout_ms} key that
- * {@link it.unige.portcommand.nlp.LLMBridge} reads independently — {@link JsonIgnoreProperties}
- * lets this record bind against that same shared file without choking on the extra object.
+ * <p>{@code defaults.json} also carries two unrelated blocks that their owners read independently
+ * — {@code llm.timeout_ms} ({@link it.unige.portcommand.nlp.LLMBridge}) and {@code reputation}
+ * ({@code harbourmaster.financial.ReputationRules}, a per-outcome delta TABLE rather than the flat
+ * scalars this record holds). {@link JsonIgnoreProperties} lets this record bind against that same
+ * shared file without choking on the extra objects.
+ *
+ * <p>{@code dailyTargetEur} was added by task 20 (the canonical €5,000 daily target,
+ * {@code planning/20} "Notes"); it lives here rather than in a financial-only config because the
+ * HUD and the EOD summary both read it, and this record is the designed cross-task home.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Settings(
@@ -33,7 +39,8 @@ public record Settings(
         @JsonProperty("llmModel") String llmModel,
         @JsonProperty("withdrawalPenaltyEur") double withdrawalPenaltyEur,
         @JsonProperty("cnpReplyBySimSeconds") int cnpReplyBySimSeconds,
-        @JsonProperty("cnpRetryAfterSimSeconds") int cnpRetryAfterSimSeconds) {
+        @JsonProperty("cnpRetryAfterSimSeconds") int cnpRetryAfterSimSeconds,
+        @JsonProperty("dailyTargetEur") double dailyTargetEur) {
 
     private static final Set<String> VALID_DIFFICULTIES = Set.of("EASY", "NORMAL", "HARD");
     private static final Settings CACHED = readFromClasspath();
@@ -48,12 +55,15 @@ public record Settings(
         if (!VALID_DIFFICULTIES.contains(difficulty)) {
             throw new IllegalArgumentException("difficulty must be EASY/NORMAL/HARD: " + difficulty);
         }
+        if (dailyTargetEur <= 0) {
+            throw new IllegalArgumentException("dailyTargetEur must be > 0: " + dailyTargetEur);
+        }
     }
 
     /** The hard-coded fallback values (task-15 brief, §15.1) — also what ships in defaults.json. */
     public static Settings defaults() {
         return new Settings(4, 60, false, "NORMAL", 300L, 30, true,
-                "microsoft/Phi-4-mini-instruct", 500.0, 5, 30);
+                "microsoft/Phi-4-mini-instruct", 500.0, 5, 30, 5_000.0);
     }
 
     /** The classpath-loaded settings, read once and cached (mirrors {@code VesselTemplates}). */

@@ -540,7 +540,7 @@ class ChatPanelTest {
         openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
 
         bus.publish(new DealClosedEvent(new Deal("deal-A", "A", "berth_1", 1600.0, 6, 0L, Deal.Outcome.DEAL)));
-        bus.publish(new WithdrawalEvent("A", Deal.Outcome.TIMEOUT));
+        bus.publish(new WithdrawalEvent("A", Deal.Outcome.TIMEOUT, 0L));
         SwingUtilities.invokeAndWait(() -> { });
 
         assertFalse(panel.registry().tab("nego-A").isClosed());

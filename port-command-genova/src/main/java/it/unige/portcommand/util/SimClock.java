@@ -99,7 +99,21 @@ public final class SimClock {
     }
 
     public int gameDay() {
-        return (int) (nowSimMillis() / MILLIS_PER_DAY) + 1;
+        return gameDayOf(nowSimMillis());
+    }
+
+    /**
+     * The 1-based game day a sim-millis instant falls in — the pure, static form of
+     * {@link #gameDay()}, which delegates here.
+     *
+     * <p>Added by task 20 so the financial ledgers can bucket a recorded
+     * {@code IncomeEvent}/{@code ExpenseEvent} by day from its own {@code simTime} stamp
+     * instead of carrying a separate day field. Deriving it means an event's day can never
+     * disagree with its timestamp, and a day aggregation stays reproducible from history
+     * alone — no clock instance, no read of live mutable state.
+     */
+    public static int gameDayOf(long simMillis) {
+        return (int) (simMillis / MILLIS_PER_DAY) + 1;
     }
 
     /**

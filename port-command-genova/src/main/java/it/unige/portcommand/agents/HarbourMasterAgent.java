@@ -24,6 +24,8 @@ import it.unige.portcommand.harbourmaster.RealCnpCoordinator;
 import it.unige.portcommand.harbourmaster.ReputationLedger;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.harbourmaster.WalletLedger;
+import it.unige.portcommand.harbourmaster.financial.LedgerCoordinator;
+import it.unige.portcommand.harbourmaster.financial.PerformativeCounter;
 import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.RandomSource;
@@ -66,6 +68,8 @@ public final class HarbourMasterAgent extends PortCommandAgent {
 
     private WalletLedger walletLedger;
     private ReputationLedger reputationLedger;
+    private LedgerCoordinator ledgerCoordinator;
+    private PerformativeCounter performativeCounter;
     private SimClock simClock;
     private RandomSource randomSource;
     private EventBus eventBus;
@@ -84,11 +88,16 @@ public final class HarbourMasterAgent extends PortCommandAgent {
         if (init == null) {
             throw new IllegalStateException(getLocalName() + " requires HarbourMasterInitArgs at args[0]");
         }
-        this.walletLedger = new WalletLedger(init.startingWallet());
-        this.reputationLedger = new ReputationLedger(init.startingReputation());
         this.simClock = argAt(1, SimClock.class);
         this.randomSource = argAt(2, RandomSource.class);
         this.eventBus = argAt(3, EventBus.class);
+        // Ledgers are constructed AFTER eventBus (task 20): they publish Wallet/ReputationChanged
+        // on every mutation, which is the HUD's live data path.
+        this.walletLedger = new WalletLedger(init.startingWallet(), eventBus);
+        this.reputationLedger = new ReputationLedger(init.startingReputation(), eventBus);
+        // Plain bus subscribers, not JADE behaviours — the catalogue stays locked at 51 (ADR-01).
+        this.ledgerCoordinator = new LedgerCoordinator(eventBus, walletLedger, reputationLedger);
+        this.performativeCounter = new PerformativeCounter(eventBus);
         this.contracts = contractsArg();
         JadeAgentSpawner spawner = argAt(5, JadeAgentSpawner.class);
         MarketHistoryArtifact marketHistory = argAt(6, MarketHistoryArtifact.class);
@@ -103,6 +112,25 @@ public final class HarbourMasterAgent extends PortCommandAgent {
         addBehaviour(new PoissonSpawnBehaviour(this, simClock, randomSource, spawner, marketHistory));
 
         completeOptionalSelfFuture();
+    }
+
+    /**
+     * Unsubscribes the task-20 bus consumers. Load-bearing, not housekeeping: the {@code EventBus}
+     * is {@code JadeBootstrap}-level shared state that OUTLIVES this agent, so a HarbourMaster
+     * respawn on the same bus would otherwise leave the previous agent's {@link LedgerCoordinator}
+     * subscribed alongside the new one — and both would charge every event, each with its own
+     * independent dedupe sets, which cannot catch a duplicate they never saw. That is exactly the
+     * teardown/rebuild task 22 (save/load) performs and task 26 (3 scenarios) repeats. Found by the
+     * task-20 adversarial review as a latent double-charge; unreachable today (one HM per JVM).
+     */
+    @Override
+    protected void onTakeDown() {
+        if (ledgerCoordinator != null) {
+            ledgerCoordinator.close();
+        }
+        if (performativeCounter != null) {
+            performativeCounter.close();
+        }
     }
 
     /**
@@ -187,6 +215,23 @@ public final class HarbourMasterAgent extends PortCommandAgent {
 
     public WalletLedger walletLedger() {
         return walletLedger;
+    }
+
+    /**
+     * The bus-fed ledger writer (task 20). Held so the subscriptions outlive setup and so tests
+     * can drive its handlers directly, the task-10 subscribe-once precedent.
+     */
+    public LedgerCoordinator ledgerCoordinator() {
+        return ledgerCoordinator;
+    }
+
+    /**
+     * The day's FIPA performative tally (task 20) — {@code DayRolloverCoordinator} (task 24) reads
+     * it for the EOD summary. Prefer its {@code resetForNewDay()} return over snapshot-then-reset;
+     * see {@link PerformativeCounter}'s javadoc for why.
+     */
+    public PerformativeCounter performativeCounter() {
+        return performativeCounter;
     }
 
     public ReputationLedger reputationLedger() {

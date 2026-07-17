@@ -3,6 +3,7 @@ package it.unige.portcommand.behaviours.coordination;
 import com.fasterxml.jackson.databind.JsonNode;
 import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.CustomsClearedEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import jade.core.Agent;
 import jade.core.behaviours.CyclicBehaviour;
@@ -62,6 +63,14 @@ public final class HandleEmergencyBehaviour extends CyclicBehaviour {
 
         if (msg.getPerformative() == ACLMessage.CONFIRM) {
             log.info("{}: customs CLEARED ({})", vesselId, text(content, "ref"));
+            // Task 20: the €100 customs_clearance trigger. Published here, AFTER the
+            // pendingCustomsChecks.remove(...) guard above consumed the conversation, so a
+            // duplicate CONFIRM cannot charge twice. That ordering matters: receiveLogged already
+            // published this message's raw CommLogEvent BEFORE the guard ran, so anything charging
+            // off the comm-log firehose instead would double-count. vesselId comes from the
+            // conversation map because the CONFIRM's own content carries none.
+            hm.eventBus().publish(new CustomsClearedEvent(
+                    vesselId, text(content, "ref"), hm.simClock().nowSimMillis()));
             return;
         }
         String event = text(content, "event");
