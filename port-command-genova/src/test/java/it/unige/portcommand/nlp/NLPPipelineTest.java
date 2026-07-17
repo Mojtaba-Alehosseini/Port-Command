@@ -139,6 +139,32 @@ class NLPPipelineTest {
     }
 
     @Test
+    void aBindingAcceptBelowPointEightIntentConfidenceFallsToClarificationNotAnAutoClose() throws IOException {
+        // Task 19 play-test: a throwaway "so?" that Rasa reads as accept_deal above the 0.60 gate
+        // but below near-certainty must NOT silently close a deal — it asks (clarification) so the
+        // player confirms via the explicit Accept button.
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200,
+                "{\"intent\": {\"name\": \"accept_deal\", \"confidence\": 0.70}, \"entities\": []}"));
+
+        PipelineResult result = await(pipeline(rasa).processChatInput("so?", DialogueCtx.NONE));
+
+        assertInstanceOf(PipelineResult.NeedsClarification.class, result,
+                "a 0.70-confidence accept must never bind — the deal-closing exploit the play-test found");
+    }
+
+    @Test
+    void aBindingAcceptAtPointEightyOrAboveStillRoutes() throws IOException {
+        // The guard is a floor, not a ban: a genuinely confident accept still closes.
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200,
+                "{\"intent\": {\"name\": \"accept_deal\", \"confidence\": 0.80}, \"entities\": []}"));
+
+        PipelineResult result = await(pipeline(rasa).processChatInput("yes I accept", DialogueCtx.NONE));
+
+        assertEquals(ACLMessage.ACCEPT_PROPOSAL,
+                assertInstanceOf(PipelineResult.Routed.class, result).msg().getPerformative());
+    }
+
+    @Test
     void highConfidenceRejectDealRoutesToRejectProposal() throws IOException {
         RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200,
                 "{\"intent\": {\"name\": \"reject_deal\", \"confidence\": 0.95}, \"entities\": []}"));

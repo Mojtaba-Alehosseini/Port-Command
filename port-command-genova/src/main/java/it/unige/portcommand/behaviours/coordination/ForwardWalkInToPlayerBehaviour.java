@@ -8,14 +8,19 @@ import com.fasterxml.jackson.databind.JsonNode;
 import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.behaviours.cnp.InitiateCNPBehaviour;
+import it.unige.portcommand.behaviours.negotiation.WithdrawalBehaviour;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.DealClosedEvent;
+import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.harbourmaster.BerthPositions;
 import it.unige.portcommand.harbourmaster.CnpRequest;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.harbourmaster.VesselTracking.Channel;
 import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
+import it.unige.portcommand.ontology.Deal;
 import it.unige.portcommand.ontology.Position;
 import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.prolog.PrologQueries;
@@ -149,6 +154,12 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         hm.negotiationRounds().remove(dialogueId);
         log.info("{}: berth GRANTED {} (price {}, {}h)", spec.vesselId(), berthId, price, hours);
 
+        // Task 19: closes a real gap — DealClosedEvent/NegotiationClosedEvent existed since
+        // task 17 but nothing published them, so a chat tab could never close/grey on a deal.
+        hm.eventBus().publish(new DealClosedEvent(new Deal("deal-" + spec.vesselId(), spec.vesselId(), berthId,
+                price, hours, hm.simClock().nowSimMillis(), Deal.Outcome.DEAL)));
+        hm.eventBus().publish(new NegotiationClosedEvent(dialogueId, spec.vesselId(), Deal.Outcome.DEAL));
+
         // Task 15: closes the walk-in CNP-dispatch gap ADR-08 left deliberately open —
         // mirrors AutoFlowDispatcherBehaviour's own tugsRequired>0 gate exactly. Terminal/customs
         // dispatch stays out of scope (not asked for; a separate, larger parity gap — see ADR-09).
@@ -165,9 +176,24 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         if (tracking != null) {
             hm.activeVessels().remove(tracking.vesselId());
         }
-        hm.negotiationBerths().remove(msg.getConversationId());
-        hm.negotiationRounds().remove(msg.getConversationId());
-        log.info("{}: walk-in withdrew ({})", msg.getSender().getLocalName(), text(content, "reason"));
+        String dialogueId = msg.getConversationId();
+        hm.negotiationBerths().remove(dialogueId);
+        hm.negotiationRounds().remove(dialogueId);
+        String reason = text(content, "reason");
+        log.info("{}: walk-in withdrew ({})", msg.getSender().getLocalName(), reason);
+
+        // Task 19: closes the same publisher gap as handleDealConfirmed's DealClosedEvent, for
+        // the non-DEAL outcomes. WithdrawalBehaviour.outcomeFor throws on an unrecognised reason
+        // (a boundary this CyclicBehaviour must never let kill its own message loop over) — the
+        // tracking cleanup above still happens either way.
+        try {
+            String vesselId = tracking != null ? tracking.vesselId() : msg.getSender().getLocalName();
+            Deal.Outcome outcome = WithdrawalBehaviour.outcomeFor(reason);
+            hm.eventBus().publish(new WithdrawalEvent(vesselId, outcome));
+            hm.eventBus().publish(new NegotiationClosedEvent(dialogueId, vesselId, outcome));
+        } catch (IllegalArgumentException e) {
+            log.warn("withdraw from {} carried an unrecognised reason '{}' -- GUI tab left as-is", msg.getSender().getLocalName(), reason);
+        }
     }
 
     /** First Prolog-compatible berth for the vessel's dimensions (RULE R8), or {@code null}. */

@@ -34,7 +34,7 @@ public final class Main {
 
         if (guiRequested) {
             SwingUtilities.invokeLater(() -> new MainWindow(boot.getEventBus(), boot.getPortStateArtifact(),
-                    boot::shutdown).setVisible(true));
+                    boot.getNlpPipeline()::processChatInput, boot::shutdown).setVisible(true));
         }
 
         // Block forever; the shutdown hook handles teardown on Ctrl+C / SIGTERM. The GUI's

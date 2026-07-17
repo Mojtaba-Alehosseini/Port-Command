@@ -19,11 +19,15 @@ import it.unige.portcommand.bootstrap.JadeBootstrap;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.CommLogEvent;
+import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.EndOfDayEvent;
+import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
+import it.unige.portcommand.gui.events.WithdrawalEvent;
+import it.unige.portcommand.ontology.Deal;
 import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.prolog.PrologEngine;
@@ -430,6 +434,89 @@ class HarbourMasterAgentIT {
         assertEquals(ACLMessage.ACCEPT_PROPOSAL, award.getPerformative());
     }
 
+    // ==================== Task 19: tab-close event publishers ====================
+
+    @Test
+    void walkInDealConfirmed_publishesDealClosedAndNegotiationClosedEvents() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W005", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vessel = spawnProbe("t15_vessel", null);
+
+        vessel.outbox.put(openingOffer(hm, spec, 1500.0, 6, "nego-W005"));
+        NegotiationOpenedEvent opened = awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-W005".equals(e.dialogueId()), 10_000);
+        assertNotNull(opened, "setup: opening offer must be forwarded");
+        String berthId = opened.snapshot().berthId();
+
+        vessel.outbox.put(dealConfirmed(hm, 1600.0, 6, "nego-W005"));
+        assertNotNull(pollUntil(vessel.inbox, m -> true, 10_000), "setup: berth grant must arrive");
+
+        DealClosedEvent dealClosed = awaitEvent(DealClosedEvent.class,
+                e -> "W005".equals(e.deal().vesselId()), 10_000);
+        assertNotNull(dealClosed, "a granted deal must publish DealClosedEvent (task-19 gap closure)");
+        assertEquals(Deal.Outcome.DEAL, dealClosed.deal().outcome());
+        assertEquals(berthId, dealClosed.deal().berthId());
+        assertEquals(1600.0, dealClosed.deal().finalPrice(), 0.001);
+        assertEquals(6, dealClosed.deal().finalHours());
+
+        NegotiationClosedEvent closed = awaitEvent(NegotiationClosedEvent.class,
+                e -> "nego-W005".equals(e.dialogueId()), 10_000);
+        assertNotNull(closed, "a granted deal must ALSO publish NegotiationClosedEvent (the chat tab's own bracket signal)");
+        assertEquals("W005", closed.vesselId());
+        assertEquals(Deal.Outcome.DEAL, closed.outcome());
+    }
+
+    @Test
+    void walkInWithdraw_publishesWithdrawalAndNegotiationClosedEventsForEveryReason() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec overPriced = new VesselSpec("W006", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        VesselSpec timedOut = new VesselSpec("W007", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vesselA = spawnProbe("t16_vessel", null);
+        Probe vesselB = spawnProbe("t17_vessel", null);
+
+        vesselA.outbox.put(openingOffer(hm, overPriced, 1500.0, 6, "nego-W006"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class, e -> "nego-W006".equals(e.dialogueId()), 10_000));
+        vesselA.outbox.put(withdrawMessage(hm, "over_priced", "nego-W006"));
+
+        WithdrawalEvent withdrawal = awaitEvent(WithdrawalEvent.class, e -> "W006".equals(e.vesselId()), 10_000);
+        assertNotNull(withdrawal, "an over_priced withdraw must publish WithdrawalEvent");
+        assertEquals(Deal.Outcome.WITHDRAW_PRICE, withdrawal.outcome());
+        NegotiationClosedEvent closedA = awaitEvent(NegotiationClosedEvent.class,
+                e -> "nego-W006".equals(e.dialogueId()), 10_000);
+        assertNotNull(closedA);
+        assertEquals(Deal.Outcome.WITHDRAW_PRICE, closedA.outcome());
+
+        vesselB.outbox.put(openingOffer(hm, timedOut, 1500.0, 6, "nego-W007"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class, e -> "nego-W007".equals(e.dialogueId()), 10_000));
+        vesselB.outbox.put(withdrawMessage(hm, "timeout", "nego-W007"));
+
+        NegotiationClosedEvent closedB = awaitEvent(NegotiationClosedEvent.class,
+                e -> "nego-W007".equals(e.dialogueId()), 10_000);
+        assertNotNull(closedB, "a timeout withdraw must ALSO publish NegotiationClosedEvent, mapped to a DIFFERENT outcome");
+        assertEquals(Deal.Outcome.TIMEOUT, closedB.outcome());
+    }
+
+    @Test
+    void walkInWithdraw_unrecognisedReasonNeverKillsTheRouterBehaviour() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec bogus = new VesselSpec("W008", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        VesselSpec after = new VesselSpec("W009", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vesselA = spawnProbe("t18_vessel", null);
+        Probe vesselB = spawnProbe("t19_vessel", null);
+
+        vesselA.outbox.put(openingOffer(hm, bogus, 1500.0, 6, "nego-W008"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class, e -> "nego-W008".equals(e.dialogueId()), 10_000));
+        // A malformed/unknown reason must be swallowed (logged), not thrown from this CyclicBehaviour.
+        vesselA.outbox.put(withdrawMessage(hm, "made_up_reason", "nego-W008"));
+        assertEventNeverPublished(NegotiationClosedEvent.class, e -> "nego-W008".equals(e.dialogueId()), 500);
+
+        // The behaviour's message loop must still be alive and processing OTHER vessels afterward.
+        vesselB.outbox.put(openingOffer(hm, after, 1500.0, 6, "nego-W009"));
+        NegotiationOpenedEvent stillWorks = awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-W009".equals(e.dialogueId()), 10_000);
+        assertNotNull(stillWorks, "the router must keep processing walk-ins after an unrecognised withdraw reason");
+    }
+
     // ==================== Player command dispatch ====================
 
     @Test
@@ -708,6 +795,14 @@ class HarbourMasterAgentIT {
         confirm.setConversationId(conversationId);
         confirm.setContent(TerminalJson.write(Map.of("intent", "deal_confirmed", "price", price, "hours", hours)));
         return confirm;
+    }
+
+    private static ACLMessage withdrawMessage(HarbourMasterAgent hm, String reason, String conversationId) {
+        ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);
+        inform.addReceiver(hm.getAID());
+        inform.setConversationId(conversationId);
+        inform.setContent(TerminalJson.write(Map.of("intent", "withdraw", "reason", reason)));
+        return inform;
     }
 
     private static ACLMessage bidReply(ACLMessage cfp, double cost, double etaMinutes, double fuelState) {

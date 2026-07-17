@@ -71,6 +71,12 @@ public final class DcgTokenizer {
      * mention-guards prevent. The grammar's {@code percent} terminal then matches the word. */
     private static final Pattern PERCENT_UNIT = Pattern.compile("(\\d)\\s*%");
 
+    /** {@code berth2} -> {@code berth 2} (task 19 play-test: players type the fused form —
+     * the UI itself displays ids like {@code berth_1}, and {@code _} already splits via the
+     * punctuation strip, but {@code berth2} stayed one token the grammar's {@code [berth, N]}
+     * terminals could never match). */
+    private static final Pattern BERTH_FUSED = Pattern.compile("\\bberth(\\d)");
+
     /** Everything outside this set becomes a separator. See the class javadoc for why
      * {@code :}, {@code '} and {@code .} survive. */
     private static final Pattern STRAY_PUNCTUATION = Pattern.compile("[^a-z0-9:'. ]");
@@ -104,6 +110,7 @@ public final class DcgTokenizer {
         t = USD_SUFFIX.matcher(t).replaceAll("$1 usd");
         t = HOUR_UNIT.matcher(t).replaceAll("$1 h");
         t = PERCENT_UNIT.matcher(t).replaceAll("$1 percent");
+        t = BERTH_FUSED.matcher(t).replaceAll("berth $1");
 
         t = STRAY_PUNCTUATION.matcher(t).replaceAll(" ");
         t = DOT_NOT_AFTER_DIGIT.matcher(t).replaceAll(" ");

@@ -12,6 +12,7 @@ import it.unige.portcommand.artifacts.DealRecord;
 import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
+import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.negotiation.Decision;
 import it.unige.portcommand.negotiation.NegotiationEngine;
@@ -29,10 +30,12 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -99,6 +102,8 @@ class WalkInVesselAgentIT {
         boolean counter = false;
         boolean accept = false;
         boolean confirm = false;
+        int openingHours = -1;
+        int counterHours = -1;
         for (int i = 0; i < 12 && !confirm; i++) {
             ACLMessage m = hmInbox.poll(10, TimeUnit.SECONDS);
             if (m == null) {
@@ -111,9 +116,11 @@ class WalkInVesselAgentIT {
                     if ("opening_offer".equals(intent)) {
                         assertEnvelope(m, ACLMessage.PROPOSE);
                         opening = true;
+                        openingHours = MAPPER.readTree(m.getContent()).get("hours").asInt();
                     } else if ("counter_offer".equals(intent)) {
                         assertEnvelope(m, ACLMessage.PROPOSE);
                         counter = true;
+                        counterHours = MAPPER.readTree(m.getContent()).get("hours").asInt();
                     }
                 }
                 case ACLMessage.ACCEPT_PROPOSAL -> {
@@ -132,6 +139,15 @@ class WalkInVesselAgentIT {
         assertTrue(counter, "vessel sent a counter PROPOSE (engine COUNTER)");
         assertTrue(accept, "vessel sent ACCEPT_PROPOSAL (engine ACCEPT)");
         assertTrue(confirm, "vessel sent CONFIRM on deal close");
+
+        // Task 19 "for 0h" regression: the relayed counter must carry the vessel's real dealHours
+        // (== the opening's hours), NOT 0. Before the fix, EvaluateCounterOfferBehaviour read the
+        // player's "hours" — which never arrived (the NLP frame keys duration under "duration",
+        // this protocol reads "hours") — and echoed 0 into the counter, rendering "Counters at €X
+        // for 0h" and, worse, closing on the ACCEPT branch at 0 hours.
+        assertTrue(openingHours > 0, "opening carried a real duration");
+        assertEquals(openingHours, counterHours,
+                "the counter's duration must equal the opening's (the vessel's fixed dealHours), never 0");
 
         verify(engine, times(2)).evaluate(anyDouble(), any());
 
@@ -248,6 +264,68 @@ class WalkInVesselAgentIT {
         List<DealRecord> recorded = boot.getMarketHistoryArtifact().lastN(1);
         assertEquals(1, recorded.size(), "withdrawal recorded");
         assertEquals(Deal.Outcome.WITHDRAW_PRICE, recorded.get(0).outcome());
+    }
+
+    /**
+     * Task 19 play-test fix: the player's "reject" (REJECT_PROPOSAL) must END the negotiation
+     * with the canonical {@code player_refused} outcome. Before the fix, no vessel-side template
+     * matched REJECT_PROPOSAL at all — the refusal was silently swallowed, the dialogue stayed
+     * open (a later "deal" could still close it), and {@code Deal.Outcome.PLAYER_REFUSED} was
+     * unreachable in production. The engine must never be consulted on a refusal.
+     */
+    @Test
+    void walkInLeavesWithPlayerRefusedWhenThePlayerRejects() throws Exception {
+        boot = new JadeBootstrap();
+        boot.start(new BootstrapConfig(TEST_PORT, false, "realtime", 300));
+
+        String vesselId = "W020";
+        VesselSpec spec = new VesselSpec(vesselId, "cargo_vessel", 8.0, 150.0, 30000, "general_cargo", 0L);
+
+        BlockingQueue<ACLMessage> outbox = new LinkedBlockingQueue<>();
+        BlockingQueue<ACLMessage> inbox = new LinkedBlockingQueue<>();
+        boot.getSpawner().spawn("probe_hm_reject", HmProbeAgent.class,
+                new Object[] {outbox, inbox, "harbour-master"});
+
+        NegotiationEngine engine = mock(NegotiationEngine.class); // a refusal must never consult the engine
+
+        AgentRoster.spawnWalkIn(boot.getSpawner(), spec, boot.getSimClock(),
+                boot.getMarketHistoryArtifact(), boot.getRandomSource(), engine);
+
+        ACLMessage openingMsg = null;
+        for (int i = 0; i < 12 && openingMsg == null; i++) {
+            ACLMessage m = inbox.poll(10, TimeUnit.SECONDS);
+            if (m != null && m.getPerformative() == ACLMessage.PROPOSE) {
+                openingMsg = m;
+            }
+        }
+        assertNotNull(openingMsg, "setup: the walk-in must send its opening PROPOSE to the probe HM");
+
+        ACLMessage reject = MessageFactory.reply(openingMsg, ACLMessage.REJECT_PROPOSAL);
+        reject.setContent("{}"); // matches DispatchPlayerCommandBehaviour's plainMessage shape
+        outbox.put(reject);
+
+        boolean withdrawInform = false;
+        for (int i = 0; i < 12 && !withdrawInform; i++) {
+            ACLMessage m = inbox.poll(10, TimeUnit.SECONDS);
+            if (m == null) {
+                break;
+            }
+            if (m.getPerformative() == ACLMessage.INFORM) {
+                JsonNode content = MAPPER.readTree(m.getContent());
+                assertEquals("withdraw", content.get("intent").asText());
+                assertEquals("player_refused", content.get("reason").asText(),
+                        "a rejection must leave with player_refused, not a price/timeout reason");
+                withdrawInform = true;
+            }
+        }
+        assertTrue(withdrawInform, "the vessel must announce its player_refused departure");
+
+        verify(engine, never()).evaluate(anyDouble(), any());
+
+        List<DealRecord> recorded = boot.getMarketHistoryArtifact().lastN(1);
+        assertEquals(1, recorded.size(), "the refusal must be recorded");
+        assertEquals(Deal.Outcome.PLAYER_REFUSED, recorded.get(0).outcome(),
+                "PLAYER_REFUSED (declared task 02, mapped task 07) is finally reachable in production");
     }
 
     /** The privacy invariant: NO hidden belief (field name OR value) in any outbound content. */

@@ -28,6 +28,13 @@ import org.slf4j.LoggerFactory;
  * {@link Decision.Type}: ACCEPT→ACCEPT_PROPOSAL (+close), COUNTER→a fresh PROPOSE,
  * WITHDRAW→{@link WithdrawalBehaviour}. Also folds in the old CounterOffer /
  * AcceptOrReject stub behaviours (task-07 §64).
+ *
+ * <p><b>Task 19 play-test fix:</b> also matches the player's REJECT_PROPOSAL ("reject"
+ * in chat) and CANCEL ("withdraw") — both end the negotiation with the canonical
+ * {@code player_refused} outcome. Before this, neither performative matched ANY
+ * vessel-side template: the player's refusal was silently ignored, the dialogue stayed
+ * open, and a later "deal" could still close it — and the {@code PLAYER_REFUSED}
+ * outcome (declared since task 02, mapped since task 07) was unreachable in production.
  */
 public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
 
@@ -50,8 +57,12 @@ public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
         this.template = MessageTemplate.and(
                 MessageTemplate.MatchConversationId(conversationId),
                 MessageTemplate.or(
-                        MessageTemplate.MatchPerformative(ACLMessage.PROPOSE),
-                        MessageTemplate.MatchPerformative(ACLMessage.ACCEPT_PROPOSAL)));
+                        MessageTemplate.or(
+                                MessageTemplate.MatchPerformative(ACLMessage.PROPOSE),
+                                MessageTemplate.MatchPerformative(ACLMessage.ACCEPT_PROPOSAL)),
+                        MessageTemplate.or(
+                                MessageTemplate.MatchPerformative(ACLMessage.REJECT_PROPOSAL),
+                                MessageTemplate.MatchPerformative(ACLMessage.CANCEL))));
     }
 
     @Override
@@ -74,10 +85,27 @@ public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
             return;
         }
 
-        // Player's counter (a PROPOSE).
+        // Player refused ("reject") or withdrew ("withdraw") -> leave with the canonical
+        // player_refused outcome (task 19; see class javadoc).
+        if (msg.getPerformative() == ACLMessage.REJECT_PROPOSAL || msg.getPerformative() == ACLMessage.CANCEL) {
+            concluded.set(true);
+            log.info("{}: player refused/withdrew -> leaving", myAgent.getLocalName());
+            myAgent.addBehaviour(new WithdrawalBehaviour(myAgent, stateRef, conversationId, "player_refused"));
+            myAgent.removeBehaviour(this); // MUST be last: removeBehaviour nulls myAgent
+            return;
+        }
+
+        // Player's counter (a PROPOSE). The walk-in negotiation is over PRICE only; the deal's
+        // DURATION is always the vessel's own required dealHours — the player's stated duration is
+        // not a term the engine evaluates. Reading the player's "hours" here was the source of the
+        // "for 0h" relay AND a latent 0-hour close on the ACCEPT branch below (task 19): the NLP
+        // frame keys duration under "duration" while this vessel protocol reads "hours", so the
+        // player's parsed duration never arrived and defaulted to 0. Using dealHours is correct
+        // regardless of that keying, and keeps the relayed counter's displayed hours consistent
+        // with the opening ("Opens at €X for Nh" / "Counters at €Y for Nh", same N).
         JsonNode counter = TerminalJson.readTreeOrNull(msg.getContent());
         double price = num(counter, "price");
-        int hours = (int) num(counter, "hours");
+        int hours = stateRef.get().dealHours();
         String berthId = text(counter, "berth_id");
 
         VesselSpec spec = vessel.spec();

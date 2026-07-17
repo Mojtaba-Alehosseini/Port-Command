@@ -15,6 +15,7 @@ import javax.swing.WindowConstants;
 
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.gui.events.GuiReadyEvent;
+import it.unige.portcommand.nlp.ChatInputProcessor;
 import it.unige.portcommand.util.EventBus;
 
 /**
@@ -45,16 +46,21 @@ public final class MainWindow extends JFrame {
      * @param eventBus          the shared bus every panel subscribes through
      * @param portStateArtifact the shared berth/tug state {@code MapPanel} (task 18) reads and
      *                          subscribes to — the only panel that needs it
+     * @param chatInputProcessor the NLP pipeline seam (task 19) {@code ChatPanel} calls on Send —
+     *                          a functional interface rather than the concrete {@code NLPPipeline}
+     *                          so this class stays decoupled from the {@code nlp} package's
+     *                          construction details (mirrors the {@code onClose Runnable} seam)
      * @param onClose           clean-shutdown hook run before the window disposes and the JVM
      *                          exits (wired to {@code JadeBootstrap::shutdown} in {@code Main})
      *                          — kept as a {@code Runnable} rather than a concrete bootstrap type
      *                          so this class has no dependency on the {@code bootstrap} package.
      */
-    public MainWindow(EventBus eventBus, PortStateArtifact portStateArtifact, Runnable onClose) {
+    public MainWindow(EventBus eventBus, PortStateArtifact portStateArtifact,
+                      ChatInputProcessor chatInputProcessor, Runnable onClose) {
         super("Port Command Genova");
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE); // we drive shutdown ourselves
         setJMenuBar(buildMenuBar(onClose));
-        layOutPanels(eventBus, portStateArtifact);
+        layOutPanels(eventBus, portStateArtifact, chatInputProcessor);
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
@@ -74,11 +80,12 @@ public final class MainWindow extends JFrame {
         setLocationRelativeTo(null);
     }
 
-    private void layOutPanels(EventBus eventBus, PortStateArtifact portStateArtifact) {
+    private void layOutPanels(EventBus eventBus, PortStateArtifact portStateArtifact,
+                              ChatInputProcessor chatInputProcessor) {
         setLayout(new GridBagLayout());
         add(new HUDPanel(eventBus), slot(0, 0, 3, 1.0, 0.0));
         add(new MapPanel(eventBus, portStateArtifact), slot(0, 1, 1, 0.5, 1.0));
-        add(new ChatPanel(eventBus), slot(1, 1, 1, 0.25, 1.0));
+        add(new ChatPanel(eventBus, chatInputProcessor), slot(1, 1, 1, 0.25, 1.0));
         add(new CommLogPanel(eventBus), slot(2, 1, 1, 0.25, 1.0));
         add(new NotificationStrip(eventBus), slot(0, 2, 3, 1.0, 0.0));
     }

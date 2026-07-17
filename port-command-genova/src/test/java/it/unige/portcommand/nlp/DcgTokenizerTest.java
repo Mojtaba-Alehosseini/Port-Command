@@ -38,6 +38,20 @@ class DcgTokenizerTest {
         assertEquals(List.of("2000", "usd"), tokens(priceForm));
     }
 
+    @ParameterizedTest(name = "[{0}] normalises to berth 2")
+    @ValueSource(strings = {"berth2", "berth_2", "berth 2"})
+    void fusedBerthFormsNormaliseToBerthPlusNumber(String berthForm) {
+        // Task 19 play-test: players type what the UI shows ("berth_1") or fuse it ("berth2");
+        // the grammar's terminals only ever see [berth, N].
+        assertEquals(List.of("berth", "2"), tokens(berthForm));
+    }
+
+    @Test
+    void berthFusedNormalisationDoesNotSplitOtherWords() {
+        // "berthing" must not become "berth ing"; only a DIGIT glued to "berth" splits.
+        assertEquals(List.of("berthing", "fee"), tokens("berthing fee"));
+    }
+
     /**
      * Division of labour: the tokeniser only rewrites the SYMBOLS (€/$), because they fuse to the
      * digits and would not survive punctuation stripping. Word forms are passed through untouched

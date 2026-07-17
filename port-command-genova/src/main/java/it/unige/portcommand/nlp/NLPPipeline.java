@@ -136,6 +136,17 @@ public final class NLPPipeline {
         return routeHighConfidence(text, r, ctx);
     }
 
+    /**
+     * A Rasa-classified {@code accept_deal} BINDS a negotiation, so it demands near-certainty:
+     * a throwaway {@code "so?"} that the DCG misses and Rasa reads as {@code accept_deal} must
+     * never silently close a deal (task 19 play-test — a bare "so?" classified above the 0.60
+     * gate closed a €6263 deal with no visible cause). Below this the turn falls to
+     * clarification — the player confirms via the explicit "Accept the current offer" button.
+     * The DCG accept path ({@code routeFrame}) and the Accept button (a direct
+     * {@code PlayerCommandEvent}) both bypass Rasa entirely and are unaffected.
+     */
+    private static final double BINDING_ACCEPT_MIN_CONFIDENCE = 0.80;
+
     /** Branch A (&ge;0.60): map a non-structural intent straight to an action/ACL. A
      * structural intent ({@code propose_offer}/{@code counter_offer}) that the DCG already
      * failed to parse still needs clarification — Rasa's confidence alone is not enough
@@ -147,7 +158,9 @@ public final class NLPPipeline {
         }
         return switch (intent) {
             case "propose_offer", "counter_offer" -> clarification();
-            case "accept_deal" -> routed(ACLMessage.ACCEPT_PROPOSAL, entitiesContent(r), ctx);
+            case "accept_deal" -> r.confidence() >= BINDING_ACCEPT_MIN_CONFIDENCE
+                    ? routed(ACLMessage.ACCEPT_PROPOSAL, entitiesContent(r), ctx)
+                    : clarification();
             case "reject_deal" -> routed(ACLMessage.REJECT_PROPOSAL, entitiesContent(r), ctx);
             // An 11th performative beyond the committed 10 (report note, per session brief).
             case "query_status" -> routed(ACLMessage.QUERY_REF, entitiesContent(r), ctx);

@@ -1,17 +1,22 @@
 package it.unige.portcommand.gui;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import javax.swing.SwingUtilities;
 
 import it.unige.portcommand.agents.TugStatus;
 import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.CommLogEvent;
+import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WeatherChangeEvent;
+import it.unige.portcommand.nlp.PipelineResult;
 import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.util.EventBus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -87,16 +92,23 @@ class GuiPanelsSubscriptionLifecycleTest {
     @Timeout(5)
     void chatPanelUnsubscribesOnRemoveNotify() throws Exception {
         EventBus bus = new EventBus();
-        ChatPanel panel = new ChatPanel(bus);
+        ChatPanel panel = new ChatPanel(bus, (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")));
+        WalkInDialogueSnapshot snapshot = WalkInDialogueSnapshot.of("W001",
+                new VesselSpec("W001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L),
+                "berth_1", 6, 1500.0, 0.0, 1, 0.0, false);
 
+        bus.publish(new NegotiationOpenedEvent("dlg-1", snapshot));
+        SwingUtilities.invokeAndWait(() -> { });
         bus.publish(new AssistantChatEvent("dlg-1", "hello"));
         SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(1, panel.receivedCountForTest(), "constructor subscription must be live (positive control)");
+        assertEquals(3, panel.registry().tab("dlg-1").transcript().size(),
+                "constructor subscription must be live (positive control): orientation line + opening bubble + assistant reply");
 
         panel.removeNotify();
         bus.publish(new AssistantChatEvent("dlg-1", "world"));
         SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(1, panel.receivedCountForTest(), "removeNotify() must cancel the subscription");
+        assertEquals(3, panel.registry().tab("dlg-1").transcript().size(),
+                "removeNotify() must cancel the subscription");
     }
 
     @Test
