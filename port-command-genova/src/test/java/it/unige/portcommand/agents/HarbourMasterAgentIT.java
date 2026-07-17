@@ -40,6 +40,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -471,6 +472,54 @@ class HarbourMasterAgentIT {
         dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.WITHDRAW, "P001", Map.of()));
         assertEquals(ACLMessage.CANCEL,
                 pollUntil(vessel.inbox, m -> true, 5000).getPerformative());
+    }
+
+    /**
+     * Regression test for a real bug found via manual play-testing (task 19), not by any prior
+     * unit/integration test — including the one directly above, which (like every other existing
+     * test of this class) never lets the behaviour's agent reference go null before invoking the
+     * handler. In production, JADE's scheduler runs a {@code OneShotBehaviour}'s {@code action()}
+     * once, then retires it — {@code Agent.removeBehaviour} calls {@code Behaviour.setAgent(null)}
+     * (bytecode-verified against jade-4.6.0.jar) as part of that retirement. Exactly when JADE gets
+     * around to that retirement is not on any bounded, test-friendly schedule (the real failure took
+     * ~19 minutes of live play to surface) — so this test does not wait for it to happen naturally;
+     * it calls the SAME public {@code setAgent(null)} JADE itself calls, deterministically
+     * reproducing the exact precondition. The behaviour's {@code this::onPlayerCommand} method
+     * reference stays subscribed on the EventBus indefinitely regardless, so any chat command
+     * published after that point used to NPE inside the handler (it re-read the now-null
+     * {@code myAgent}). The fix captures the agent in a plain field at construction instead.
+     */
+    @Test
+    void dispatchPlayerCommand_stillWorksAfterItsAgentReferenceIsNulled() throws Exception {
+        ServiceContract contract = new ServiceContract("CONTRACT-D1", "D001", "berth_1", 5200.0, 8, 0L);
+        VesselSpec spec = new VesselSpec("D001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-D1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe vessel = spawnProbe("t20_vessel", null);
+
+        vessel.outbox.put(contractRequest(hm, "CONTRACT-D1", spec, "t20_vessel"));
+        assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "setup: establishes activeVessels tracking with a real sender AID");
+
+        // action() registers the real subscription exactly as JADE's scheduler would (this class
+        // itself no longer reads myAgent inside action(), only the injected `hm` field, so calling
+        // it directly here is faithful to the real wiring, not a workaround).
+        DispatchPlayerCommandBehaviour dispatch = new DispatchPlayerCommandBehaviour(hm);
+        dispatch.action();
+
+        // Deterministically reproduce what JADE's own Agent.removeBehaviour does once the scheduler
+        // retires a completed OneShotBehaviour, instead of waiting on its real (unbounded) timing.
+        dispatch.setAgent(null);
+        assertNull(dispatch.getAgent(), "setup sanity: the behaviour's agent reference must be null now");
+
+        // The real path: publish through the bus (ASYNC), never a direct method call. Matched
+        // specifically on ACCEPT_PROPOSAL (not "any message") -- the HM's own auto-flow can send a
+        // contracted vessel other unrelated traffic on its own schedule, which must not be mistaken
+        // for this dispatch succeeding.
+        hm.eventBus().publish(new PlayerCommandEvent(PlayerCommandKind.ACCEPT, "D001", Map.of()));
+
+        ACLMessage reply = pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 5000);
+        assertNotNull(reply, "a chat command published after the behaviour's agent reference is nulled "
+                + "must still reach the vessel -- this is exactly what failed in the manual play-test");
     }
 
     // ==================== Weather safety gate (v1.1: R15/16 + R17 + R19) ====================

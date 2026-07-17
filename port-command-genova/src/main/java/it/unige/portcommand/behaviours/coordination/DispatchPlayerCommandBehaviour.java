@@ -28,24 +28,38 @@ import org.slf4j.LoggerFactory;
  * {@code onPlayerCommand} is also callable directly by tests, which several
  * existing ITs still do to drive it deterministically on the calling thread
  * rather than relying on the real bus's ASYNC delivery timing).
+ *
+ * <p><b>Task 19 fix (found via real play-testing, not a unit test):</b> the agent
+ * reference is captured in {@link #hm}, a plain field set once in the constructor —
+ * NEVER read from the inherited {@code myAgent} inside {@link #onPlayerCommand}. JADE's
+ * {@code Agent.removeBehaviour} calls {@code Behaviour.setAgent(null)}
+ * (bytecode-verified against jade-4.6.0.jar), and the scheduler runs exactly that once a
+ * {@link OneShotBehaviour}'s {@code action()} completes and {@code done()} reports
+ * {@code true} — so {@code myAgent} goes null shortly after {@link #action()} returns,
+ * while the {@code this::onPlayerCommand} method reference stays subscribed on the bus
+ * indefinitely. The first real chat message sent after that window NPE'd here
+ * (every other subscribe-once/public-handler behaviour in {@code behaviours.assistant}
+ * already avoids this by capturing its own dependencies as constructor fields and
+ * never touching {@code myAgent} post-construction — this class just hadn't).
  */
 public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(DispatchPlayerCommandBehaviour.class);
 
+    private final HarbourMasterAgent hm;
+
     public DispatchPlayerCommandBehaviour(Agent agent) {
         super(agent);
+        this.hm = (HarbourMasterAgent) agent;
     }
 
     @Override
     public void action() {
-        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
         hm.eventBus().subscribe(PlayerCommandEvent.class, this::onPlayerCommand, DeliveryMode.ASYNC);
         log.debug("subscribed to PlayerCommandEvent");
     }
 
     public void onPlayerCommand(PlayerCommandEvent event) {
-        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
         PlayerCommand cmd = PlayerCommand.from(event);
         VesselTracking tracking = hm.activeVessels().get(cmd.targetVesselId());
         if (tracking == null) {
