@@ -6,8 +6,11 @@ import it.unige.portcommand.persistence.AgentDirectory;
 import jade.core.Agent;
 import jade.domain.DFService;
 import jade.domain.FIPAException;
+import jade.domain.FIPAService;
 import jade.domain.FIPAAgentManagement.DFAgentDescription;
+import jade.domain.FIPAAgentManagement.FIPAManagementVocabulary;
 import jade.domain.FIPAAgentManagement.ServiceDescription;
+import jade.lang.acl.ACLMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -73,7 +76,43 @@ public abstract class PortCommandAgent extends Agent {
     protected void onTakeDown() {
     }
 
-    /** Registers one DF service for this agent. Fails fast if the DF rejects it. */
+    /**
+     * Per-attempt bound on the DF register round trip — a healthy DF answers in
+     * milliseconds; the 2026-07-18 full-suite wedge sat 30+ s. Attempts × timeout +
+     * spacings = 3×2500 + 2×1200 = 9.9 s, deliberately INSIDE GameSession's 10 s
+     * {@code awaitHarbourMasterReady} bound, so even the HarbourMaster's own
+     * registration either self-heals (a one-blip stall retries at ~3.7 s) or fails
+     * loudly through the session layer — never a silent hang.
+     */
+    private static final long DF_REGISTER_TIMEOUT_MS = 2_500L;
+    private static final int DF_REGISTER_ATTEMPTS = 3;
+    /** Mirrors the DF-registration-send retry invariant's spacing (INVARIANTS.md). */
+    private static final long DF_REGISTER_RETRY_SPACING_MS = 1_200L;
+
+    /**
+     * Registers one DF service for this agent — BOUNDED (2026-07-18): the stock
+     * {@code DFService.register} blocks with no timeout, and during a load's
+     * teardown→rebuild a respawning agent could wedge forever in setup if the rebuilt
+     * platform's DF stalled under machine load (observed once in a full-suite run —
+     * BUILD_LOG "Checkpoint-#6 fix round", flake log). This composes the SAME
+     * primitives {@code DFService.register} does internally
+     * ({@code createRequestMessage} + {@code doFipaRequestClient}), but through the
+     * TIMED {@code doFipaRequestClient} overload (null reply == timeout, JADE
+     * contract), retrying up to {@link #DF_REGISTER_ATTEMPTS} times.
+     *
+     * <p>A timed-out attempt may still have REACHED the DF (only the reply was late),
+     * so a retry can come back {@code already-registered} — that IS success, not a
+     * rejection, and is treated as such. Any other REFUSE/FAILURE stays fail-fast,
+     * exactly the pre-existing semantics. Exhausting every attempt throws — a loud,
+     * bounded failure (the session layer lands in MENU) instead of the hang.
+     *
+     * <p>The DF request rides JADE's own FIPA-Agent-Management envelope (built by
+     * {@code DFService.createRequestMessage}) — deliberately NOT
+     * {@code MessageFactory.create}: rule 5 governs the game's {@code port_command_v1}
+     * protocol messages, and the stock {@code DFService.register} has always built
+     * this infra message internally; stamping the app envelope onto it would break
+     * the DF's SL codec.
+     */
     protected final void registerDfService(String serviceType, String serviceName) {
         DFAgentDescription dfd = new DFAgentDescription();
         dfd.setName(getAID());
@@ -81,13 +120,34 @@ public abstract class PortCommandAgent extends Agent {
         sd.setType(serviceType);
         sd.setName(serviceName);
         dfd.addServices(sd);
-        try {
-            DFService.register(this, dfd);
-            log.info("DF registered: type='{}' name='{}'", serviceType, serviceName);
-        } catch (FIPAException e) {
-            throw new IllegalStateException(
-                    "DF registration failed for " + getLocalName() + " (service " + serviceType + ")", e);
+        for (int attempt = 1; attempt <= DF_REGISTER_ATTEMPTS; attempt++) {
+            try {
+                ACLMessage request = DFService.createRequestMessage(this, getDefaultDF(),
+                        FIPAManagementVocabulary.REGISTER, dfd, null);
+                ACLMessage reply = FIPAService.doFipaRequestClient(this, request, DF_REGISTER_TIMEOUT_MS);
+                if (reply != null) {
+                    log.info("DF registered: type='{}' name='{}'", serviceType, serviceName);
+                    return;
+                }
+                log.warn("DF register timed out ({} ms) for {} (service '{}', attempt {}/{})",
+                        DF_REGISTER_TIMEOUT_MS, getLocalName(), serviceType, attempt, DF_REGISTER_ATTEMPTS);
+            } catch (FIPAException e) {
+                if (attempt > 1 && String.valueOf(e.getMessage()).contains("already-registered")) {
+                    // A previous timed-out attempt actually landed; the DF knows us. Success.
+                    log.info("DF registered: type='{}' name='{}' (prior attempt had landed)",
+                            serviceType, serviceName);
+                    return;
+                }
+                throw new IllegalStateException(
+                        "DF registration failed for " + getLocalName() + " (service " + serviceType + ")", e);
+            }
+            if (attempt < DF_REGISTER_ATTEMPTS) {
+                doWait(DF_REGISTER_RETRY_SPACING_MS);
+            }
         }
+        throw new IllegalStateException("DF registration timed out for " + getLocalName()
+                + " (service " + serviceType + ") after " + DF_REGISTER_ATTEMPTS + " attempts of "
+                + DF_REGISTER_TIMEOUT_MS + " ms — the platform DF is not answering");
     }
 
     /** AID lookup helper for subclasses; never call {@code DFService.search} directly. */
