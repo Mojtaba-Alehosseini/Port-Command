@@ -54,12 +54,25 @@ public final class RandomSource {
         return new Random(seed ^ stableHash(name));
     }
 
-    /** Deterministic 64-bit polynomial hash (unlike 32-bit {@link String#hashCode()}). */
+    /**
+     * Deterministic 64-bit polynomial hash (unlike 32-bit {@link String#hashCode()}),
+     * finished with murmur3's fmix64 avalanche. Without the finalizer (checkpoint-#6 F2,
+     * fixed 2026-07-18) adjacent stream names ("vessel-WALKIN-63"/"-64") produced child
+     * seeds differing only in low bits, and {@link Random}'s first draw is strongly
+     * correlated across adjacent seeds — walk-in personalities (the first draw of each
+     * per-vessel stream) locked into dozens-long single-personality runs. The avalanche
+     * makes every output bit depend on every input bit, decorrelating sibling streams.
+     */
     private static long stableHash(String s) {
         long h = 1125899906842597L; // a large prime
         for (int i = 0; i < s.length(); i++) {
             h = 31 * h + s.charAt(i);
         }
+        h ^= h >>> 33;
+        h *= 0xff51afd7ed558ccdL;
+        h ^= h >>> 33;
+        h *= 0xc4ceb9fe1a85ec53L;
+        h ^= h >>> 33;
         return h;
     }
 
