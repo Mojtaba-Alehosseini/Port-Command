@@ -200,9 +200,7 @@ public final class GameStateBuilder {
     public static GameState fromScenario(it.unige.portcommand.scenario.Scenario s, long resolvedSeed,
                                          long realSecondsPerGameDay, String savedAt) {
         it.unige.portcommand.scenario.Scenario.InitialState init = s.initialState();
-        long simMillis = (init.startDay() - 1L) * 86_400_000L
-                + Long.parseLong(init.startTimeOfDay().substring(0, 2)) * 3_600_000L
-                + Long.parseLong(init.startTimeOfDay().substring(3, 5)) * 60_000L;
+        long simMillis = init.startSimMillis();
 
         List<VesselStateDTO> docked = new ArrayList<>();
         Map<String, List<BerthOccupancy>> occupanciesByTerminal = new java.util.LinkedHashMap<>();

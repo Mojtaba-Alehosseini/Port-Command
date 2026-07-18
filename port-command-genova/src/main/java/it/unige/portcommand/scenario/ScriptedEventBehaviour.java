@@ -43,6 +43,16 @@ import org.slf4j.LoggerFactory;
  * <p>All state is touched only on the HarbourMaster thread: ticks fire here, and both
  * snapshot paths (autosave inline, manual save via one-shot) run on the same thread.
  * Events apply inside a catch-all so one failing event cannot kill the timeline.
+ *
+ * <p><b>Scenario event times are relative to scenario start, not midnight</b> (fixed
+ * 2026-07-18, found by an actual play-through: every packaged scenario boots at 08:00 —
+ * 28,800 absolute sim-seconds — which is already past every event's declared
+ * {@code simTimeSeconds} (max 1,500), so ALL of them fired in the very first tick,
+ * defeating the tutorial's 5-step pacing and the storm's hold→clear reaction window).
+ * {@link #scenarioStartSeconds} is {@code scenario.initialState().startSimMillis()/1000}
+ * — a pure function of the scenario's own declared day/time, added to a scenario event's
+ * {@code simTimeSeconds} when it is queued. Daily-stream events are unaffected: their
+ * {@code simTimeSeconds} ({@code ContractSchedule.spawnSimSeconds}) is already absolute.
  */
 public final class ScriptedEventBehaviour extends SimTickerBehaviour {
 
@@ -57,6 +67,7 @@ public final class ScriptedEventBehaviour extends SimTickerBehaviour {
 
     private final GameContext ctx;
     private final Scenario scenario;                 // null in sandbox play
+    private final long scenarioStartSeconds;          // 0 in sandbox; unused there
     private final List<ServiceContract> dailyBase;   // pristine contracts.json set
     private final Set<String> fired = new LinkedHashSet<>();
     private final PriorityQueue<Pending> pending = new PriorityQueue<>(
@@ -70,6 +81,8 @@ public final class ScriptedEventBehaviour extends SimTickerBehaviour {
         super(agent, ctx.simClock(), TICK_SIM_MILLIS);
         this.ctx = ctx;
         this.scenario = runtime.scenario();
+        this.scenarioStartSeconds = scenario == null ? 0L
+                : scenario.initialState().startSimMillis() / 1000L;
         this.dailyBase = dailyBase.stream()
                 .sorted(Comparator.comparing(ServiceContract::contractId))
                 .toList();
@@ -83,7 +96,8 @@ public final class ScriptedEventBehaviour extends SimTickerBehaviour {
                 ScriptedEvent event = scenario.events().get(i);
                 String id = scenario.key() + "#" + i;
                 if (!fired.contains(id)) {
-                    pending.add(new Pending(id, event.simTimeSeconds(), seq++, true, event));
+                    pending.add(new Pending(id, scenarioStartSeconds + event.simTimeSeconds(),
+                            seq++, true, event));
                     pendingScenarioEvents++;
                 }
             }

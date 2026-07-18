@@ -74,6 +74,22 @@ public record Scenario(
             WeatherInit weatherOverride,
             List<BerthInit> berths,
             List<TugInit> tugs) {
+
+        /**
+         * Absolute sim-millis this scenario's clock starts at — the SAME formula
+         * {@code GameStateBuilder.fromScenario} uses to set the initial {@code SimClock}
+         * (single-sourced here, 2026-07-18 timing-bug fix). Deliberately recomputed, not
+         * persisted: it is a pure function of the scenario's own declared day/time, so it
+         * is identical across every boot AND every reload of the same scenario — exactly
+         * the fixed reference point {@code ScriptedEventBehaviour} needs to translate a
+         * scripted event's "sim-seconds since scenario start" into the engine's absolute
+         * sim-clock seconds.
+         */
+        public long startSimMillis() {
+            return (startDay() - 1L) * 86_400_000L
+                    + Long.parseLong(startTimeOfDay().substring(0, 2)) * 3_600_000L
+                    + Long.parseLong(startTimeOfDay().substring(3, 5)) * 60_000L;
+        }
     }
 
     /**

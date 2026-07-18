@@ -48,9 +48,17 @@ class ScriptedEventBehaviourTest {
                 null, new RandomSource(42), bus, null);
     }
 
+    /** Starts at midnight (offset 0) so every OTHER test's raw {@code jumpTo(N)} literals
+     * mean exactly what they say — "N sim-seconds since scenario start". The offset
+     * translation itself (non-midnight starts, the 2026-07-18 bug) has its own dedicated
+     * tests below, which build their own non-midnight scenario explicitly. */
     private static Scenario scenarioOf(ScriptedEvent... events) {
+        return scenarioStartingAt("00:00", events);
+    }
+
+    private static Scenario scenarioStartingAt(String startTimeOfDay, ScriptedEvent... events) {
         return new Scenario("testsc", "Test", "test scenario", 1_000.0, 7L, null,
-                new Scenario.InitialState(1, "08:00", 1_000.0, 50,
+                new Scenario.InitialState(1, startTimeOfDay, 1_000.0, 50,
                         new Scenario.WeatherInit(10, "good", 0.5, "sunny"), List.of(), List.of()),
                 List.of(), List.of(events));
     }
@@ -132,6 +140,76 @@ class ScriptedEventBehaviourTest {
         assertEquals(List.of("first", "second", "third"), publishedTexts(),
                 "the not-yet-fired tail still fires in the restored timeline");
         assertEquals(List.of("testsc#0", "testsc#1", "testsc#2"), rebuilt.firedEventIdsSorted());
+    }
+
+    // ---- scenario-start offset (2026-07-18: found by an actual play-through — every
+    // packaged scenario boots at 08:00, and the un-fixed engine compared each event's
+    // declared simTimeSeconds directly against the ABSOLUTE clock, so all 7 tutorial
+    // events fired within one 30-sim-s tick instead of across their intended ~31 wall-s
+    // spread. Regression-guarded here with an explicit non-midnight scenario start,
+    // decoupled from every other test's midnight-start convenience helper.) ----
+
+    @Test
+    void startSimMillisIsMidnightPlusTheDeclaredTimeOfDay() {
+        assertEquals(0L, new Scenario.InitialState(1, "00:00", 0, 0, null, List.of(), List.of())
+                .startSimMillis());
+        assertEquals(8 * 3_600_000L,
+                new Scenario.InitialState(1, "08:00", 0, 0, null, List.of(), List.of())
+                        .startSimMillis());
+        assertEquals(86_400_000L + 8 * 3_600_000L + 30 * 60_000L,
+                new Scenario.InitialState(2, "08:30", 0, 0, null, List.of(), List.of())
+                        .startSimMillis(), "day 2 adds a full MILLIS_PER_DAY");
+    }
+
+    @Test
+    void scenarioEventsAreRelativeToScenarioStartNotMidnight() {
+        // The exact shape of the packaged scenarios: boots at 08:00 (28,800 abs sim-s),
+        // events declared at small offsets (100, 500) from THAT start.
+        Scenario s = scenarioStartingAt("08:00", note(100, "first"), note(500, "second"));
+        ScriptedEventBehaviour behaviour = new ScriptedEventBehaviour(null, ctx,
+                new ScenarioRuntime(s, Set.of()), List.of());
+
+        clock.restore(500L * 1000L, 300); // raw absolute 500s — the PRE-FIX due instant
+        clock.resume();
+        behaviour.onSimTick();
+        assertEquals(List.of(), publishedTexts(),
+                "at 08:00 + 500 abs-sim-s the scenario has been running only ~8h08m20s — "
+                        + "neither event (due at 08:00+100s and 08:00+500s) is due yet");
+
+        jumpTo(8 * 3600 + 100); // scenario-start + 100s — the first event's TRUE due instant
+        behaviour.onSimTick();
+        assertEquals(List.of("first"), publishedTexts(), "fires exactly at start+100s");
+
+        jumpTo(8 * 3600 + 500); // scenario-start + 500s
+        behaviour.onSimTick();
+        assertEquals(List.of("first", "second"), publishedTexts(), "fires exactly at start+500s");
+    }
+
+    @Test
+    void aFiveDayTwoTutorialStepsAreNotAllFiredByTheFirstTick() {
+        // The precise regression: the tutorial's own 5 steps (0, 200, 600, 1100, 1500),
+        // observed firing within one 30-sim-s tick of an 08:00 boot pre-fix.
+        Scenario s = scenarioStartingAt("08:00",
+                new it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent(0, 1, "s1"),
+                new it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent(200, 2, "s2"),
+                new it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent(600, 3, "s3"),
+                new it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent(1100, 4, "s4"),
+                new it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent(1500, 5, "s5"));
+        ScriptedEventBehaviour behaviour = new ScriptedEventBehaviour(null, ctx,
+                new ScenarioRuntime(s, Set.of()), List.of());
+
+        jumpTo(8 * 3600); // the scenario's own opening instant — only step 1 (offset 0) is due
+        behaviour.onSimTick();
+        assertEquals(1, behaviour.firedEventIdsSorted().size(),
+                "only the offset-0 step fires at the scenario's opening instant, not all 5");
+
+        jumpTo(8 * 3600 + 700); // between steps 3 (600) and 4 (1100)
+        behaviour.onSimTick();
+        assertEquals(3, behaviour.firedEventIdsSorted().size(), "steps 1-3 due, 4-5 still ahead");
+
+        jumpTo(8 * 3600 + 1500);
+        behaviour.onSimTick();
+        assertEquals(5, behaviour.firedEventIdsSorted().size(), "all 5 due by start+1500s");
     }
 
     // ---- Poisson suppression window ----
