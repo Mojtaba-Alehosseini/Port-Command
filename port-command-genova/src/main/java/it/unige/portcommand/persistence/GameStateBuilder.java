@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import it.unige.portcommand.agents.BaseVesselAgent;
@@ -96,6 +97,9 @@ public final class GameStateBuilder {
                 .orElseThrow(() -> new IllegalStateException("customs_agent not in AgentDirectory"));
 
         long simMillis = src.simClock().nowSimMillis();
+        // Task 23: the scenario engine's persisted slice, read on this same HM thread. A
+        // stub-harness HM without the engine snapshots sandbox semantics (null key, []).
+        var scripted = hm.scriptedEvents();
         return new GameState(
                 SaveLoadManager.SCHEMA_VERSION,
                 savedAt,
@@ -108,6 +112,8 @@ public final class GameStateBuilder {
                 src.gameOverGuard() == null ? 0 : src.gameOverGuard().lastDeepDebtDay(),
                 src.marketHistory().lastN(MARKET_HISTORY_LIMIT),
                 src.policyRegistry().all().stream().map(PolicyRule::trigger).toList(),
+                scripted == null ? null : scripted.scenarioKey(),
+                scripted == null ? List.of() : scripted.firedEventIdsSorted(),
                 new GameState.AgentsState(
                         hm.snapshotDto(),
                         weather.snapshotDto(),
@@ -175,6 +181,118 @@ public final class GameStateBuilder {
                 v.personality(), v.minAcceptablePrice(), v.targetPrice(),
                 v.maxWaitMinutes(), v.minDurationHours(), v.negotiationRound(),
                 v.negotiationStartedAtSimMillis());
+    }
+
+    /**
+     * Task 23: a scenario's opening {@link GameState} — <b>the same shape a save file
+     * has</b>, so scenario start reuses the task-22 load path verbatim (validate →
+     * teardown → rebuild; reconciliation dated 2026-07-18 — planning/23's §23.10
+     * {@code Main.startScenario} sketch predates {@code GameSession}). Pre-docked berth
+     * vessels materialise as restored DOCKED walk-ins whose deal closed pre-scenario
+     * (no fee re-earned: {@code LedgerCoordinator} only credits on live events), with
+     * dims from {@code ScenarioVessels}' pinned table.
+     *
+     * @param resolvedSeed          the pinned {@code randomSeed}, or the freshly generated
+     *                              one when the scenario's field is null (0 is a valid pin)
+     * @param realSecondsPerGameDay the already-resolved pacing (CLI {@code --day-length}
+     *                              beats the scenario override beats the sandbox default)
+     */
+    public static GameState fromScenario(it.unige.portcommand.scenario.Scenario s, long resolvedSeed,
+                                         long realSecondsPerGameDay, String savedAt) {
+        it.unige.portcommand.scenario.Scenario.InitialState init = s.initialState();
+        long simMillis = (init.startDay() - 1L) * 86_400_000L
+                + Long.parseLong(init.startTimeOfDay().substring(0, 2)) * 3_600_000L
+                + Long.parseLong(init.startTimeOfDay().substring(3, 5)) * 60_000L;
+
+        List<VesselStateDTO> docked = new ArrayList<>();
+        Map<String, List<BerthOccupancy>> occupanciesByTerminal = new java.util.LinkedHashMap<>();
+        occupanciesByTerminal.put("terminal_container", new ArrayList<>());
+        occupanciesByTerminal.put("terminal_general", new ArrayList<>());
+        init.berths().stream()
+                .sorted(Comparator.comparingInt(it.unige.portcommand.scenario.Scenario.BerthInit::berthId))
+                .forEach(berth -> {
+                    String berthId = "berth_" + berth.berthId();
+                    String terminal = berth.berthId() == 2 ? "terminal_container" : "terminal_general";
+                    if (berth.occupied()) {
+                        var v = berth.vessel();
+                        long freeAt = simMillis + v.dealHours() * 3_600_000L;
+                        docked.add(dockedVessel(v, berthId, simMillis, freeAt));
+                        occupanciesByTerminal.get(terminal).add(new BerthOccupancy(berthId,
+                                v.vesselId(), simMillis, freeAt, 1, BerthOccupancy.Status.DOCKED));
+                    } else {
+                        occupanciesByTerminal.get(terminal).add(BerthOccupancy.free(berthId));
+                    }
+                });
+        docked.sort(Comparator.comparing(VesselStateDTO::id));
+        List<TerminalStateDTO> terminals = List.of(
+                new TerminalStateDTO("terminal_container", occupanciesByTerminal.get("terminal_container")),
+                new TerminalStateDTO("terminal_general", occupanciesByTerminal.get("terminal_general")));
+
+        List<TugStateDTO> tugs = init.tugs().stream()
+                .sorted(Comparator.comparingInt(it.unige.portcommand.scenario.Scenario.TugInit::tugId))
+                .map(t -> new TugStateDTO("tug_" + t.tugId(),
+                        // §3.15's AVAILABLE is the engine's IDLE; a REFUELING boot restores
+                        // IDLE-with-low-tank and RefuelIfLowBehaviour re-triggers (task-22 rule).
+                        "AVAILABLE".equals(t.status()) ? "IDLE" : t.status(),
+                        null, t.fuel(), null, null))
+                .toList();
+
+        var weather = init.weatherOverride();
+        return new GameState(
+                SaveLoadManager.SCHEMA_VERSION,
+                savedAt,
+                resolvedSeed,
+                mergedSettings(s, realSecondsPerGameDay),
+                new GameState.SimClockState(simMillis, realSecondsPerGameDay),
+                init.wallet(),
+                init.reputation(),
+                0, 0,
+                List.of(), List.of(),
+                s.key(),
+                List.of(),
+                new GameState.AgentsState(
+                        new it.unige.portcommand.persistence.dto.HarbourMasterStateDTO(
+                                List.of(), List.of(), new java.util.LinkedHashMap<>(),
+                                new java.util.LinkedHashMap<>(), 0),
+                        new it.unige.portcommand.persistence.dto.WeatherStateDTO(
+                                new it.unige.portcommand.agents.WeatherSnapshot(weather.windKn(),
+                                        weather.visibility(), weather.swell(), weather.state(), simMillis)),
+                        new it.unige.portcommand.persistence.dto.CustomsStateDTO(1),
+                        tugs, terminals, docked));
+    }
+
+    private static VesselStateDTO dockedVessel(it.unige.portcommand.scenario.Scenario.DockedVessel v,
+                                               String berthId, long simMillis, long freeAt) {
+        double[] dims = it.unige.portcommand.scenario.ScenarioVessels.pinnedDims(v.vesselType());
+        var position = it.unige.portcommand.harbourmaster.BerthPositions.position(berthId);
+        return new VesselStateDTO(
+                v.vesselId(), v.vesselType(), VesselStateDTO.CHANNEL_WALK_IN,
+                dims[0], dims[1], (int) dims[2],
+                it.unige.portcommand.scenario.ScenarioVessels.cargoClassFor(v.vesselType()),
+                simMillis,
+                Stage.DOCKED.name(), "DOCKED", freeAt,
+                berthId, v.dealPrice(), v.dealHours(),
+                List.of(), false, false,
+                position.x(), position.y(), 0.0,
+                null,
+                null, null, null, null, null, null, null);
+    }
+
+    /** {@code Settings.load()} with the scenario's partial override applied (task 23). */
+    private static Settings mergedSettings(it.unige.portcommand.scenario.Scenario s,
+                                           long realSecondsPerGameDay) {
+        Settings base = Settings.load();
+        var override = s.settingsOverride();
+        return new Settings(
+                base.roundLimit(), base.timeLimitSeconds(),
+                override != null && override.autopilotEnabled() != null
+                        ? override.autopilotEnabled() : base.autopilotEnabled(),
+                override != null && override.difficulty() != null
+                        ? override.difficulty() : base.difficulty(),
+                realSecondsPerGameDay,
+                base.maxGameDays(), base.firstLaunch(), base.llmModel(),
+                base.withdrawalPenaltyEur(), base.cnpReplyBySimSeconds(),
+                base.cnpRetryAfterSimSeconds(), base.dailyTargetEur(), base.bankruptcyFloorEur());
     }
 
     /**

@@ -91,7 +91,7 @@ class HarbourMasterAgentIT {
 
     @Test
     void contractedVesselCompatible_acceptsAndDispatchesDownstream() throws Exception {
-        ServiceContract contract = new ServiceContract("CONTRACT-1", "C001", "berth_1", 5200.0, 8, 0L);
+        ServiceContract contract = new ServiceContract("CONTRACT-1", "C001", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
         VesselSpec spec = new VesselSpec("C001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
         HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         Probe vessel = spawnProbe("t1_vessel", null);
@@ -154,7 +154,7 @@ class HarbourMasterAgentIT {
      */
     @Test
     void contractedAutoFlow_publishesCommLogEventSequence() throws Exception {
-        ServiceContract contract = new ServiceContract("CONTRACT-CL1", "CL001", "berth_1", 5200.0, 8, 0L);
+        ServiceContract contract = new ServiceContract("CONTRACT-CL1", "CL001", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
         VesselSpec spec = new VesselSpec("CL001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
         HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-CL1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         Probe vessel = spawnProbe("cl_vessel", null);
@@ -232,7 +232,7 @@ class HarbourMasterAgentIT {
 
     @Test
     void contractedVesselIncompatible_refusedNeverAccepted() throws Exception {
-        ServiceContract contract = new ServiceContract("CONTRACT-I1", "I001", "berth_1", 5200.0, 8, 0L);
+        ServiceContract contract = new ServiceContract("CONTRACT-I1", "I001", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
         // 50 m draft: no berth in this harbour is remotely that deep.
         VesselSpec spec = new VesselSpec("I001", "cargo_vessel", 50.0, 150.0, 30000, "general_cargo", 0L);
         assertFalse(PrologQueries.isCompatible("berth_1", "cargo_vessel", 50.0, 150.0, 30000),
@@ -252,7 +252,7 @@ class HarbourMasterAgentIT {
 
     @Test
     void ferryContract_skipsCnpEntirely() throws Exception {
-        ServiceContract contract = new ServiceContract("CONTRACT-F1", "F001", "berth_4", 1800.0, 4, 0L);
+        ServiceContract contract = new ServiceContract("CONTRACT-F1", "F001", "ferry", "berth_4", 1800.0, 4, 0L);
         VesselSpec spec = new VesselSpec("F001", "ferry", 5.0, 110.0, 9000, "general_cargo", 0L);
         assertEquals(0, PrologQueries.tugsRequired("ferry", 9000, 110.0), "fixture sanity: ferry is always 0 tugs (07b)");
 
@@ -270,7 +270,7 @@ class HarbourMasterAgentIT {
 
     @Test
     void cnpZeroBids_holdsVesselNeverAccepts() throws Exception {
-        ServiceContract contract = new ServiceContract("CONTRACT-Z1", "Z001", "berth_1", 5200.0, 8, 0L);
+        ServiceContract contract = new ServiceContract("CONTRACT-Z1", "Z001", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
         VesselSpec spec = new VesselSpec("Z001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
         HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-Z1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         Probe vessel = spawnProbe("t4_vessel", null);
@@ -302,7 +302,7 @@ class HarbourMasterAgentIT {
         assertEquals(2, PrologQueries.tugsRequired("tanker", tonnage, length),
                 "PROJECT_DEFINITION §5.2: tanker is always 2 tugs");
 
-        ServiceContract contract = new ServiceContract("CONTRACT-T1", "T001", berthId, 9000.0, 10, 0L);
+        ServiceContract contract = new ServiceContract("CONTRACT-T1", "T001", "tanker", berthId, 9000.0, 10, 0L);
         VesselSpec spec = new VesselSpec("T001", "tanker", draft, length, tonnage, "liquid_bulk", 0L);
         HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-T1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         Probe vessel = spawnProbe("t5_vessel", null);
@@ -627,7 +627,7 @@ class HarbourMasterAgentIT {
 
     @Test
     void dispatchPlayerCommand_translatesEachKindFaithfully() throws Exception {
-        ServiceContract contract = new ServiceContract("CONTRACT-P1", "P001", "berth_1", 5200.0, 8, 0L);
+        ServiceContract contract = new ServiceContract("CONTRACT-P1", "P001", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
         VesselSpec spec = new VesselSpec("P001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
         HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-P1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         Probe vessel = spawnProbe("t9_vessel", null);
@@ -689,7 +689,7 @@ class HarbourMasterAgentIT {
      */
     @Test
     void dispatchPlayerCommand_stillWorksAfterItsAgentReferenceIsNulled() throws Exception {
-        ServiceContract contract = new ServiceContract("CONTRACT-D1", "D001", "berth_1", 5200.0, 8, 0L);
+        ServiceContract contract = new ServiceContract("CONTRACT-D1", "D001", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
         VesselSpec spec = new VesselSpec("D001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
         HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-D1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         Probe vessel = spawnProbe("t20_vessel", null);
@@ -961,7 +961,7 @@ class HarbourMasterAgentIT {
 
     @Test
     void customsFlagged_marksBlockedAndNotifies() throws Exception {
-        ServiceContract contract = new ServiceContract("CONTRACT-CU1", "CU1", "berth_1", 5200.0, 8, 0L);
+        ServiceContract contract = new ServiceContract("CONTRACT-CU1", "CU1", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
         VesselSpec spec = new VesselSpec("CU1", "cargo_vessel", 9.0, 150.0, 30000, "hazmat_class_1", 0L);
         assertTrue(PrologQueries.isHazmat("hazmat_class_1"), "fixture sanity: hazmat_class_1 must be hazmat");
         HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-CU1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
@@ -1032,7 +1032,7 @@ class HarbourMasterAgentIT {
     private InTransitFixture getVesselInTransit(String prefix) throws Exception {
         String contractId = "CONTRACT-" + prefix;
         String vesselId = "V-" + prefix;
-        ServiceContract contract = new ServiceContract(contractId, vesselId, "berth_1", 5200.0, 8, 0L);
+        ServiceContract contract = new ServiceContract(contractId, vesselId, "cargo_vessel", "berth_1", 5200.0, 8, 0L);
         VesselSpec spec = new VesselSpec(vesselId, "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
         HarbourMasterAgent hm = spawnHm(Map.of(contractId, contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         Probe vessel = spawnProbe(prefix + "_vessel", null);

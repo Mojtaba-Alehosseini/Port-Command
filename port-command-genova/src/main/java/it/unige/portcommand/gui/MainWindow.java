@@ -76,6 +76,7 @@ public final class MainWindow extends JFrame {
     private final EndOfDaySummaryDialog endOfDayDialog;
     private final GameOverDialog gameOverDialog;
     private final PauseOverlay pauseOverlay;
+    private JMenuItem newGameItem;
     private JMenuItem pauseItem;
     private JMenuItem resumeItem;
     private JMenuItem quitItem;
@@ -194,6 +195,12 @@ public final class MainWindow extends JFrame {
     private JMenuBar buildMenuBar(EventBus eventBus, Runnable onClose) {
         JMenuBar bar = new JMenuBar();
         JMenu game = new JMenu("Game");
+        // Task 23: scenario chooser. The current world (if any) is replaced — the dialog's
+        // explicit Start IS the confirmation, mirroring confirmAndLoad's dialog.
+        newGameItem = new JMenuItem("New Game…");
+        newGameItem.addActionListener(e -> chooseAndStartScenario());
+        game.add(newGameItem);
+        game.addSeparator();
         pauseItem = new JMenuItem("Pause");
         pauseItem.addActionListener(e -> lifecycle.pause());
         resumeItem = new JMenuItem("Resume");
@@ -302,6 +309,44 @@ public final class MainWindow extends JFrame {
     }
 
     /**
+     * Game → New Game… (task 23): modal scenario chooser, then the same worker-thread +
+     * {@code loadInProgress} pattern as {@link #confirmAndLoad} — {@code startScenario}
+     * is a teardown/rebuild that takes seconds and must never block the EDT. The GUI
+     * refreshes itself from the boot's events ({@code GameLoadedEvent} etc.).
+     */
+    private void chooseAndStartScenario() {
+        if (loadInProgress) {
+            return;
+        }
+        java.util.Optional<String> key = NewGameDialog.choose(this,
+                session.scenarioRegistry().all());
+        if (key.isEmpty()) {
+            return;
+        }
+        loadInProgress = true;
+        reflectMode();
+        Thread worker = new Thread(() -> {
+            Exception failure = null;
+            try {
+                session.startScenario(key.get());
+            } catch (Exception e) {
+                failure = e;
+            }
+            Exception reported = failure;
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                loadInProgress = false;
+                reflectMode();
+                if (reported != null) {
+                    JOptionPane.showMessageDialog(this, reported.getMessage(),
+                            "New Game", JOptionPane.ERROR_MESSAGE);
+                }
+            });
+        }, "scenario-starter");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    /**
      * Game → Quit: confirm, then end the run through the single game-over authority
      * ({@code lifecycle.quit()} → {@code QuitEvent} → {@code GameOverGuard} →
      * {@code GameOverEvent} → {@link GameOverDialog}). planning/24's "ask about the active
@@ -341,6 +386,7 @@ public final class MainWindow extends JFrame {
     private void reflectMode() {
         GameMode mode = lifecycle.mode();
         pauseOverlay.setVisible(mode == GameMode.PAUSED);
+        newGameItem.setEnabled(!loadInProgress); // legal from any settled mode (replaces the world)
         pauseItem.setEnabled(!loadInProgress && mode == GameMode.RUNNING);
         resumeItem.setEnabled(!loadInProgress && mode == GameMode.PAUSED);
         quitItem.setEnabled(!loadInProgress && (mode == GameMode.RUNNING || mode == GameMode.PAUSED));

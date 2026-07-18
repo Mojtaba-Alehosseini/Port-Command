@@ -102,6 +102,17 @@ public final class WalkInVesselAgent extends BaseVesselAgent {
         double target = template.sampleTargetPrice(r);
         int wait = template.sampleMaxWaitMinutes(r);
         int hours = 6 + r.nextInt(13); // 6..18 sim-hours of desired service
+        // Task 23: scenario-pinned beliefs (optional args entry, found by type) REPLACE the
+        // sampled values after every draw has been taken, so the "vessel-"+id stream's
+        // sequence is identical with or without overrides (replay/pinned-seed discipline).
+        // Still hidden beliefs — the override rides the in-JVM args channel only (P-04).
+        it.unige.portcommand.negotiation.WalkInBeliefOverrides overrides =
+                optionalArgOfType(it.unige.portcommand.negotiation.WalkInBeliefOverrides.class);
+        if (overrides != null) {
+            personality = overrides.personality() != null ? overrides.personality() : personality;
+            min = overrides.minAcceptablePrice() != null ? overrides.minAcceptablePrice() : min;
+            target = overrides.targetPrice() != null ? overrides.targetPrice() : target;
+        }
         // Task 19b: the hidden cargo floor, from its own ISOLATED substream (same rationale as
         // the opening roll below — the "vessel-"+id sequence is replay-pinned), clamped to the
         // announced preferred stay so a vessel never opens below its own floor.

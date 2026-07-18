@@ -108,8 +108,11 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
         reset(nextGapWallMs(simClock, draw));
     }
 
-    /** @return true iff the clock isn't paused and fewer than {@link #MAX_ACTIVE_WALKINS}
-     * walk-ins are currently active. Public (not private) so {@code PoissonSpawnBehaviourIT}
+    /** @return true iff the clock isn't paused, no scenario scripted wave is firing
+     * (task 23: Poisson traffic is suppressed until the last scripted event, and because
+     * the wave is derived from events-minus-firedEventIds the suppression window survives
+     * a mid-scenario save/load), and fewer than {@link #MAX_ACTIVE_WALKINS} walk-ins are
+     * currently active. Public (not private) so {@code PoissonSpawnBehaviourIT}
      * (parent {@code behaviours} test package — a test in this sub-package would shadow
      * {@code BehaviourCatalogueTest}'s scan) can drive it directly without needing a full
      * spawn round-trip to observe the outcome. */
@@ -117,7 +120,11 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
         if (simClock.isPaused()) {
             return false;
         }
-        long activeWalkIns = ((HarbourMasterAgent) myAgent).activeVessels().values().stream()
+        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
+        if (hm.scriptedWaveActive()) {
+            return false;
+        }
+        long activeWalkIns = hm.activeVessels().values().stream()
                 .filter(v -> v.channel() == Channel.WALK_IN)
                 .count();
         return activeWalkIns < MAX_ACTIVE_WALKINS;

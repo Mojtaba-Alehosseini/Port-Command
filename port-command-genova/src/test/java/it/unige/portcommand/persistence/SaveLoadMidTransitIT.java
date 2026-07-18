@@ -133,9 +133,13 @@ class SaveLoadMidTransitIT {
                         .map(a -> String.valueOf(((it.unige.portcommand.agents.BaseVesselAgent) a).flowPhase()))
                         .orElse("agent absent")
                 + ", tracking: " + hm.activeVessels().get("C001"));
-        Path dockedSave = session.saveNow();
+        // Task 23: the daily contracted stream is live background traffic now — a D1 arrival
+        // can be mid-grant at this instant, transiently refusing the manual save. Retry.
+        Path dockedSave = saveNowRetrying(session, 15_000);
         VesselStateDTO dockedDto = new SaveLoadManager(tempDir).load(dockedSave)
-                .agents().activeVessels().get(0);
+                .agents().activeVessels().stream()
+                .filter(v -> "C001".equals(v.id()))
+                .findFirst().orElseThrow();
         assertEquals("DOCKED", dockedDto.currentPhase(), "settled-window sanity: vessel-side phase");
         assertEquals(dockedDto.currentPhase(), dockedDto.stage(),
                 "the persisted stage must match the vessel's phase at save time (checkpoint-#6 F1)");
@@ -165,9 +169,28 @@ class SaveLoadMidTransitIT {
                 "one charge per awarded tug — the resume must never re-award or re-charge");
         assertEquals(awards.stream().mapToDouble(TugJobAwardedEvent::cost).sum(),
                 tugCharges.stream().mapToDouble(ExpenseEvent::amount).sum(), 0.0001);
-        assertEquals(walletAtSave, hm.walletLedger().balance(), 0.0001,
-                "completing the restored flow moves no further money (fee at grant, tug at award "
-                        + "— both are in the saved balance already)");
+        // Task 23 update (2026-07-18): the loaded world now runs the daily contracted stream
+        // (C001-D1, F001-D1 …), so the GLOBAL balance legitimately moves post-load. The
+        // invariant this test owns is C001-scoped: completing the RESTORED flow moves no
+        // further C001 money (fee at grant, tug at award — both in the saved balance), and
+        // the balance reconciles exactly to walletAtSave + the recorded background flows.
+        long savedSimMillis = savedState.simClock().simMillis();
+        List<it.unige.portcommand.harbourmaster.IncomeEvent> postSaveIncome =
+                hm.walletLedger().incomeHistory().stream()
+                        .filter(e -> e.simTime() > savedSimMillis).toList();
+        List<ExpenseEvent> postSaveExpense = hm.walletLedger().expenseHistory().stream()
+                .filter(e -> e.simTime() > savedSimMillis).toList();
+        assertTrue(postSaveIncome.stream().noneMatch(e -> "C001".equals(e.vesselId()))
+                        && postSaveExpense.stream().noneMatch(e -> "C001".equals(e.vesselId())),
+                "completing the restored flow moves no further C001 money (fee at grant, tug at "
+                        + "award — both are in the saved balance already)");
+        double expectedBalance = walletAtSave
+                + postSaveIncome.stream().mapToDouble(
+                        it.unige.portcommand.harbourmaster.IncomeEvent::amount).sum()
+                - postSaveExpense.stream().mapToDouble(ExpenseEvent::amount).sum();
+        assertEquals(expectedBalance, hm.walletLedger().balance(), 0.0001,
+                "the balance reconciles to the saved wallet plus ONLY the recorded background "
+                        + "flows (task 23's daily contracted stream) — nothing moved unrecorded");
 
         // Checkpoint-#6 F6 (fixed 2026-07-18): tug bids are rounded to whole cents at bid
         // construction, so REAL awarded charges — and the wallet they debited — carry no
@@ -181,6 +204,22 @@ class SaveLoadMidTransitIT {
                 hm.walletLedger().balance() * 100.0, 1e-6,
                 "the wallet holds no sub-cent residue after real CNP awards, got "
                         + hm.walletLedger().balance());
+    }
+
+    /** Bounded retry past a transient {@link SaveNotAllowedException} — a background daily
+     * contracted arrival (task 23) can be mid-grant exactly when the test wants to save. */
+    private Path saveNowRetrying(GameSession session, long timeoutMs) throws Exception {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (true) {
+            try {
+                return session.saveNow();
+            } catch (SaveNotAllowedException transientRefusal) {
+                if (System.currentTimeMillis() >= deadline) {
+                    throw transientRefusal;
+                }
+                Thread.sleep(100);
+            }
+        }
     }
 
     private <E extends Event> E awaitEvent(Class<E> type, Predicate<E> matcher, long timeoutMs)

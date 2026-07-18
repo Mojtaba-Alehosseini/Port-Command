@@ -89,6 +89,9 @@ public final class HarbourMasterAgent extends PortCommandAgent
      * the walk-in spawn counter. */
     private DispatchPlayerCommandBehaviour dispatchPlayerCommand;
     private PoissonSpawnBehaviour poissonSpawn;
+    /** Task 23: the scenario engine + daily contracted stream; null only in stub harnesses
+     * that pass no {@code ScenarioRuntime}. Snapshot reads it for {@code firedEventIds}. */
+    private it.unige.portcommand.scenario.ScriptedEventBehaviour scriptedEvents;
 
     @Override
     protected void registerServices() {
@@ -115,7 +118,10 @@ public final class HarbourMasterAgent extends PortCommandAgent
         // collaborator is agent-owned; it subscribes to EndOfDayDetectBehaviour's EndOfDayEvent.
         this.dayRolloverCoordinator = new DayRolloverCoordinator(eventBus, simClock, walletLedger,
                 reputationLedger, performativeCounter);
-        this.contracts = contractsArg();
+        // Task 23: mutable since the scenario engine registers scenario-local contracts and
+        // the daily stream's day-qualified clones at runtime (ConcurrentHashMap — behaviours
+        // read it on this thread, but the map is advertised shared state like the trackers).
+        this.contracts = new ConcurrentHashMap<>(contractsArg());
         JadeAgentSpawner spawner = argAt(5, JadeAgentSpawner.class);
         MarketHistoryArtifact marketHistory = argAt(6, MarketHistoryArtifact.class);
         this.cnpCoordinator = new RealCnpCoordinator(this, serviceLocator(), simClock);
@@ -150,6 +156,28 @@ public final class HarbourMasterAgent extends PortCommandAgent
         addBehaviour(new SimClockTickPublisherBehaviour(this, simClock, eventBus));
         if (restore != null) {
             addBehaviour(new RestoreDispatchBehaviour(this));
+        }
+
+        // Task 23: the scenario engine (scenario-package behaviour — catalogue stays 51,
+        // ADR-01/INVARIANTS). The daily contracted stream's base is captured from the
+        // PRISTINE contracts.json arg BEFORE scenario-local contracts merge in, so script
+        // props never recur daily. Installed on every production boot (ScenarioRuntime is
+        // threaded by sandbox, scenario and load paths alike); stub harnesses without a
+        // runtime get no engine and keep their quiet world.
+        it.unige.portcommand.scenario.ScenarioRuntime scenarioRuntime =
+                optionalArgOfType(it.unige.portcommand.scenario.ScenarioRuntime.class);
+        if (scenarioRuntime != null) {
+            java.util.List<ServiceContract> dailyBase = java.util.List.copyOf(contractsArg().values());
+            if (scenarioRuntime.scenario() != null) {
+                for (ServiceContract local : scenarioRuntime.scenario().contracts()) {
+                    contracts.putIfAbsent(local.contractId(), local);
+                }
+            }
+            this.scriptedEvents = new it.unige.portcommand.scenario.ScriptedEventBehaviour(this,
+                    new it.unige.portcommand.scenario.GameContext(contracts, simClock, spawner,
+                            marketHistory, randomSource, eventBus, agentDirectory()),
+                    scenarioRuntime, dailyBase);
+            addBehaviour(scriptedEvents);
         }
 
         completeOptionalSelfFuture();
@@ -304,8 +332,23 @@ public final class HarbourMasterAgent extends PortCommandAgent
         return cnpRetryAttempts;
     }
 
+    /** Live contract map: {@code contracts.json} + scenario-locals + the daily stream's
+     * day-qualified clones (task 23 — mutable by the scenario engine only). */
     public Map<String, ServiceContract> contracts() {
         return contracts;
+    }
+
+    /** The scenario engine (task 23), or null in stub harnesses without a
+     * {@code ScenarioRuntime}. Read by {@code GameStateBuilder} for the save's
+     * {@code activeScenario}/{@code firedEventIds} and by the Poisson gate below. */
+    public it.unige.portcommand.scenario.ScriptedEventBehaviour scriptedEvents() {
+        return scriptedEvents;
+    }
+
+    /** True while an active scenario's scripted wave is still firing — the Poisson
+     * spawner suppression gate (planning/23: resume after the last scripted event). */
+    public boolean scriptedWaveActive() {
+        return scriptedEvents != null && scriptedEvents.scenarioWaveActive();
     }
 
     public CnpCoordinator cnpCoordinator() {

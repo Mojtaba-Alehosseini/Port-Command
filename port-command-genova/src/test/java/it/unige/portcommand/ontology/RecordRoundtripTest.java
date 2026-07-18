@@ -39,7 +39,7 @@ class RecordRoundtripTest {
 
     @Test
     void serviceContractRoundtrips() throws Exception {
-        roundtrip(new ServiceContract("c-1", "v-1", "berth_2", 5200.0, 12, 1_700_000_000L),
+        roundtrip(new ServiceContract("c-1", "v-1", "container_vessel", "berth_2", 5200.0, 12, 1_700_000_000L),
                 ServiceContract.class);
     }
 
@@ -68,8 +68,8 @@ class RecordRoundtripTest {
         assertJsonHasKeys(new Position(1.0, 2.0, 3.0), "heading_deg");
         assertJsonHasKeys(new BerthSpec("berth_1", "deep_water_berth", 1.0, 1.0, true),
                 "berth_id", "berth_type", "max_draft", "has_crane");
-        assertJsonHasKeys(new ServiceContract("c", "v", "berth_1", 1.0, 1, 0L),
-                "contract_id", "contracted_fee", "expected_arrival_sim_millis");
+        assertJsonHasKeys(new ServiceContract("c", "v", "cargo_vessel", "berth_1", 1.0, 1, 0L),
+                "contract_id", "vessel_type", "contracted_fee", "expected_arrival_sim_millis");
         assertJsonHasKeys(new Offer(1.0, 1, "berth_1", "a", "b", 0L),
                 "duration_hours", "from_agent", "to_agent");
         assertJsonHasKeys(new Deal("d", "v", "berth_1", 1.0, 1, 0L, Deal.Outcome.DEAL),

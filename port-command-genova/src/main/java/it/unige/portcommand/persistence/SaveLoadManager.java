@@ -144,10 +144,20 @@ public final class SaveLoadManager {
             // constructor's validation throw (e.g. Settings range checks, VesselSpec types).
             throw new CorruptSaveException("Save file failed to bind: " + e.getMessage(), e);
         }
-        validate(state, source);
+        validate(state, source.toString());
         log.info("loaded {} (schemaVersion {}, day {}, wallet {})",
                 source, version, state.simClock() == null ? "?" : gameDayOf(state), state.wallet());
         return state;
+    }
+
+    /**
+     * The same invariant gate {@link #load} applies, for a state built in memory — task
+     * 23's scenario boot runs its {@code GameStateBuilder.fromScenario} output through
+     * this before teardown, so a scenario-built state is provably save-shaped and a bad
+     * one fails BEFORE the running game is touched (the task-22 validate-first rule).
+     */
+    public void validateState(GameState state, String label) throws CorruptSaveException {
+        validate(state, label);
     }
 
     private static String gameDayOf(GameState state) {
@@ -155,7 +165,7 @@ public final class SaveLoadManager {
     }
 
     /** Schema invariants beyond type binding — each failure is one clear message. */
-    private static void validate(GameState state, Path source) throws CorruptSaveException {
+    private static void validate(GameState state, String source) throws CorruptSaveException {
         require(state.settings() != null, "settings missing", source);
         require(state.simClock() != null, "simClock missing", source);
         require(state.simClock().simMillis() >= 0, "simClock.simMillis negative", source);
@@ -204,7 +214,7 @@ public final class SaveLoadManager {
         }
     }
 
-    private static void require(boolean condition, String message, Path source) throws CorruptSaveException {
+    private static void require(boolean condition, String message, String source) throws CorruptSaveException {
         if (!condition) {
             throw new CorruptSaveException("Invalid save " + source + ": " + message);
         }

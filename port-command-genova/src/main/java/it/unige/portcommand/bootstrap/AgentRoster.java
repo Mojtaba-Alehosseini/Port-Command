@@ -91,10 +91,28 @@ public final class AgentRoster {
                                                MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
                                                EventBus eventBus, AgentDirectory directory,
                                                PolicyRegistryArtifact policyRegistry) {
+        // Pre-task-23 signature: no scenario runtime → the HM installs no scripted-event
+        // engine and no daily contracted stream (the stub-harness ITs' quiet world).
+        spawnSingletonsAndFleet(spawner, portState, simClock, randomSource, marketHistory,
+                llmBridge, eventBus, directory, policyRegistry, null);
+    }
+
+    /**
+     * Task 23 signature: {@code scenarioRuntime} (nullable) rides the args channel, found
+     * by type — with it the HarbourMaster installs {@code ScriptedEventBehaviour} (the
+     * scenario script when one is active, and the {@code ContractSchedule} daily
+     * contracted stream in sandbox play too). Every production boot passes one.
+     */
+    public static void spawnSingletonsAndFleet(JadeAgentSpawner spawner, PortStateArtifact portState,
+                                               SimClock simClock, RandomSource randomSource,
+                                               MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
+                                               EventBus eventBus, AgentDirectory directory,
+                                               PolicyRegistryArtifact policyRegistry,
+                                               it.unige.portcommand.scenario.ScenarioRuntime scenarioRuntime) {
         spawner.spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
                 new HarbourMasterInitArgs(STARTING_WALLET, STARTING_REPUTATION),
                 simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory,
-                null, directory});
+                null, directory, scenarioRuntime});
         spawner.spawn("weather_agent", WeatherAgent.class,
                 new Object[] {defaultWeatherInit(), randomSource, simClock, eventBus, directory});
         spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource, directory});
@@ -136,16 +154,20 @@ public final class AgentRoster {
                                        EventBus eventBus, AgentDirectory directory,
                                        PolicyRegistryArtifact policyRegistry, GameState state,
                                        List<TerminalStateDTO> reconciledTerminals,
-                                       java.util.concurrent.CompletableFuture<HarbourMasterAgent> hmReady) {
+                                       java.util.concurrent.CompletableFuture<HarbourMasterAgent> hmReady,
+                                       it.unige.portcommand.scenario.ScenarioRuntime scenarioRuntime) {
         // The existing task-20 self-future seam at args[7] (adversarial review #3): agent
         // spawning is async, and the loader must not declare the world live before the HM —
         // the coordination anchor and the directory's first entry — finished its setup.
+        // Task 23: scenarioRuntime (found by type) re-arms the scripted-event engine with
+        // the save's firedEventIds, so a reloaded mid-scenario game never replays.
         spawner.spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
                 new HarbourMasterInitArgs(state.wallet(), state.reputation()),
                 simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory,
                 hmReady, directory,
                 new HarbourMasterRestoreState(state.agents().harbourMaster(),
-                        state.agents().activeVessels())});
+                        state.agents().activeVessels()),
+                scenarioRuntime});
         spawner.spawn("weather_agent", WeatherAgent.class, new Object[] {
                 defaultWeatherInit(), randomSource, simClock, eventBus, directory,
                 state.agents().weather().current()});
@@ -233,8 +255,18 @@ public final class AgentRoster {
     public static AgentController spawnWalkIn(JadeAgentSpawner spawner, VesselSpec spec, SimClock simClock,
                                               MarketHistoryArtifact marketHistory, RandomSource randomSource,
                                               NegotiationEngine engine, AgentDirectory directory) {
+        return spawnWalkIn(spawner, spec, simClock, marketHistory, randomSource, engine, directory, null);
+    }
+
+    /** Task 23 overload: {@code overrides} (nullable) pins scenario-scripted hidden
+     * beliefs; null fields (or a null record) keep the normal template draws. Still
+     * in-JVM-only — the beliefs never surface (P-04). */
+    public static AgentController spawnWalkIn(JadeAgentSpawner spawner, VesselSpec spec, SimClock simClock,
+                                              MarketHistoryArtifact marketHistory, RandomSource randomSource,
+                                              NegotiationEngine engine, AgentDirectory directory,
+                                              it.unige.portcommand.negotiation.WalkInBeliefOverrides overrides) {
         return spawner.spawn(vesselLocalName(spec), WalkInVesselAgent.class,
-                new Object[] {spec, simClock, marketHistory, engine, randomSource, directory});
+                new Object[] {spec, simClock, marketHistory, engine, randomSource, directory, overrides});
     }
 
     /** A JADE-legal local name ({@code ^[a-z][a-z0-9_]*$}) derived from the vessel id. Public
@@ -256,10 +288,12 @@ public final class AgentRoster {
      * Loads {@code data/contracts.json} once at startup (planning/11 §11.2 step 1),
      * keyed by {@code contractId}. A test constructs its own small map directly
      * instead of calling this (constructor-arg DI — no static registry). Missing
-     * resource is non-fatal (empty map, WARN logged): the fixed demo contracts are
-     * placeholder data superseded by task 23's scenario loader.
+     * resource is non-fatal (empty map, WARN logged). Public since task 23:
+     * {@code ScenarioLoader} validates contracted spawn refs against this same set,
+     * and these entries ARE the daily contracted stream's base schedule
+     * ({@code scenario.ContractSchedule}).
      */
-    private static Map<String, ServiceContract> loadContracts() {
+    public static Map<String, ServiceContract> loadContracts() {
         try (InputStream in = AgentRoster.class.getResourceAsStream("/data/contracts.json")) {
             if (in == null) {
                 log.warn("data/contracts.json not found on classpath; HarbourMaster boots with zero contracts");

@@ -1,0 +1,32 @@
+{
+  "key": "malformed",
+  "displayName": "Malformed — events out of order",
+  "description": "Negative fixture: the second event is earlier than the first.",
+  "targetDailyRevenue": 1000,
+  "randomSeed": null,
+  "settingsOverride": null,
+  "initialState": {
+    "startDay": 1,
+    "startTimeOfDay": "08:00",
+    "wallet": 10000,
+    "reputation": 50,
+    "weatherOverride": { "windKn": 10, "visibility": "good", "swell": 0.5, "state": "sunny" },
+    "berths": [
+      { "berthId": 1, "occupied": false, "vessel": null },
+      { "berthId": 2, "occupied": false, "vessel": null },
+      { "berthId": 3, "occupied": false, "vessel": null },
+      { "berthId": 4, "occupied": false, "vessel": null }
+    ],
+    "tugs": [
+      { "tugId": 1, "status": "AVAILABLE", "fuel": 1.0 },
+      { "tugId": 2, "status": "AVAILABLE", "fuel": 1.0 },
+      { "tugId": 3, "status": "AVAILABLE", "fuel": 1.0 },
+      { "tugId": 4, "status": "AVAILABLE", "fuel": 1.0 }
+    ]
+  },
+  "contracts": [],
+  "events": [
+    { "type": "Notification", "simTimeSeconds": 600, "severity": "INFO", "text": "late" },
+    { "type": "Notification", "simTimeSeconds": 100, "severity": "INFO", "text": "early — OUT OF ORDER" }
+  ]
+}

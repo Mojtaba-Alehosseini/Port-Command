@@ -21,8 +21,11 @@ import it.unige.portcommand.persistence.SaveLoadManager;
  * <p>Flags: {@code --gui} opens the Swing shell (task 17); {@code --day-length
  * <seconds>} overrides how many real seconds one game day lasts (task 24 — maps to the
  * {@code simclock.real.seconds.per.day} system property that
- * {@link BootstrapConfig#fromSystemProperties()} reads; default 300); {@code --load
- * <path>} (task 22) boots FROM a save file instead of starting fresh.
+ * {@link BootstrapConfig#fromSystemProperties()} reads; default 300; when passed it also
+ * beats any scenario pacing override); {@code --load <path>} (task 22) boots FROM a save
+ * file instead of starting fresh; {@code --scenario <key>} (task 23) boots one of the 3
+ * scripted scenarios ({@code tutorial | busy_day | storm}) — mutually exclusive with
+ * {@code --load}.
  */
 public final class Main {
 
@@ -34,6 +37,10 @@ public final class Main {
         boolean guiRequested = argList.contains("--gui");
         applyDayLengthOverride(argList);
         Path loadPath = loadPathArg(argList);
+        String scenarioKey = scenarioArg(argList);
+        if (loadPath != null && scenarioKey != null) {
+            throw new IllegalArgumentException("--load and --scenario are mutually exclusive");
+        }
 
         BootstrapConfig cfg = BootstrapConfig.fromSystemProperties();
         JadeBootstrap boot = new JadeBootstrap();
@@ -46,8 +53,10 @@ public final class Main {
         GameSession session = new GameSession(boot, cfg, new SaveLoadManager(), leaderboard);
         if (loadPath != null) {
             session.loadGame(loadPath); // SchemaVersion/CorruptSave surface on the console
+        } else if (scenarioKey != null) {
+            session.startScenario(scenarioKey); // task 23 — headless-testable scenario boot
         } else {
-            // There is no menu screen yet (tasks 21/23) — boot straight into a running game.
+            // Sandbox boot (in-game New Game… opens the scenario dialog; task 23).
             session.startNewGame();
         }
 
@@ -83,6 +92,10 @@ public final class Main {
             throw new IllegalArgumentException("--day-length must be > 0, got " + seconds);
         }
         System.setProperty("simclock.real.seconds.per.day", String.valueOf(seconds));
+        // Task 23: mark the override EXPLICIT — scenario pacing defers to a player-stated
+        // day length (GameSession.resolveDayLength), but must not treat the ambient
+        // default as one.
+        System.setProperty("simclock.day.length.explicit", "true");
     }
 
     /** {@code --load <path>} → the save file to boot from, or null for a fresh game (task 22). */
@@ -95,5 +108,18 @@ public final class Main {
             throw new IllegalArgumentException("--load requires a path (e.g. save/autosave.json)");
         }
         return Path.of(argList.get(at + 1));
+    }
+
+    /** {@code --scenario <key>} → the scripted scenario to boot (task 23), or null. */
+    private static String scenarioArg(List<String> argList) {
+        int at = argList.indexOf("--scenario");
+        if (at < 0) {
+            return null;
+        }
+        if (at + 1 >= argList.size()) {
+            throw new IllegalArgumentException(
+                    "--scenario requires a key: tutorial | busy_day | storm");
+        }
+        return argList.get(at + 1);
     }
 }

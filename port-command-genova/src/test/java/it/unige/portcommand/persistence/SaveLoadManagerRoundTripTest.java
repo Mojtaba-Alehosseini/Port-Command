@@ -126,6 +126,9 @@ class SaveLoadManagerRoundTripTest {
                 2,
                 List.of(new DealRecord("tanker", 9, 2_450.0, 6_000_000L, Deal.Outcome.DEAL)),
                 List.of("auto accept if price > 2200 for tankers"),
+                // Task 23: a mid-scenario save — the replay guard + scenario marker round-trip.
+                "tutorial",
+                List.of("contract:CONTRACT-1:d1", "tutorial#0", "tutorial#2"),
                 new GameState.AgentsState(
                         new HarbourMasterStateDTO(
                                 List.of(new IncomeEvent(2_450.0, "berth_base", "WALKIN-1", 6_000_000L)),

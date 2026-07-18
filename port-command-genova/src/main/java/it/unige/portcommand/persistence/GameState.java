@@ -44,6 +44,14 @@ import it.unige.portcommand.persistence.dto.WeatherStateDTO;
  * @param lastDeepDebtDay         the streak's last deep-debt day number
  * @param marketHistory last ≤200 deal records, insertion order
  * @param policyTriggers the player's registered autopilot policy texts, registration order
+ * @param activeScenario the running scenario's key, or null in sandbox play (task 23) —
+ *                      the loader reinstalls the scenario's remaining script from it
+ * @param firedEventIds already-fired scripted-event ids, sorted (task 23's replay guard —
+ *                      scenario events AND the daily contracted stream's day-qualified
+ *                      ids). <b>Always serialized</b>: an empty {@code []} when nothing
+ *                      has fired, normalised non-null here so the NON_NULL mapper can
+ *                      never omit it. Both fields are additive within schema v1 — a
+ *                      pre-task-23 save loads with sandbox semantics; no version bump.
  * @param agents        the per-agent DTO tree
  */
 public record GameState(
@@ -58,7 +66,13 @@ public record GameState(
         int lastDeepDebtDay,
         List<DealRecord> marketHistory,
         List<String> policyTriggers,
+        String activeScenario,
+        List<String> firedEventIds,
         AgentsState agents) {
+
+    public GameState {
+        firedEventIds = firedEventIds == null ? List.of() : List.copyOf(firedEventIds);
+    }
 
     /** Sim instant + wall↔sim mapping. Day, hour and minute are derived from these two. */
     public record SimClockState(long simMillis, long realSecondsPerGameDay) {

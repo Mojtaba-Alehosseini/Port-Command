@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -56,6 +57,9 @@ public final class GameSession {
     private final SaveLoadManager saveLoadManager;
     private final Leaderboard leaderboard;
     private final AgentDirectory directory = new AgentDirectory();
+    /** Task 23: the 3 packaged scenarios, loaded+validated eagerly (a bad file fails here). */
+    private final it.unige.portcommand.scenario.ScenarioRegistry scenarioRegistry =
+            new it.unige.portcommand.scenario.ScenarioRegistry();
 
     private GameLifecycle lifecycle;
     private AutosaveCoordinator autosaveCoordinator;
@@ -70,16 +74,69 @@ public final class GameSession {
         this.leaderboard = leaderboard;
     }
 
-    /** Boots the container + fleet and starts a fresh run (the pre-task-22 Main sequence). */
+    /** Boots the container + fleet and starts a fresh run (the pre-task-22 Main sequence).
+     * Sandbox play — the scenario runtime still rides along (task 23) so the DAILY
+     * contracted stream ({@code ContractSchedule}) spawns {@code contracts.json} arrivals
+     * from day 1: contracted fees are live income in free play, not just scenarios. */
     public synchronized void startNewGame() {
         boot.start(bootConfig);
         ensureSessionServices();
         AgentRoster.spawnSingletonsAndFleet(boot.getSpawner(), boot.getPortStateArtifact(),
                 boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact(),
-                boot.getLLMBridge(), boot.getEventBus(), directory, boot.getPolicyRegistryArtifact());
+                boot.getLLMBridge(), boot.getEventBus(), directory, boot.getPolicyRegistryArtifact(),
+                it.unige.portcommand.scenario.ScenarioRuntime.sandbox(java.util.Set.of()));
         this.gameOverGuard = new GameOverGuard(boot.getEventBus(), lifecycle, leaderboard,
                 AgentRoster.STARTING_WALLET, AgentRoster.STARTING_REPUTATION);
         lifecycle.startNewGame();
+    }
+
+    /**
+     * Task 23: boots a scripted scenario. NOT a parallel boot path — the scenario's
+     * opening {@link GameState} is built by {@code GameStateBuilder.fromScenario}, run
+     * through the SAME invariant gate a save file passes, and the world is rebuilt by the
+     * SAME teardown/rebuild body {@link #loadGame} uses (reconciliation dated 2026-07-18;
+     * planning/23's §23.10 {@code Main.startScenario} sketch predates task 22). Call OFF
+     * the EDT.
+     *
+     * <p>Seed rule (hard constraint): a null {@code randomSeed} generates a fresh seed —
+     * recorded in the built state, hence in every save of the run; {@code 0} is a valid
+     * pinned seed, never a sentinel.
+     */
+    public synchronized void startScenario(String key) throws CorruptSaveException {
+        it.unige.portcommand.scenario.Scenario scenario = scenarioRegistry.findByKey(key)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "unknown scenario '" + key + "' — valid keys: "
+                                + it.unige.portcommand.scenario.ScenarioRegistry.KEYS));
+        long seed = scenario.randomSeed() != null ? scenario.randomSeed()
+                : new java.util.Random().nextLong();
+        GameState state = GameStateBuilder.fromScenario(scenario, seed,
+                resolveDayLength(scenario), Instant.now().toString());
+        saveLoadManager.validateState(state, "scenario:" + key); // fail BEFORE teardown (task-22 rule)
+        bootWorld(state, new it.unige.portcommand.scenario.ScenarioRuntime(scenario, Set.of()),
+                "scenario:" + key);
+        boot.getEventBus().publish(
+                new it.unige.portcommand.scenario.events.ScenarioStartedEvent(scenario));
+        boot.getEventBus().publish(new it.unige.portcommand.gui.events.NotificationEvent(
+                "Scenario started: " + scenario.displayName(),
+                it.unige.portcommand.gui.events.NotificationEvent.Severity.INFO,
+                boot.getSimClock().nowSimMillis()));
+        log.info("scenario '{}' started (seed {}, day length {}s)", key, seed,
+                state.simClock().realSecondsPerGameDay());
+    }
+
+    /**
+     * Scenario pacing precedence: an EXPLICIT {@code --day-length} (marker property set by
+     * {@code Main}) beats the scenario's {@code settingsOverride.realSecondsPerGameDay}
+     * beats the sandbox default — the player's stated intent wins over scenario defaults.
+     */
+    private long resolveDayLength(it.unige.portcommand.scenario.Scenario scenario) {
+        boolean explicitCli = Boolean.getBoolean("simclock.day.length.explicit");
+        Long scenarioRate = scenario.settingsOverride() == null ? null
+                : scenario.settingsOverride().realSecondsPerGameDay();
+        if (!explicitCli && scenarioRate != null) {
+            return scenarioRate;
+        }
+        return bootConfig.realSecondsPerGameDay();
     }
 
     /**
@@ -153,6 +210,57 @@ public final class GameSession {
     public synchronized void loadGame(Path source)
             throws SchemaVersionException, CorruptSaveException {
         GameState state = saveLoadManager.load(source); // validate FIRST — running game untouched on failure
+        bootWorld(state, runtimeFor(state), source.toString());
+        log.info("loaded {} — day {}, wallet {}, {} restored vessel(s)", source,
+                SimClock.gameDayOf(state.simClock().simMillis()), state.wallet(),
+                state.agents().activeVessels().size());
+    }
+
+    /**
+     * Task 23: the scenario-engine bundle a load re-arms the HarbourMaster with. A save
+     * that names a scenario resumes its remaining script (events minus the persisted
+     * {@code firedEventIds} — the no-replay guarantee); a sandbox save still carries its
+     * fired ids so the daily contracted stream never re-spawns a day's arrivals. The
+     * vessel TRACES (restored vessels + the day's income/expense vessel ids) let the
+     * engine recover a spawn the save caught pre-grant (adversarial-review finding 1)
+     * without ever re-crediting one that already earned.
+     */
+    private it.unige.portcommand.scenario.ScenarioRuntime runtimeFor(GameState state)
+            throws CorruptSaveException {
+        java.util.Set<String> fired = new java.util.HashSet<>(state.firedEventIds());
+        java.util.Set<String> traces = new java.util.HashSet<>();
+        for (var vessel : state.agents().activeVessels()) {
+            traces.add(vessel.id());
+        }
+        for (var income : state.agents().harbourMaster().dayIncome()) {
+            if (income.vesselId() != null) {
+                traces.add(income.vesselId());
+            }
+        }
+        for (var expense : state.agents().harbourMaster().dayExpense()) {
+            if (expense.vesselId() != null) {
+                traces.add(expense.vesselId());
+            }
+        }
+        if (state.activeScenario() == null) {
+            return it.unige.portcommand.scenario.ScenarioRuntime.sandbox(fired, traces);
+        }
+        it.unige.portcommand.scenario.Scenario scenario =
+                scenarioRegistry.findByKey(state.activeScenario())
+                        .orElseThrow(() -> new CorruptSaveException(
+                                "save references unknown scenario '" + state.activeScenario() + "'"));
+        return new it.unige.portcommand.scenario.ScenarioRuntime(scenario, fired, traces);
+    }
+
+    /**
+     * The shared teardown → rebuild body behind {@link #loadGame} and
+     * {@link #startScenario} (task 22's sequence, unchanged semantics — task 23 only
+     * threads the scenario runtime through). The caller has already validated
+     * {@code state}, so a failure past this point can only be a boot failure: the catch
+     * shuts the half-built world down and lands in MENU.
+     */
+    private void bootWorld(GameState state, it.unige.portcommand.scenario.ScenarioRuntime runtime,
+                           String sourceLabel) {
         boolean wasLive = lifecycle != null && boot.isStarted();
         if (wasLive) {
             lifecycle.beginLoading();
@@ -165,7 +273,7 @@ public final class GameSession {
             boot.start(bootConfig);
             ensureSessionServices();
             if (!wasLive) {
-                lifecycle.beginLoading(); // cold `--load` start: MENU → LOADING, now that it exists
+                lifecycle.beginLoading(); // cold `--load`/`--scenario` start: MENU → LOADING
             }
 
             // Shared-service state, restored in place (the GUI holds these instances).
@@ -180,7 +288,7 @@ public final class GameSession {
                     boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact(),
                     boot.getLLMBridge(), boot.getEventBus(), directory,
                     boot.getPolicyRegistryArtifact(), state, GameStateBuilder.reconcileTerminals(state),
-                    hmReady);
+                    hmReady, runtime);
             awaitHarbourMasterReady(hmReady);
 
             GameOverGuard guard = new GameOverGuard(boot.getEventBus(), lifecycle, leaderboard,
@@ -192,12 +300,10 @@ public final class GameSession {
 
             publishRestoredState(state);
             lifecycle.completeLoading();
-            log.info("loaded {} — day {}, wallet {}, {} restored vessel(s)", source,
-                    SimClock.gameDayOf(state.simClock().simMillis()), state.wallet(),
-                    state.agents().activeVessels().size());
         } catch (RuntimeException e) {
             // Never a half-boot: kill whatever came up, land in MENU, surface one error.
-            log.error("load failed after teardown — shutting the half-built world down", e);
+            log.error("boot of {} failed after teardown — shutting the half-built world down",
+                    sourceLabel, e);
             try {
                 closeWorld();
                 if (boot.isStarted()) {
@@ -336,6 +442,11 @@ public final class GameSession {
 
     public GameOverGuard gameOverGuard() {
         return gameOverGuard;
+    }
+
+    /** The 3 packaged scenarios (task 23) — the NewGameDialog's data source. */
+    public it.unige.portcommand.scenario.ScenarioRegistry scenarioRegistry() {
+        return scenarioRegistry;
     }
 
     private GameStateBuilder.Sources sources() {
