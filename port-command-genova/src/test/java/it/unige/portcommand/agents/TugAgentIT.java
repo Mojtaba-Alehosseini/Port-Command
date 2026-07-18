@@ -100,9 +100,13 @@ class TugAgentIT {
             String id = "tug_" + (i + 1);
             JsonNode bid = node(proposals.get(id));
             double distanceKm = TugMath.distanceKm(BASES[i], TARGET);
-            double expectedCost = BASE_FARE + FUEL_COST_PER_KM * distanceKm;
+            // Whole-cent expectation since checkpoint-#6 F6 (2026-07-18): BidInCNPBehaviour
+            // rounds the money value at bid construction, so the quoted cost is
+            // round(fare + fuel*km) to 2 dp — not the raw float product. Same formula,
+            // plus the rounding the wallet now relies on.
+            double expectedCost = Math.round((BASE_FARE + FUEL_COST_PER_KM * distanceKm) * 100.0) / 100.0;
             double expectedEta = TugMath.etaMinutes(distanceKm, TOP_SPEED_KNOTS);
-            assertEquals(expectedCost, bid.get("cost").asDouble(), 1e-6, id + " cost = baseFare + fuelCostPerKm*km");
+            assertEquals(expectedCost, bid.get("cost").asDouble(), 1e-6, id + " cost = round2(baseFare + fuelCostPerKm*km)");
             assertEquals(expectedEta, bid.get("eta_minutes").asDouble(), 1e-6, id + " eta_minutes");
             assertEquals(1.0, bid.get("fuel_state").asDouble(), 1e-9, id + " full fuel");
             assertEquals(BASES[i].x(), bid.get("position").get("x").asDouble(), 1e-9, id + " bids from its base");
