@@ -461,6 +461,6 @@ public final class HarbourMasterAgent extends PortCommandAgent
             receivers.add(((AID) it.next()).getLocalName());
         }
         eventBus.publish(new CommLogEvent(simClock.nowSimMillis(), sender, receivers,
-                message.getPerformative(), Paraphraser.paraphrase(message), message.getConversationId()));
+                message.getPerformative(), Paraphraser.paraphrase(message, sender), message.getConversationId()));
     }
 }

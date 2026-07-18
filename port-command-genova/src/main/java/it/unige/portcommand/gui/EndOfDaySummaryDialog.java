@@ -1,9 +1,13 @@
 package it.unige.portcommand.gui;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.KeyboardFocusManager;
 import java.awt.Window;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -11,6 +15,8 @@ import javax.swing.JDialog;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
+import javax.swing.Timer;
+import javax.swing.text.JTextComponent;
 
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.EndOfDayCompletedEvent;
@@ -40,7 +46,19 @@ import it.unige.portcommand.util.Subscription;
  */
 public final class EndOfDaySummaryDialog extends JDialog {
 
+    /**
+     * How long the modal report waits (ms) before it appears over an ACTIVELY-EDITED chat input
+     * (#7, checkpoint fix 2026-07-18). Long enough to finish a word; the game is already PAUSED by
+     * {@code MainWindow}'s earlier {@code EndOfDayCompletedEvent} handler, so nothing sim-driven
+     * moves while we wait, and the dialog still appears at once when the field loses focus first.
+     */
+    private static final int DEFER_MS = 1200;
+
     private final Subscription<EndOfDayCompletedEvent> subscription;
+
+    /** True while a {@link #DEFER_MS} defer is pending, so the timer and the focus-lost listener
+     * (whichever fires first) reveal the dialog exactly once. */
+    private boolean deferArmed;
 
     /**
      * Registers the dialog's own listener. Construction does NOT show anything — the dialog opens
@@ -68,7 +86,54 @@ public final class EndOfDaySummaryDialog extends JDialog {
         setContentPane(buildContent(model));
         pack();
         setLocationRelativeTo(getOwner());
-        setVisible(true);
+        showRespectingActiveTyping();
+    }
+
+    /**
+     * #7 (checkpoint fix): a modal that pops up mid-keystroke steals focus and eats the in-flight
+     * character. If the player is actively typing into an editable text input (a chat tab's field)
+     * when the day settles, wait up to {@link #DEFER_MS} — revealing the moment that field loses
+     * focus, or when the timer elapses, whichever comes first — instead of yanking focus away now.
+     * Any other focus owner (a menu item drove the Debug path, or nothing is being typed) shows
+     * immediately.
+     */
+    private void showRespectingActiveTyping() {
+        Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        if (focusOwner instanceof JTextComponent field && field.isEditable() && field.isShowing()) {
+            deferShowUntilIdle(field);
+        } else {
+            setVisible(true); // blocks (modal) until Continue
+        }
+    }
+
+    private void deferShowUntilIdle(JTextComponent field) {
+        if (deferArmed) {
+            return;
+        }
+        deferArmed = true;
+        Timer timer = new Timer(DEFER_MS, null);
+        timer.setRepeats(false);
+        FocusAdapter onBlur = new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                reveal(field, this, timer);
+            }
+        };
+        timer.addActionListener(e -> reveal(field, onBlur, timer));
+        field.addFocusListener(onBlur);
+        timer.start();
+    }
+
+    /** One-shot: tears down the timer + focus listener and finally shows the modal. Guarded by
+     * {@link #deferArmed} so the two triggers reveal exactly once (and a later day re-arms it). */
+    private void reveal(JTextComponent field, FocusAdapter listener, Timer timer) {
+        if (!deferArmed) {
+            return;
+        }
+        deferArmed = false;
+        timer.stop();
+        field.removeFocusListener(listener);
+        setVisible(true); // blocks (modal) until Continue
     }
 
     private JPanel buildContent(EndOfDaySummaryModel model) {

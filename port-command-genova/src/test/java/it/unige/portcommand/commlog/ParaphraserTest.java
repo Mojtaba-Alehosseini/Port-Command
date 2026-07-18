@@ -163,6 +163,23 @@ class ParaphraserTest {
         assertTrue(Paraphraser.paraphrase(refuse).startsWith("Refusing"));
     }
 
+    /**
+     * #6 (checkpoint #5–#7): a PROPOSE FROM the HarbourMaster is a price DEMAND, everyone else's is
+     * an OFFER. Sender-aware verb only — same content, same performative, different reading.
+     */
+    @Test
+    void harbourMasterProposeReadsAsDemandWhileAVesselOfferStaysOffering() {
+        ACLMessage propose = propose(Map.of("intent", "counter_offer", "price", 5000.0, "hours", 8,
+                "vessel_spec", Map.of("vessel_id", "WALKIN-S1")));
+
+        assertTrue(Paraphraser.paraphrase(propose, "WALKIN-S1").startsWith("Offering "),
+                "a vessel's own PROPOSE is an offer");
+        assertTrue(Paraphraser.paraphrase(propose).startsWith("Offering "),
+                "no attached sender (null AID) defaults to Offering");
+        assertTrue(Paraphraser.paraphrase(propose, "harbour_master").startsWith("Demanding "),
+                "the HarbourMaster's PROPOSE is a demand");
+    }
+
     private static ACLMessage request(Map<String, Object> content) {
         return withContent(ACLMessage.REQUEST, content);
     }

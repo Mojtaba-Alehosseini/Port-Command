@@ -27,26 +27,47 @@ public final class Paraphraser {
 
     private static final Logger log = LoggerFactory.getLogger(Paraphraser.class);
 
+    /** The HarbourMaster's DF/local name — the sender whose PROPOSE is a demand, not an offer. */
+    private static final String HARBOUR_MASTER = "harbour_master";
+
     private Paraphraser() {
     }
 
+    /**
+     * Sender-agnostic overload — derives the sender from the message's own {@code getSender()}
+     * (null when no live AID is attached, e.g. in unit tests). The comm-log path should prefer
+     * the {@link #paraphrase(ACLMessage, String)} overload with the already-resolved local name.
+     */
     public static String paraphrase(ACLMessage msg) {
+        String sender = msg == null || msg.getSender() == null ? null : msg.getSender().getLocalName();
+        return paraphrase(msg, sender);
+    }
+
+    /**
+     * @param senderLocalName the message's sender local name (the comm-log call site already
+     *                        resolves it); load-bearing ONLY for PROPOSE, where a HarbourMaster
+     *                        PROPOSE is a price DEMAND ("Demanding €X") while a vessel's own
+     *                        offer or a tug's CNP escort bid stays "Offering" (checkpoint #5–#7,
+     *                        2026-07-18). Paraphrase layer only — the ACL performative is
+     *                        untouched.
+     */
+    public static String paraphrase(ACLMessage msg, String senderLocalName) {
         if (msg == null) {
             return "(no message)";
         }
         try {
-            return paraphraseInternal(msg);
+            return paraphraseInternal(msg, senderLocalName);
         } catch (RuntimeException e) {
             log.warn("Paraphraser: falling back to a generic rendering for an unparseable message", e);
             return genericFallback(msg);
         }
     }
 
-    private static String paraphraseInternal(ACLMessage msg) {
+    private static String paraphraseInternal(ACLMessage msg, String senderLocalName) {
         JsonNode content = TerminalJson.readTreeOrNull(msg.getContent());
         return switch (msg.getPerformative()) {
             case ACLMessage.REQUEST -> "Requesting " + requestObject(content);
-            case ACLMessage.PROPOSE -> "Offering " + offer(content);
+            case ACLMessage.PROPOSE -> proposeVerb(senderLocalName) + offer(content);
             case ACLMessage.ACCEPT_PROPOSAL -> "Granted " + deal(content);
             case ACLMessage.REJECT_PROPOSAL -> "Declined the offer" + reasonSuffix(content);
             case ACLMessage.CFP -> "Escort needed for " + vessel(content);
@@ -88,6 +109,15 @@ public final class Paraphraser {
             return "action for " + vesselId;
         }
         return "assistance";
+    }
+
+    /**
+     * PROPOSE verb (#6): the HarbourMaster PROPOSEs a price to a walk-in as a DEMAND
+     * ("Demanding €X"); a vessel PROPOSEs its own offer and a tug PROPOSEs a CNP escort bid,
+     * both of which stay "Offering". A null sender (no live AID — unit tests) reads as an offer.
+     */
+    private static String proposeVerb(String senderLocalName) {
+        return HARBOUR_MASTER.equals(senderLocalName) ? "Demanding " : "Offering ";
     }
 
     /**
