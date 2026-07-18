@@ -68,14 +68,57 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         JsonNode content = TerminalJson.readTreeOrNull(msg.getContent());
         String intent = text(content, "intent");
         if (intent == null) {
-            return; // not a walk-in negotiation message we recognise; drop silently
+            // Tug-originated flow reports carry an "event" field, not "intent" (checkpoint-#6
+            // F1, fixed 2026-07-18): the escort_complete INFORM is the dock report this
+            // tracking previously swallowed silently.
+            if ("escort_complete".equals(text(content, "event"))) {
+                advanceStage(hm, text(content, "vessel_id"), Stage.DOCKED);
+            }
+            return; // anything else without an intent is not a walk-in negotiation message
         }
         switch (intent) {
             case "opening_offer", "counter_offer" -> handleOffer(hm, msg, content);
             case "deal_confirmed" -> handleDealConfirmed(hm, msg, content);
             case "withdraw" -> handleWithdraw(hm, msg, content);
+            // Checkpoint-#6 F1/F5 (fixed 2026-07-18): both channels' DockAndServiceBehaviour
+            // INFORMs {intent: service_complete} at service end, and this switch used to fall
+            // through to the "unrecognised" branch — the HM-side stage never left
+            // AWAITING_TUG/IN_TRANSIT, so departures logged stale stages and the persisted
+            // VesselStateDTO.stage contradicted the vessel's own currentPhase.
+            case "service_complete" -> advanceStage(hm, text(content, "vessel_id"), Stage.DEPARTING);
             case "departed" -> handleDeparted(hm, content);
             default -> log.debug("unrecognised walk-in intent '{}' from {}", intent, msg.getSender().getLocalName());
+        }
+    }
+
+    /**
+     * Forward-only stage advance from a received flow report (checkpoint-#6 F1). Monotone by
+     * {@link Stage} ordinal — a late or duplicate report (two escorting tugs each INFORM
+     * escort_complete; a delivered-then-storm-held vessel may report out of order) can never
+     * move tracking backwards. Deliberately does NOT touch tugs/holds: the weather CANCEL
+     * sweep's backward AWAITING_TUG reset stays the one legitimate regression, and the
+     * re-dispatch sweep (weatherHeld AND AWAITING_TUG) is naturally skipped for a vessel this
+     * advanced past AWAITING_TUG — a docked vessel must never be re-escorted. Terminal removal
+     * stays exclusively in {@link #handleDeparted}/{@link #handleWithdraw} (INVARIANTS
+     * "terminal removal" rule).
+     *
+     * <p><b>Report lag is inherent</b> (adversarial review F-1, 2026-07-18): the stage is the
+     * HM's best knowledge FROM RECEIVED REPORTS, not a mirror of the vessel's own phase. The
+     * DOCKED signal is the tug's escort_complete, which arrives escort-time after the vessel's
+     * fixed 2-sim-min self-docking — and a 0-tug vessel emits no dock report at all, so it
+     * tracks IN_TRANSIT until its service_complete. The pre-fix bug was stages STUCK for a
+     * vessel's whole life; transient lag (and the 0-tug DOCKED skip) is by design.
+     */
+    private static void advanceStage(HarbourMasterAgent hm, String vesselId, Stage target) {
+        if (vesselId == null) {
+            return;
+        }
+        VesselTracking advanced = hm.activeVessels().computeIfPresent(vesselId,
+                (id, tracking) -> tracking.stage().ordinal() < target.ordinal()
+                        ? tracking.withStage(target)
+                        : tracking);
+        if (advanced != null && advanced.stage() == target) {
+            log.debug("{}: tracking stage -> {}", vesselId, target);
         }
     }
 
@@ -171,7 +214,13 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         accept.setContent(TerminalJson.write(Map.of("berth_id", berthId, "price", price, "hours", hours)));
         hm.sendLogged(accept);
 
-        hm.activeVessels().put(spec.vesselId(), tracking.withStage(Stage.AWAITING_TUG).withBerth(berthId));
+        // Checkpoint-#6 F1 (fixed 2026-07-18): a vessel that needs no escort never awaits one —
+        // it starts its transit the moment the grant lands (AwaitBerthBehaviour attaches the
+        // transit unconditionally), so AWAITING_TUG was a from-the-start lie for 0-tug vessels
+        // (W9 departed still showing it). Stage the grant by what actually happens next.
+        int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());
+        Stage grantStage = tugsRequired > 0 ? Stage.AWAITING_TUG : Stage.IN_TRANSIT;
+        hm.activeVessels().put(spec.vesselId(), tracking.withStage(grantStage).withBerth(berthId));
         hm.negotiationBerths().remove(dialogueId);
         hm.negotiationRounds().remove(dialogueId);
         log.info("{}: berth GRANTED {} (price {}, {}h)", spec.vesselId(), berthId, price, hours);
@@ -185,7 +234,6 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         // Task 15: closes the walk-in CNP-dispatch gap ADR-08 left deliberately open —
         // mirrors AutoFlowDispatcherBehaviour's own tugsRequired>0 gate exactly. Terminal/customs
         // dispatch stays out of scope (not asked for; a separate, larger parity gap — see ADR-09).
-        int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());
         if (tugsRequired > 0) {
             Position berthPosition = BerthPositions.position(berthId);
             hm.cnpCoordinator().initiate(new CnpRequest(spec.vesselId(), msg.getSender(),

@@ -446,6 +446,100 @@ class HarbourMasterAgentIT {
         assertEquals(ACLMessage.ACCEPT_PROPOSAL, award.getPerformative());
     }
 
+    // ============ Checkpoint-#6 F1/F5 (2026-07-18): HM tracking stage lifecycle ============
+
+    /**
+     * The full walk-in lifecycle as the HarbourMaster's OWN tracking sees it (checkpoint-#6
+     * F1/F5 regression): every stage the flow reports must land in {@code activeVessels}, in
+     * order, ending in the terminal removal (INVARIANTS "terminal removal" rule). Pre-fix,
+     * escort_complete was dropped silently ({@code event} field, not {@code intent}) and
+     * service_complete fell into the "unrecognised intent" branch — vessels departed still
+     * showing AWAITING_TUG/IN_TRANSIT and persisted a stage contradicting their own phase.
+     */
+    @Test
+    void walkInFullLifecycle_trackingStageMonotone_endsTerminal() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W101", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vessel = spawnProbe("t30_vessel", null);
+        Probe tug = spawnProbe("t30_tug", "tug-escort");
+        List<VesselTracking.Stage> observed = new java.util.ArrayList<>();
+
+        vessel.outbox.put(openingOffer(hm, spec, 4800.0, 6, "nego-W101"));
+        observed.add(assertStageReached(hm, "W101", VesselTracking.Stage.NEGOTIATING).stage());
+
+        vessel.outbox.put(dealConfirmed(hm, 4900.0, 6, "nego-W101"));
+        assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "setup: berth grant must arrive");
+        observed.add(assertStageReached(hm, "W101", VesselTracking.Stage.AWAITING_TUG).stage());
+
+        ACLMessage cfp = pollUntil(tug.inbox, m -> true, 10_000);
+        assertNotNull(cfp, "setup: this cargo_vessel fixture requires tugs — a CFP must go out");
+        tug.outbox.put(bidReply(cfp, 100.0, 5.0, 0.9));
+        assertNotNull(pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "setup: the lone bidder must be awarded");
+        observed.add(assertStageReached(hm, "W101", VesselTracking.Stage.IN_TRANSIT).stage());
+
+        // The tug's delivery report — exactly EscortToBerthBehaviour's message shape
+        // ({"event": "escort_complete"}, CNP conversation id, no protocol tag).
+        tug.outbox.put(flowReport(hm, Map.of("event", "escort_complete", "vessel_id", "W101"),
+                cfp.getConversationId()));
+        observed.add(assertStageReached(hm, "W101", VesselTracking.Stage.DOCKED).stage());
+
+        // The vessel's service-end report — exactly DockAndServiceBehaviour's message shape.
+        vessel.outbox.put(flowReport(hm, Map.of(
+                "intent", "service_complete", "vessel_id", "W101", "berth_id", "berth_1"), null));
+        observed.add(assertStageReached(hm, "W101", VesselTracking.Stage.DEPARTING).stage());
+
+        vessel.outbox.put(flowReport(hm, Map.of("intent", "departed", "vessel_id", "W101"), null));
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (hm.activeVessels().containsKey("W101") && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+        assertFalse(hm.activeVessels().containsKey("W101"),
+                "departure must remove the tracking entry (terminal-removal invariant)");
+
+        for (int i = 1; i < observed.size(); i++) {
+            assertTrue(observed.get(i - 1).ordinal() < observed.get(i).ordinal(),
+                    "stage sequence must be strictly monotone, got: " + observed);
+        }
+    }
+
+    /**
+     * The W9 case from checkpoint-#6 F1: a ferry needs no escort (RULE R11), so its grant
+     * must track IN_TRANSIT immediately — it never awaits a tug — and the service/depart
+     * reports carry it to DEPARTING and out.
+     */
+    @Test
+    void zeroTugWalkInGrant_tracksInTransitImmediately_neverAwaitingTug() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W102", "ferry", 5.0, 120.0, 8000, "passengers", 0L);
+        assertEquals(0, PrologQueries.tugsRequired("ferry", 8000, 120.0),
+                "fixture sanity: a ferry must be tug-exempt (RULE R11)");
+        Probe vessel = spawnProbe("t31_vessel", null);
+
+        vessel.outbox.put(openingOffer(hm, spec, 1500.0, 6, "nego-W102"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-W102".equals(e.dialogueId()), 10_000), "setup: offer must be forwarded");
+
+        vessel.outbox.put(dealConfirmed(hm, 1600.0, 6, "nego-W102"));
+        assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "setup: berth grant must arrive");
+        VesselTracking granted = assertStageReached(hm, "W102", VesselTracking.Stage.IN_TRANSIT);
+        assertNotEquals(VesselTracking.Stage.AWAITING_TUG, granted.stage(),
+                "a 0-tug vessel never awaits a tug (checkpoint-#6 F1, the W9 stale-stage case)");
+
+        vessel.outbox.put(flowReport(hm, Map.of(
+                "intent", "service_complete", "vessel_id", "W102", "berth_id", "berth_1"), null));
+        assertStageReached(hm, "W102", VesselTracking.Stage.DEPARTING);
+
+        vessel.outbox.put(flowReport(hm, Map.of("intent", "departed", "vessel_id", "W102"), null));
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (hm.activeVessels().containsKey("W102") && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+        assertFalse(hm.activeVessels().containsKey("W102"), "departure must close the tracking entry");
+    }
+
     // ==================== Task 19: tab-close event publishers ====================
 
     @Test
@@ -1050,6 +1144,32 @@ class HarbourMasterAgentIT {
                 "swell", swell, "state", state)));
         alert.setProtocol(HandleWeatherAlertBehaviour.WEATHER_ALERT_PROTOCOL);
         return alert;
+    }
+
+    /** Polls until the tracked stage EQUALS {@code stage}; fails the test with a diagnostic
+     * (current entry, or "absent") if it never arrives. Returns the observed tracking. */
+    private static VesselTracking assertStageReached(HarbourMasterAgent hm, String vesselId,
+                                                     VesselTracking.Stage stage) throws InterruptedException {
+        VesselTracking tracking = pollTracking(hm, vesselId, t -> t.stage() == stage, 10_000);
+        if (tracking == null) {
+            fail("tracking for " + vesselId + " never reached stage " + stage + " — currently: "
+                    + hm.activeVessels().get(vesselId));
+        }
+        return tracking;
+    }
+
+    /** A vessel/tug flow report INFORM ({@code service_complete}/{@code departed}/
+     * {@code escort_complete} shapes) — mirrors the production senders exactly:
+     * plain INFORM on the standard envelope, no protocol tag. */
+    private static ACLMessage flowReport(HarbourMasterAgent hm, Map<String, Object> content,
+                                         String conversationId) {
+        ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);
+        inform.addReceiver(hm.getAID());
+        if (conversationId != null) {
+            inform.setConversationId(conversationId);
+        }
+        inform.setContent(TerminalJson.write(content));
+        return inform;
     }
 
     /** Bounded poll on the HM's tracking map until {@code condition} holds for {@code vesselId}. */

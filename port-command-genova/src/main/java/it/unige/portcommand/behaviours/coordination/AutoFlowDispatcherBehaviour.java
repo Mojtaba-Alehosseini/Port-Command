@@ -127,12 +127,14 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
                 contract.contractedHours(), hm.simClock().nowSimMillis()));
 
         String vesselId = spec.vesselId();
+        // Checkpoint-#6 F1 (fixed 2026-07-18): mirror of the walk-in grant — a 0-tug vessel
+        // transits immediately, so its tracking starts IN_TRANSIT, never AWAITING_TUG.
+        int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());
         hm.activeVessels().put(vesselId, VesselTracking
                 .arriving(vesselId, spec, Channel.CONTRACTED, msg.getSender())
-                .withStage(Stage.AWAITING_TUG)
+                .withStage(tugsRequired > 0 ? Stage.AWAITING_TUG : Stage.IN_TRANSIT)
                 .withBerth(contract.berthId()));
 
-        int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());
         if (tugsRequired > 0) {
             Position berthPosition = BerthPositions.position(contract.berthId());
             hm.cnpCoordinator().initiate(

@@ -12,6 +12,7 @@ import it.unige.portcommand.gui.events.TugJobAwardedEvent;
 import it.unige.portcommand.harbourmaster.ExpenseEvent;
 import it.unige.portcommand.harbourmaster.financial.ExpenseRules;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
+import it.unige.portcommand.persistence.dto.VesselStateDTO;
 import it.unige.portcommand.util.Event;
 import it.unige.portcommand.util.EventBusProbe;
 import it.unige.portcommand.util.SimClock;
@@ -100,7 +101,46 @@ class SaveLoadMidTransitIT {
         assertEquals(walletAtSave, hm.walletLedger().balance(), 0.0001,
                 "the restored wallet is the saved wallet");
 
-        // --- Resume: transit (≤2 sim-min) + service (8 h) + departure (1 min). ---
+        // --- Checkpoint-#6 F1 regression (2026-07-18): drive the restored world to the settled
+        // docked window — vessel phase DOCKED and the restored tug's escort_complete consumed
+        // (HM tracking DOCKED) — and prove a save taken there persists a stage that MATCHES the
+        // vessel's phase. Pre-fix the tracking never advanced, so this save carried
+        // stage IN_TRANSIT against currentPhase DOCKED (the W35 lie in the day-5 autosave).
+        // Budget: ≤6.5 sim-hours in 15-min steps. The vessel docks in ~2 sim-min, but the
+        // ESCORT is real distance at real speed: worst tug route ≈ base(50,100) →
+        // pickup(700,200) → berth_1(400,150) ≈ 96 km ≈ 5.2 sim-h at 10 kn (TugMath 10 px/km),
+        // and the 8 h service window comfortably contains it — a 4 h budget did NOT (the
+        // first full-suite run failed exactly there with tug_3/tug_4 still en route).
+        boolean settledDocked = false;
+        for (int i = 0; i < 26 && !settledDocked; i++) {
+            clock.advance(clock.simSecondsToWallMs(900L));
+            settledDocked = waitUntil(() -> {
+                boolean phaseDocked = session.directory().byName("vessel_c001")
+                        .filter(it.unige.portcommand.agents.BaseVesselAgent.class::isInstance)
+                        .map(a -> ((it.unige.portcommand.agents.BaseVesselAgent) a).flowPhase()
+                                == it.unige.portcommand.agents.BaseVesselAgent.FlowPhase.DOCKED)
+                        .orElse(false);
+                it.unige.portcommand.harbourmaster.VesselTracking tracking =
+                        hm.activeVessels().get("C001");
+                return phaseDocked && tracking != null
+                        && tracking.stage() == it.unige.portcommand.harbourmaster.VesselTracking.Stage.DOCKED;
+            }, 500);
+        }
+        assertTrue(settledDocked, "the restored vessel must dock AND the restored tug's "
+                + "escort_complete must advance HM tracking to DOCKED — vessel phase: "
+                + session.directory().byName("vessel_c001")
+                        .filter(it.unige.portcommand.agents.BaseVesselAgent.class::isInstance)
+                        .map(a -> String.valueOf(((it.unige.portcommand.agents.BaseVesselAgent) a).flowPhase()))
+                        .orElse("agent absent")
+                + ", tracking: " + hm.activeVessels().get("C001"));
+        Path dockedSave = session.saveNow();
+        VesselStateDTO dockedDto = new SaveLoadManager(tempDir).load(dockedSave)
+                .agents().activeVessels().get(0);
+        assertEquals("DOCKED", dockedDto.currentPhase(), "settled-window sanity: vessel-side phase");
+        assertEquals(dockedDto.currentPhase(), dockedDto.stage(),
+                "the persisted stage must match the vessel's phase at save time (checkpoint-#6 F1)");
+
+        // --- Resume: remaining service (8 h from docking) + departure (1 min). ---
         clock.advance(clock.simSecondsToWallMs(10 * 3_600L));
         // Keyed to C001, not isEmpty(): the live Poisson spawner may add walk-ins meanwhile.
         boolean departed = waitUntil(() -> !hm.activeVessels().containsKey("C001"), 20_000);
@@ -128,6 +168,19 @@ class SaveLoadMidTransitIT {
         assertEquals(walletAtSave, hm.walletLedger().balance(), 0.0001,
                 "completing the restored flow moves no further money (fee at grant, tug at award "
                         + "— both are in the saved balance already)");
+
+        // Checkpoint-#6 F6 (fixed 2026-07-18): tug bids are rounded to whole cents at bid
+        // construction, so REAL awarded charges — and the wallet they debited — carry no
+        // sub-cent residue (pre-fix the fare+fuel float product left the balance with a
+        // permanent …532.615951895947-style tail).
+        for (ExpenseEvent charge : tugCharges) {
+            assertEquals(Math.round(charge.amount() * 100.0), charge.amount() * 100.0, 1e-6,
+                    "a real tug charge must be a whole-cent amount, got " + charge.amount());
+        }
+        assertEquals(Math.round(hm.walletLedger().balance() * 100.0),
+                hm.walletLedger().balance() * 100.0, 1e-6,
+                "the wallet holds no sub-cent residue after real CNP awards, got "
+                        + hm.walletLedger().balance());
     }
 
     private <E extends Event> E awaitEvent(Class<E> type, Predicate<E> matcher, long timeoutMs)
