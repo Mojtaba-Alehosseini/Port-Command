@@ -59,6 +59,7 @@ public final class GameSession {
 
     private GameLifecycle lifecycle;
     private AutosaveCoordinator autosaveCoordinator;
+    private boolean guiRefreshSubscribed;
     private volatile GameOverGuard gameOverGuard;
 
     public GameSession(JadeBootstrap boot, BootstrapConfig bootConfig,
@@ -249,6 +250,34 @@ public final class GameSession {
             autosaveCoordinator = new AutosaveCoordinator(boot.getEventBus(), saveLoadManager,
                     this::sources);
         }
+        if (!guiRefreshSubscribed) {
+            // Checkpoint-#6 F3 (fixed 2026-07-18): the ledgers publish only on MUTATION, so a
+            // fresh boot showed "Wallet: —" until the first money event — only the LOAD path had
+            // a synthetic refresh. The window's one-time GuiReadyEvent (first paint) is the
+            // uniform hook: it fires after startNewGame on a fresh `--gui` boot AND after a cold
+            // `--load` boot (whose publishRestoredState ran before the window existed and was
+            // lost), and this session-scoped subscription is registered before either.
+            boot.getEventBus().subscribe(it.unige.portcommand.gui.events.GuiReadyEvent.class,
+                    e -> publishLiveHudState("gui_ready"), it.unige.portcommand.util.DeliveryMode.CALLER_THREAD);
+            guiRefreshSubscribed = true;
+        }
+    }
+
+    /** The load-path synthetic refresh (same event shapes), sourced from the LIVE ledgers. */
+    private void publishLiveHudState(String source) {
+        directory.byName("harbour_master")
+                .filter(HarbourMasterAgent.class::isInstance)
+                .map(HarbourMasterAgent.class::cast)
+                .ifPresent(hm -> {
+                    long simMillis = boot.getSimClock().nowSimMillis();
+                    boot.getEventBus().publish(new WalletChangedEvent(
+                            hm.walletLedger().balance(), 0.0, source, null, simMillis));
+                    boot.getEventBus().publish(new ReputationChangedEvent(
+                            hm.reputationLedger().score(), 0.0, source, null, simMillis));
+                    boot.getEventBus().publish(new SimClockTickEvent(simMillis,
+                            SimClock.gameDayOf(simMillis), boot.getSimClock().simHour(),
+                            boot.getSimClock().simMinute()));
+                });
     }
 
     /** Re-parses persisted policy triggers straight into the session registry (no bus race). */

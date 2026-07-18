@@ -64,6 +64,23 @@ public final class CommLogModel {
         onChange.run();
     }
 
+    /**
+     * Clean slate on a load (checkpoint-#6 F4, fixed 2026-07-18): drops every entry — the
+     * replaced timeline's MAS history no longer describes the world, same rule as the chat
+     * tabs' reset on {@code GameLoadedEvent}. Entries are archived on their way out (the same
+     * eviction contract as {@link #add}), so the on-disk history stays complete across the
+     * cut. Filters, muted senders and the known sender/receiver sets survive — they are user
+     * preferences and dropdown vocabulary, not history (and the panel's combos are add-only
+     * by design).
+     */
+    public void clear() {
+        while (!entries.isEmpty()) {
+            archiver.archive(entries.getFirst());
+            entries.removeFirst();
+        }
+        onChange.run();
+    }
+
     /** {@code null} clears the filter (show every performative). */
     public void setPerformativeFilter(Integer performative) {
         this.performativeFilter = performative;

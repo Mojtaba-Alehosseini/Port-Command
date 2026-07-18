@@ -53,6 +53,7 @@ public final class CommLogPanel extends JPanel {
 
     private final CommLogModel model = new CommLogModel();
     private final Subscription<CommLogEvent> subscription;
+    private final Subscription<it.unige.portcommand.persistence.events.GameLoadedEvent> loadedSubscription;
     private final JTextPane textPane = new JTextPane();
     private final JScrollPane scrollPane;
     private final JComboBox<String> senderFilterCombo = new JComboBox<>(new String[] {ALL});
@@ -90,6 +91,12 @@ public final class CommLogPanel extends JPanel {
         scrollPane.getVerticalScrollBar().addAdjustmentListener(e -> updateResumeButton());
 
         this.subscription = eventBus.subscribe(CommLogEvent.class, this::onCommLogEvent, DeliveryMode.EDT);
+        // Checkpoint-#6 F4 (fixed 2026-07-18): an in-place Game → Load replaced the whole
+        // timeline but this log kept listing the old world's traffic — clean slate on the
+        // loaded-marker event, the same rule ChatPanel applies to its tabs.
+        this.loadedSubscription = eventBus.subscribe(
+                it.unige.portcommand.persistence.events.GameLoadedEvent.class,
+                e -> { model.clear(); render(); }, DeliveryMode.EDT);
     }
 
     private JPanel buildFilterBar() {
@@ -328,6 +335,7 @@ public final class CommLogPanel extends JPanel {
     public void removeNotify() {
         super.removeNotify();
         subscription.cancel();
+        loadedSubscription.cancel();
     }
 
     /** Test-only: the model backing this panel's rendering. */

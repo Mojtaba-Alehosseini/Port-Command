@@ -173,6 +173,39 @@ class SaveLoadSessionIT {
                 "a restored walk-in sends no PROPOSE — its beliefs are carried, never surfaced");
     }
 
+    /**
+     * Checkpoint-#6 F3 (fixed 2026-07-18): the ledgers publish only on mutation, so a fresh
+     * boot rendered "Wallet: —" until the first money event. The window's one-time
+     * {@code GuiReadyEvent} now triggers the same synthetic absolute refresh the load path
+     * publishes — here fired from the test thread ({@code CALLER_THREAD} subscription, so the
+     * refresh is synchronous) against a freshly started game.
+     */
+    @Test
+    void guiReady_publishesLiveHudRefreshAtFreshBoot() throws Exception {
+        boot = new JadeBootstrap();
+        GameSession session = new GameSession(boot,
+                new BootstrapConfig(TEST_PORT, false, "realtime", 300),
+                new SaveLoadManager(tempDir), new Leaderboard(tempDir.resolve("scores.json")));
+        session.startNewGame();
+
+        boot.getEventBus().publish(new it.unige.portcommand.gui.events.GuiReadyEvent());
+
+        List<Event> published = EventBusProbe.published(boot.getEventBus());
+        assertTrue(published.stream()
+                        .filter(it.unige.portcommand.gui.events.WalletChangedEvent.class::isInstance)
+                        .map(it.unige.portcommand.gui.events.WalletChangedEvent.class::cast)
+                        .anyMatch(e -> "gui_ready".equals(e.source())
+                                && e.balance() == AgentRoster.STARTING_WALLET && e.delta() == 0.0),
+                "GuiReadyEvent must publish a synthetic absolute wallet refresh with the "
+                        + "starting balance — the HUD must never boot to the \"—\" placeholder");
+        assertTrue(published.stream()
+                        .filter(it.unige.portcommand.gui.events.ReputationChangedEvent.class::isInstance)
+                        .map(it.unige.portcommand.gui.events.ReputationChangedEvent.class::cast)
+                        .anyMatch(e -> "gui_ready".equals(e.reason())
+                                && e.score() == AgentRoster.STARTING_REPUTATION),
+                "GuiReadyEvent must publish the matching reputation refresh");
+    }
+
     private BaseVesselAgent awaitVesselWithPhase(String localName, GameSession session)
             throws InterruptedException {
         long deadline = System.currentTimeMillis() + 15_000;

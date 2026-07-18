@@ -330,4 +330,28 @@ class CommLogModelTest {
         assertTrue(lines.get(0).contains("\"entry-0\""), "first archived line is the first-evicted head");
         assertTrue(lines.get(2).contains("\"entry-2\""), "archive order follows eviction order");
     }
+
+    /** Checkpoint-#6 F4 (fixed 2026-07-18): the load-time clean slate — every entry dropped
+     * from the visible buffer, every dropped entry archived first (the {@code add} eviction
+     * contract), filters/known-vocabulary untouched. */
+    @Test
+    void clearDropsAllEntriesArchivingThemAndKeepsFilterVocabulary(@TempDir Path tempDir) throws Exception {
+        CommLogModel model = new CommLogModel(new LogArchiver(tempDir));
+        model.add(event(0, "hm", ACLMessage.REQUEST, "pre-load-1"));
+        model.add(event(1, "tug_1", ACLMessage.PROPOSE, "pre-load-2"));
+        boolean[] changed = {false};
+        model.setOnChange(() -> changed[0] = true);
+
+        model.clear();
+
+        assertTrue(changed[0], "clear must notify the panel to re-render");
+        assertEquals(0, model.size(), "the replaced timeline's entries are gone");
+        assertTrue(model.filteredEntries().isEmpty());
+        Path archive = tempDir.resolve("commlog-archive-" + LocalDate.now() + ".jsonl");
+        List<String> lines = Files.readAllLines(archive);
+        assertEquals(2, lines.size(), "cleared entries are archived on their way out, like evictions");
+        assertTrue(lines.get(0).contains("\"pre-load-1\""));
+        assertEquals(List.of("hm", "tug_1"), model.knownSenders(),
+                "dropdown vocabulary survives the clear (add-only combos)");
+    }
 }
