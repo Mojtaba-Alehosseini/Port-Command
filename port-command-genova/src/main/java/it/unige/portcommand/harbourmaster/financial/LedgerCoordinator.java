@@ -82,6 +82,9 @@ public final class LedgerCoordinator {
     private final Set<String> penalisedWithdrawals = ConcurrentHashMap.newKeySet();
     /** vesselId -> the distinct tugs already billed as an extra-tug surcharge for that vessel. */
     private final Map<String, Set<String>> tugsPerVessel = new ConcurrentHashMap<>();
+    /** Task 23 balance: bounds cumulative unengaged-timeout loss at −5/day; rollover resets. */
+    private final ReputationRules.UnengagedTimeoutDailyCap unengagedCap =
+            new ReputationRules.UnengagedTimeoutDailyCap();
 
     private final List<Subscription<?>> subscriptions = new ArrayList<>();
 
@@ -97,6 +100,11 @@ public final class LedgerCoordinator {
                 ContractedFeeEarnedEvent.class, this::onContractedFee, DeliveryMode.CALLER_THREAD));
         subscriptions.add(eventBus.subscribe(
                 CustomsClearedEvent.class, this::onCustomsCleared, DeliveryMode.CALLER_THREAD));
+        // DayRolloverEvent is the EOD fan-out's LAST event (DayRolloverCoordinator contract),
+        // so the ended day's own withdrawals were all clamped before this reset runs.
+        subscriptions.add(eventBus.subscribe(
+                it.unige.portcommand.lifecycle.events.DayRolloverEvent.class,
+                e -> unengagedCap.resetForNewDay(), DeliveryMode.CALLER_THREAD));
     }
 
     /**
@@ -135,7 +143,20 @@ public final class LedgerCoordinator {
             return;
         }
         double delta = ReputationRules.withdrawalDelta(event.outcome(), event.playerEngaged());
-        String reason = event.outcome() == Deal.Outcome.TIMEOUT && !event.playerEngaged()
+        boolean unengagedTimeout = event.outcome() == Deal.Outcome.TIMEOUT && !event.playerEngaged();
+        if (unengagedTimeout) {
+            // Task 23 balance (checkpoint-#6): a mostly-idle day was bleeding ~−8/day from
+            // walk-ins nobody touched. Cumulative unengaged loss is floored at −5/day;
+            // the engaged −3 path below stays uncapped.
+            double clamped = unengagedCap.clamp(delta);
+            if (clamped == 0.0) {
+                log.info("unengaged timeout for {} — daily reputation cap ({}) reached, no further penalty",
+                        event.vesselId(), ReputationRules.timeoutUnengagedDailyCap());
+                return;
+            }
+            delta = clamped;
+        }
+        String reason = unengagedTimeout
                 ? "timeout_unengaged"
                 : event.outcome().name().toLowerCase(java.util.Locale.ROOT);
         reputation.adjust(delta, reason, event.vesselId(), event.simTimeMillis());

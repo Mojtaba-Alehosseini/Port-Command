@@ -101,6 +101,29 @@ class LedgerCoordinatorTest {
     }
 
     /**
+     * Task 23 (checkpoint-#6 balance call, 2026-07-18): cumulative UNENGAGED-timeout loss is
+     * floored at −5 per day (evidence: 70 → 9 over 8 mostly-idle days — passive walk-ins the
+     * player never touched were the dominant bleed). Ten unengaged timeouts in one day cost
+     * exactly −5 total; the day rollover resets the budget; the engaged −3 stays uncapped.
+     */
+    @Test
+    void unengagedTimeoutLossIsCappedAtMinusFivePerDayAndResetsAtRollover() {
+        for (int i = 1; i <= 10; i++) {
+            bus.publish(new WithdrawalEvent("U" + i, Deal.Outcome.TIMEOUT, false, 1_000L * i));
+        }
+        assertEquals(45.0, reputation.score(), EPS,
+                "10 unengaged timeouts in one day cost the −5 cap, not −10");
+
+        bus.publish(new WithdrawalEvent("E1", Deal.Outcome.TIMEOUT, true, 20_000L));
+        assertEquals(42.0, reputation.score(), EPS, "the engaged −3 is NOT capped");
+
+        bus.publish(new it.unige.portcommand.lifecycle.events.DayRolloverEvent(2, null));
+        bus.publish(new WithdrawalEvent("U11", Deal.Outcome.TIMEOUT, false, 90_000_000L));
+        assertEquals(41.0, reputation.score(), EPS,
+                "a new day has a fresh −5 unengaged budget (rollover reset)");
+    }
+
+    /**
      * A withdrawal's reputation penalty must be stamped with the sim time it happened, not 0.
      * Before {@code WithdrawalEvent} carried a timestamp, every penalty in the ledger's history
      * bucketed to day 1 forever — corrupt audit data the moment anything reads reputation by day.

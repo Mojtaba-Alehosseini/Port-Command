@@ -53,8 +53,50 @@ public final class ReputationRules {
     private static final Map<Deal.Outcome, Double> DELTAS = readFromClasspath();
     private static final double DAILY_TARGET_BONUS = readReputationScalar("daily_target");
     private static final double TIMEOUT_UNENGAGED_DELTA = readReputationScalar("timeout_unengaged");
+    private static final double TIMEOUT_UNENGAGED_DAILY_CAP =
+            readReputationScalar("timeout_unengaged_daily_cap");
 
     private ReputationRules() {
+    }
+
+    /**
+     * The per-day floor on CUMULATIVE unengaged-timeout reputation loss (task 23,
+     * checkpoint-#6 balance call, 2026-07-18: 70 → 9 over 8 mostly-idle days — passive
+     * walk-ins the player never touched were the dominant bleed). −5.0 canonical, a
+     * {@code reputation}-block scalar like {@link #timeoutUnengagedDelta()}. Applies ONLY
+     * to the unengaged split; engaged-timeout (−3) and every other outcome stay uncapped —
+     * abandoning a negotiation you started remains fully priced.
+     */
+    public static double timeoutUnengagedDailyCap() {
+        return TIMEOUT_UNENGAGED_DAILY_CAP;
+    }
+
+    /**
+     * Day-scoped accumulator enforcing {@link #timeoutUnengagedDailyCap()}. Owned by
+     * {@code LedgerCoordinator} (one per HarbourMaster life), reset on
+     * {@code DayRolloverEvent}. Not persisted: a mid-day save/load restarts the day's
+     * budget — worst case one extra capful that day, the same order as the pre-cap
+     * behaviour and far inside the harm the cap exists to stop (documented limitation).
+     */
+    public static final class UnengagedTimeoutDailyCap {
+
+        private double appliedToday;
+
+        /**
+         * Clamps {@code delta} (negative) so today's cumulative unengaged loss never
+         * exceeds the cap; returns the portion to apply (0.0 once the budget is spent).
+         */
+        public double clamp(double delta) {
+            double budget = timeoutUnengagedDailyCap() - appliedToday; // e.g. -5 - (-4) = -1
+            double applied = Math.max(delta, Math.min(budget, 0.0));
+            appliedToday += applied;
+            return applied;
+        }
+
+        /** New day, fresh budget (the rollover hook). */
+        public void resetForNewDay() {
+            appliedToday = 0.0;
+        }
     }
 
     /**

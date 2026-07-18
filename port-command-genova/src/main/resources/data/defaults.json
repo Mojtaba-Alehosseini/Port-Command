@@ -18,6 +18,7 @@
     "withdraw_duration": -2.0,
     "timeout": -3.0,
     "timeout_unengaged": -1.0,
+    "timeout_unengaged_daily_cap": -5.0,
     "player_refused": 0.0,
     "daily_target": 2.0
   },

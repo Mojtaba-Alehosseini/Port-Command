@@ -100,4 +100,29 @@ class ReputationRulesTest {
         org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
                 () -> ReputationRules.table().put(Deal.Outcome.DEAL, 99.0));
     }
+
+    /**
+     * Task 23 (checkpoint-#6 balance call, 2026-07-18): the daily cap on cumulative
+     * unengaged-timeout loss is the −5.0 {@code reputation}-block scalar, and the
+     * accumulator clamps to it exactly — including a partial last step — then resets.
+     */
+    @Test
+    void unengagedDailyCapScalarIsMinusFiveAndTheAccumulatorClampsToIt() {
+        assertEquals(-5.0, ReputationRules.timeoutUnengagedDailyCap(), EPS);
+
+        ReputationRules.UnengagedTimeoutDailyCap cap = new ReputationRules.UnengagedTimeoutDailyCap();
+        double applied = 0.0;
+        for (int i = 0; i < 10; i++) {
+            applied += cap.clamp(ReputationRules.timeoutUnengagedDelta()); // 10 × −1
+        }
+        assertEquals(-5.0, applied, EPS, "10 unengaged timeouts apply exactly the cap");
+        assertEquals(0.0, cap.clamp(-1.0), EPS, "budget spent — further penalties clamp to 0");
+
+        cap.resetForNewDay();
+        assertEquals(-1.0, cap.clamp(-1.0), EPS, "rollover restores the full budget");
+
+        ReputationRules.UnengagedTimeoutDailyCap partial = new ReputationRules.UnengagedTimeoutDailyCap();
+        assertEquals(-4.5, partial.clamp(-4.5), EPS);
+        assertEquals(-0.5, partial.clamp(-1.0), EPS, "the last step is clamped partially, not dropped");
+    }
 }
