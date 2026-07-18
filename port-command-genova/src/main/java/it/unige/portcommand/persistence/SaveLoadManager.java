@@ -78,6 +78,42 @@ public final class SaveLoadManager {
         return !Files.exists(savegamePath());
     }
 
+    /**
+     * A save slot's headline metadata for task 21's {@code SaveLoadDialog} preview — day, wallet
+     * and the wall-clock save instant. Deliberately NOT a full {@link #load}: the dialog must
+     * show every slot's summary on open without rebuilding the world (a real load tears the JADE
+     * container down), so this reads only the three scalar fields off the JSON tree.
+     */
+    public record SaveSlotInfo(int day, double wallet, String savedAt) {
+    }
+
+    /**
+     * Reads a slot's {@link SaveSlotInfo} without materialising a {@link GameState}. Returns empty
+     * for a missing file, unreadable JSON, a non-object root, or a wrong-{@code schemaVersion}
+     * file — the preview simply shows "empty" for any slot it cannot summarise, and never throws
+     * on the EDT.
+     */
+    public java.util.Optional<SaveSlotInfo> peek(Path source) {
+        if (!Files.exists(source)) {
+            return java.util.Optional.empty();
+        }
+        try (var in = Files.newInputStream(source)) {
+            JsonNode root = mapper.readTree(in);
+            if (root == null || !root.isObject() || root.path("schemaVersion").asInt(-1) != SCHEMA_VERSION) {
+                return java.util.Optional.empty();
+            }
+            long simMillis = root.path("simClock").path("simMillis").asLong(0L);
+            double wallet = root.path("wallet").asDouble(0.0);
+            String savedAt = root.path("savedAt").isMissingNode() || root.path("savedAt").isNull()
+                    ? null : root.path("savedAt").asText();
+            return java.util.Optional.of(new SaveSlotInfo(
+                    it.unige.portcommand.util.SimClock.gameDayOf(simMillis), wallet, savedAt));
+        } catch (IOException e) {
+            log.warn("peek of {} failed — slot shown as empty", source, e);
+            return java.util.Optional.empty();
+        }
+    }
+
     /** The shared, identically-configured mapper — fixtures and agents' Mementoable impls use it
      * so a hand-built test state and a production save round-trip through the SAME modules. */
     public ObjectMapper mapper() {

@@ -16,6 +16,7 @@ import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.gui.model.NegotiationTabRegistry;
@@ -52,6 +53,14 @@ public final class ChatPanel extends JPanel {
     private final Subscription<NegotiationClosedEvent> closedSubscription;
     private final Subscription<AssistantChatEvent> assistantSubscription;
     private final Subscription<SimClockTickEvent> clockSubscription;
+    private final Subscription<SettingsChangedEvent> settingsSubscription;
+    private final Subscription<it.unige.portcommand.persistence.events.GameLoadedEvent> loadedSubscription;
+
+    /** Live Channel-B autopilot state (task 21): seeded from the {@code defaults.json} value and
+     * updated on {@link SettingsChangedEvent}; every tab's Hint button follows it. The tabs read
+     * it through a {@code BooleanSupplier} so a toggle re-hides/re-shows Hint on the next refresh
+     * without threading the flag through every {@link DialogueTabView} field. */
+    private boolean autopilotEnabled = Settings.load().autopilotEnabled();
 
     /**
      * Headless-test convenience: a private frozen clock (nothing advances it), so the countdown
@@ -77,9 +86,31 @@ public final class ChatPanel extends JPanel {
         // strip-label-only refresh, never the full transcript re-render).
         this.clockSubscription = eventBus.subscribe(SimClockTickEvent.class, this::onClockTick, DeliveryMode.EDT);
         // Task 22: a loaded game never carries an open negotiation (saves drop/refuse them),
-        // so the pre-load world's tabs are stale — clean slate on the loaded-marker event.
-        eventBus.subscribe(it.unige.portcommand.persistence.events.GameLoadedEvent.class,
+        // so the pre-load world's tabs are stale — clean slate on the loaded-marker event. Stored +
+        // cancelled like every other subscription (adversarial finding 5 — it was the odd one out).
+        this.loadedSubscription = eventBus.subscribe(it.unige.portcommand.persistence.events.GameLoadedEvent.class,
                 this::onGameLoaded, DeliveryMode.EDT);
+        // Task 21: the Settings screen toggles autopilot live — update the flag and re-render open
+        // tabs so the Hint button appears/disappears at once (#9's live-visibility half).
+        this.settingsSubscription = eventBus.subscribe(SettingsChangedEvent.class, this::onSettingsChanged, DeliveryMode.EDT);
+        // #9: keep keystrokes in the tab the player is looking at — focusing an open tab's field
+        // makes it ready to type; focusing a CLOSED tab's (non-editable) field makes it swallow
+        // input rather than letting focus fall through to the comm-log filter combo.
+        tabbedPane.addChangeListener(e -> focusSelectedTabInput());
+    }
+
+    private void onSettingsChanged(SettingsChangedEvent event) {
+        autopilotEnabled = event.autopilotEnabled();
+        views.values().forEach(DialogueTabView::refresh);
+    }
+
+    /** Focuses the input of the currently selected tab (deferred so it runs after the tab-switch
+     * layout settles). No-op headless / when nothing is selected. */
+    private void focusSelectedTabInput() {
+        java.awt.Component selected = tabbedPane.getSelectedComponent();
+        if (selected instanceof DialogueTabView view) {
+            javax.swing.SwingUtilities.invokeLater(view::focusInput);
+        }
     }
 
     private void onGameLoaded(it.unige.portcommand.persistence.events.GameLoadedEvent event) {
@@ -88,6 +119,10 @@ public final class ChatPanel extends JPanel {
         tabbedPane.removeAll();
         removeAll();
         add(new JLabel("Waiting for a walk-in…", SwingConstants.CENTER), BorderLayout.CENTER);
+        // The respawned AssistantAgent boots autopilot OFF; keep this mirror in step so a walk-in
+        // after the load shows its Hint button (adversarial finding 4 — else the GUI stayed "ON"
+        // and hid Hint while the agent did nothing).
+        autopilotEnabled = false;
         revalidate();
         repaint();
     }
@@ -116,7 +151,8 @@ public final class ChatPanel extends JPanel {
             tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
             add(tabbedPane, BorderLayout.CENTER);
         }
-        DialogueTabView view = new DialogueTabView(dialogueId, registry, eventBus, processor, simClock);
+        DialogueTabView view = new DialogueTabView(dialogueId, registry, eventBus, processor, simClock,
+                () -> autopilotEnabled);
         views.put(dialogueId, view);
         tabbedPane.addTab(tabTitle(event), view);
         revalidate();
@@ -161,6 +197,8 @@ public final class ChatPanel extends JPanel {
         closedSubscription.cancel();
         assistantSubscription.cancel();
         clockSubscription.cancel();
+        settingsSubscription.cancel();
+        loadedSubscription.cancel();
     }
 
     /** Test-only: the shared model backing every tab. */

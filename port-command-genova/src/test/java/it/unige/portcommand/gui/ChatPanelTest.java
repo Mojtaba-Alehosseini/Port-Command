@@ -16,6 +16,7 @@ import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
+import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.gui.model.DialogueTabModel;
 import it.unige.portcommand.nlp.ChatInputProcessor;
@@ -514,11 +515,41 @@ class ChatPanelTest {
         assertFalse(view.hintButtonVisibleForTest());
     }
 
+    /**
+     * Task 21: the Settings screen's autopilot toggle hides/re-shows the Hint button LIVE — the
+     * ON case the task-19 test noted had "no injection seam" is now the {@link SettingsChangedEvent}
+     * path. Also the leak guard: after {@code removeNotify()} the settings subscription is cancelled,
+     * so a later event must not touch the detached panel's tabs.
+     */
+    @Test
+    @Timeout(5)
+    void autopilotSettingTogglesHintButtonLiveAndUnsubscribesOnRemoveNotify() throws Exception {
+        EventBus bus = new EventBus();
+        ChatPanel panel = new ChatPanel(bus, (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")));
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        DialogueTabView view = panel.viewForTest("nego-A");
+        assertTrue(view.hintButtonVisibleForTest(), "hint visible under the default autopilot=off");
+
+        bus.publish(new SettingsChangedEvent("NORMAL", 300L, true, "microsoft/Phi-4-mini-instruct"));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertFalse(view.hintButtonVisibleForTest(), "autopilot on hides the Hint button live");
+
+        bus.publish(new SettingsChangedEvent("NORMAL", 300L, false, "microsoft/Phi-4-mini-instruct"));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertTrue(view.hintButtonVisibleForTest(), "autopilot off re-shows it");
+
+        panel.removeNotify();
+        bus.publish(new SettingsChangedEvent("NORMAL", 300L, true, "microsoft/Phi-4-mini-instruct"));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertTrue(view.hintButtonVisibleForTest(),
+                "removeNotify() must cancel the settings subscription — no update on a detached panel");
+    }
+
     // ==================== Tab close bracket ====================
 
     @Test
     @Timeout(5)
-    void negotiationClosedGreysTheRightTabAndDisablesInput() throws Exception {
+    void negotiationClosedGreysTheRightTabAndMakesInputReadOnly() throws Exception {
         EventBus bus = new EventBus();
         ChatPanel panel = new ChatPanel(bus, (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")));
         openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
@@ -528,11 +559,14 @@ class ChatPanelTest {
         SwingUtilities.invokeAndWait(() -> { });
 
         assertTrue(panel.registry().tab("nego-A").isClosed());
-        assertFalse(panel.viewForTest("nego-A").inputFieldForTest().isEnabled());
+        // #9 (2026-07-18): the closed tab's input is now NON-EDITABLE rather than DISABLED — it
+        // stays focusable so it swallows keystrokes in place instead of dropping focus and letting
+        // them fall through to the comm-log filter combo. It remains enabled either way.
+        assertFalse(panel.viewForTest("nego-A").inputFieldForTest().isEditable());
         assertTrue(panel.tabTitleForTest("nego-A").endsWith("(closed)"));
         // The OTHER tab must be entirely untouched.
         assertFalse(panel.registry().tab("nego-B").isClosed());
-        assertTrue(panel.viewForTest("nego-B").inputFieldForTest().isEnabled());
+        assertTrue(panel.viewForTest("nego-B").inputFieldForTest().isEditable());
         assertFalse(panel.tabTitleForTest("nego-B").endsWith("(closed)"));
     }
 

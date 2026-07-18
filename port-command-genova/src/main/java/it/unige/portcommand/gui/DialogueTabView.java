@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -48,6 +49,11 @@ final class DialogueTabView extends JPanel {
     private final EventBus eventBus;
     private final ChatInputProcessor processor;
     private final SimClock simClock;
+    /** Live Channel-B autopilot state (task 21): the parent {@code ChatPanel} owns the flag and
+     * updates it on {@code SettingsChangedEvent}; the Hint button hides while autopilot is on.
+     * Read live rather than off the static {@code Settings.load()} so the toggle takes effect at
+     * once instead of only reflecting the {@code defaults.json} value. */
+    private final BooleanSupplier autopilotEnabled;
     /** Sim instant this dialogue's tab opened — the countdown's zero point (task 24). */
     private final long openedAtSimMillis;
 
@@ -59,13 +65,14 @@ final class DialogueTabView extends JPanel {
     private final ClarificationButtonsPanel clarificationPanel;
 
     DialogueTabView(String dialogueId, NegotiationTabRegistry registry, EventBus eventBus,
-                    ChatInputProcessor processor, SimClock simClock) {
+                    ChatInputProcessor processor, SimClock simClock, BooleanSupplier autopilotEnabled) {
         super(new BorderLayout(4, 4));
         this.dialogueId = dialogueId;
         this.registry = registry;
         this.eventBus = eventBus;
         this.processor = processor;
         this.simClock = simClock;
+        this.autopilotEnabled = autopilotEnabled;
         this.openedAtSimMillis = simClock.nowSimMillis();
 
         transcriptPane.setContentType("text/html");
@@ -106,9 +113,15 @@ final class DialogueTabView extends JPanel {
         transcriptPane.setText(ChatMessageRenderer.renderTranscript(tab.transcript()));
         boolean closed = tab.isClosed();
         offerStripLabel.setText(offerStripText(tab, closed));
-        inputField.setEnabled(!closed);
+        // #9 (checkpoint fix, 2026-07-18): a CLOSED tab keeps its input field ENABLED (hence
+        // focusable) but NON-EDITABLE. A non-editable focused field silently swallows typed
+        // characters (they no-op and never propagate); the old setEnabled(false) instead dropped
+        // focus, and the keystrokes fell through to the comm-log Performative filter combo, whose
+        // type-ahead then changed the filter. Send is still disabled and Enter is guarded in
+        // sendText, so a closed tab is inert.
+        inputField.setEditable(!closed);
         sendButton.setEnabled(!closed);
-        hintButton.setVisible(!closed && !Settings.load().autopilotEnabled());
+        hintButton.setVisible(!closed && !autopilotEnabled.getAsBoolean());
         // Task 19 play-test fix: the buttons are a PERSISTENT quick-action bar on every open
         // tab, not a fallback that only appears after a failed parse — players expected them
         // to always be there ("the buttons are not always appear!").
@@ -162,12 +175,19 @@ final class DialogueTabView extends JPanel {
         }
     }
 
+    /** Focuses this tab's input field — {@code ChatPanel} calls it on tab selection so keystrokes
+     * always land in the tab the player is looking at (an open tab is ready to type; a CLOSED
+     * tab's non-editable field swallows them — #9). No-op when the window is not showing. */
+    void focusInput() {
+        inputField.requestFocusInWindow();
+    }
+
     /** Package-private so a headless test can drive a send without simulating real
      * JTextField/ActionEvent plumbing. */
     void sendText(String text) {
         DialogueTabModel tab = registry.tab(dialogueId);
-        if (tab == null) {
-            return;
+        if (tab == null || tab.isClosed()) {
+            return; // #9: Enter on a closed tab's (non-editable) field must not send.
         }
         inputField.setText("");
         clarificationPanel.setVisible(false);

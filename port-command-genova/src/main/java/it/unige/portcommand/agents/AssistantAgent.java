@@ -10,8 +10,11 @@ import it.unige.portcommand.behaviours.assistant.AutopilotExecuteBehaviour;
 import it.unige.portcommand.behaviours.assistant.ExplainEventBehaviour;
 import it.unige.portcommand.behaviours.assistant.PolicyParseBehaviour;
 import it.unige.portcommand.behaviours.assistant.RecommendOnDemandBehaviour;
+import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.nlp.LLMBridge;
+import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
 
 /**
  * The ChatBDI-pattern assistant (one instance) — the project centerpiece. Full v1.1
@@ -32,6 +35,9 @@ public final class AssistantAgent extends PortCommandAgent {
     private AutopilotExecuteBehaviour autopilotPlan;
     private PolicyParseBehaviour policyPlan;
     private ExplainEventBehaviour explainPlan;
+    /** Task 21: the Settings screen's live autopilot toggle, delivered over the bus (never a
+     * direct GUI→agent call — INVARIANTS: GUI ↔ agents only through EventBus). */
+    private Subscription<SettingsChangedEvent> settingsSubscription;
 
     @Override
     protected void registerServices() {
@@ -57,6 +63,16 @@ public final class AssistantAgent extends PortCommandAgent {
         addBehaviour(autopilotPlan);
         addBehaviour(policyPlan);
         addBehaviour(explainPlan);
+
+        // Task 21: the Settings screen flips Channel-B autopilot live. CALLER_THREAD delivery
+        // runs the toggle synchronously on the publisher's thread (the EDT) — the target is a
+        // thread-safe AtomicBoolean AutopilotExecuteBehaviour re-reads, so no JADE-thread hop is
+        // needed and no Swing is touched. Subscribed here (not in a behaviour) because the handler
+        // needs no myAgent — sidestepping the OneShot-nulls-myAgent trap the four plans work
+        // around; cancelled in onTakeDown so an Assistant respawn (load teardown/rebuild) does not
+        // leave a dead lambda writing a garbage-collected agent's flag.
+        settingsSubscription = eventBus.subscribe(SettingsChangedEvent.class,
+                e -> autopilotEnabled.set(e.autopilotEnabled()), DeliveryMode.CALLER_THREAD);
     }
 
     /**
@@ -78,6 +94,9 @@ public final class AssistantAgent extends PortCommandAgent {
         }
         if (explainPlan != null) {
             explainPlan.cancelSubscription();
+        }
+        if (settingsSubscription != null) {
+            settingsSubscription.cancel();
         }
     }
 

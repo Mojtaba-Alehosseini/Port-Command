@@ -167,4 +167,20 @@ public final class SimClock {
     public long realSecondsPerGameDay() {
         return realSecondsPerGameDay;
     }
+
+    /**
+     * Changes ONLY the sim↔wall mapping rate, live, without touching accumulated sim time or
+     * the pause/day state (task 21's Settings day-length slider). Distinct from {@link #restore}:
+     * that adopts a whole persisted clock (and pauses); this is the "speed dial" — the already
+     * accumulated {@code simMillis} is left exactly where it is, so game time is continuous and
+     * only FUTURE {@link #advance(long)} deltas map at the new rate. Thread-safe: the field is
+     * {@code volatile} and every reader ({@code WallClockAdvancer}, the countdown) re-reads it.
+     */
+    public void setRealSecondsPerGameDay(long realSecondsPerGameDay) {
+        if (realSecondsPerGameDay <= 0) {
+            throw new IllegalArgumentException(
+                    "realSecondsPerGameDay must be > 0, got " + realSecondsPerGameDay);
+        }
+        this.realSecondsPerGameDay = realSecondsPerGameDay;
+    }
 }
