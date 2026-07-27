@@ -38,6 +38,39 @@ public final class InitiateCNPBehaviour extends OneShotBehaviour {
      */
     public static final String CNP_PROTOCOL = "fipa-contract-net";
 
+    /**
+     * Wall-clock floor for the CFP bid window and the CNP retry delay (audit A-03, 2026-07-27).
+     *
+     * <p>These two were the only sim→wall conversions in the codebase without one —
+     * {@code SimTickerBehaviour.wallPeriodMs}, {@code RefuelIfLowBehaviour} and
+     * {@code PoissonSpawnBehaviour.nextGapWallMs} all clamp. At the sandbox default (300
+     * real-seconds per game day) {@code simSecondsToWallMs(5)} is <b>17 ms</b>: every tug had to
+     * receive the CFP, score a bid and reply, and the hub's collector had to run, inside 17 ms —
+     * and on the first CNP of a process, with Jackson still class-loading its serializers, that is
+     * a coin flip. Under {@code --day-length 17} or below the integer division floors to a literal
+     * <b>0</b>, so the waker fired on the next scheduler pass and {@code closeAndAward()} ran with
+     * zero bids every single time. The retry delay collapsed with it — 30 sim-seconds is 5 ms at
+     * {@code --day-length 17} and 1 ms at the {@code --day-length 5} that {@code Main}'s own javadoc
+     * names for integration runs — so all three retries were spent as fast as the scheduler could
+     * run them. The visible outcome was an empty Contract Net: a held vessel, no
+     * CANCEL/ACCEPT/REJECT traffic at all.
+     *
+     * <p><b>Why 50 and not more.</b> The floor must stay BELOW the smallest window any shipped
+     * scenario already uses — 52 ms at 900 s/day — so that no scenario timing moves. That matters
+     * concretely: in {@code storm.json} the tanker SPAWNS at t=960 s and the wind crosses 30 kn at
+     * t=990 s, which is 312 ms of wall clock at 900 s/day, and the demo's CANCEL beat only exists if
+     * the tugs are awarded inside that gap. Note 312 ms is an UPPER BOUND on the real margin, not
+     * the margin itself: the grant follows the spawn through the arrival REQUEST, a DF resolve and
+     * the Prolog gate, so the window the award actually has is strictly shorter. A larger floor
+     * would eat the margin task 26 retimed (BUG-02). Pinned by {@code CnpWindowFloorTest}.
+     */
+    public static final long MIN_CNP_WINDOW_WALL_MS = 50L;
+
+    /** {@link SimClock#simSecondsToWallMs} with {@link #MIN_CNP_WINDOW_WALL_MS} applied. */
+    public static long cnpWindowWallMs(SimClock simClock, long simSeconds) {
+        return Math.max(MIN_CNP_WINDOW_WALL_MS, simClock.simSecondsToWallMs(simSeconds));
+    }
+
     private final CnpRequest req;
     private final ServiceLocator serviceLocator;
     private final SimClock simClock;
@@ -81,7 +114,7 @@ public final class InitiateCNPBehaviour extends OneShotBehaviour {
 
         BidCollectorBehaviour collector = new BidCollectorBehaviour(myAgent, cfpId, req);
         myAgent.addBehaviour(collector);
-        myAgent.addBehaviour(new WakerBehaviour(myAgent, simClock.simSecondsToWallMs(replyBySimSeconds)) {
+        myAgent.addBehaviour(new WakerBehaviour(myAgent, cnpWindowWallMs(simClock, replyBySimSeconds)) {
             @Override
             protected void onWake() {
                 collector.closeAndAward();

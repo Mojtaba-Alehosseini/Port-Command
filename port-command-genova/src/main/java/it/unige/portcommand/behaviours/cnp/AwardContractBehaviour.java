@@ -126,7 +126,11 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
             hm.cnpRetryAttempts().remove(req.vesselId());
             return;
         }
-        long delayWallMs = hm.simClock().simSecondsToWallMs(Settings.load().cnpRetryAfterSimSeconds());
+        // Floored (audit A-03): unfloored this was 1 ms under --day-length 5, so all three retries
+        // collected zero bids as fast as the scheduler could run them and the cap was spent in
+        // milliseconds. See InitiateCNPBehaviour.MIN_CNP_WINDOW_WALL_MS.
+        long delayWallMs = InitiateCNPBehaviour.cnpWindowWallMs(
+                hm.simClock(), Settings.load().cnpRetryAfterSimSeconds());
         myAgent.addBehaviour(new CnpRetryBehaviour(myAgent, hm.cnpCoordinator(), req, delayWallMs));
         log.info("CNP for {}: scheduling retry {}/{} in {} sim-s",
                 req.vesselId(), attempt, CnpRetryBehaviour.MAX_RETRIES, Settings.load().cnpRetryAfterSimSeconds());

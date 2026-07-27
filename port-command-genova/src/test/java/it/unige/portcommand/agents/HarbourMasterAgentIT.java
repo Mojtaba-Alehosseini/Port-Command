@@ -18,6 +18,7 @@ import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.CommLogEvent;
 import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.EndOfDayEvent;
@@ -389,6 +390,105 @@ class HarbourMasterAgentIT {
         assertEquals("no_compatible_berth", content(refuse).get("reason").asText());
 
         assertEventNeverPublished(NegotiationOpenedEvent.class, ne -> "nego-W002".equals(ne.dialogueId()), 500);
+    }
+
+    /**
+     * Audit A-01 (2026-07-27). The walk-in vessel's own REFUSE — {@code invalid_price} and
+     * {@code berth_incompatible}, both from {@code EvaluateCounterOfferBehaviour} — is addressed
+     * to the HarbourMaster on the {@code nego-} conversation with NO protocol tag. Before the fix
+     * the HM's whole inbound template set matched PROPOSE|CONFIRM|INFORM only, so the REFUSE was
+     * dropped on the floor: no chat reply, no comm-log line (receiveLogged only sees what a
+     * template matched), no notification, no round change — the dialogue the player drives BY HAND
+     * in front of the examiner simply froze until the vessel timed out.
+     *
+     * <p>The third instance of the BUG-01/BUG-03 class: a producer added (task 19) without a
+     * hub-side consumer, invisible to unit tests because {@code WalkInVesselAgentIT} supplies its
+     * own HarbourMaster stand-in and therefore receives the REFUSE itself.
+     */
+    @Test
+    void walkInRefusedTheCounter_reachesThePlayerAndBurnsNoRound() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W020", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vessel = spawnProbe("t26_vessel", null);
+
+        vessel.outbox.put(openingOffer(hm, spec, 4800.0, 6, "nego-W020"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class, e -> "nego-W020".equals(e.dialogueId()), 10_000));
+        assertEquals(1, hm.negotiationRounds().get("nego-W020").get(), "fixture: the opening offer is round 1");
+
+        vessel.outbox.put(negotiationRefuse(hm, "invalid_price", "nego-W020"));
+
+        AssistantChatEvent shown = awaitEvent(AssistantChatEvent.class,
+                e -> "nego-W020".equals(e.dialogueId()), 10_000);
+        assertNotNull(shown, "a vessel-side REFUSE must reach the player's tab, not the floor");
+        assertTrue(shown.text().contains("invalid_price"),
+                "the player must be told WHY the counter bounced, got: " + shown.text());
+
+        // The vessel deliberately does not burn a round on a malformed counter
+        // (EvaluateCounterOfferBehaviour's price guard returns before recordPlayerCounter),
+        // so the hub must not invent one either.
+        assertEquals(1, hm.negotiationRounds().get("nego-W020").get(), "a bounced counter burns no round");
+        assertNotNull(hm.negotiationBerths().get("nego-W020"), "the candidate berth survives a bounce");
+    }
+
+    /**
+     * Audit A-01, second half. The vessel's ACCEPT_PROPOSAL (it took the player's counter) was
+     * dropped by the same template gap. Functionally benign — the {@code deal_confirmed} CONFIRM
+     * follows and IS matched — but it meant the vessel's acceptance never reached the comm log or
+     * the performative tally, so the log showed only the HM accepting and never the vessel.
+     */
+    @Test
+    void walkInAcceptedTheCounter_isLoggedRatherThanDropped() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W023", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vessel = spawnProbe("t28_vessel", null);
+
+        vessel.outbox.put(openingOffer(hm, spec, 4800.0, 6, "nego-W023"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class, e -> "nego-W023".equals(e.dialogueId()), 10_000));
+
+        ACLMessage accept = MessageFactory.create(ACLMessage.ACCEPT_PROPOSAL);
+        accept.addReceiver(hm.getAID());
+        accept.setConversationId("nego-W023");
+        accept.setContent(TerminalJson.write(Map.of("intent", "accept", "price", 4700.0, "hours", 6)));
+        vessel.outbox.put(accept);
+
+        CommLogEvent logged = awaitEvent(CommLogEvent.class,
+                e -> e.performative() == ACLMessage.ACCEPT_PROPOSAL && "t28_vessel".equals(e.sender()), 10_000);
+        assertNotNull(logged, "the vessel's own ACCEPT-PROPOSAL must appear in the comm log");
+    }
+
+    /**
+     * Audit A-02 (2026-07-27). {@code pickBerth} took {@code findCompatibleBerths(...).get(0)}
+     * unconditionally, and R8's {@code findall} enumerates {@code instance_of/2} in clause order —
+     * so the pick was DETERMINISTIC: every walk-in of a given class resolved to the same berth
+     * (berth_1 for a cargo_vessel). {@code busy_day} scripts two walk-ins at t=300; both were
+     * offered, and could both be granted, one berth between them. Nothing downstream catches it:
+     * a walk-in sends the terminal no berth REQUEST at all (ADR-09), so {@code berth_busy} never
+     * fires and {@code PortStateArtifact} never learns the berth is taken.
+     */
+    @Test
+    void twoConcurrentWalkInsOfTheSameClass_getDifferentBerths() throws Exception {
+        assertTrue(PrologQueries.findCompatibleBerths("cargo_vessel", 9.0, 150.0, 30000).size() >= 2,
+                "fixture sanity: this class needs >= 2 compatible berths or the assertion is vacuous");
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec first = new VesselSpec("W021", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        VesselSpec second = new VesselSpec("W022", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vesselA = spawnProbe("t27_vessel_a", null);
+        Probe vesselB = spawnProbe("t27_vessel_b", null);
+
+        vesselA.outbox.put(openingOffer(hm, first, 4800.0, 6, "nego-W021"));
+        NegotiationOpenedEvent openedA = awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-W021".equals(e.dialogueId()), 10_000);
+        assertNotNull(openedA);
+
+        vesselB.outbox.put(openingOffer(hm, second, 4800.0, 6, "nego-W022"));
+        NegotiationOpenedEvent openedB = awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-W022".equals(e.dialogueId()), 10_000);
+        assertNotNull(openedB);
+
+        assertNotEquals(openedA.snapshot().berthId(), openedB.snapshot().berthId(),
+                "a berth already held by a live walk-in must not be offered to a second one");
+        assertTrue(PrologQueries.isCompatible(openedB.snapshot().berthId(), "cargo_vessel", 9.0, 150.0, 30000),
+                "the alternative berth must still be Prolog-compatible");
     }
 
     @Test
@@ -1103,6 +1203,16 @@ class HarbourMasterAgentIT {
         confirm.setConversationId(conversationId);
         confirm.setContent(TerminalJson.write(Map.of("intent", "deal_confirmed", "price", price, "hours", hours)));
         return confirm;
+    }
+
+    /** The vessel-side REFUSE {@code EvaluateCounterOfferBehaviour} sends on a malformed counter:
+     * a reply on the {@code nego-} conversation with NO protocol tag (audit A-01). */
+    private static ACLMessage negotiationRefuse(HarbourMasterAgent hm, String reason, String conversationId) {
+        ACLMessage refuse = MessageFactory.create(ACLMessage.REFUSE);
+        refuse.addReceiver(hm.getAID());
+        refuse.setConversationId(conversationId);
+        refuse.setContent(TerminalJson.write(Map.of("intent", "refuse", "reason", reason)));
+        return refuse;
     }
 
     private static ACLMessage withdrawMessage(HarbourMasterAgent hm, String reason, String conversationId) {

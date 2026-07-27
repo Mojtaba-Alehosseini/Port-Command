@@ -2,7 +2,11 @@ package it.unige.portcommand.behaviours.coordination;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import it.unige.portcommand.agents.HarbourMasterAgent;
@@ -11,6 +15,7 @@ import it.unige.portcommand.behaviours.cnp.InitiateCNPBehaviour;
 import it.unige.portcommand.behaviours.negotiation.WithdrawalBehaviour;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
@@ -66,6 +71,23 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             return;
         }
         JsonNode content = TerminalJson.readTreeOrNull(msg.getContent());
+        // Audit A-01 (2026-07-27): the vessel's own REFUSE / ACCEPT_PROPOSAL replies to the
+        // player's counter. Handled by PERFORMATIVE, before the intent switch, because a REFUSE
+        // with unparseable content must still reach the player rather than fall through the
+        // intent == null branch below.
+        if (msg.getPerformative() == ACLMessage.REFUSE) {
+            handleVesselRefuse(hm, msg, content);
+            return;
+        }
+        if (msg.getPerformative() == ACLMessage.ACCEPT_PROPOSAL) {
+            // No action: the vessel's DealClosedBehaviour CONFIRM follows immediately and is what
+            // grants the berth. Matching it at all is the point — receiveLogged is the comm log's
+            // only instrumentation point, so before this the log showed the HM accepting and never
+            // the vessel, and the performative tally missed the vessel's side of the close.
+            log.debug("{}: vessel accepted the player's counter (deal_confirmed follows)",
+                    msg.getSender().getLocalName());
+            return;
+        }
         String intent = text(content, "intent");
         if (intent == null) {
             // Tug-originated flow reports carry an "event" field, not "intent" (checkpoint-#6
@@ -143,6 +165,34 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         }
     }
 
+    /**
+     * The vessel bounced the player's counter (audit A-01). {@code EvaluateCounterOfferBehaviour}
+     * REFUSEs {@code invalid_price} (an absent/non-positive price — producer garbage it must not
+     * turn into a €0 deal) or {@code berth_incompatible}, in BOTH cases deliberately without
+     * consuming a round. So this surfaces the reason to the player's own tab and touches neither
+     * {@code negotiationRounds} nor {@code negotiationBerths}: the dialogue is exactly where it
+     * was, and the player can simply send a better counter.
+     *
+     * <p>Routed as an {@link AssistantChatEvent} because {@code ChatPanel} dispatches that by exact
+     * {@code dialogueId} into the tab the player is looking at — the conversation id the vessel
+     * replied on IS that dialogue id ({@code "nego-"+vesselId}, set by
+     * {@code DispatchPlayerCommandBehaviour}).
+     */
+    private void handleVesselRefuse(HarbourMasterAgent hm, ACLMessage msg, JsonNode content) {
+        String reason = text(content, "reason");
+        String dialogueId = msg.getConversationId();
+        String vessel = msg.getSender().getLocalName();
+        String explanation = switch (reason == null ? "" : reason) {
+            case "invalid_price" -> "That counter reached " + vessel + " without a usable price, so it "
+                    + "could not act on it (invalid_price). No round was used — send a price.";
+            case "berth_incompatible" -> vessel + " cannot use that berth (berth_incompatible). "
+                    + "No round was used — name a berth that fits, or leave the berth out.";
+            default -> vessel + " refused that counter (" + reason + "). No round was used.";
+        };
+        hm.eventBus().publish(new AssistantChatEvent(dialogueId, explanation));
+        log.info("{}: counter REFUSEd ({}) — surfaced to {}", vessel, reason, dialogueId);
+    }
+
     private void handleOffer(HarbourMasterAgent hm, ACLMessage msg, JsonNode content) {
         VesselSpec spec = TerminalJson.treeToOrNull(content.get("vessel_spec"), VesselSpec.class);
         if (spec == null) {
@@ -152,7 +202,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         int hours = (int) num(content, "hours");
         String dialogueId = msg.getConversationId();
 
-        String berthId = hm.negotiationBerths().computeIfAbsent(dialogueId, id -> pickBerth(spec));
+        String berthId = hm.negotiationBerths().computeIfAbsent(dialogueId, id -> pickBerth(hm, spec));
         if (berthId == null) {
             ACLMessage refuse = MessageFactory.reply(msg, ACLMessage.REFUSE);
             refuse.setContent(TerminalJson.write(Map.of("intent", "refuse", "reason", "no_compatible_berth")));
@@ -270,11 +320,47 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         }
     }
 
-    /** First Prolog-compatible berth for the vessel's dimensions (RULE R8), or {@code null}. */
-    private static String pickBerth(VesselSpec spec) {
+    /**
+     * First Prolog-compatible berth for the vessel's dimensions (RULE R8) that no live vessel is
+     * already holding, or {@code null} when the vessel fits nowhere at all.
+     *
+     * <p><b>Audit A-02 (2026-07-27).</b> This used to be a bare {@code compatible.get(0)}. R8's
+     * {@code findall} enumerates {@code instance_of/2} in clause order, so that pick was
+     * DETERMINISTIC — every walk-in of a given class got the SAME berth (berth_1 for a
+     * cargo_vessel). Two overlapping same-class walk-ins (which {@code busy_day} scripts at t=300)
+     * were therefore both offered, and could both be granted, one berth: two vessels docked in it,
+     * with the map still painting it FREE. Nothing downstream catches that — a walk-in sends the
+     * terminal no berth REQUEST at all (ADR-09), so {@code TerminalState}'s {@code berth_busy}
+     * guard never sees it and no {@code BerthOccupancyUpdate} is ever pushed.
+     *
+     * <p>The de-duplication is deliberately a PREFERENCE, not a constraint: if every compatible
+     * berth is already held, this falls back to the old first-compatible pick rather than
+     * returning {@code null}. Returning null would REFUSE {@code no_compatible_berth} — a lie,
+     * since the berth does fit and is merely busy — and would newly turn away vessels the port
+     * previously served. Real occupancy arbitration belongs with the terminal-REQUEST parity fix
+     * (backlog), which is where a truthful {@code berth_busy} can come from.
+     */
+    private static String pickBerth(HarbourMasterAgent hm, VesselSpec spec) {
         List<String> compatible = PrologQueries.findCompatibleBerths(
                 spec.vesselType(), spec.draft(), spec.length(), spec.tonnage());
-        return compatible.isEmpty() ? null : compatible.get(0);
+        if (compatible.isEmpty()) {
+            return null;
+        }
+        Set<String> held = hm.activeVessels().values().stream()
+                .map(VesselTracking::assignedBerth)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Optional<String> free = compatible.stream().filter(berth -> !held.contains(berth)).findFirst();
+        if (free.isEmpty()) {
+            // The residual A-02 case, made VISIBLE rather than silent (adversarial review, 2026-07-27):
+            // when every compatible berth is held we fall back to the old pick, which reproduces the
+            // original collision. Logging it is one line and turns "two vessels in one berth, map
+            // still FREE" from invisible into greppable.
+            log.warn("{}: every compatible berth {} is already held — falling back to {}; "
+                            + "this vessel may collide with an existing one (audit A-02 residual)",
+                    spec.vesselId(), compatible, compatible.get(0));
+        }
+        return free.orElse(compatible.get(0));
     }
 
     private static VesselTracking findByAid(HarbourMasterAgent hm, AID aid) {
@@ -287,8 +373,8 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
     }
 
     /**
-     * Matches PROPOSE/CONFIRM/INFORM on the standard envelope, excluding every
-     * OTHER tagged conversation on the HarbourMaster's shared inbound queue: CNP
+     * Matches PROPOSE/CONFIRM/INFORM/REFUSE/ACCEPT_PROPOSAL on the standard envelope, excluding
+     * every OTHER tagged conversation on the HarbourMaster's shared inbound queue: CNP
      * bids, the weather threshold alert, the customs pre-clearance reply, and the
      * terminal berth reply — each routed to its own behaviour instead. Excluding by
      * PROTOCOL TAG (not sender AID) is deliberate: an earlier AID-based exclusion
@@ -296,12 +382,25 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
      * successful DF lookup for that sender resolved, and this template would
      * wrongly swallow it (adversarial review finding, task 11) — a protocol tag set
      * at send time has no such timing dependency.
+     *
+     * <p><b>REFUSE / ACCEPT_PROPOSAL added by audit A-01 (2026-07-27).</b> The walk-in vessel's
+     * {@code EvaluateCounterOfferBehaviour} replies to the player's counter with both, on the
+     * {@code nego-} conversation and with no protocol tag — and no behaviour on this agent claimed
+     * either, so they sat in the inbox for the process's life. The four protocol exclusions above
+     * already fence off every OTHER producer of those two performatives that addresses the hub
+     * (tug bids under {@code fipa-contract-net}, terminal berth replies under the terminal
+     * protocol, customs under its own), which is what makes this widening safe. Verified by
+     * enumerating every {@code ACLMessage.REFUSE}/{@code ACCEPT_PROPOSAL} construction in
+     * {@code src/main}: the walk-in vessel's three are the only untagged ones aimed here.
      */
     private static final MessageTemplate TEMPLATE = MessageTemplate.and(
             MessageTemplate.and(MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY),
-                    MessageTemplate.or(MessageTemplate.or(MessageTemplate.MatchPerformative(ACLMessage.PROPOSE),
-                            MessageTemplate.MatchPerformative(ACLMessage.CONFIRM)),
-                            MessageTemplate.MatchPerformative(ACLMessage.INFORM))),
+                    MessageTemplate.or(
+                            MessageTemplate.or(MessageTemplate.or(MessageTemplate.MatchPerformative(ACLMessage.PROPOSE),
+                                    MessageTemplate.MatchPerformative(ACLMessage.CONFIRM)),
+                                    MessageTemplate.MatchPerformative(ACLMessage.INFORM)),
+                            MessageTemplate.or(MessageTemplate.MatchPerformative(ACLMessage.REFUSE),
+                                    MessageTemplate.MatchPerformative(ACLMessage.ACCEPT_PROPOSAL)))),
             MessageTemplate.and(MessageTemplate.and(
                     MessageTemplate.not(MessageTemplate.MatchProtocol(InitiateCNPBehaviour.CNP_PROTOCOL)),
                     MessageTemplate.not(MessageTemplate.MatchProtocol(HandleWeatherAlertBehaviour.WEATHER_ALERT_PROTOCOL))),
