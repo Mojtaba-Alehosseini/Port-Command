@@ -165,7 +165,16 @@ public final class NLPPipeline {
             // An 11th performative beyond the committed 10 (report note, per session brief).
             case "query_status" -> routed(ACLMessage.QUERY_REF, entitiesContent(r), ctx);
             case "set_constraint" -> routed(ACLMessage.REQUEST, entitiesContent(r), ctx);
-            case "request_help" -> routed(ACLMessage.REQUEST, entitiesContent(r), ctx);
+            // Audit D-06 (2026-07-27): carries an explicit marker instead of Rasa's entities (which
+            // for a bare "help" is an empty object, indistinguishable from set_constraint's). The
+            // GUI needs to tell a HELP request apart from a fleet-wide instruction so it can route
+            // the typed form to the Assistant, exactly as the "Talk to the assistant" clarification
+            // BUTTON already does — before this, `help` was classified correctly at F1 1.000 and
+            // then answered with "Fleet-wide commands aren't wired to a dialogue tab yet.", which
+            // is not merely unhelpful but false: a help request is not a fleet command. Nothing
+            // consumed the entities on this path (there was no consumer at all), so dropping them
+            // costs nothing. Same shape as set_policy's dedicated content below.
+            case "request_help" -> routed(ACLMessage.REQUEST, helpContent(), ctx);
             // Raw text handed onward to PolicyParser (task 10); Rasa's entities are ignored
             // on this path — PolicyParser owns its own regex-DSL parse of the original text.
             case "set_policy" -> routed(ACLMessage.REQUEST, policyContent(text), ctx);
@@ -222,6 +231,15 @@ public final class NLPPipeline {
     private static String policyContent(String text) {
         return TerminalJson.write(Map.of("policy_text", text));
     }
+
+    /** The {@code request_help} marker the GUI keys on — see {@link #HELP_REQUEST_KEY}. */
+    private static String helpContent() {
+        return TerminalJson.write(Map.of(HELP_REQUEST_KEY, true));
+    }
+
+    /** Content key marking a REQUEST as the player asking for help rather than issuing a
+     * fleet-wide instruction (audit D-06). Read by {@code DialogueTabView.dispatchRouted}. */
+    public static final String HELP_REQUEST_KEY = "help_request";
 
     private static PipelineResult clarification() {
         return new PipelineResult.NeedsClarification(ClarificationButtons.defaultOptions());

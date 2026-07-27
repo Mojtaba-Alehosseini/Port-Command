@@ -25,9 +25,28 @@ import it.unige.portcommand.util.RandomSource;
  * seeded per-vessel streams the Poisson spawner uses — their berth is negotiated at
  * grant time against whatever dims they rolled, so sampling is safe there.
  *
- * <p>Cargo classes are the canonical {@code cargo_class/1} atoms; the tanker's
- * {@code liquid_bulk} is deliberately hazmat so scripted tankers exercise the customs
- * pre-clearance leg (the storm scenario's cascade).
+ * <p>Cargo classes are the canonical {@code cargo_class/1} atoms.
+ *
+ * <p><b>Correction 2026-07-27 (audit D-04): no shipped vessel is hazmat, and the customs leg is
+ * therefore cold in every scenario.</b> This javadoc used to claim "the tanker's {@code liquid_bulk}
+ * is deliberately hazmat so scripted tankers exercise the customs pre-clearance leg (the storm
+ * scenario's cascade)". That is false against the shipped ontology. {@code port_ontology.pl:80}
+ * generates {@code is_hazmat(C) :- subclass_of(C, hazmat_cargo).} — a ONE-HOP test over the
+ * converter's direct edges — and the only direct children of {@code hazmat_cargo} are
+ * {@code hazmat_class_1} and {@code hazmat_class_3}. {@code liquid_bulk}'s edge is
+ * {@code subclass_of(liquid_bulk, cargo)}, not {@code hazmat_cargo}. The complete set of cargo
+ * classes any vessel ever receives is {@code liquid_bulk} / {@code containerized_cargo} /
+ * {@code general_cargo} here plus a hard-coded {@code general_cargo} for every Poisson walk-in —
+ * none of them hazmat — so {@code AutoFlowDispatcherBehaviour}'s {@code isHazmat} gate never opens,
+ * {@code sendCustomsRequest} is never called, and the CustomsAgent registers on the DF and receives
+ * nothing all game. R22–R24 and {@code CustomsClearedEvent} are exercised only by tests, which use
+ * {@code hazmat_class_1}/{@code hazmat_class_3} — values the simulation never produces.
+ *
+ * <p>Turning it on is one map entry ({@code "tanker" -> "hazmat_class_3"}) and is NOT taken here:
+ * it would start charging {@code ExpenseRules.customsClearance()} per scripted tanker and add a
+ * comm-log leg to all three scenarios, i.e. it moves money and traffic during the demo freeze and
+ * needs the §7.5 calibration re-checked. Filed for Moji's decision — see
+ * {@code docs/audit/AUDIT_RESOLUTION.md} (D-04) and {@code POST_DEMO_BACKLOG.md}.
  */
 public final class ScenarioVessels {
 

@@ -26,6 +26,7 @@ import it.unige.portcommand.nlp.ButtonOption;
 import it.unige.portcommand.nlp.ChatInputProcessor;
 import it.unige.portcommand.nlp.ClarificationButtons;
 import it.unige.portcommand.nlp.DialogueCtx;
+import it.unige.portcommand.nlp.NLPPipeline;
 import it.unige.portcommand.nlp.PipelineResult;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.SimClock;
@@ -111,6 +112,16 @@ final class DialogueTabView extends JPanel {
             return;
         }
         transcriptPane.setText(ChatMessageRenderer.renderTranscript(tab.transcript()));
+        // Audit C-28 (2026-07-27): JEditorPane.setText replaces the document and leaves the caret
+        // at offset 0, and the default DefaultCaret update policy then scrolls the viewport TO the
+        // caret — i.e. to the TOP. Every new message therefore jumped a scrolling transcript back
+        // to the orientation line, putting the vessel's newest counter (the thing the player is
+        // supposed to answer) off-screen, every turn, in the panel the demo spends the most time
+        // in. CommLogPanel already handles the same hazard with its wasAtBottom/setCaretPosition
+        // logic; the chat tab had no equivalent. Pinning the caret at the end is unconditional
+        // here rather than stick-to-bottom-only, because a transcript only ever grows at the end
+        // and the player has no reason to be parked mid-history when a new line lands.
+        transcriptPane.setCaretPosition(transcriptPane.getDocument().getLength());
         boolean closed = tab.isClosed();
         offerStripLabel.setText(offerStripText(tab, closed));
         // #9 (checkpoint fix, 2026-07-18): a CLOSED tab keeps its input field ENABLED (hence
@@ -215,8 +226,7 @@ final class DialogueTabView extends JPanel {
         String targetVesselId = routed.addressee() != null ? routed.addressee() : typingVesselId;
         PlayerCommandKind kind = kindFor(routed.msg().getPerformative());
         if (kind == null) {
-            appendSystem(routed.msg().getPerformative() == ACLMessage.INFORM
-                    ? "Noted." : "Fleet-wide commands aren't wired to a dialogue tab yet.");
+            handleUnroutableRequest(routed);
             return;
         }
         // Status is an OBSERVABLE, GUI-local concept — the tab already holds everything a
@@ -247,6 +257,49 @@ final class DialogueTabView extends JPanel {
         // acceptance and the deal closed with no visible cause — every routed action must be
         // legible). Button clicks skip this: their own label bubble already is the echo.
         appendSystem(interpretationEcho(kind, content, targetVesselId, typingVesselId));
+    }
+
+    /**
+     * Everything the pipeline routes that is NOT a per-dialogue move (audit D-06, 2026-07-27).
+     *
+     * <p>Five of the ten canonical intents land here — {@code request_help}, {@code set_constraint},
+     * {@code set_policy}, plus the DCG's {@code command} and {@code constrain} frames (the v1.1
+     * negation and command phenomenon blocks, PROJECT_DEFINITION §6.2) — because all five become
+     * an {@code ACLMessage.REQUEST} and {@code kindFor} has no {@code PlayerCommandKind} for it.
+     * They all used to get the single line "Fleet-wide commands aren't wired to a dialogue tab
+     * yet.", which was correct for two of them and <b>false</b> for the rest: a request for help is
+     * not a fleet command, and a policy is not one either. The parse was right in every case and
+     * the GUI then said something untrue about it.
+     *
+     * <p>This does not invent new dispatch — none of these has an in-game consumer in v1, which is
+     * a scope fact and is stated as such. What it does is (a) send the typed {@code help} to the
+     * Assistant, which the "Talk to the assistant" clarification BUTTON already did, so only the
+     * typed form was dead; and (b) say something true about the other four.
+     */
+    private void handleUnroutableRequest(PipelineResult.Routed routed) {
+        if (routed.msg().getPerformative() == ACLMessage.INFORM) {
+            appendSystem("Noted.");
+            return;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> content =
+                (Map<String, Object>) TerminalJson.readOrNull(routed.msg().getContent(), Map.class);
+        if (content != null && Boolean.TRUE.equals(content.get(NLPPipeline.HELP_REQUEST_KEY))) {
+            appendSystem("→ Asking the Assistant.");
+            onHint();
+            return;
+        }
+        if (content != null && content.get("policy_text") != null) {
+            // Deliberately says what happened HERE, not what the game does or does not support:
+            // whether a policy input surface exists is an open decision (audit C-01/D-02), and a
+            // message asserting "v1 has none" would silently become false the moment that decision
+            // goes the other way. Found by the adversarial review, 2026-07-27.
+            appendSystem("I read that as a standing policy. A chat tab dispatches per-dialogue moves "
+                    + "only, so nothing was set from here — handle this negotiation directly.");
+            return;
+        }
+        appendSystem("I understood a fleet-wide instruction, but v1 only dispatches per-dialogue "
+                + "moves — nothing fleet-wide was sent.");
     }
 
     /**
@@ -382,6 +435,16 @@ final class DialogueTabView extends JPanel {
     /** Test-only accessors. */
     JTextField inputFieldForTest() {
         return inputField;
+    }
+
+    /** Test-only: where the transcript caret sits (audit C-28 — it must be at the end). */
+    int caretPositionForTest() {
+        return transcriptPane.getCaretPosition();
+    }
+
+    /** Test-only: the transcript document's length, the expected caret position. */
+    int transcriptLengthForTest() {
+        return transcriptPane.getDocument().getLength();
     }
 
     /** Test-only: the offer strip's current text (task-24 countdown assertions). */

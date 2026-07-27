@@ -283,8 +283,17 @@ class ChatPanelTest {
                 .filter(e -> e.speaker() == DialogueTabModel.Speaker.SYSTEM)
                 .map(DialogueTabModel.ChatEntry::text).toList();
         // systemTexts[0] is the tab's orientation line; the two send outcomes follow it.
-        assertEquals(List.of("Noted.", "Fleet-wide commands aren't wired to a dialogue tab yet."),
-                systemTexts.subList(1, systemTexts.size()));
+        // The REQUEST line's WORDING changed on 2026-07-27 (audit D-06): it used to be
+        // "Fleet-wide commands aren't wired to a dialogue tab yet." for every REQUEST, which was
+        // false for request_help and set_policy. This test's REQUEST carries no marker, so it is
+        // the genuine fleet-wide case and still gets the fleet-wide answer — the assertion it
+        // makes (neither dispatches; both leave exactly one system bubble) is unchanged.
+        assertEquals(2, systemTexts.size() - 1, "exactly one system bubble per send, as before");
+        assertEquals("Noted.", systemTexts.get(1));
+        assertTrue(systemTexts.get(2).contains("fleet-wide"),
+                "a REQUEST with no help/policy marker is the fleet-wide case: " + systemTexts.get(2));
+        assertFalse(systemTexts.get(2).contains("Assistant"),
+                "an unmarked REQUEST must NOT be re-routed to the Assistant");
     }
 
     // ==================== NeedsClarification / quick-action bar ====================
@@ -361,6 +370,99 @@ class ChatPanelTest {
         List<HintButtonEvent> hints = published(bus, HintButtonEvent.class);
         assertEquals(1, hints.size());
         assertEquals("nego-A", hints.get(0).dialogueId());
+    }
+
+    // ==================== Audit fixes (2026-07-27) ====================
+
+    /**
+     * Audit D-06. A typed {@code help} is classified {@code request_help} (holdout F1 1.000),
+     * routed to an {@code ACLMessage.REQUEST}, and {@code kindFor} has no {@code PlayerCommandKind}
+     * for REQUEST — so the tab answered with "Fleet-wide commands aren't wired to a dialogue tab
+     * yet.", which is not merely unhelpful but <b>false</b>: a request for help is not a fleet
+     * command. The clarification BUTTON already reached the Assistant; only the typed form died.
+     */
+    @Test
+    @Timeout(5)
+    void aTypedHelpRequestReachesTheAssistantJustLikeTheButton() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+
+        processor.returning(new PipelineResult.Routed(
+                acl(ACLMessage.REQUEST, Map.of(it.unige.portcommand.nlp.NLPPipeline.HELP_REQUEST_KEY, true))));
+        panel.viewForTest("nego-A").sendText("help");
+        SwingUtilities.invokeAndWait(() -> { });
+
+        List<HintButtonEvent> hints = published(bus, HintButtonEvent.class);
+        assertEquals(1, hints.size(), "a typed help must fire the same HintButtonEvent as the button");
+        assertEquals("nego-A", hints.get(0).dialogueId());
+        assertTrue(published(bus, PlayerCommandEvent.class).isEmpty(),
+                "help is not a per-dialogue move — nothing binding may be dispatched");
+    }
+
+    /**
+     * Audit D-06, the other half: a genuine fleet-wide instruction (the DCG's {@code command} and
+     * {@code constrain} frames — PROJECT_DEFINITION §6.2's negation and command phenomenon blocks)
+     * still says so, and still dispatches nothing. What must NOT happen is the help route firing
+     * for it.
+     */
+    @Test
+    @Timeout(5)
+    void aFleetWideInstructionIsAnsweredTruthfullyAndDispatchesNothing() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+
+        processor.returning(new PipelineResult.Routed(
+                acl(ACLMessage.REQUEST, Map.of("action", "hold", "patient", "tanker"))));
+        panel.viewForTest("nego-A").sendText("hold all tankers until the wind drops");
+        SwingUtilities.invokeAndWait(() -> { });
+
+        assertTrue(published(bus, HintButtonEvent.class).isEmpty(), "not a help request");
+        assertTrue(published(bus, PlayerCommandEvent.class).isEmpty(), "nothing fleet-wide is dispatched in v1");
+        String transcript = panel.registry().tab("nego-A").transcript().toString();
+        assertTrue(transcript.contains("fleet-wide"), "the player must be told what was understood: " + transcript);
+    }
+
+    /**
+     * Audit C-28 — an invariant GUARD, <b>not</b> a reproduction. Stated plainly because the
+     * difference matters: this test passes both with and without the fix.
+     *
+     * <p>The reported mechanism is that {@code JEditorPane.setText} replaces the document and
+     * leaves the caret at offset 0, after which {@code DefaultCaret}'s update policy scrolls the
+     * viewport to the caret — i.e. to the top — so every new message would jump a scrolling
+     * transcript back to the orientation line and hide the vessel's newest counter. <b>Headlessly
+     * that does not reproduce:</b> with no realized viewport, {@code DefaultCaret.insertUpdate}
+     * carries the dot along with the full-document insert and the caret lands at the end anyway.
+     * The auditor said as much — the finding is marked "needs one run to confirm".
+     *
+     * <p>So what shipped is a defensive one-liner ({@code setCaretPosition(getLength())} after
+     * {@code setText}) that is a no-op when the caret is already at the end and correct when it is
+     * not, plus this guard so a future refactor cannot silently leave the caret at the top. Whether
+     * the transcript actually scrolled at 1280×800 is still open and belongs to the GUI walk —
+     * see {@code docs/audit/AUDIT_RESOLUTION.md} (C-28).
+     */
+    @Test
+    @Timeout(5)
+    void theTranscriptStaysPinnedToTheNewestMessage() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        DialogueTabView view = panel.viewForTest("nego-A");
+
+        for (int i = 0; i < 8; i++) {
+            processor.returning(new PipelineResult.Routed(acl(ACLMessage.PROPOSE, Map.of("price", 2000 + i, "hours", 5))));
+            view.sendText("how about " + (2000 + i) + " for 5 hours");
+            SwingUtilities.invokeAndWait(() -> { });
+        }
+
+        int length = view.transcriptLengthForTest();
+        assertTrue(length > 0, "setup: the transcript must have content to scroll");
+        assertEquals(length, view.caretPositionForTest(),
+                "the caret must sit at the end so the viewport shows the newest message, not the top");
     }
 
     @Test

@@ -59,17 +59,22 @@ class WildSetIndependenceTest {
         List<String> out = new ArrayList<>();
         Goldens.load("/nlp/golden/dcg_goldens.jsonl").forEach(g -> out.add(g.get("utterance").asText()));
         Goldens.load("/nlp/golden/intent_goldens.jsonl").forEach(g -> out.add(g.get("utterance").asText()));
+        out.addAll(rasaCorpus());
+        return out;
+    }
+
+    /** The Rasa corpus alone (both splits) — the intent goldens' disjointness reference. */
+    private static List<String> rasaCorpus() {
         // The authoring CSV is the Rasa corpus's source of truth and lives outside the Java module.
         Path csv = Path.of("..", "nlp-python", "rasa", "data", "nlu_authoring.csv");
         assertTrue(Files.exists(csv), () -> "authoring corpus not found at " + csv.toAbsolutePath()
                 + " — fix this path rather than letting the independence check pass vacuously");
+        List<String> out = new ArrayList<>();
         try (var lines = Files.lines(csv, StandardCharsets.UTF_8)) {
             lines.skip(1).forEach(line -> {
-                // intent,text,annotated_text,split — `text` never contains a comma in this corpus,
-                // and a row that ever does will simply be compared as a longer string (safe).
-                String[] cells = line.split(",");
-                if (cells.length >= 2) {
-                    out.add(cells[1]);
+                List<String> cells = splitCsvRow(line);
+                if (cells.size() >= 2) {
+                    out.add(cells.get(1));
                 }
             });
         } catch (IOException e) {
@@ -78,22 +83,67 @@ class WildSetIndependenceTest {
         return out;
     }
 
-    /** The Rasa corpus alone (both splits) — the intent goldens' disjointness reference. */
-    private static List<String> rasaCorpus() {
-        List<String> out = new ArrayList<>();
-        Path csv = Path.of("..", "nlp-python", "rasa", "data", "nlu_authoring.csv");
-        assertTrue(Files.exists(csv), () -> "authoring corpus not found at " + csv.toAbsolutePath());
-        try (var lines = Files.lines(csv, StandardCharsets.UTF_8)) {
-            lines.skip(1).forEach(line -> {
-                String[] cells = line.split(",");
-                if (cells.length >= 2) {
-                    out.add(cells[1]);
+    /**
+     * RFC-4180-aware field split of one authoring row ({@code intent,text,annotated_text,split}).
+     *
+     * <p><b>Audit D-07 (2026-07-27).</b> This used to be {@code line.split(",")} plus {@code cells[1]},
+     * on the written assumption that "`text` never contains a comma in this corpus". <b>30 of the
+     * 580 rows do</b>, and they are properly RFC-4180-quoted, so the naive split handed the guard a
+     * truncated, quote-prefixed fragment as its reference string. For example row 3's
+     * {@code "Offering 1800 for the cargo, 6 hours"} became {@code "Offering 1800 for the cargo} —
+     * five tokens instead of seven. A wild-set author echoing that sentence (exactly the shape a
+     * multi-slot utterance invites) would score a symmetric difference of 2 and a length difference
+     * of 2 against the fragment, so the &le;1-token rule never fired and the contaminated row
+     * passed. Thirty of the developer's most distinctive utterances were unprotected by the ONE
+     * guard that makes the honesty number both course reports cite non-vacuous.
+     */
+    private static List<String> splitCsvRow(String line) {
+        List<String> cells = new ArrayList<>();
+        StringBuilder cell = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (inQuotes) {
+                if (c != '"') {
+                    cell.append(c);
+                } else if (i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    cell.append('"'); // RFC-4180 escaped quote inside a quoted field
+                    i++;
+                } else {
+                    inQuotes = false;
                 }
-            });
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            } else if (c == '"' && cell.isEmpty()) {
+                inQuotes = true;
+            } else if (c == ',') {
+                cells.add(cell.toString());
+                cell.setLength(0);
+            } else {
+                cell.append(c);
+            }
         }
-        return out;
+        cells.add(cell.toString());
+        return cells;
+    }
+
+    /**
+     * Audit D-07's loud-failure half: the reference corpus must never contain a fragment with a
+     * dangling quote, and the quote-aware path must actually be exercised. Without the second
+     * assertion this guard could silently go back to being vacuous if the corpus were ever
+     * regenerated without quoted fields.
+     */
+    @Test
+    void theAuthoringCorpusIsReadWithItsQuotedFieldsIntact() {
+        List<String> corpus = rasaCorpus();
+        assertEquals(580, corpus.size(), "every authoring row must yield a text column");
+
+        List<String> truncated = corpus.stream().filter(s -> s.startsWith("\"") || s.endsWith("\"")).toList();
+        assertEquals(List.of(), truncated,
+                "a reference string with a dangling quote is a naive-split fragment, not an utterance");
+
+        long withCommas = corpus.stream().filter(s -> s.contains(",")).count();
+        assertTrue(withCommas > 0,
+                "no corpus row contains a comma — the quote-aware reader is untested, and the "
+                        + "≤1-token guard below would be comparing against whatever split(\",\") returns");
     }
 
     /**
