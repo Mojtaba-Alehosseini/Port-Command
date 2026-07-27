@@ -48,7 +48,9 @@ public final class TimeoutWithdrawalBehaviour extends SimTickerBehaviour {
         long elapsed = simClock().nowSimMillis() - state.negotiationStartedAtSimMillis();
         if (elapsed > (long) state.maxWaitMinutes() * SIM_MILLIS_PER_MINUTE) {
             concluded.set(true);
-            log.info("{}: negotiation timed out ({} sim-min) -> withdraw", myAgent.getLocalName(),
+            // DEBUG since task 26: ForwardWalkInToPlayerBehaviour logs this same withdrawal at the
+        // hub, which is where an operator looks. Vessel-side detail stays in the file log.
+        log.debug("{}: negotiation timed out ({} sim-min) -> withdraw", myAgent.getLocalName(),
                     state.maxWaitMinutes());
             myAgent.addBehaviour(new WithdrawalBehaviour(myAgent, stateRef, conversationId, "timeout"));
             myAgent.removeBehaviour(this);

@@ -35,7 +35,9 @@ public final class JadeAgentSpawner implements AgentSpawner {
         try {
             AgentController controller = container.createNewAgent(localName, agentClass.getName(), args);
             controller.start();
-            log.info("Agent {} spawned (class={})", localName, agentClass.getSimpleName());
+            // DEBUG since task 26: one line per agent, and vessels are created continuously.
+        // The roster's single "Roster spawned: 10 fixed agents" line covers boot.
+        log.debug("Agent {} spawned (class={})", localName, agentClass.getSimpleName());
             return controller;
         } catch (StaleProxyException e) {
             throw new AgentSpawnException("failed to spawn agent " + localName, e);

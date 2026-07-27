@@ -18,6 +18,7 @@ import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.scenario.Scenario.BerthInit;
 import it.unige.portcommand.scenario.Scenario.TugInit;
+import it.unige.portcommand.scenario.events.BerthFloodEvent;
 import it.unige.portcommand.scenario.events.NotificationScriptedEvent;
 import it.unige.portcommand.scenario.events.ScriptedEvent;
 import it.unige.portcommand.scenario.events.SpawnVesselEvent;
@@ -42,6 +43,8 @@ public final class ScenarioLoader {
     private static final Set<String> WEATHER_STATES = Set.of("sunny", "cloudy", "stormy");
     private static final Set<String> TUG_STATUSES = Set.of("AVAILABLE", "REFUELING");
     private static final Set<String> SEVERITIES = Set.of("INFO", "WARN", "EMERGENCY");
+    /** The four berths the port has ({@code _schema.json}'s berth_id enum). Task 26: BerthFlood. */
+    private static final Set<String> BERTH_IDS = Set.of("berth_1", "berth_2", "berth_3", "berth_4");
     private static final Set<String> DIFFICULTIES = Set.of("EASY", "NORMAL", "HARD");
 
     private final ObjectMapper mapper = JsonMapper.builder().build();
@@ -192,6 +195,15 @@ public final class ScenarioLoader {
                             at + ".severity must be INFO|WARN|EMERGENCY");
                     require(notBlank(notification.text()), at + ".text is required");
                 }
+                case BerthFloodEvent flood ->
+                        // The null test comes FIRST: BERTH_IDS is a Set.of(...), whose contains(null)
+                        // throws NPE by contract rather than returning false. _schema.json does not
+                        // list berthId as required, so {"type":"BerthFlood","simTimeSeconds":780} is
+                        // schema-legal and must produce this message, not a stack trace. (The schema
+                        // is documentation only — this method is the sole gate.)
+                        require(flood.berthId() != null && BERTH_IDS.contains(flood.berthId()),
+                                at + ".berthId must be berth_1|berth_2|berth_3|berth_4, got "
+                                        + flood.berthId());
             }
         }
     }

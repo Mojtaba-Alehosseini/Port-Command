@@ -36,7 +36,10 @@ public abstract class PortCommandAgent extends Agent {
     @Override
     protected final void setup() {
         MDC.put("agent", getLocalName());
-        log.info("Starting agent {}", getLocalName());
+        // DEBUG, not INFO (task 26): this fires for every agent, and at sandbox pacing a
+        // walk-in spawns roughly every 24 s. Agent lifecycle is developer information; the
+        // game-level "a vessel arrived" line below it is the operator information.
+        log.debug("Starting agent {}", getLocalName());
         // Per-agent locator, bound to this agent's thread. getContainerController()
         // is a JADE instance handle (verified via javap), not a static registry —
         // honours the constructor-arg/no-static-DI rule (ADR-02).
@@ -126,7 +129,7 @@ public abstract class PortCommandAgent extends Agent {
                         FIPAManagementVocabulary.REGISTER, dfd, null);
                 ACLMessage reply = FIPAService.doFipaRequestClient(this, request, DF_REGISTER_TIMEOUT_MS);
                 if (reply != null) {
-                    log.info("DF registered: type='{}' name='{}'", serviceType, serviceName);
+                    log.debug("DF registered: type='{}' name='{}'", serviceType, serviceName);
                     return;
                 }
                 log.warn("DF register timed out ({} ms) for {} (service '{}', attempt {}/{})",
@@ -134,7 +137,7 @@ public abstract class PortCommandAgent extends Agent {
             } catch (FIPAException e) {
                 if (attempt > 1 && String.valueOf(e.getMessage()).contains("already-registered")) {
                     // A previous timed-out attempt actually landed; the DF knows us. Success.
-                    log.info("DF registered: type='{}' name='{}' (prior attempt had landed)",
+                    log.debug("DF registered: type='{}' name='{}' (prior attempt had landed)",
                             serviceType, serviceName);
                     return;
                 }

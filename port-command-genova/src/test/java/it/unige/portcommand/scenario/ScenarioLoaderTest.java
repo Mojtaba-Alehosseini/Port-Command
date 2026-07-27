@@ -8,6 +8,7 @@ import java.util.Map;
 import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.prolog.PrologQueries;
+import it.unige.portcommand.scenario.events.BerthFloodEvent;
 import it.unige.portcommand.scenario.events.NotificationScriptedEvent;
 import it.unige.portcommand.scenario.events.SpawnVesselEvent;
 import it.unige.portcommand.scenario.events.TugRefuelCompleteEvent;
@@ -91,6 +92,15 @@ class ScenarioLoaderTest {
                 .filter(e -> "tanker".equals(e.vesselType())).findFirst().orElseThrow();
         assertEquals(900, tanker.simTimeSeconds());
         assertEquals("AGGRESSIVE", tanker.personality());
+        // 2026-07-27 (task 26): the scripted terminal-flood — the DISCONFIRM trigger
+        // PROJECT_DEFINITION §13.3 has always attributed to Busy Day but which nothing in the
+        // shipped game ever fired. berth_2 is deliberate: terminal_container is the only terminal
+        // that manages it (AgentRoster), so exactly one terminal retracts and the other ignores
+        // the broadcast, which is the behaviour RetractIfFloodBehaviour documents.
+        List<BerthFloodEvent> floods = eventsOf(s, BerthFloodEvent.class);
+        assertEquals(1, floods.size(), "busy_day carries exactly one scripted flood");
+        assertEquals("berth_2", floods.get(0).berthId());
+        assertEquals(780, floods.get(0).simTimeSeconds());
     }
 
     @Test
@@ -105,16 +115,43 @@ class ScenarioLoaderTest {
                 .filter(Scenario.BerthInit::occupied).toList();
         assertEquals(2, occupied.size());
         assertTrue(occupied.stream().allMatch(b -> "cargo_vessel".equals(b.vessel().vesselType())));
-        // Storm at 480s (crosses the 30-kn tanker limit), clear at 1500s.
+        // Storm at 990s (crosses the 30-kn tanker limit), clear at 1980s.
+        //
+        // THESE TIMES ARE LOAD-BEARING (retimed 2026-07-27, task 26 — was 480/1500). The storm
+        // must strike while the tanker is IN TRANSIT WITH TUGS, because that is the only state
+        // HandleWeatherAlertBehaviour cancels an escort from, and that window is exactly
+        // TransitToBerthBehaviour.TRANSIT_SIM_MILLIS = 120 sim-s wide. At 480 the tanker (spawned
+        // at t=0) had been docked for six sim-minutes, so the storm scenario's whole reason to
+        // exist — the CANCEL performative PROJECT_DEFINITION §13 assigns to it — never fired in a
+        // real playthrough; `--smoke` found it. The spawn also moved to 960 so the first
+        // 15-sim-minute weather broadcast (t=900) can establish the alert baseline first:
+        // WeatherAlertPolicy.transition treats a null previous reading as "no transition", so a
+        // storm before that tick is silent no matter how it is timed.
         List<WeatherChangeScriptedEvent> weather = eventsOf(s, WeatherChangeScriptedEvent.class);
         assertEquals(2, weather.size());
-        assertEquals(480, weather.get(0).simTimeSeconds());
+        assertEquals(990, weather.get(0).simTimeSeconds());
         assertEquals(32, weather.get(0).windKn());
-        assertEquals(1500, weather.get(1).simTimeSeconds());
+        assertEquals(1980, weather.get(1).simTimeSeconds());
         assertEquals(24, weather.get(1).windKn());
         // The EMERGENCY banner rides the storm moment.
         assertTrue(eventsOf(s, NotificationScriptedEvent.class).stream()
-                .anyMatch(n -> "EMERGENCY".equals(n.severity()) && n.simTimeSeconds() == 480));
+                .anyMatch(n -> "EMERGENCY".equals(n.severity()) && n.simTimeSeconds() == 990));
+        // The tanker enters the world 60 sim-s BEFORE the storm — the margin that keeps it in
+        // transit when the alert lands (120 sim-s transit, so ~58 sim-s of slack either side).
+        SpawnVesselEvent tanker = eventsOf(s, SpawnVesselEvent.class).stream()
+                .filter(e -> SpawnVesselEvent.CHANNEL_CONTRACTED.equals(e.channel()))
+                .findFirst().orElseThrow();
+        assertEquals(960, tanker.simTimeSeconds(), "tanker spawn must precede the storm");
+        long gap = weather.get(0).simTimeSeconds() - tanker.simTimeSeconds();
+        assertTrue(gap > 0 && gap <= 30,
+                "the storm must land EARLY inside the tanker's 120 sim-s transit, not late: gap="
+                        + gap + " sim-s. 30 is one ScriptedEventBehaviour tick, the smallest gap the "
+                        + "engine can express, and the margin that matters is REAL time, not sim time: "
+                        + "at the storm's 900 s/day the whole 120 sim-s window is 1.25 WALL seconds. "
+                        + "The first version of this fix used a 60 sim-s gap and left only ~330 ms "
+                        + "between the hold and the docking (measured across five runs), because the "
+                        + "scripted event itself fires up to a tick late. See docs/BUGS_FOUND.md "
+                        + "BUG-02.");
     }
 
     // ---- seed rule ----
@@ -268,7 +305,10 @@ class ScenarioLoaderTest {
         ServiceContract local = storm.contracts().get(0);
         assertEquals("tanker", local.vesselType());
         assertEquals("berth_1", local.berthId(), "the only tanker-capable berth stays free at boot");
-        assertInstanceOf(NotificationScriptedEvent.class, storm.events().get(1),
-                "the 0s tanker notification rides beside the spawn");
+        // The t=0 "tanker due" WARN now OPENS the script (index 0) and the spawn follows at
+        // t=960 — retimed 2026-07-27 (task 26) so the storm can catch the tanker mid-transit;
+        // see stormMatchesItsSpec() for why those numbers are load-bearing.
+        assertInstanceOf(NotificationScriptedEvent.class, storm.events().get(0),
+                "the tanker-due warning opens the script, ahead of the spawn");
     }
 }

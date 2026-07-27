@@ -38,17 +38,17 @@
     }
   ],
   "events": [
-    { "type": "SpawnVessel", "simTimeSeconds": 0, "vesselType": "tanker", "channel": "contracted",
-      "vesselId": null, "contractRef": "ST-901", "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null },
     { "type": "Notification", "simTimeSeconds": 0, "severity": "WARN",
-      "text": "Tanker T901 inbound for berth 1. Forecast: severe wind building within the hour." },
-    { "type": "WeatherChange", "simTimeSeconds": 480, "windKn": 32, "visibility": "poor", "swell": 4.0, "state": "stormy" },
-    { "type": "Notification", "simTimeSeconds": 480, "severity": "EMERGENCY",
+      "text": "Tanker T901 due within the hour for berth 1. Forecast: severe wind building." },
+    { "type": "SpawnVessel", "simTimeSeconds": 960, "vesselType": "tanker", "channel": "contracted",
+      "vesselId": null, "contractRef": "ST-901", "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null },
+    { "type": "WeatherChange", "simTimeSeconds": 990, "windKn": 32, "visibility": "poor", "swell": 4.0, "state": "stormy" },
+    { "type": "Notification", "simTimeSeconds": 990, "severity": "EMERGENCY",
       "text": "Storm: wind 32 kn — tanker operations unsafe. Escorts cancelled, vessels held offshore." },
-    { "type": "SpawnVessel", "simTimeSeconds": 900, "vesselType": "cargo_vessel", "channel": "walk_in",
+    { "type": "SpawnVessel", "simTimeSeconds": 1500, "vesselType": "cargo_vessel", "channel": "walk_in",
       "vesselId": "STORM-W1", "contractRef": null, "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null },
-    { "type": "WeatherChange", "simTimeSeconds": 1500, "windKn": 24, "visibility": "good", "swell": 1.0, "state": "cloudy" },
-    { "type": "Notification", "simTimeSeconds": 1500, "severity": "INFO",
+    { "type": "WeatherChange", "simTimeSeconds": 1980, "windKn": 24, "visibility": "good", "swell": 1.0, "state": "cloudy" },
+    { "type": "Notification", "simTimeSeconds": 1980, "severity": "INFO",
       "text": "Storm clearing, tanker proceeding — escorts re-dispatched." }
   ]
 }

@@ -66,7 +66,8 @@ public final class WithdrawalBehaviour extends OneShotBehaviour {
         vessel.marketHistory().record(new DealRecord(
                 vessel.spec().vesselType(), hours, lastPrice,
                 vessel.simClock().nowSimMillis(), outcomeFor(reason)));
-        log.info("{}: withdrew ({}) -> INFORM + recorded + doDelete", myAgent.getLocalName(), reason);
+        // DEBUG since task 26 - see TimeoutWithdrawalBehaviour: one event, one INFO line, at the hub.
+        log.debug("{}: withdrew ({}) -> INFORM + recorded + doDelete", myAgent.getLocalName(), reason);
         myAgent.doDelete();
     }
 

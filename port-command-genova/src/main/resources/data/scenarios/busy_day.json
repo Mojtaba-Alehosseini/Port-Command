@@ -49,6 +49,7 @@
     { "type": "SpawnVessel", "simTimeSeconds": 300, "vesselType": "ferry", "channel": "walk_in",
       "vesselId": "WALKIN-B2", "contractRef": null, "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null },
     { "type": "TugRefuelComplete", "simTimeSeconds": 720, "tugId": 1 },
+    { "type": "BerthFlood", "simTimeSeconds": 780, "berthId": "berth_2" },
     { "type": "SpawnVessel", "simTimeSeconds": 900, "vesselType": "tanker", "channel": "walk_in",
       "vesselId": "WALKIN-B3", "contractRef": null, "personality": "AGGRESSIVE", "minPrice": null, "targetPrice": null, "etaSimMillis": null }
   ]

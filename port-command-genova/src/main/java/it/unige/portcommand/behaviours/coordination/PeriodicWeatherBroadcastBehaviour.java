@@ -72,6 +72,24 @@ public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour 
         this.eventBus = eventBus;
     }
 
+    /**
+     * Runs one broadcast cycle immediately, off the ticker.
+     *
+     * <p><b>2026-07-27 (task 26).</b> A scripted {@code WeatherChange} adopts its snapshot into
+     * the shared cell synchronously, but the ALERT that actually holds vessels only left on the
+     * next periodic tick — up to 15 sim-minutes later. A vessel's channel-to-berth transit is
+     * {@code TransitToBerthBehaviour.TRANSIT_SIM_MILLIS} = 2 sim-minutes, so the alert essentially
+     * never caught a vessel in transit, and the storm scenario's CANCEL cascade — the one the
+     * scenario's own EMERGENCY banner announces as "Escorts cancelled, vessels held offshore",
+     * and the one PROJECT_DEFINITION §13 counts on for the CANCEL performative — could not fire.
+     * The scripted event now calls this so the change takes effect at the instant it is scripted
+     * for. Idempotent with respect to the ticker: {@code lastObserved} advances here, so the next
+     * periodic tick simply sees no transition.
+     */
+    public void broadcastNow() {
+        onSimTick();
+    }
+
     @Override
     protected void onSimTick() {
         if (simClock().isPaused()) {

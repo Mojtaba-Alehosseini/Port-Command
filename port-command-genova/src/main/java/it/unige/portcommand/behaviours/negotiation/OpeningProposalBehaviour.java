@@ -78,7 +78,9 @@ public final class OpeningProposalBehaviour extends OneShotBehaviour {
 
         stateRef.set(state.markStarted(vessel.simClock().nowSimMillis())
                 .recordOwnOffer(opening, state.dealHours()));
-        log.info("{} opened at {} ({}h) -> harbour-master", myAgent.getLocalName(), opening, state.dealHours());
+        // DEBUG since task 26: the PROPOSE is already in the comm log, and the hub logs the
+        // forwarded offer. Three classes were reporting one event.
+        log.debug("{} opened at {} ({}h) -> harbour-master", myAgent.getLocalName(), opening, state.dealHours());
     }
 
     /**

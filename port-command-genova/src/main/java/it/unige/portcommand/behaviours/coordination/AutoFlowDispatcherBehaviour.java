@@ -9,6 +9,7 @@ import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.ContractedFeeEarnedEvent;
+import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.harbourmaster.BerthPositions;
 import it.unige.portcommand.harbourmaster.CnpRequest;
 import it.unige.portcommand.harbourmaster.VesselTracking;
@@ -50,13 +51,38 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
     private static final Logger log = LoggerFactory.getLogger(AutoFlowDispatcherBehaviour.class);
     /** Set on the terminal berth REQUEST; its CONFIRM/REFUSE reply preserves it via {@code createReply()}. */
     public static final String TERMINAL_BERTH_PROTOCOL = "port-command-terminal-berth";
+    /**
+     * Set by {@link RetractIfFloodBehaviour} on its unsolicited flood DISCONFIRM.
+     *
+     * <p>Matched by PROTOCOL rather than by performative-plus-ontology (adversarial review, task
+     * 26): the ontology is the whole game's, so a bare DISCONFIRM+ontology template claims EVERY
+     * DISCONFIRM anyone ever sends the HarbourMaster. That is correct today only because the flood
+     * retract is the single producer in {@code src/main}; a second one added later would be
+     * silently swallowed here and logged as a berth retraction with a null berth. A tag costs one
+     * line and removes the class of bug.
+     */
+    public static final String FLOOD_RETRACT_PROTOCOL = "port-command-flood-retract";
     private static final MessageTemplate REQUEST_TEMPLATE = MessageTemplate.and(
             MessageTemplate.MatchPerformative(ACLMessage.REQUEST),
             MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));
-    private static final MessageTemplate TERMINAL_REPLY_TEMPLATE = MessageTemplate.and(
-            MessageTemplate.MatchProtocol(TERMINAL_BERTH_PROTOCOL),
-            MessageTemplate.or(MessageTemplate.MatchPerformative(ACLMessage.CONFIRM),
-                    MessageTemplate.MatchPerformative(ACLMessage.REFUSE)));
+    /**
+     * The terminal's replies to the berth REQUEST (protocol-tagged CONFIRM/REFUSE), plus — since
+     * 2026-07-27, task 26 — the terminal's UNSOLICITED flood retraction. That DISCONFIRM is not a
+     * reply to anything: {@code RetractIfFloodBehaviour} builds a fresh message with no protocol
+     * and no conversation id, so it needs its own arm rather than a protocol tag it has no honest
+     * claim to. Without this arm the message would sit in the HarbourMaster's queue forever, and —
+     * because {@code receiveLogged} is the comm log's only instrumentation point — DISCONFIRM
+     * would never appear in the log or the end-of-day performative tally even once the flood
+     * trigger existed. Matched on the game ontology so it cannot swallow platform traffic.
+     */
+    private static final MessageTemplate TERMINAL_REPLY_TEMPLATE = MessageTemplate.or(
+            MessageTemplate.and(
+                    MessageTemplate.MatchProtocol(TERMINAL_BERTH_PROTOCOL),
+                    MessageTemplate.or(MessageTemplate.MatchPerformative(ACLMessage.CONFIRM),
+                            MessageTemplate.MatchPerformative(ACLMessage.REFUSE))),
+            MessageTemplate.and(
+                    MessageTemplate.MatchPerformative(ACLMessage.DISCONFIRM),
+                    MessageTemplate.MatchProtocol(FLOOD_RETRACT_PROTOCOL)));
     private static final MessageTemplate TEMPLATE = MessageTemplate.or(REQUEST_TEMPLATE, TERMINAL_REPLY_TEMPLATE);
     private static final int DF_RETRY_ATTEMPTS = 3;
     // Must exceed ServiceLocator's 1 s DF-search cache TTL, or a retry inside that
@@ -84,7 +110,7 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
             return;
         }
         if (msg.getPerformative() != ACLMessage.REQUEST) {
-            logTerminalReply(msg);
+            logTerminalReply(hm, msg);
             return;
         }
 
@@ -187,12 +213,31 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
         hm.sendLogged(request);
     }
 
-    /** Drains + logs a terminal's CONFIRM/REFUSE reply to the berth REQUEST above — see the class javadoc. */
-    private void logTerminalReply(ACLMessage reply) {
-        if (reply.getPerformative() == ACLMessage.CONFIRM) {
-            log.info("terminal CONFIRM ({}) <- {}", reply.getContent(), reply.getSender().getLocalName());
-        } else {
-            log.debug("terminal REFUSE ({}) <- {}", reply.getContent(), reply.getSender().getLocalName());
+    /**
+     * Drains + logs a terminal's CONFIRM/REFUSE reply to the berth REQUEST above, and the
+     * unsolicited flood DISCONFIRM — see {@link #TERMINAL_REPLY_TEMPLATE}'s javadoc.
+     *
+     * <p>The retraction is surfaced to the player (a berth just disappeared under a docked
+     * vessel — the player has to know) and logged at WARN. It deliberately does NOT re-plan the
+     * affected vessel or rewrite {@code activeVessels}: re-berthing on a retraction is a gameplay
+     * rule, and task 26 is a hardening task. Filed in {@code docs/POST_DEMO_BACKLOG.md}.
+     */
+    private void logTerminalReply(HarbourMasterAgent hm, ACLMessage reply) {
+        switch (reply.getPerformative()) {
+            case ACLMessage.CONFIRM ->
+                    log.info("terminal CONFIRM ({}) <- {}", reply.getContent(), reply.getSender().getLocalName());
+            case ACLMessage.DISCONFIRM -> {
+                JsonNode content = TerminalJson.readTreeOrNull(reply.getContent());
+                String berthId = text(content, "berth_id");
+                log.warn("terminal DISCONFIRM: berth {} retracted <- {}",
+                        berthId, reply.getSender().getLocalName());
+                hm.eventBus().publish(new NotificationEvent(
+                        "Berth " + (berthId == null ? "?" : berthId.replace('_', ' '))
+                                + " has been retracted by the terminal.",
+                        NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis()));
+            }
+            default ->
+                    log.debug("terminal REFUSE ({}) <- {}", reply.getContent(), reply.getSender().getLocalName());
         }
     }
 

@@ -26,6 +26,8 @@ public final class WeatherAgent extends PortCommandAgent
 
     private final AtomicReference<WeatherSnapshot> current = new AtomicReference<>();
     private DebugWeatherOverrideBehaviour debugOverride;
+    /** Held so a scripted weather change can force an immediate broadcast (task 26). */
+    private PeriodicWeatherBroadcastBehaviour broadcast;
 
     @Override
     protected void registerServices() {
@@ -50,8 +52,9 @@ public final class WeatherAgent extends PortCommandAgent
                 args.overrides() != null ? args.overrides() : List.of();
 
         addBehaviour(new WeatherEvolutionBehaviour(this, simClock, current, matrix, weatherRng, overrides));
-        addBehaviour(new PeriodicWeatherBroadcastBehaviour(this, simClock, current, getServiceLocator(),
-                eventBus));
+        broadcast = new PeriodicWeatherBroadcastBehaviour(this, simClock, current, getServiceLocator(),
+                eventBus);
+        addBehaviour(broadcast);
         // Task 24: Debug-menu storm trigger (checkpoint demos) — uncounted parent-pkg behaviour.
         debugOverride = new DebugWeatherOverrideBehaviour(this, current, simClock, eventBus);
         addBehaviour(debugOverride);
@@ -64,6 +67,22 @@ public final class WeatherAgent extends PortCommandAgent
             current.set(restored);
             log.info("{}: restored weather {} kn / {} / {}", getLocalName(),
                     restored.wind(), restored.visibility(), restored.state());
+        }
+    }
+
+    /**
+     * Broadcasts the current weather immediately instead of waiting for the next 15-sim-minute
+     * tick (task 26). Called by {@code WeatherChangeScriptedEvent} through a {@code
+     * OneShotBehaviour} added to this agent, so the work runs on THIS agent's own thread — the
+     * scripted event itself executes on the HarbourMaster's.
+     *
+     * <p>Without it a scripted storm's alert arrived up to 15 sim-minutes late, while a vessel's
+     * channel-to-berth transit lasts 2, so the storm scenario's CANCEL cascade never fired in a
+     * real playthrough. See {@link PeriodicWeatherBroadcastBehaviour#broadcastNow()}.
+     */
+    public void broadcastWeatherNow() {
+        if (broadcast != null) {
+            broadcast.broadcastNow();
         }
     }
 

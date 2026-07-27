@@ -198,6 +198,42 @@ tasks.named<JavaExec>("run") {
     // java.library.path comes from applicationDefaultJvmArgs above.
     environment("SWI_HOME_DIR", swiHome())
     environment("PATH", nativePath)
+
+    // `./gradlew run -PjadePort=11099` — the escape hatch for a machine where something else
+    // owns RMI port 1099 (start.sh --jade-port / start.bat -JadePort pass this).
+    // It has to be a PROJECT property forwarded as a systemProperty: a plain `-Djade.main.port=…`
+    // on the gradlew command line sets it on the Gradle DAEMON, and a JavaExec fork does not
+    // inherit the daemon's system properties, so the app would never see it and would silently
+    // bind 1099 anyway. Same trap as the -Pjfr note below.
+    (project.findProperty("jadePort") as String?)?.let { systemProperty("jade.main.port", it) }
+
+    // --- Task 26: opt-in JVM Flight Recorder for the profiling run --------------------
+    // `./gradlew run -Pjfr` (what profile.sh / profile.bat invoke) records the APPLICATION
+    // JVM to logs/profile.jfr. planning/26 §26.4 sketched
+    // `-Dorg.gradle.jvmargs="-XX:StartFlightRecording=..."` — that is wrong and was corrected
+    // here (dated reconciliation 2026-07-27): org.gradle.jvmargs configures the Gradle DAEMON,
+    // not the forked JavaExec the game runs in, so it would have profiled the build tool and
+    // produced a recording with no game frames in it at all.
+    //
+    // -Pjfr.seconds overrides the 900 s (15-minute) default, which is the acceptance
+    // criterion's session length. The recording is written on dump/exit; the JVM must be shut
+    // down cleanly (close the window — the GUI's handler calls System.exit) or the file is
+    // truncated, hence dumponexit.
+    if (project.hasProperty("jfr")) {
+        val seconds = (project.findProperty("jfr.seconds") as String?) ?: "900"
+        val jfrFile = layout.projectDirectory.file("logs/profile.jfr").asFile
+        jvmArgs(
+            "-XX:StartFlightRecording=duration=${seconds}s,filename=${jfrFile.absolutePath}," +
+                "settings=profile,dumponexit=true,name=port-command",
+            "-XX:FlightRecorderOptions=stackdepth=128",
+        )
+        // mkdirs at EXECUTION time, not configuration time: touching the filesystem while the
+        // build script is being configured breaks the configuration cache (adversarial review).
+        doFirst {
+            jfrFile.parentFile.mkdirs()
+            logger.lifecycle("JFR: recording ${seconds}s to ${jfrFile.absolutePath}")
+        }
+    }
 }
 
 // Phase-0 diagnostic: resolve + verify the three native artefacts. Fails fast

@@ -12,6 +12,12 @@ import it.unige.portcommand.scenario.ScriptedEventBehaviour;
  * {@code TutorialStepAdvance}, {@code Notification} — the last publishes task 17's
  * canonical {@code gui.events.NotificationEvent}, never a second class).
  *
+ * <p><b>2026-07-27 (task 26): 5 wire names become 6.</b> {@code BerthFlood} was added because
+ * PROJECT_DEFINITION §13's "DISCONFIRM via the scripted Busy-Day terminal-flood" had no
+ * implementation — {@code RetractIfFloodBehaviour} waited for an INFORM the shipped game never
+ * sent, so one of the ten performatives was unreachable in live play. See
+ * {@link BerthFloodEvent}; it adds no behaviour class and no gameplay rule.
+ *
  * <p>Lives HERE (not in the parent {@code scenario} package the planning file's table
  * sketched) because Java's sealed-type rule requires unnamed-module permitted subtypes
  * in the SAME package as their sealed interface — dated reconciliation 2026-07-18; the
@@ -28,10 +34,11 @@ import it.unige.portcommand.scenario.ScriptedEventBehaviour;
         @JsonSubTypes.Type(value = WeatherChangeScriptedEvent.class, name = "WeatherChange"),
         @JsonSubTypes.Type(value = TugRefuelCompleteEvent.class, name = "TugRefuelComplete"),
         @JsonSubTypes.Type(value = TutorialStepAdvanceEvent.class, name = "TutorialStepAdvance"),
-        @JsonSubTypes.Type(value = NotificationScriptedEvent.class, name = "Notification")})
+        @JsonSubTypes.Type(value = NotificationScriptedEvent.class, name = "Notification"),
+        @JsonSubTypes.Type(value = BerthFloodEvent.class, name = "BerthFlood")})
 public sealed interface ScriptedEvent
         permits SpawnVesselEvent, WeatherChangeScriptedEvent, TugRefuelCompleteEvent,
-                TutorialStepAdvanceEvent, NotificationScriptedEvent {
+                TutorialStepAdvanceEvent, NotificationScriptedEvent, BerthFloodEvent {
 
     /** Sim-seconds since scenario start at which this event is due. */
     long simTimeSeconds();

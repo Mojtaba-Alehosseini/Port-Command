@@ -12,6 +12,7 @@ import it.unige.portcommand.gui.MainWindow;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
 import it.unige.portcommand.persistence.GameSession;
 import it.unige.portcommand.persistence.SaveLoadManager;
+import it.unige.portcommand.smoke.SmokeRunner;
 
 /**
  * Application entry point. Builds the {@link GameSession} (which owns the JADE boot, the
@@ -25,7 +26,8 @@ import it.unige.portcommand.persistence.SaveLoadManager;
  * beats any scenario pacing override); {@code --load <path>} (task 22) boots FROM a save
  * file instead of starting fresh; {@code --scenario <key>} (task 23) boots one of the 3
  * scripted scenarios ({@code tutorial | busy_day | storm}) — mutually exclusive with
- * {@code --load}.
+ * {@code --load}; {@code --smoke} (task 26) runs {@link SmokeRunner#runAll()} headlessly and
+ * exits with its failure count instead of starting a session at all.
  */
 public final class Main {
 
@@ -34,6 +36,11 @@ public final class Main {
 
     public static void main(String[] args) throws Exception {
         List<String> argList = Arrays.asList(args);
+        // Task 26: --smoke owns the whole process — it boots and tears down three worlds of its
+        // own, so it must run BEFORE any of the normal session wiring below.
+        if (argList.contains("--smoke")) {
+            System.exit(SmokeRunner.runAll() == 0 ? 0 : 1);
+        }
         boolean guiRequested = argList.contains("--gui");
         applyDayLengthOverride(argList);
         Path loadPath = loadPathArg(argList);

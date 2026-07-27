@@ -1,23 +1,11 @@
 #!/usr/bin/env bash
-# Port Command Genova launcher.
-# Starts the Flask LLM sidecar (task 13) in the BACKGROUND — its model loads
-# while the game boots, and /health returns 503 until it is ready (the Java
-# LLMBridge in task 14 polls it, so the game never blocks on it). Then runs the
-# game in the foreground. The Rasa NLU server is started separately via
-# nlp-python/start_rasa.sh.
-set -euo pipefail
-cd "$(dirname "$0")"                          # port-command-genova/
-ROOT="$(cd .. && pwd)"
-
-LLM="$ROOT/nlp-python/start_llm.sh"
-if [ -f "$LLM" ]; then
-  echo "Starting LLM sidecar -> http://127.0.0.1:5006 (loads model in background)..."
-  bash "$LLM" &
-  LLM_PID=$!
-  # Stop the sidecar when the game exits.
-  trap '[ -n "${LLM_PID:-}" ] && kill "$LLM_PID" 2>/dev/null || true' EXIT
-else
-  echo "note: $LLM not found — skipping sidecar (explanations fall back to template text)."
-fi
-
-./gradlew run
+# Superseded by the repo-root ../start.sh (task 26, 2026-07-27).
+#
+# This script used to start the LLM sidecar and the game, but NOT Rasa — so a launch through it
+# left the NLU cascade without its middle stage, and every typed sentence the DCG could not
+# parse fell to a clarification. That is a bad thing to discover during a demo, so rather than
+# leave a partial launcher lying next to a complete one, this delegates.
+#
+# The root launcher boots Rasa (:5005, from .venv-rasa) then the sidecar (:5006, from .venv with
+# LLM_QUANT=onnx) then the game, health-checks between each, and stops all three on Ctrl-C.
+exec "$(cd "$(dirname "$0")/.." && pwd)/start.sh" "$@"
