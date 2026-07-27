@@ -110,6 +110,10 @@ public final class MainWindow extends JFrame {
     private JMenuItem loadItem;
     /** True while a load worker thread owns the world — menus disabled, no re-entry. */
     private boolean loadInProgress;
+    /** True from the moment {@link #saveGame()} starts its worker until the worker's
+     * {@code invokeLater} lands. EDT-only, like {@code loadInProgress}. See
+     * {@link #toggleMenuResume()} for what it protects (audit C-08). */
+    private boolean saveInProgress;
 
     /** Live mirror of the three non-clock editable settings (task 21): seeded from
      * {@code defaults.json} and updated on {@link SettingsChangedEvent} so re-opening the Settings
@@ -146,7 +150,11 @@ public final class MainWindow extends JFrame {
         this.lifecycle = lifecycle;
         this.leaderboard = leaderboard;
         this.session = session;
-        this.pauseOverlay = new PauseOverlay(this::toggleMenuResume);
+        // Audit C-04: the glass pane covers the menu-bar strip too, so it is handed the menu bar's
+        // live bounds (in glass-pane coordinates) to pass mouse events through and to skip when
+        // painting the scrim. Computed lazily on every hit-test/paint — the menu bar does not exist
+        // yet at this point in construction, and its height can change with the look-and-feel.
+        this.pauseOverlay = new PauseOverlay(this::toggleMenuResume, this::menuBarBoundsInGlassPane);
         setGlassPane(pauseOverlay);
         setJMenuBar(buildMenuBar(eventBus, onClose));
         layOutPanels(eventBus, portStateArtifact, chatInputProcessor);
@@ -349,7 +357,35 @@ public final class MainWindow extends JFrame {
         bar.add(buildSettingsMenu(eventBus));
         bar.add(buildDebugMenu(eventBus));
         bar.add(buildHelpMenu());
+        makePopupsHeavyweight(bar);
         return bar;
+    }
+
+    /**
+     * Forces every menu's dropdown to be a HEAVYWEIGHT popup — the second half of the C-04 fix
+     * (found by the adversarial review of the first half, 2026-07-27).
+     *
+     * <p>Passing the menu-bar strip through {@code PauseOverlay.contains} makes the menus OPEN while
+     * paused, and stops there. Swing's default popup is <b>lightweight</b>: {@code LightWeightPopup}
+     * adds the {@code JPopupMenu} to the frame's own {@code JLayeredPane} — and {@code JRootPane.addImpl}
+     * forces the glass pane to child index 0, above the entire layered pane. So the dropdown would
+     * render UNDER the PAUSED scrim and its items would land in the region where {@code contains()}
+     * still reports true, i.e. **Save and Load would still be unclickable while paused** — the exact
+     * two items {@code reflectMode()} deliberately keeps enabled in PAUSED, and the whole reason C-04
+     * is a defect rather than a design choice. A heavyweight popup is its own window and is not in the
+     * root pane's z-order at all, so the glass pane cannot cover it.
+     *
+     * <p>Set per menu rather than through the global {@code JPopupMenu.setDefaultLightWeightPopupEnabled}
+     * static, which would change popup behaviour for every combo box and tooltip in the app.
+     * {@code MenuPopupWeightTest} pins it.
+     */
+    static void makePopupsHeavyweight(JMenuBar bar) {
+        for (int i = 0; i < bar.getMenuCount(); i++) {
+            JMenu menu = bar.getMenu(i);
+            if (menu != null) {
+                menu.getPopupMenu().setLightWeightPopupEnabled(false);
+            }
+        }
     }
 
     /** Settings → Settings…: opens the four-knob dialog seeded with the current live values (day
@@ -411,6 +447,7 @@ public final class MainWindow extends JFrame {
      */
     private void saveGame() {
         saveItem.setEnabled(false);
+        saveInProgress = true; // audit C-08: Esc must not un-pause the world mid-quiesce
         Thread worker = new Thread(() -> {
             String info = null;
             String error = null;
@@ -424,6 +461,7 @@ public final class MainWindow extends JFrame {
             String infoMessage = info;
             String errorMessage = error;
             javax.swing.SwingUtilities.invokeLater(() -> {
+                saveInProgress = false;
                 reflectMode();
                 if (errorMessage != null) {
                     JOptionPane.showMessageDialog(this, errorMessage, "Save Game", JOptionPane.ERROR_MESSAGE);
@@ -533,6 +571,16 @@ public final class MainWindow extends JFrame {
         }
     }
 
+    /** The menu bar's rectangle expressed in the glass pane's coordinate space, or an empty
+     * rectangle when there is no menu bar / it is not showing (audit C-04). */
+    private java.awt.Rectangle menuBarBoundsInGlassPane() {
+        javax.swing.JMenuBar bar = getJMenuBar();
+        if (bar == null || !bar.isVisible() || bar.getParent() == null) {
+            return new java.awt.Rectangle();
+        }
+        return javax.swing.SwingUtilities.convertRectangle(bar.getParent(), bar.getBounds(), pauseOverlay);
+    }
+
     /** Esc toggles pause/resume — bound WHEN_IN_FOCUSED_WINDOW so it works from any panel. */
     private void installEscBinding() {
         getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
@@ -545,7 +593,24 @@ public final class MainWindow extends JFrame {
         });
     }
 
+    /**
+     * The single funnel for Esc, Game → Pause and the overlay's Resume button.
+     *
+     * <p><b>Audit C-08 (2026-07-27):</b> gated while a manual save is in flight. The pause
+     * {@code GameSession.saveNow} takes around the snapshot IS the quiesce —
+     * {@code buildOnHarbourMasterThread}'s own javadoc says "no HM behaviour can be mid-step while
+     * ours runs; THE CLOCK IS PAUSED so nothing sim-driven moves elsewhere". Esc bypassed that
+     * entirely: the player sees an unexplained PAUSED scrim appear (the save's own pause), presses
+     * Esc, the clock restarts, and the one-shot snapshot behaviour then walks a world that is
+     * moving — tug legs, cargo timers and walk-in patience all advancing underneath it. Normally
+     * milliseconds; the code budgets up to {@code MANUAL_SAVE_TIMEOUT_SECONDS = 5} for it.
+     * Secondary: the save's {@code finally { resumeIfPaused(); }} would otherwise silently cancel
+     * a pause the player took deliberately during the write.
+     */
     private void toggleMenuResume() {
+        if (saveInProgress || loadInProgress) {
+            return;
+        }
         if (lifecycle.mode() == GameMode.RUNNING) {
             lifecycle.pause();
         } else if (lifecycle.mode() == GameMode.PAUSED) {

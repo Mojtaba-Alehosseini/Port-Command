@@ -1,6 +1,7 @@
 package it.unige.portcommand.gui.model;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -74,10 +75,17 @@ public final class CommLogModel {
      * by design).
      */
     public void clear() {
-        while (!entries.isEmpty()) {
-            archiver.archive(entries.getFirst());
-            entries.removeFirst();
-        }
+        // Audit C-06 (2026-07-27): ONE batched write instead of one file open/append/close per
+        // entry. This runs on the EDT off GameLoadedEvent, and at the 500-entry cap the per-entry
+        // form froze the UI for a quarter-second to over a second at exactly the moment the demo
+        // switches scenarios.
+        //
+        // ARCHIVE, THEN DISCARD — in that order, matching add()'s eviction contract. The first cut
+        // of this fix copied, cleared, and then archived; the adversarial review caught it. It was
+        // only observably equivalent because archiveAll swallows its exceptions, which is precisely
+        // the kind of "correct by accident" this ordering rule exists to forbid.
+        archiver.archiveAll(new ArrayList<>(entries));
+        entries.clear();
         onChange.run();
     }
 

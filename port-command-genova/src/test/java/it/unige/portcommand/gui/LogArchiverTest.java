@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LogArchiverTest {
@@ -41,6 +42,49 @@ class LogArchiverTest {
         JsonNode second = MAPPER.readTree(lines.get(1));
         assertEquals("second", second.get("paraphrase").asText());
         assertEquals("tug_1", second.get("sender").asText());
+    }
+
+    /**
+     * Audit C-06 (2026-07-27). {@code CommLogModel.clear()} used to call {@link LogArchiver#archive}
+     * once per entry — up to 500 sequential {@code createDirectories} + open + append + close calls
+     * <b>on the EDT</b>, on every Load and every New Game, which is precisely what DEMO_SCRIPT
+     * Beat 5's scenario switch does. {@code archiveAll} pays one file round-trip instead of N.
+     * The single-syscall property itself is structural (one {@code Files.writeString} in the
+     * method); what is asserted here is that batching did not cost ordering or completeness.
+     */
+    @Test
+    void archiveAllWritesEveryEntryInOrderInOneGo(@TempDir Path tempDir) throws Exception {
+        LogArchiver archiver = new LogArchiver(tempDir);
+        archiver.archiveAll(List.of(
+                new CommLogEvent(0L, "hm", List.of("tug_1"), ACLMessage.CFP, "one", "c1"),
+                new CommLogEvent(1L, "hm", List.of("tug_2"), ACLMessage.CFP, "two", "c2"),
+                new CommLogEvent(2L, "hm", List.of("tug_3"), ACLMessage.CFP, "three", "c3")));
+
+        List<String> lines = Files.readAllLines(tempDir.resolve("commlog-archive-" + LocalDate.now() + ".jsonl"));
+        assertEquals(3, lines.size(), "one line per event, batched or not");
+        assertEquals("one", MAPPER.readTree(lines.get(0)).get("paraphrase").asText());
+        assertEquals("two", MAPPER.readTree(lines.get(1)).get("paraphrase").asText());
+        assertEquals("three", MAPPER.readTree(lines.get(2)).get("paraphrase").asText(),
+                "batching must not reorder — the archive is the history's tail");
+    }
+
+    @Test
+    void archiveAllOnAnEmptyBatchWritesNothingAndDoesNotCreateTheDirectory(@TempDir Path tempDir) {
+        Path missing = tempDir.resolve("never-created");
+        new LogArchiver(missing).archiveAll(List.of());
+
+        assertFalse(Files.exists(missing), "an empty clear() must not touch the disk at all");
+    }
+
+    @Test
+    void archiveAllAppendsRatherThanReplacing(@TempDir Path tempDir) throws Exception {
+        LogArchiver archiver = new LogArchiver(tempDir);
+        archiver.archive(new CommLogEvent(0L, "hm", List.of("t"), ACLMessage.CFP, "evicted", "c0"));
+        archiver.archiveAll(List.of(new CommLogEvent(1L, "hm", List.of("t"), ACLMessage.CFP, "cleared", "c1")));
+
+        List<String> lines = Files.readAllLines(tempDir.resolve("commlog-archive-" + LocalDate.now() + ".jsonl"));
+        assertEquals(2, lines.size(), "a batched clear must not truncate the eviction history before it");
+        assertEquals("evicted", MAPPER.readTree(lines.get(0)).get("paraphrase").asText());
     }
 
     @Test

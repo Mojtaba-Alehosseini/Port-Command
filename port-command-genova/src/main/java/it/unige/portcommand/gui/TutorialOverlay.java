@@ -19,8 +19,10 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 
 import it.unige.portcommand.gui.events.GuiReadyEvent;
+import it.unige.portcommand.persistence.events.GameLoadedEvent;
 import it.unige.portcommand.scenario.events.TutorialStepAdvancedEvent;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
@@ -38,11 +40,14 @@ import it.unige.portcommand.util.Subscription;
  * drifts. A target that isn't showing (e.g. minimised, or a Hint button with no open tab) simply
  * yields no cutout — the scrim dims fully and the caption still explains the step.
  *
- * <p><b>Two drivers, one view.</b> The tutorial scenario fires {@link TutorialStepAdvancedEvent} on
- * the bus at scripted sim-times (this replaces the task-23 placeholder notification banner, keeping
- * that event contract); the overlay shows that step with the scenario's own text. Independently,
+ * <p><b>Two drivers, one view — and two different endings.</b> The tutorial scenario fires
+ * {@link TutorialStepAdvancedEvent} on the bus at scripted sim-times (this replaces the task-23
+ * placeholder notification banner, keeping that event contract); the overlay shows that step with
+ * the scenario's own text, and dismisses itself {@link #SCRIPTED_AUTO_DISMISS_MILLIS} after the
+ * FINAL scripted step, because a script has no Done button to click (audit C-03). Independently,
  * Help → "Show tutorial" (and first launch) calls {@link #startFromBeginning()} and the player
- * pages through the five canonical steps with Next. X dismisses at any time.
+ * pages through the five canonical steps with Next, ending on Done. X dismisses at any time, and
+ * so does a world swap ({@code GameLoadedEvent}).
  *
  * <p><b>Non-blocking</b> (planning "common mistake"): {@link #contains(int, int)} is solid only over
  * the caption card, so every click OUTSIDE it — including on the highlighted element — passes
@@ -53,9 +58,18 @@ import it.unige.portcommand.util.Subscription;
 public final class TutorialOverlay extends JComponent {
 
     /** §3.13 canonical step texts — used for Help/first-launch paging (the scenario supplies its
-     * own per-step text when it drives). */
+     * own per-step text when it drives).
+     *
+     * <p>Step 1's wording was corrected on 2026-07-27 (audit C-05): it used to say "vessels arrive
+     * and move here as the day runs", but {@code VesselArrivedEvent}/{@code VesselDepartedEvent}
+     * have no production publisher — {@code MapPanel}'s arrival/departure chips are wired,
+     * consumed and tested, and nothing ever fires them. What the map genuinely shows is berth
+     * occupancy (a vessel appears once a terminal grants and reports its berth), the four tug dots
+     * and the weather chip, so that is what the text now promises. Wiring the two publishers is in
+     * the backlog; until then the text must not point the player at something that cannot render.
+     * {@code tutorial.json}'s own step-1 string was corrected in the same pass. */
     private static final String[] STEP_TEXT = {
-            "This is the map — vessels arrive and move here as the day runs.",
+            "This is the map — berths fill as vessels dock, and the four tugs move as they escort.",
             "When a walk-in vessel hails you, its negotiation opens as a chat tab here.",
             "Press the Hint button in a chat tab to ask the Assistant for a recommended counter-offer.",
             "Every agent message appears in the comm log here, colour-coded by FIPA performative.",
@@ -71,9 +85,21 @@ public final class TutorialOverlay extends JComponent {
 
     static final int TOTAL_STEPS = 5;
 
+    /**
+     * How long the FINAL scripted step stays up before the overlay dismisses itself (audit C-03,
+     * 2026-07-27). Long enough to read the last card; short enough to be gone before the demo's
+     * second beat. In {@code tutorial.json} the five steps fire at 0/200/600/1100/1500 sim-seconds
+     * and the scenario runs at 1800 real-seconds/day, so step 5 lands ~31 real seconds in and the
+     * scrim clears ~43 s in — inside Beat 1's two-minute budget.
+     */
+    static final int SCRIPTED_AUTO_DISMISS_MILLIS = 12_000;
+
     private final transient Container searchRoot;
     private final Subscription<GuiReadyEvent> readySubscription;
     private final Subscription<TutorialStepAdvancedEvent> stepSubscription;
+    private final Subscription<GameLoadedEvent> loadedSubscription;
+    /** One-shot, armed only by the SCRIPTED driver's final step; see {@link #showStep}. */
+    private final transient Timer autoDismissTimer;
 
     private final JPanel card = new JPanel(new BorderLayout(8, 8));
     private final JLabel caption = new JLabel();
@@ -89,6 +115,12 @@ public final class TutorialOverlay extends JComponent {
      * @param searchRoot the content pane whose subtree is searched for the named highlight targets
      */
     public TutorialOverlay(EventBus eventBus, Container searchRoot) {
+        this(eventBus, searchRoot, SCRIPTED_AUTO_DISMISS_MILLIS);
+    }
+
+    /** Test seam: {@code autoDismissMillis} lets a headless test assert the scripted auto-dismiss
+     * without waiting the production dwell. Production uses the two-arg constructor. */
+    TutorialOverlay(EventBus eventBus, Container searchRoot, int autoDismissMillis) {
         this.searchRoot = searchRoot;
         setOpaque(false);
         setVisible(false);
@@ -114,12 +146,20 @@ public final class TutorialOverlay extends JComponent {
         card.setVisible(false);
         add(card);
 
+        this.autoDismissTimer = new Timer(autoDismissMillis, e -> dismiss());
+        this.autoDismissTimer.setRepeats(false);
+
         this.readySubscription = eventBus.subscribe(GuiReadyEvent.class, e -> {
             ready = true;
             repaint();
         }, DeliveryMode.EDT);
         this.stepSubscription = eventBus.subscribe(TutorialStepAdvancedEvent.class,
                 e -> showStep(e.step(), e.text()), DeliveryMode.EDT);
+        // Audit C-13 (2026-07-27): the scrim must not outlive the world it explains. Switching
+        // Tutorial -> Storm mid-demo (DEMO_SCRIPT Beat 5) otherwise left the tutorial's step-5
+        // card and its 60% scrim sitting over the storm. ChatPanel/CommLogPanel already reset on
+        // this event; the overlay was one of the three surfaces that did not.
+        this.loadedSubscription = eventBus.subscribe(GameLoadedEvent.class, e -> dismiss(), DeliveryMode.EDT);
     }
 
     /** Help → "Show tutorial" / first launch: page from step 1 with the canonical text. */
@@ -137,16 +177,31 @@ public final class TutorialOverlay extends JComponent {
         if (step < 1 || step > TOTAL_STEPS) {
             return;
         }
+        boolean scripted = scenarioText != null && !scenarioText.isBlank();
         currentStep = step;
         caption.setText("<html><div style='width:320px'>" + escape(
-                scenarioText != null && !scenarioText.isBlank() ? scenarioText : STEP_TEXT[step - 1])
-                + "</div></html>");
+                scripted ? scenarioText : STEP_TEXT[step - 1]) + "</div></html>");
         stepIndicator.setText("Step " + step + " of " + TOTAL_STEPS);
         nextButton.setText(step == TOTAL_STEPS ? "Done" : "Next");
         card.setVisible(true);
         setVisible(true);
         layoutCard();
         repaint();
+
+        // Audit C-03 (2026-07-27) — the scripted driver had no ENDING. `tutorial.json` fires
+        // exactly five TutorialStepAdvance events, the last at simTimeSeconds 1500, and there is
+        // no sixth; `advance()` (the only other route to dismiss()) fires solely on the Next/Done
+        // BUTTON, which is the MANUAL driver's ending. So a scenario-driven tutorial parked itself
+        // on step 5 forever: at 1800 real-seconds/day all five steps land inside the first ~31 real
+        // seconds, and the 60% black scrim then covered the map, chat and comm log for the whole
+        // rest of the session — including the storm beat and the EOD report. Clicks still passed
+        // through (contains() is solid only over the card), so it was purely, and severely, visual.
+        // Only the SCRIPTED path auto-dismisses: Help -> "Show tutorial" is the player paging at
+        // their own speed and must still wait for Done.
+        autoDismissTimer.stop();
+        if (scripted && step == TOTAL_STEPS) {
+            autoDismissTimer.restart();
+        }
     }
 
     private void advance() {
@@ -158,9 +213,30 @@ public final class TutorialOverlay extends JComponent {
     }
 
     private void dismiss() {
+        autoDismissTimer.stop();
         card.setVisible(false);
         setVisible(false);
         currentStep = 0;
+    }
+
+    /**
+     * Package-private probe for the headless C-03 test: the overlay is "up" when a step is showing.
+     *
+     * <p><b>This is the dismiss STATE MACHINE, not the scrim.</b> {@link #paintComponent}
+     * additionally gates on {@link #isReady()} and a non-zero size, and headlessly {@code isReady()}
+     * is false and the size is 0×0, so nothing paints in the tests at all. Neither condition implies
+     * the other, and an earlier version of this javadoc claimed they could not drift — they can.
+     * What the tests genuinely pin is the timer/dismiss logic, which IS the C-03 defect; whether the
+     * scrim is visible on a real window belongs to the GUI walk. (Adversarial review, 2026-07-27.)
+     */
+    boolean isShowingAStep() {
+        return currentStep != 0 && isVisible();
+    }
+
+    /** Package-private test seam for the Next/Done button, so a headless test can page the MANUAL
+     * driver without synthesising an {@code ActionEvent} on a button that is never realized. */
+    void advanceForTest() {
+        advance();
     }
 
     /**
@@ -253,8 +329,10 @@ public final class TutorialOverlay extends JComponent {
     @Override
     public void removeNotify() {
         super.removeNotify();
+        autoDismissTimer.stop();
         readySubscription.cancel();
         stepSubscription.cancel();
+        loadedSubscription.cancel();
     }
 
     private static Component findByName(Container root, String name) {

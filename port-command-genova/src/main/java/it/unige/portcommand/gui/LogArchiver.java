@@ -6,6 +6,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDate;
+import java.util.Collections;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,13 +66,59 @@ public final class LogArchiver {
      * {@code TerminalJson.write} failure is unchecked and would otherwise propagate on the EDT.
      */
     public void archive(CommLogEvent event) {
+        // Collections.singletonList, NOT List.of: List.of rejects null eagerly, which would throw
+        // OUTSIDE archiveAll's try and break this method's "never throws" contract for a null event.
+        archiveAll(Collections.singletonList(event));
+    }
+
+    /**
+     * Appends every event as one JSON line, in order, in a SINGLE open/write/close. Never throws,
+     * for the same reason {@link #archive} does not.
+     *
+     * <p><b>Audit C-06 (2026-07-27).</b> The per-entry form was designed for the EVICTION path —
+     * one write per event once the 500-entry cap is reached, which is fine. {@code CommLogModel.clear()}
+     * reused it in a tight loop, so every Load and every New Game did up to 500 sequential
+     * {@code createDirectories} + open + append + close calls <b>on the Event Dispatch Thread</b>.
+     * On Windows with Defender in the path that is roughly 0.5–3 ms each: a visible hitch at best,
+     * and the demo's own "New Game → Storm Event" scenario switch (DEMO_SCRIPT Beat 5) is exactly
+     * when it fires. Batching pays one syscall round-trip instead of N; the caller still archives
+     * BEFORE it discards, exactly as the eviction path does.
+     *
+     * <p>A single un-serialisable event is skipped and logged, never fatal to the rest of the batch —
+     * the per-entry form degraded that way and the batched form must too.
+     */
+    public void archiveAll(List<CommLogEvent> events) {
+        if (events.isEmpty()) {
+            return;
+        }
         Path file = targetDir.resolve("commlog-archive-" + LocalDate.now() + ".jsonl");
+        // Serialize per event, each in its own try: batching must not turn "one un-serialisable
+        // entry is dropped" into "the whole 500-entry batch is lost". The per-entry loop this
+        // replaced degraded that way, and a batch that shares one try would not — found by the
+        // adversarial review of the C-06 fix, 2026-07-27.
+        StringBuilder lines = new StringBuilder();
+        int skipped = 0;
+        for (CommLogEvent event : events) {
+            try {
+                lines.append(TerminalJson.write(event)).append(System.lineSeparator());
+            } catch (RuntimeException e) {
+                skipped++;
+                log.warn("Skipping an un-serialisable comm-log entry while archiving", e);
+            }
+        }
+        if (skipped > 0) {
+            log.warn("{} of {} comm-log entries could not be serialised and were not archived",
+                    skipped, events.size());
+        }
+        if (lines.length() == 0) {
+            return;
+        }
         try {
             Files.createDirectories(targetDir);
-            Files.writeString(file, TerminalJson.write(event) + System.lineSeparator(),
+            Files.writeString(file, lines.toString(),
                     StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException | RuntimeException e) {
-            log.warn("Failed to archive comm-log entry to {}", file, e);
+            log.warn("Failed to archive {} comm-log entr(ies) to {}", events.size(), file, e);
         }
     }
 }
