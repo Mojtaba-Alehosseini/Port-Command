@@ -16,7 +16,7 @@ class HallucinationValidatorTest {
     private static Recommendation tankerAtBerth3() {
         MarketStats stats = new MarketStats(6000.0, 500.0, 12, 5000.0, 7000.0, 0.8, false);
         return new Recommendation("accept", 6000.0, 1.0, 4900.0, List.of("R7"), stats,
-                "tanker", "berth_3", 6, "compatible");
+                "tanker", "berth_3", 6, "compatible", null);
     }
 
     @Test
@@ -64,7 +64,7 @@ class HallucinationValidatorTest {
     void currencyAndThousandsFormattingAllNormaliseToTheSameFigure() {
         MarketStats stats = new MarketStats(2000.0, 100.0, 15, 1900.0, 2100.0, 0.9, false);
         Recommendation rec = new Recommendation("counter", 2000.0, 0.75, 800.0, List.of("R7"), stats,
-                "container_vessel", "berth_2", 4, "compatible");
+                "container_vessel", "berth_2", 4, "compatible", null);
         // "€2,000" (comma thousands separator) must match the required "2000" figure.
         String output = "Recommended counter at €2,000. Market average is €2,000 "
                 + "(±€100, based on 15 recent deals). Acceptance probability 75%, "

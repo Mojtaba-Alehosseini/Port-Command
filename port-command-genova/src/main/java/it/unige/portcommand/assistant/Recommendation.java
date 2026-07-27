@@ -6,6 +6,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import it.unige.portcommand.artifacts.MarketStats;
+import it.unige.portcommand.harbourmaster.financial.IncomeRules;
 
 /**
  * The chosen action from {@link RecommendationAlgorithm#run}, plus everything
@@ -27,6 +28,13 @@ import it.unige.portcommand.artifacts.MarketStats;
  * @param berthId      the berth under negotiation
  * @param durationHours the negotiated service duration
  * @param prologStatus {@code "compatible"} or {@code "incompatible"} — the berth/vessel Prolog verdict
+ * @param fallbackBand the static §7.5 fee band the algorithm actually scored against when the
+ *                     market query was low-confidence (&lt; 10 samples), else {@code null}. Carried
+ *                     rather than re-derived so {@link AssistantPromptBuilder} can NAME the band it
+ *                     used instead of printing the zeroed {@code marketStats} — the task-24
+ *                     visual-checkpoint finding filed in planning/10 ("Market average €0 (±€0, 0
+ *                     recent deals)" on the first Hint of a fresh run). Passing it through is what
+ *                     makes the surfaced text and the scoring band structurally the same number.
  */
 public record Recommendation(
         String action,
@@ -38,10 +46,17 @@ public record Recommendation(
         String vesselType,
         String berthId,
         int durationHours,
-        String prologStatus) {
+        String prologStatus,
+        IncomeRules.PriceRange fallbackBand) {
 
     public Recommendation {
         prologTrace = List.copyOf(prologTrace);
+    }
+
+    /** True when the recommendation was scored against the static §7.5 band rather than live
+     * market history — i.e. when the explanation must say so instead of quoting a €0 average. */
+    public boolean usesFallbackBand() {
+        return fallbackBand != null;
     }
 
     /** Proper nouns legitimately present in the recommendation trace — the negative-control gazetteer. */
@@ -56,8 +71,18 @@ public record Recommendation(
      */
     public Set<String> allFigures() {
         Set<String> figures = new LinkedHashSet<>();
-        figures.add(fmt(marketStats.mean()));
-        figures.add(fmt(marketStats.stddev()));
+        // Exactly the figures the prompt/template renders, and no others: this set is BOTH the
+        // required-number list (check 1: each must appear) and the positive control (check 3: no
+        // other number may appear). Emitting mean/stddev on the fallback path — where the text
+        // deliberately does not print them — would make every low-confidence explanation fail
+        // check 1 and silently degrade the Assistant to its template.
+        if (usesFallbackBand()) {
+            figures.add(fmt(fallbackBand.lo()));
+            figures.add(fmt(fallbackBand.hi()));
+        } else {
+            figures.add(fmt(marketStats.mean()));
+            figures.add(fmt(marketStats.stddev()));
+        }
         figures.add(String.valueOf(marketStats.sampleCount()));
         figures.add(fmt(price));
         figures.add(fmt(pAccept * 100.0));
