@@ -21,11 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * NLU regression against the TRAINED Rasa model (task 12's {@code portcmd_nlu.tar.gz}), over the
- * 45 hand-authored goldens in {@code intent_goldens.jsonl} — 5 per canonical intent.
+ * 50 hand-authored goldens in {@code intent_goldens.jsonl} — 5 per canonical intent.
  *
- * <p><b>Not the acceptance gate.</b> The F1 ≥ 0.85 gate is `rasa test nlu` on the 90-row holdout
+ * <p><b>2026-07-27 (task 26, decision b): 45 &rarr; 50.</b> The canonical intent set went 9
+ * &rarr; 10 ({@code out_of_scope}), so the anchor gained its 5 rows like every other intent. The
+ * pre-existing 45 are untouched and still expect the same intents — the retrain must not move them.
+ *
+ * <p><b>Not the acceptance gate.</b> The F1 ≥ 0.85 gate is `rasa test nlu` on the 96-row holdout
  * ({@code nlp-python/test_rasa.sh}); that is the number the report cites. This suite is the
- * REGRESSION anchor: 45 utterances that appear in neither the training nor the holdout split
+ * REGRESSION anchor: 50 utterances that appear in neither the training nor the holdout split
  * (verified disjoint, including a &le;1-token near-duplicate scan), so a pipeline change,
  * a config edit, or an accidental retrain on different data shows up here as a diff rather than
  * as a silent drift nobody notices until the demo.
@@ -70,8 +74,9 @@ class RasaRegressionIT {
     @Test
     void everyGoldenUtteranceKeepsItsIntentAndEntities() {
         List<JsonNode> corpus = Goldens.load(CORPUS);
-        assertTrue(corpus.size() == 45,
-                "planning/25 v1.1 addendum pins 45 intent goldens; found " + corpus.size());
+        assertTrue(corpus.size() == 50,
+                "planning/25 v1.1 addendum pins 5 intent goldens per canonical intent — 10 intents "
+                        + "since task 26 decision b, so 50; found " + corpus.size());
 
         List<String> mismatches = new ArrayList<>();
         List<String> extraEntities = new ArrayList<>();
@@ -127,7 +132,8 @@ class RasaRegressionIT {
     private static String renderReport(int total, Map<String, int[]> perIntent,
                                        List<String> mismatches, List<String> extras, int budget) {
         StringBuilder sb = new StringBuilder();
-        sb.append("# Rasa intent-golden regression (task 25, 45 utterances disjoint from train + holdout)\n\n");
+        sb.append("# Rasa intent-golden regression (task 25, " + total
+                + " utterances disjoint from train + holdout)\n\n");
         sb.append("| intent | passed | total |\n|---|---|---|\n");
         perIntent.forEach((intent, t) -> sb.append(String.format("| %s | %d | %d |%n", intent, t[0], t[1])));
         sb.append(String.format("%n**%d/%d exact** (intent + every expected entity value); soft budget %d.%n",

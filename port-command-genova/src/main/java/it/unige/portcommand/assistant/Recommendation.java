@@ -65,9 +65,48 @@ public record Recommendation(
     }
 
     /**
+     * The figures a paraphrase MUST reproduce — the decision itself: the price, the acceptance
+     * probability, and the expected value. Check 1 of {@link HallucinationValidator}.
+     *
+     * <p><b>2026-07-27 (task 26, decision a).</b> Check 1 used to require the whole of
+     * {@link #allFigures()}. Measured against the real sidecar (Phi-4-mini, ONNX-INT4), that gate
+     * scored 2/20; after task 26 named the dropped figures in the system prompt it scored 15/20,
+     * and the residual failures were all the same shape — the model paraphrases the least salient
+     * supporting figure into words instead of digits ("the lack of recent deals" for a sample count
+     * of 3, or a market average quoted without its spread). Those answers are faithful; they are
+     * not hallucinations. Requiring a small model to echo eight figures verbatim measures
+     * instruction-following, not truthfulness, and failing on it pins the Assistant to its template
+     * for no safety gain.
+     *
+     * <p>What is NOT relaxed: {@link #allFigures()} stays the positive control, so a number that
+     * is neither in this set nor anywhere else in the recommendation still fails check 3. Two of
+     * the twenty traces still fail exactly there, and correctly: asked for a 0% acceptance
+     * probability, the model writes "100% likelihood of rejection", and 100 is a number the
+     * recommendation never contained.
+     *
+     * <p><b>The precise cost, stated because an adversarial review found the earlier wording
+     * ("may never alter it") too strong.</b> A supporting figure may now be omitted, OR replaced
+     * by another figure <i>of the same recommendation</i>: "based on 500 recent deals" passes
+     * for a trace whose sample count is 12 but whose stddev is 500, because check 1 no longer
+     * demands the 12 and check 3 admits the 500. It may still never be replaced by a number the
+     * recommendation does not contain, which is the case that matters — an invented or
+     * arbitrarily wrong figure. Pinned by
+     * {@code HallucinationValidatorTest.outputSwappingASupportingFigureForAnotherOfTheSameTraceIsAcceptedNow}.
+     */
+    public Set<String> requiredFigures() {
+        Set<String> figures = new LinkedHashSet<>();
+        figures.add(fmt(price));
+        figures.add(fmt(pAccept * 100.0));
+        figures.add(fmt(ev));
+        return figures;
+    }
+
+    /**
      * Every numeric figure that may legitimately appear in the LLM's paraphrase, formatted
      * exactly as {@link AssistantPromptBuilder} renders them ({@code "%.0f"}, {@link Locale#ROOT})
-     * so {@link HallucinationValidator}'s normalised-string comparison lines up.
+     * so {@link HallucinationValidator}'s normalised-string comparison lines up. This is the
+     * POSITIVE CONTROL (check 3): a number outside this set was invented or altered. A superset
+     * of {@link #requiredFigures()}.
      */
     public Set<String> allFigures() {
         Set<String> figures = new LinkedHashSet<>();

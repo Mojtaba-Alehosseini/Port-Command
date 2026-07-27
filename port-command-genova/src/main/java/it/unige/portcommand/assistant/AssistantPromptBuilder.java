@@ -14,10 +14,28 @@ import java.util.Locale;
  */
 public final class AssistantPromptBuilder {
 
+    /**
+     * The anti-hallucination system instruction. Mirrored (deliberately, not shared) by
+     * {@code llm_sidecar/prompts.py DEFAULT_SYSTEM_PROMPT}; Java always sends its own, so this
+     * constant is the one that reaches the model in production.
+     *
+     * <p><b>2026-07-27 (task 26, decision a).</b> Two sentences were added naming the two figures
+     * the model actually drops. Task 25 measured the gate at 2/20 with the sidecar up: the
+     * generations invent nothing (check 3 held on all 20) but check 1 requires EVERY figure in
+     * {@link Recommendation#allFigures()} to be reproduced, and Phi-4-mini silently omits the
+     * least salient one — the SAMPLE COUNT in 18/18 failures, and the duration / mean / stddev /
+     * EV in one each. Output was never truncated (~47 words of a 120-token budget), so this is a
+     * choice the instruction can address rather than a budget problem. No digit appears in this
+     * text on purpose: an example figure here would be copied into the answer and fail check 3
+     * (the positive control admits only numbers from the recommendation itself).
+     */
     public static final String SYSTEM_PROMPT = """
             You are a harbour-master negotiation assistant. Paraphrase the input recommendation
             in 2-3 sentences of clear, professional English. NEVER add, change, or omit any
             numbers, prices, percentages, durations, or named entities (berths, vessels).
+            Every figure in the input must appear in your answer, including the service duration
+            in hours and the number of recent deals the market figure is based on. Leaving a
+            figure out is as wrong as inventing one.
             If unsure, repeat the input verbatim.""";
 
     private AssistantPromptBuilder() {

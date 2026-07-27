@@ -43,3 +43,8 @@
 {"utterance":"Cancel that last request","intent":"cancel_action","entities":{}}
 {"utterance":"Undo the berth booking","intent":"cancel_action","entities":{}}
 {"utterance":"Let's stop here","intent":"cancel_action","entities":{}}
+{"utterance": "kjhgfdsa mnbvcxz", "intent": "out_of_scope", "entities": {}}
+{"utterance": "erm", "intent": "out_of_scope", "entities": {}}
+{"utterance": "good afternoon", "intent": "out_of_scope", "entities": {}}
+{"utterance": "recommend a good restaurant nearby", "intent": "out_of_scope", "entities": {}}
+{"utterance": "are you a robot", "intent": "out_of_scope", "entities": {}}

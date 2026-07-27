@@ -539,3 +539,43 @@ cancel_action,Withdraw the whole booking,Withdraw the whole booking,test
 cancel_action,Stop the booking,Stop the booking,test
 cancel_action,Let's shut this negotiation down,Let's shut this negotiation down,test
 cancel_action,Drop the deal,Drop the deal,test
+out_of_scope,asdfghjkl,asdfghjkl,train
+out_of_scope,sdkfjsldkfj,sdkfjsldkfj,train
+out_of_scope,;lkjhgfdsa,;lkjhgfdsa,train
+out_of_scope,aaaaaaaaaa,aaaaaaaaaa,train
+out_of_scope,zzzzz,zzzzz,train
+out_of_scope,blargh blargh,blargh blargh,train
+out_of_scope,xyzzy,xyzzy,train
+out_of_scope,fdsa fdsa fdsa,fdsa fdsa fdsa,train
+out_of_scope,mmmmmmm,mmmmmmm,train
+out_of_scope,uhh,uhh,train
+out_of_scope,errr,errr,train
+out_of_scope,hmmmm,hmmmm,train
+out_of_scope,eh,eh,train
+out_of_scope,uh huh,uh huh,train
+out_of_scope,whatever,whatever,train
+out_of_scope,oh,oh,train
+out_of_scope,good morning,good morning,train
+out_of_scope,hello there,hello there,train
+out_of_scope,hi,hi,train
+out_of_scope,how are you today,how are you today,train
+out_of_scope,thanks a lot,thanks a lot,train
+out_of_scope,cheers mate,cheers mate,train
+out_of_scope,haha very funny,haha very funny,train
+out_of_scope,see you later,see you later,train
+out_of_scope,nice to meet you,nice to meet you,train
+out_of_scope,what is the capital of france,what is the capital of france,train
+out_of_scope,tell me a joke,tell me a joke,train
+out_of_scope,who won the football match last night,who won the football match last night,train
+out_of_scope,can you write me a poem,can you write me a poem,train
+out_of_scope,what time does the pizzeria close,what time does the pizzeria close,train
+out_of_scope,play some music,play some music,train
+out_of_scope,how do I reset my password,how do I reset my password,train
+out_of_scope,order me a pizza,order me a pizza,train
+out_of_scope,what is your favourite colour,what is your favourite colour,train
+out_of_scope,qwertyuiop,qwertyuiop,test
+out_of_scope,meh,meh,test
+out_of_scope,goodbye,goodbye,test
+out_of_scope,what is the meaning of life,what is the meaning of life,test
+out_of_scope,sing me a song,sing me a song,test
+out_of_scope,book me a flight to rome,book me a flight to rome,test

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Evaluate the trained Rasa NLU model.
-#   1) HOLDOUT (the acceptance gate): intent weighted-F1 >= 0.85 on the 90
-#      disjoint utterances in tests/test_holdout.yml. This is the ONLY pass/fail.
+#   1) HOLDOUT (the acceptance gate): intent weighted-F1 >= 0.85 on the 96
+#      disjoint utterances in tests/test_holdout.yml (90 until task 26 added the
+#      10th intent, out_of_scope). This is the ONLY pass/fail.
 #      Entity (NER) F1 from the same run is reported, NOT gated.
 #   2) 5-fold CROSS-VALIDATION: the in-development noise-floor check (slower —
 #      retrains DIET 5x). Informational only.

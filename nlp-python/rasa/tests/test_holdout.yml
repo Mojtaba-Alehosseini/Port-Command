@@ -110,3 +110,11 @@ nlu:
     - Stop the booking
     - Let's shut this negotiation down
     - Drop the deal
+- intent: out_of_scope
+  examples: |
+    - qwertyuiop
+    - meh
+    - goodbye
+    - what is the meaning of life
+    - sing me a song
+    - book me a flight to rome

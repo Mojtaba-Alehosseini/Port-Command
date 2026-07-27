@@ -170,6 +170,14 @@ public final class NLPPipeline {
             // on this path — PolicyParser owns its own regex-DSL parse of the original text.
             case "set_policy" -> routed(ACLMessage.REQUEST, policyContent(text), ctx);
             case "cancel_action" -> routeCancelAction(ctx);
+            // 2026-07-27 (task 26, decision b): the 10th canonical intent. A ROUTING LABEL, like
+            // set_policy — it never becomes an ACL, it is the classifier saying "none of the nine
+            // port moves", which is exactly the clarification path. Written explicitly rather than
+            // left to `default` so the intent's contract is visible where it is enforced: the
+            // whole reason it was added is that without a "none of these" class DIET had to spread
+            // a keyboard mash or a greeting over the nine in-domain intents, and one of them won
+            // (measured: 73.7% false-bind rate on the wild set's should-ask turns).
+            case "out_of_scope" -> clarification();
             default -> clarification();
         };
     }

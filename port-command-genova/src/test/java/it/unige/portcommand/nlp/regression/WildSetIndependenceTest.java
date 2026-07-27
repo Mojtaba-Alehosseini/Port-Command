@@ -78,6 +78,81 @@ class WildSetIndependenceTest {
         return out;
     }
 
+    /** The Rasa corpus alone (both splits) — the intent goldens' disjointness reference. */
+    private static List<String> rasaCorpus() {
+        List<String> out = new ArrayList<>();
+        Path csv = Path.of("..", "nlp-python", "rasa", "data", "nlu_authoring.csv");
+        assertTrue(Files.exists(csv), () -> "authoring corpus not found at " + csv.toAbsolutePath());
+        try (var lines = Files.lines(csv, StandardCharsets.UTF_8)) {
+            lines.skip(1).forEach(line -> {
+                String[] cells = line.split(",");
+                if (cells.length >= 2) {
+                    out.add(cells[1]);
+                }
+            });
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return out;
+    }
+
+    /**
+     * The intent goldens' own disjointness claim, checked rather than asserted in prose.
+     *
+     * <p>{@code RasaRegressionIT}'s javadoc and {@code docs/testing.md} both say the anchors are
+     * "verified disjoint from both splits (exact and &le;1-token near-duplicate scan)" — but until
+     * task 26's adversarial review nothing enforced it, and the five {@code out_of_scope} anchors
+     * added in that task went in with only a hand check. An anchor that has leaked into training
+     * stops being a regression detector and becomes a memorisation test that always passes.
+     *
+     * <p>Same &le;1-token rule {@code csv_to_nlu.py} applies to the holdout, and the same rule the
+     * wild-set test above applies — one implementation, three corpora.
+     */
+    @Test
+    void noIntentGoldenIsATrainingUtteranceOrOneTokenFromOne() {
+        List<JsonNode> goldens = Goldens.load("/nlp/golden/intent_goldens.jsonl");
+        assertEquals(50, goldens.size(), "5 anchors per canonical intent, 10 intents since task 26");
+        List<String> corpus = rasaCorpus();
+        assertTrue(corpus.size() > 500,
+                () -> "the Rasa corpus loaded only " + corpus.size() + " rows — the comparison "
+                        + "would pass vacuously");
+
+        Set<String> corpusNormalised = corpus.stream().map(WildSetIndependenceTest::normalise)
+                .collect(Collectors.toCollection(HashSet::new));
+        List<Set<String>> corpusTokens = corpus.stream().map(WildSetIndependenceTest::tokens).toList();
+
+        List<String> offenders = new ArrayList<>();
+        for (JsonNode g : goldens) {
+            String utterance = g.get("utterance").asText();
+            Set<String> t = tokens(utterance);
+            if (t.isEmpty()) {
+                continue;
+            }
+            if (corpusNormalised.contains(normalise(utterance))) {
+                offenders.add("VERBATIM in training: " + utterance);
+                continue;
+            }
+            for (int i = 0; i < corpusTokens.size(); i++) {
+                Set<String> c = corpusTokens.get(i);
+                if (c.isEmpty()) {
+                    continue;
+                }
+                Set<String> symmetric = new HashSet<>(t);
+                c.forEach(tok -> {
+                    if (!symmetric.add(tok)) {
+                        symmetric.remove(tok);
+                    }
+                });
+                if (symmetric.size() <= 1 && Math.abs(t.size() - c.size()) <= 1) {
+                    offenders.add("~1 token from \"" + corpus.get(i) + "\": " + utterance);
+                    break;
+                }
+            }
+        }
+        assertEquals(List.of(), offenders,
+                "intent goldens that overlap the Rasa corpus — rewrite them, do not relabel them");
+    }
+
     @Test
     void noWildUtteranceIsADeveloperUtteranceOrOneTokenFromOne() {
         List<JsonNode> wild = Goldens.load("/nlp/golden/wild_set.jsonl");

@@ -48,6 +48,22 @@ class LlmHallucinationIT {
     /** planning/25 Step 25.7: "assertion: validate(...) returns true for >= 18/20". */
     private static final int REQUIRED_PASSES = 18;
 
+    /**
+     * Per-trace request timeout for the MEASUREMENT, pinned through {@link LLMBridge}'s explicit
+     * test/ops seam instead of the config-driven production default (30 s, sized in task 13b from
+     * a ~17 s quiet-machine generation).
+     *
+     * <p>2026-07-27: the first re-measurement of this suite lost 12 of 20 traces to
+     * {@code LLMTimeoutException} because a Rasa training run happened to share the CPU — ONNX-INT4
+     * inference is CPU-bound, and generation stretched past 30 s. Those rows scored as failures in a
+     * table whose whole purpose is to report how often the VALIDATOR passes, which made the
+     * measurement an artefact of machine load. This suite is not a latency test — production
+     * latency is governed by {@code llm.timeout_ms} in {@code defaults.json} and is unchanged — so
+     * the bound here is set well past any plausible generation. A timeout at this length means the
+     * sidecar is genuinely wedged, not merely busy.
+     */
+    private static final java.time.Duration MEASUREMENT_TIMEOUT = java.time.Duration.ofSeconds(120);
+
     private static List<JsonNode> corpus;
 
     @BeforeAll
@@ -101,7 +117,7 @@ class LlmHallucinationIT {
     @Test
     void theValidatorAcceptsAtLeast18Of20RealGenerations() throws Exception {
         LLMBridge bridge = new LLMBridge(LLMBridge.resolveExplainUri(), LLMBridge.resolveHealthUri(),
-                httpClient(), new ObjectMapper());
+                httpClient(), new ObjectMapper(), MEASUREMENT_TIMEOUT);
         Assumptions.assumeTrue(bridge.isReady(),
                 "LLM sidecar not ready on " + LLMBridge.resolveHealthUri()
                         + " — start nlp-python/start_llm.bat with LLM_QUANT=onnx (see docs/testing.md)");
@@ -114,7 +130,7 @@ class LlmHallucinationIT {
             AssistantPromptBuilder.PromptPayload prompt = AssistantPromptBuilder.prompt(rec);
             // Exactly the production request shape (RecommendOnDemandBehaviour / ExplainEventBehaviour).
             LLMRequest request = new LLMRequest(prompt.user(), prompt.system(),
-                    rec.allFigures().stream().toList(), rec.namedEntities().stream().toList(), true);
+                    rec.requiredFigures().stream().toList(), rec.namedEntities().stream().toList(), true);
 
             String verdict;
             try {
@@ -143,18 +159,20 @@ class LlmHallucinationIT {
         assertTrue(passes >= REQUIRED_PASSES,
                 () -> "hallucination validator passed only " + finalPasses + "/" + corpus.size()
                         + " (need " + REQUIRED_PASSES + "); see " + written + ".\n"
-                        + "KNOWN FAILURE, measured 2/20 on 2026-07-27 (Phi-4-mini-instruct, ONNX-INT4, "
-                        + "max_new_tokens=120). The generations are FAITHFUL — they invent nothing, so "
-                        + "check 3 (positive control) holds on all 20 — but check 1 requires EVERY figure "
-                        + "in allFigures() to appear, and the model omits one. Measured per trace: the "
-                        + "SAMPLE COUNT is missing in 18/18 failures; stddev, mean, ev and duration are "
-                        + "each missing in exactly 1. Output is not truncated (~47 words of a 120-token "
-                        + "budget) — the model is choosing to drop the least salient figure. The fix is a "
-                        + "task-10 design decision, not this suite's: dropping the sample count alone "
-                        + "reaches exactly 18/20, and requiring only price / p_accept / ev reaches 19/20 "
-                        + "(t03 also omits the EV). Either way stddev and sample count stay in the "
-                        + "positive control, so the model still may not ALTER them. Do NOT lower this "
-                        + "threshold to make the build green; see planning/25 R13.");
+                        + "MEASUREMENT HISTORY (Phi-4-mini-instruct, ONNX-INT4, max_new_tokens=120, "
+                        + "greedy). 2026-07-27 task 25: 2/20 — faithful generations, but check 1 "
+                        + "demanded EVERY figure in allFigures() and the model dropped the least "
+                        + "salient one (the sample count in 18/18 failures). 2026-07-27 task 26 "
+                        + "decision a, step 1 (name the dropped figures in the system prompt): 15/20. "
+                        + "Step 2 (check 1 narrowed to price / p_accept / ev; check 3 still spans "
+                        + "every figure): 18/20 — exactly the gate. The two that still fail are REAL: "
+                        + "asked for a 0% acceptance probability the model writes '100% likelihood of "
+                        + "rejection', and 100 is a number the recommendation never contained. That is "
+                        + "the positive control doing its job; do not weaken it, and do not lower this "
+                        + "threshold to make the build green (planning/25 R13, planning/26 R-a).\n"
+                        + "If this is red, check FIRST whether the sidecar is on the ONNX backend "
+                        + "(LLM_QUANT=onnx) and whether anything else is loading the CPU — a busy "
+                        + "machine used to turn these rows into timeouts.");
     }
 
     private static java.net.http.HttpClient httpClient() {

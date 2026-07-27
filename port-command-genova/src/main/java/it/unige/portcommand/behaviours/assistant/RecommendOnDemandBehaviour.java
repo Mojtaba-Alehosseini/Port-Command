@@ -76,8 +76,12 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
 
         String template = AssistantPromptBuilder.template(rec);
         PromptPayload prompt = AssistantPromptBuilder.prompt(rec);
+        // requiredFigures(), not allFigures(): the sidecar's own check 1 mirrors the Java one
+        // (task 13 parity), so both sides must narrow together — see Recommendation#requiredFigures.
+        // The sidecar's verdict is advisory anyway; HallucinationValidator below is what gates the
+        // fall back to the plain template.
         LLMRequest request = new LLMRequest(prompt.user(), prompt.system(),
-                rec.allFigures().stream().toList(), rec.namedEntities().stream().toList(), true);
+                rec.requiredFigures().stream().toList(), rec.namedEntities().stream().toList(), true);
 
         llmBridge.explain(request)
                 .thenAccept(response -> {

@@ -29,10 +29,17 @@ import re
 import sys
 from pathlib import Path
 
-# The 9 canonical intents (PROJECT_DEFINITION 6.3). Order fixes YAML block order.
+# The 10 canonical intents (PROJECT_DEFINITION 6.3). Order fixes YAML block order.
+#
+# 2026-07-27 (task 26, decision b): 9 -> 10. ``out_of_scope`` was added because the wild-set
+# evaluation measured a 73.7% FALSE-BIND rate — of the 19 turns whose correct answer is "ask",
+# 14 emitted a binding ACL instead, because a keyboard mash or a greeting has to be classified
+# as SOMETHING and DIET spreads that mass over the nine in-domain intents. Giving the classifier
+# an explicit "none of these" label is the standard fix. It is a ROUTING LABEL, like set_policy:
+# NLPPipeline maps it to the clarification path, never to an ACL.
 INTENTS = [
     "propose_offer", "counter_offer", "accept_deal", "reject_deal", "query_status",
-    "set_constraint", "set_policy", "request_help", "cancel_action",
+    "set_constraint", "set_policy", "request_help", "cancel_action", "out_of_scope",
 ]
 SPLITS = {"train", "test"}
 
