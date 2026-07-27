@@ -87,7 +87,13 @@ class SaveLoadMidTransitIT {
                 "the granted vessel must enter its flow before the save");
 
         // --- Save mid-transit, then load it back (full teardown + rebuild). ---
-        Path saved = session.saveNow();
+        // Retried for the same reason the docked save below is (task 25, 2026-07-27): a live game
+        // runs BOTH background streams, and either can transiently refuse a manual save at this
+        // instant — a task-23 daily contracted arrival mid-grant, or a task-24 Poisson walk-in with
+        // an open, unanswered negotiation ("Finish the current negotiation with WALKIN-1 before
+        // saving", seen once in a full-suite run). Both clear on their own in well under a sim
+        // minute, so a bounded retry is the deterministic fix; a single-shot save here is a race.
+        Path saved = saveNowRetrying(session, 15_000);
         GameState savedState = new SaveLoadManager(tempDir).load(saved);
         double walletAtSave = savedState.wallet();
         assertEquals(1, savedState.agents().activeVessels().size(), "C001 is in the save");
@@ -206,8 +212,12 @@ class SaveLoadMidTransitIT {
                         + hm.walletLedger().balance());
     }
 
-    /** Bounded retry past a transient {@link SaveNotAllowedException} — a background daily
-     * contracted arrival (task 23) can be mid-grant exactly when the test wants to save. */
+    /** Bounded retry past a transient {@link SaveNotAllowedException}. Two background streams can
+     * refuse a manual save at any instant: a task-23 daily contracted arrival mid-grant, and a
+     * task-24 Poisson walk-in holding an open negotiation. Both resolve themselves within a sim
+     * minute (well under a wall second at the test's 300 s/game-day rate), so the refusal is
+     * transient by construction — but a single-shot save is still a race, which is why both saves
+     * in this test go through here. */
     private Path saveNowRetrying(GameSession session, long timeoutMs) throws Exception {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (true) {

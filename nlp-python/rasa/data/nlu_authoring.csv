@@ -169,12 +169,12 @@ accept_deal,Perfct,Perfct,train
 accept_deal,deal then,deal then,train
 accept_deal,agreed then,agreed then,train
 accept_deal,"yep, done","yep, done",train
-accept_deal,It's a deal then,It's a deal then,test
-accept_deal,"Ok, that works","Ok, that works",test
-accept_deal,"Sure, let's proceed","Sure, let's proceed",test
-accept_deal,"Agreed, we have a deal","Agreed, we have a deal",test
+accept_deal,"Right then, book it in","Right then, book it in",test
+accept_deal,"Ok, we're on","Ok, we're on",test
+accept_deal,"Fine, that deal works for us","Fine, that deal works for us",test
+accept_deal,"Yes, that price suits us","Yes, that price suits us",test
 accept_deal,"Yes, I accept that","Yes, I accept that",test
-accept_deal,"Fine, good deal","Fine, good deal",test
+accept_deal,We are happy with that offer,We are happy with that offer,test
 accept_deal,I'll take that one,I'll take that one,test
 accept_deal,That's done then,That's done then,test
 accept_deal,"Sounds good, I'm in","Sounds good, I'm in",test
@@ -235,7 +235,7 @@ reject_deal,Not even close,Not even close,test
 reject_deal,Rejected,Rejected,test
 reject_deal,We won't take that,We won't take that,test
 reject_deal,Way too low for us,Way too low for us,test
-reject_deal,"Sorry, no","Sorry, no",test
+reject_deal,"No, that price is not good enough","No, that price is not good enough",test
 reject_deal,That's a hard pass,That's a hard pass,test
 reject_deal,Can't make that work,Can't make that work,test
 reject_deal,"No, decline it","No, decline it",test
@@ -478,7 +478,7 @@ request_help,What's possible here,What's possible here,test
 request_help,Tell me the commands,Tell me the commands,test
 request_help,How do things work here,How do things work here,test
 request_help,Need a hand,Need a hand,test
-request_help,What are the available actions,What are the available actions,test
+request_help,Walk me through my choices,Walk me through my choices,test
 cancel_action,Cancel,Cancel,train
 cancel_action,Never mind,Never mind,train
 cancel_action,Stop the deal,Stop the deal,train
@@ -533,9 +533,9 @@ cancel_action,Let's cancel,Let's cancel,test
 cancel_action,Scrap the negotiation,Scrap the negotiation,test
 cancel_action,I'm pulling out,I'm pulling out,test
 cancel_action,Cancel it all,Cancel it all,test
-cancel_action,Abort this,Abort this,test
+cancel_action,Withdraw that request,Withdraw that request,test
 cancel_action,Withdraw the request,Withdraw the request,test
-cancel_action,Call it off now,Call it off now,test
+cancel_action,Withdraw the whole booking,Withdraw the whole booking,test
 cancel_action,Stop the booking,Stop the booking,test
-cancel_action,Never mind then,Never mind then,test
+cancel_action,Let's shut this negotiation down,Let's shut this negotiation down,test
 cancel_action,Drop the deal,Drop the deal,test

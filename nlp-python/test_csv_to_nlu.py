@@ -113,6 +113,28 @@ def test_different_numbers_are_not_duplicates(tmp_path):
     assert nlu.count("\n    - ") == 1 and holdout.count("\n    - ") == 1
 
 
+def test_holdout_item_that_is_a_train_item_plus_one_filler_token_raises(tmp_path):
+    # Task 25: not LEAKAGE (the surfaces differ, the label is unambiguous), but it makes the
+    # held-out item free and inflates the reported F1 — the task-12 review's MINOR M1.
+    csv_path = write_csv(tmp_path / "n1.csv", [
+        ("accept_deal", "It's a deal", "It's a deal", "train"),
+        ("accept_deal", "It's a deal then", "It's a deal then", "test"),
+    ])
+    with pytest.raises(c2n.CorpusError, match="NEAR-DUPLICATES"):
+        c2n.generate(csv_path)
+
+
+def test_near_duplicate_guard_is_scoped_to_one_intent(tmp_path):
+    # A one-token-apart pair across DIFFERENT intents is not a free holdout item — it is a
+    # genuinely hard minimal pair, and rejecting it would forbid the most informative rows.
+    csv_path = write_csv(tmp_path / "n2.csv", [
+        ("accept_deal", "no problem", "no problem", "train"),
+        ("reject_deal", "problem", "problem", "test"),
+    ])
+    nlu, holdout = c2n.generate(csv_path)
+    assert nlu.count("\n    - ") == 1 and holdout.count("\n    - ") == 1
+
+
 def test_duplicate_within_split_raises(tmp_path):
     csv_path = write_csv(tmp_path / "d.csv", [
         ("accept_deal", "Deal", "Deal", "train"),

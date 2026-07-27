@@ -99,6 +99,47 @@ def validate(rows: list[dict]) -> None:
             f"train/holdout LEAKAGE: {len(leak)} utterance(s) in both splits "
             f"(normalised): {examples}"
         )
+    _reject_near_duplicates(rows)
+
+
+def _reject_near_duplicates(rows: list[dict]) -> None:
+    """Fail on a holdout item that is a train item plus/minus ONE filler token.
+
+    Exact-match leakage is caught above; this catches the softer failure the task-12
+    adversarial review filed as MINOR M1 — 10 short-intent holdout items that differed
+    from a train item by a single token ("It's a deal then" ~ "It's a deal"). Those are
+    not label-ambiguous, so they are not leakage, but they make the easy intents free and
+    inflate the reported F1. Task 25 replaced them and added this guard so the holdout
+    cannot silently drift back.
+
+    The rule: within one intent, a train/holdout pair whose token SETS differ by at most
+    one token AND whose lengths differ by at most one. That is precisely the "added filler
+    token" shape. A swapped token is NOT caught, because swapping removes one token and
+    adds another, giving a symmetric difference of two — which is why "How about 2200" /
+    "How about 2400" stays legitimate (``test_different_numbers_are_not_duplicates``): a
+    different price is a real variant, a trailing "then" is not.
+    """
+    def tokens(text: str) -> set[str]:
+        return set(normalise(text).split())
+
+    by_intent: dict[str, dict[str, list[str]]] = {}
+    for r in rows:
+        by_intent.setdefault(r["intent"], {"train": [], "test": []})[r["split"]].append(r["text"])
+
+    hits: list[str] = []
+    for intent, splits in by_intent.items():
+        for held in splits["test"]:
+            ht = tokens(held)
+            for trained in splits["train"]:
+                tt = tokens(trained)
+                if len(ht ^ tt) <= 1 and abs(len(ht) - len(tt)) <= 1:
+                    hits.append(f"{intent}: {held!r} ~ train {trained!r}")
+    if hits:
+        shown = "; ".join(hits[:5])
+        raise CorpusError(
+            f"holdout NEAR-DUPLICATES: {len(hits)} holdout item(s) differ from a train "
+            f"item of the same intent by <=1 token: {shown}"
+        )
 
 
 def render_yaml(rows: list[dict], split: str) -> str:

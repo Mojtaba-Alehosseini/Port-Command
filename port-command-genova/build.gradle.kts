@@ -1,6 +1,7 @@
 plugins {
     java
     application
+    jacoco
 }
 
 repositories {
@@ -128,9 +129,69 @@ val integrationTest = tasks.register<Test>("integrationTest") {
     shouldRunAfter(tasks.test)
 }
 
-// Keep the commit gate strong: `check` (hence the pre-commit hook) runs both lanes.
+// --- Coverage gate (task 25) ------------------------------------------------
+// planning/25: "≥ 60% line coverage on src/main/java, EXCLUDING it.unige.portcommand.gui.**".
+// Swing painting code is manually verified via the --gui visual checkpoints, so it is not
+// counted; every non-GUI package is.
+//
+// Both lanes contribute execution data. The `jacoco` plugin instruments EVERY Test task, so
+// `test` writes build/jacoco/test.exec and `integrationTest` writes build/jacoco/integrationTest.exec;
+// the report and the verification read both. Measuring only the unit lane would under-count the
+// agent/behaviour code that only the JADE integration tests can reach.
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+// The GUI exclude, stated ONCE and shared by the report and the gate so they can never drift.
+// NB: sourceSets.main.output.classesDirs is a collection of DIRECTORIES, so a path filter over it
+// excludes nothing — the exclude has to be applied to the class-file TREE underneath them.
+val coverageClassDirs: FileCollection = files(
+    sourceSets.main.get().output.classesDirs.files.map { dir ->
+        fileTree(dir) { exclude("it/unige/portcommand/gui/**") }
+    }
+)
+val coverageExecData: FileCollection = fileTree(layout.buildDirectory) { include("jacoco/*.exec") }
+
+tasks.named<JacocoReport>("jacocoTestReport") {
+    dependsOn(tasks.test, integrationTest)
+    executionData.setFrom(coverageExecData)
+    classDirectories.setFrom(coverageClassDirs)
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
+}
+
+tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    dependsOn(tasks.named("jacocoTestReport"))
+    executionData.setFrom(coverageExecData)
+    classDirectories.setFrom(coverageClassDirs)
+    // JaCoCo SKIPS a limit whose ratio is NaN, so an empty classDirectories — a typo'd exclude, a
+    // moved output dir — would make this gate pass while measuring nothing at all. Fail loudly
+    // instead. 200 is well under the ~279 non-GUI classes and well over any plausible accident.
+    doFirst {
+        val counted = coverageClassDirs.files.count { it.name.endsWith(".class") }
+        require(counted > 200) {
+            "coverage gate would measure only $counted classes — the GUI exclude or the class output " +
+                "directory is wrong, and the gate would pass vacuously."
+        }
+    }
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.60".toBigDecimal()
+            }
+        }
+    }
+}
+
+// Keep the commit gate strong: `check` (hence the pre-commit hook) runs both lanes and the
+// coverage gate.
 tasks.named("check") {
-    dependsOn(integrationTest)
+    dependsOn(integrationTest, tasks.named("jacocoTestCoverageVerification"))
 }
 
 tasks.named<JavaExec>("run") {

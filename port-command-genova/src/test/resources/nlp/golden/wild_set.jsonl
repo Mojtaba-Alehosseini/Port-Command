@@ -1,0 +1,129 @@
+{"id":"w001","card":"open_offer","ctx":"none","expect":"PROPOSE","utterance":"Let's start at 1800 for six hours"}
+{"id":"w002","card":"open_offer","ctx":"none","expect":"PROPOSE","utterance":"i can do 2000, 5 hours, berth 3"}
+{"id":"w003","card":"open_offer","ctx":"none","expect":"PROPOSE","utterance":"How does 2400 for 8 hours sound to you"}
+{"id":"w004","card":"open_offer","ctx":"none","expect":"PROPOSE","utterance":"I make you a price of 2000 for five hours"}
+{"id":"w005","card":"italian_out_of_scope","ctx":"none","expect":"clarification","utterance":"Proposta: 2200 euro per 6 ore"}
+{"id":"w006","card":"open_offer","ctx":"none","expect":"PROPOSE","utterance":"we are prepared to offer two thousand euros"}
+{"id":"w007","card":"open_offer","ctx":"none","expect":"PROPOSE","utterance":"OFFER 2500 FOR 10 HOURS"}
+{"id":"w008","card":"open_offer","ctx":"none","expect":"PROPOSE","utterance":"put us down for 1900 at the third berth"}
+{"id":"w009","card":"open_offer","ctx":"none","expect":"PROPOSE","utterance":"Would you take 1650 for four hours?"}
+{"id":"w010","card":"open_offer","ctx":"none","expect":"PROPOSE","utterance":"my offer is 2050 and that's a fair number"}
+{"id":"w011","card":"counter_higher","ctx":"focus","expect":"PROPOSE","utterance":"push it up to 2000"}
+{"id":"w012","card":"counter_higher","ctx":"focus","expect":"PROPOSE","utterance":"a bit more, say 1800"}
+{"id":"w013","card":"counter_higher","ctx":"focus","expect":"PROPOSE","utterance":"300 more and we have a deal"}
+{"id":"w014","card":"counter_higher","ctx":"focus","expect":"PROPOSE","utterance":"can you stretch to 1900"}
+{"id":"w015","card":"counter_higher","ctx":"focus","expect":"PROPOSE","utterance":"I need at least 1750 to make this work"}
+{"id":"w016","card":"counter_higher","ctx":"focus","expect":"PROPOSE","utterance":"bump that by 10%"}
+{"id":"w017","card":"counter_higher","ctx":"focus","expect":"PROPOSE","utterance":"realistically 1700 is my ceiling"}
+{"id":"w018","card":"counter_higher","ctx":"focus","expect":"PROPOSE","utterance":"counter: 1850"}
+{"id":"w019","card":"counter_higher","ctx":"focus","expect":"PROPOSE","utterance":"that's low, try 2100"}
+{"id":"w020","card":"counter_higher","ctx":"focus","expect":"PROPOSE","utterance":"we could go to 1950 but no higher"}
+{"id":"w021","card":"split_difference","ctx":"focus","expect":"PROPOSE","utterance":"let's just split it down the middle"}
+{"id":"w022","card":"split_difference","ctx":"focus","expect":"PROPOSE","utterance":"meet me halfway and we're done"}
+{"id":"w023","card":"split_difference","ctx":"focus","expect":"PROPOSE","utterance":"let's land between our two numbers"}
+{"id":"w024","card":"split_difference","ctx":"focus","expect":"PROPOSE","utterance":"somewhere in the middle works for me"}
+{"id":"w025","card":"change_duration","ctx":"focus","expect":"PROPOSE","utterance":"same price but only 4 hours"}
+{"id":"w026","card":"change_duration","ctx":"focus","expect":"PROPOSE","utterance":"make it 8 hours"}
+{"id":"w027","card":"change_duration","ctx":"focus","expect":"PROPOSE","utterance":"we need the berth for twelve hours, not five"}
+{"id":"w028","card":"change_duration","ctx":"focus","expect":"PROPOSE","utterance":"can we shorten it to 3 hours"}
+{"id":"w029","card":"accept","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"yeah go on then"}
+{"id":"w030","card":"accept","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"alright, book it"}
+{"id":"w031","card":"accept","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"that's fine by us"}
+{"id":"w032","card":"italian_out_of_scope","ctx":"focus","expect":"clarification","utterance":"va bene, deal"}
+{"id":"w033","card":"accept","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"I'm happy with that number"}
+{"id":"w034","card":"accept","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"ok fine whatever, agreed"}
+{"id":"w035","card":"accept","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"sign it off"}
+{"id":"w036","card":"accept","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"we accept your terms"}
+{"id":"w037","card":"accept","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"sure why not"}
+{"id":"w038","card":"accept","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"consider it agreed"}
+{"id":"w039","card":"accept","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"that's grand, proceed"}
+{"id":"w040","card":"accept","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"perfect, thank you"}
+{"id":"w041","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"no chance at that price"}
+{"id":"w042","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"that's an insult, honestly"}
+{"id":"w043","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"we're not taking it"}
+{"id":"w044","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"you are undervaluing the berth badly"}
+{"id":"w045","card":"italian_out_of_scope","ctx":"focus","expect":"clarification","utterance":"assolutamente no, non se ne parla"}
+{"id":"w046","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"sorry mate, can't do it"}
+{"id":"w047","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"that number is nowhere near enough"}
+{"id":"w048","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"we are turning this one down"}
+{"id":"w049","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"I'd rather leave the berth empty"}
+{"id":"w050","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"no way, the stay is far too long"}
+{"id":"w051","card":"ask_berths","ctx":"none","expect":"QUERY_REF","utterance":"which quays have space right now"}
+{"id":"w052","card":"ask_berths","ctx":"none","expect":"QUERY_REF","utterance":"got any berths open?"}
+{"id":"w053","card":"ask_berths","ctx":"none","expect":"QUERY_REF","utterance":"show me the free berths"}
+{"id":"w054","card":"ask_berths","ctx":"none","expect":"QUERY_REF","utterance":"is berth 2 taken"}
+{"id":"w055","card":"ask_berths","ctx":"none","expect":"QUERY_REF","utterance":"how many spaces are left"}
+{"id":"w056","card":"ask_tugs","ctx":"none","expect":"QUERY_REF","utterance":"how many tugs can I call on"}
+{"id":"w057","card":"ask_tugs","ctx":"none","expect":"QUERY_REF","utterance":"are the tugs busy"}
+{"id":"w058","card":"ask_tugs","ctx":"none","expect":"QUERY_REF","utterance":"tug availability please"}
+{"id":"w059","card":"ask_tugs","ctx":"none","expect":"QUERY_REF","utterance":"where is tug 3"}
+{"id":"w060","card":"ask_weather","ctx":"none","expect":"QUERY_REF","utterance":"how's the sea looking"}
+{"id":"w061","card":"ask_weather","ctx":"none","expect":"QUERY_REF","utterance":"what's the wind doing"}
+{"id":"w062","card":"ask_weather","ctx":"none","expect":"QUERY_REF","utterance":"is the weather going to be a problem"}
+{"id":"w063","card":"italian_out_of_scope","ctx":"none","expect":"clarification","utterance":"che tempo fa"}
+{"id":"w064","card":"ask_vessel","ctx":"none","expect":"QUERY_REF","utterance":"how deep does she sit"}
+{"id":"w065","card":"ask_vessel","ctx":"none","expect":"QUERY_REF","utterance":"what is Genoa Star carrying"}
+{"id":"w066","card":"ask_vessel","ctx":"none","expect":"QUERY_REF","utterance":"when is the Carthago due in"}
+{"id":"w067","card":"ask_vessel","ctx":"none","expect":"QUERY_REF","utterance":"how long is that ship"}
+{"id":"w068","card":"ask_vessel","ctx":"none","expect":"QUERY_REF","utterance":"give me a rundown of what's inbound"}
+{"id":"w069","card":"ask_best_price","ctx":"focus","expect":"QUERY_REF","utterance":"what's the lowest you'd go"}
+{"id":"w070","card":"ask_best_price","ctx":"focus","expect":"QUERY_REF","utterance":"where would you actually settle"}
+{"id":"w071","card":"ask_best_price","ctx":"focus","expect":"QUERY_REF","utterance":"come on, what do you really want to pay"}
+{"id":"w072","card":"set_floor","ctx":"none","expect":"REQUEST","utterance":"from now on don't take anything under 2000"}
+{"id":"w073","card":"set_floor","ctx":"none","expect":"REQUEST","utterance":"my minimum is 1800, always"}
+{"id":"w074","card":"set_floor","ctx":"none","expect":"REQUEST","utterance":"auto accept anything above 2500"}
+{"id":"w075","card":"set_floor","ctx":"none","expect":"REQUEST","utterance":"standing rule: counter every first offer"}
+{"id":"w076","card":"set_floor","ctx":"none","expect":"REQUEST","utterance":"never go below 1900 euros for a tanker"}
+{"id":"w077","card":"constrain","ctx":"none","expect":"REQUEST","utterance":"keep the tankers out of the inner basin"}
+{"id":"w078","card":"constrain","ctx":"none","expect":"REQUEST","utterance":"no cruise ships tonight please"}
+{"id":"w079","card":"constrain","ctx":"none","expect":"REQUEST","utterance":"berth 4 is closed until further notice"}
+{"id":"w080","card":"constrain","ctx":"none","expect":"REQUEST","utterance":"don't let any hazmat cargo in"}
+{"id":"w081","card":"constrain","ctx":"none","expect":"REQUEST","utterance":"block the ferries from berth 1"}
+{"id":"w082","card":"hold_weather","ctx":"none","expect":"REQUEST","utterance":"keep every tanker alongside while it blows"}
+{"id":"w083","card":"hold_weather","ctx":"none","expect":"REQUEST","utterance":"nobody moves until this storm passes"}
+{"id":"w084","card":"hold_weather","ctx":"none","expect":"REQUEST","utterance":"keep everything alongside for now"}
+{"id":"w085","card":"hold_weather","ctx":"none","expect":"REQUEST","utterance":"no ferry moves for now"}
+{"id":"w086","card":"dispatch_tugs","ctx":"none","expect":"REQUEST","utterance":"send two tugs out"}
+{"id":"w087","card":"dispatch_tugs","ctx":"none","expect":"REQUEST","utterance":"I want three tugs on that one"}
+{"id":"w088","card":"dispatch_tugs","ctx":"none","expect":"REQUEST","utterance":"dispatch a couple of tugs to the tanker"}
+{"id":"w089","card":"help","ctx":"none","expect":"REQUEST","utterance":"what do I actually type here"}
+{"id":"w090","card":"help","ctx":"none","expect":"REQUEST","utterance":"first time playing, any pointers"}
+{"id":"w091","card":"italian_out_of_scope","ctx":"none","expect":"clarification","utterance":"aiuto"}
+{"id":"w092","card":"help","ctx":"none","expect":"REQUEST","utterance":"list everything I'm allowed to do"}
+{"id":"w093","card":"help","ctx":"none","expect":"REQUEST","utterance":"im lost, what now"}
+{"id":"w094","card":"cancel","ctx":"none","expect":"CANCEL","utterance":"forget I said anything"}
+{"id":"w095","card":"cancel","ctx":"none","expect":"CANCEL","utterance":"cancel the tug I ordered"}
+{"id":"w096","card":"cancel","ctx":"none","expect":"CANCEL","utterance":"scratch that"}
+{"id":"w097","card":"cancel","ctx":"none","expect":"CANCEL","utterance":"undo the last thing"}
+{"id":"w098","card":"italian_out_of_scope","ctx":"none","expect":"clarification","utterance":"annulla tutto"}
+{"id":"w099","card":"withdraw","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"I'm pulling out of this negotiation"}
+{"id":"w100","card":"withdraw","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"forget this deal, we're done talking"}
+{"id":"w101","card":"address_specific","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"Genoa Star gets a yes from me"}
+{"id":"w102","card":"address_specific","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"let the tanker know we are refusing"}
+{"id":"w103","card":"address_specific","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"Carthago, you have a deal"}
+{"id":"w104","card":"address_specific","ctx":"focus","expect":"PROPOSE","utterance":"Genoa Star: 1900 for 5 hours"}
+{"id":"w105","card":"address_specific","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"say no to the cargo vessel"}
+{"id":"w106","card":"anaphora","ctx":"focus","expect":"PROPOSE","utterance":"1800 on the berth we discussed"}
+{"id":"w107","card":"anaphora","ctx":"focus","expect":"ACCEPT_PROPOSAL","utterance":"go with that one"}
+{"id":"w108","card":"anaphora","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"turn it down"}
+{"id":"w109","card":"anaphora","ctx":"focus","expect":"PROPOSE","utterance":"keep the berth, move the money to 2000"}
+{"id":"w110","card":"negation","ctx":"focus","expect":"REQUEST","utterance":"my floor is 2000, full stop"}
+{"id":"w111","card":"negation","ctx":"focus","expect":"REQUEST","utterance":"not for less than six hours"}
+{"id":"w112","card":"negation","ctx":"focus","expect":"REQUEST","utterance":"I won't go under 1800 on this one"}
+{"id":"w113","card":"ambiguous","ctx":"focus","expect":"clarification","utterance":"hmm"}
+{"id":"w114","card":"ambiguous","ctx":"focus","expect":"clarification","utterance":"so?"}
+{"id":"w115","card":"ambiguous","ctx":"focus","expect":"clarification","utterance":"maybe, let me think about it"}
+{"id":"w116","card":"ambiguous","ctx":"focus","expect":"clarification","utterance":"what would you do in my position"}
+{"id":"w117","card":"ambiguous","ctx":"focus","expect":"clarification","utterance":"fine in principle though the money is short"}
+{"id":"w118","card":"ambiguous","ctx":"focus","expect":"clarification","utterance":"agreed provided you come down to 1500"}
+{"id":"w119","card":"ambiguous","ctx":"focus","expect":"clarification","utterance":"yes on condition the stay is three hours"}
+{"id":"w120","card":"ambiguous","ctx":"none","expect":"clarification","utterance":"the ligurian sea is rough this time of year"}
+{"id":"w121","card":"ambiguous","ctx":"none","expect":"clarification","utterance":"asdkjh"}
+{"id":"w122","card":"ambiguous","ctx":"focus","expect":"clarification","utterance":"berth 9 then"}
+{"id":"w123","card":"ambiguous","ctx":"focus","expect":"clarification","utterance":"give me a second"}
+{"id":"w124","card":"ambiguous","ctx":"none","expect":"clarification","utterance":"how much does a tug cost per hour and can I get two"}
+{"id":"w125","card":"ambiguous","ctx":"focus","expect":"clarification","utterance":"either 1800 now or 2200 tomorrow, your call"}
+{"id":"w126","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"That number is out of the question"}
+{"id":"w127","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"The price is way beyond us"}
+{"id":"w128","card":"reject","ctx":"focus","expect":"REJECT_PROPOSAL","utterance":"That's below what we can take"}
+{"id":"w129","card":"constrain","ctx":"none","expect":"REQUEST","utterance":"Deny entry to cruise ships"}
