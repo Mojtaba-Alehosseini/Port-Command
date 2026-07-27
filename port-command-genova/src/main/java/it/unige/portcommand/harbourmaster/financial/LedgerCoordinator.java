@@ -39,17 +39,19 @@ import org.slf4j.LoggerFactory;
  *       wrong: two co-winning tugs for one vessel share a single CNP {@code cfpId}, so keying on
  *       it collapses two real jobs into one and under-charges. {@code tugId} is the only per-tug
  *       discriminator that exists.</li>
- *   <li><b>Extra-tug surcharge → the vessel's set of distinct {@code tugId}s.</b> Deliberately a
- *       DIFFERENT key from the expense above, because the two things are counted differently: the
- *       expense counts <em>jobs</em>, the surcharge counts <em>tugs</em>. If a vessel ever has the
- *       same tug awarded twice on different conversations, that is two jobs to pay for but still
- *       one tug to bill for. <strong>Defence in depth, not a live path:</strong> the only retry
- *       today ({@code CnpRetryBehaviour}) fires exclusively on ZERO bids
- *       ({@code AwardContractBehaviour}'s {@code holdVessel(hm,"no_bids")}), and zero bids means
- *       zero awards — so a retry cannot currently re-award anything. Do not "simplify" the two
- *       keys into one on the strength of that: it is a property of today's retry trigger, not of
- *       the ledger. (The earlier version of this note claimed the retry itself was the motivating
- *       case; that was wrong — corrected after the task-20 adversarial review traced the trigger.)</li>
+ *   <li><b>Extra-tug surcharge → {@code vesselId + "|" + conversationId} → that escort's set of
+ *       distinct {@code tugId}s.</b> The two still COUNT different things — the expense counts
+ *       <em>jobs</em>, the surcharge counts <em>tugs beyond the first on one escort</em> — but as of
+ *       2026-07-27 they no longer <em>partition</em> differently: a {@code conversationId} is a
+ *       cfpId and belongs to exactly one vessel, so both sets are now keyed inside the same
+ *       (conversation, tug) cell. The earlier note here said "do not simplify them into one key";
+ *       that rationale is retired, and the honest statement is that the surcharge's own dedupe is
+ *       currently unreachable — see {@link #onTugJobAwarded}.
+ *       <p>The conversation id joined the key in <b>audit B-1</b>. It used to be the vessel alone,
+ *       on the stated assumption that a vessel's tug set never turns over — true of the zero-bid
+ *       retry, and NOT true of task 24's weather hold, which cancels the assigned tugs and
+ *       re-tenders a fresh Contract Net that different tugs usually win. On the {@code storm}
+ *       scenario that credited the port €500 it never earned.</li>
  *   <li><b>Contracted fee → {@code contractId}; customs → {@code vesselId}.</b></li>
  *   <li><b>Deal / withdrawal → {@code vesselId}.</b> A walk-in negotiates once.</li>
  * </ul>
@@ -80,8 +82,9 @@ public final class LedgerCoordinator {
     private final Set<String> chargedClearances = ConcurrentHashMap.newKeySet();
     private final Set<String> creditedDeals = ConcurrentHashMap.newKeySet();
     private final Set<String> penalisedWithdrawals = ConcurrentHashMap.newKeySet();
-    /** vesselId -> the distinct tugs already billed as an extra-tug surcharge for that vessel. */
-    private final Map<String, Set<String>> tugsPerVessel = new ConcurrentHashMap<>();
+    /** vesselId|conversationId -> the distinct tugs already billed as an extra-tug surcharge on
+     * that ESCORT. Keyed per escort, not per vessel — see {@link #onTugJobAwarded} (audit B-1). */
+    private final Map<String, Set<String>> tugsPerEscort = new ConcurrentHashMap<>();
     /** Task 23 balance: bounds cumulative unengaged-timeout loss at −5/day; rollover resets. */
     private final ReputationRules.UnengagedTimeoutDailyCap unengagedCap =
             new ReputationRules.UnengagedTimeoutDailyCap();
@@ -179,7 +182,40 @@ public final class LedgerCoordinator {
 
     /**
      * A tug won a Contract Net: the port pays the winning bid, and bills the vessel €500 for each
-     * tug beyond the first. See the class javadoc for why those two use different keys.
+     * tug beyond the first ON THAT ESCORT. See the class javadoc for why those two use different
+     * keys.
+     *
+     * <p><b>Audit B-1 (2026-07-27) — why the surcharge key gained the conversation id.</b> It used
+     * to be the vessel's set of every distinct tug ever awarded to it, for the vessel's whole life.
+     * That is only equal to "€500 per tug beyond the first" if the vessel's tug set never turns
+     * over, and task 20 justified the assumption against the only re-award path that existed then:
+     * {@code CnpRetryBehaviour}, which fires exclusively on ZERO bids and therefore re-awards the
+     * same non-bidders. <b>Task 24's weather hold added a second re-award path four tasks later</b>
+     * — {@code holdVessel} CANCELs the assigned tugs and resets tracking, and the clear sweep runs
+     * a FRESH Contract Net whose winners are usually DIFFERENT tugs (R12's score is fuel-dominated
+     * and the released pair burned fuel travelling). Neither task's diff contained both halves, so
+     * no per-task review could see it.
+     *
+     * <p>On the shipped {@code storm} script that over-credited the port €500: T901 took 2 tugs,
+     * was held, and was re-escorted by 2 more, which billed as though it had held four at once.
+     * Keying per escort makes the surcharge mean what its name says.
+     *
+     * <p><b>What changed for the two cases the old key was chosen for</b> (stated precisely after the
+     * adversarial review corrected an earlier "both behave identically", which was true only for one
+     * tug): a retry re-awarding the SAME single tug still bills nothing extra, because a fresh cfpId
+     * with one tug in it is a size-1 set; and co-winners on one cfpId still bill exactly once. But a
+     * re-tender that re-awards the same TWO tugs now bills €500 twice where the old key billed it
+     * once. That is the intended per-escort semantics — two real escorts, two extra tugs, matching
+     * the two extra jobs the expense side already pays for — and it is a genuine behaviour change,
+     * not a no-op.
+     *
+     * <p><b>The {@code tugs.add} guard below is currently UNREACHABLE.</b> {@code chargedTugJobs} is
+     * keyed {@code (conversationId, tugId)} and returns early on a duplicate, and a cfpId belongs to
+     * one vessel — so reaching the add implies the pair is new, which implies the tug is not yet in
+     * this escort's set. It is kept as defence in depth against a future change to either key, and
+     * said out loud here rather than left to read as live logic. The {@code synchronized} block
+     * around it is NOT dead: two different tugs on one cfpId can still race, and the add+size pair
+     * must stay atomic together.
      */
     public void onTugJobAwarded(TugJobAwardedEvent event) {
         if (!chargedTugJobs.add(event.conversationId() + "|" + event.tugId())) {
@@ -190,7 +226,8 @@ public final class LedgerCoordinator {
         charge(ExpenseRules.tugJob(event.cost()), ExpenseRules.SOURCE_TUG_JOB,
                 event.vesselId(), event.simTimeMillis());
 
-        Set<String> tugs = tugsPerVessel.computeIfAbsent(event.vesselId(), k -> ConcurrentHashMap.newKeySet());
+        Set<String> tugs = tugsPerEscort.computeIfAbsent(
+                event.vesselId() + "|" + event.conversationId(), k -> ConcurrentHashMap.newKeySet());
         // The add+size pair must be atomic TOGETHER. `add` alone is atomic, but reading size()
         // afterwards is not: two threads adding tug_1 and tug_2 concurrently would both observe
         // size()==2 and both bill 500-0, inventing a phantom €500. Unreachable today (every money
@@ -200,7 +237,8 @@ public final class LedgerCoordinator {
         int tugsSoFar;
         synchronized (tugs) {
             if (!tugs.add(event.tugId())) {
-                return; // this tug was already billed to this vessel — a re-award, not a new tug
+                // Unreachable today — see the javadoc. Defence in depth if either key changes.
+                return;
             }
             tugsSoFar = tugs.size();
         }

@@ -193,8 +193,15 @@ class LedgerCoordinatorTest {
 
     /**
      * A CNP retry mints a fresh cfpId. Re-awarding the SAME tug is a genuinely new job to pay for
-     * — but NOT a second tug to bill the vessel a €500 surcharge for. This is why the expense and
-     * the surcharge deliberately use different keys.
+     * — but NOT a second tug to bill the vessel a €500 surcharge for.
+     *
+     * <p><b>What this test pins changed on 2026-07-27 (audit B-1), and the old description no longer
+     * fit</b> — corrected after the adversarial review pointed out that it now passes for a different
+     * reason. It used to demonstrate "the same tug across two conversations is deduped by the
+     * vessel-lifetime key". Since the surcharge is keyed per ESCORT, each conversation is now an
+     * independent size-1 set and neither charges a surcharge on its own. The OUTCOME it asserts —
+     * two jobs paid, no surcharge invented — is the one that matters and is unchanged; it is simply
+     * no longer evidence for the two-different-keys rationale.
      */
     @Test
     void aRetryReawardingTheSameTugChargesAgainButInventsNoExtraTugSurcharge() {
@@ -202,8 +209,28 @@ class LedgerCoordinatorTest {
         bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-retry-1", 9_000L));
 
         assertEquals(2, wallet.expenseHistory().size(), "two jobs — the retry is real work");
-        assertEquals(List.of(), wallet.incomeHistory(), "still only one tug ever touched this vessel");
+        assertEquals(List.of(), wallet.incomeHistory(),
+                "one tug on each escort — neither escort has a tug beyond the first");
         assertEquals(10_000.0 - 800.0, wallet.balance(), EPS);
+    }
+
+    /**
+     * Keeps the VESSEL half of the surcharge key honest. {@code tugsForDifferentVesselsDoNotShareASurchargeCount}
+     * below uses two different conversation ids as well as two vessels, so since the B-1 re-key it
+     * would pass even if {@code vesselId} were dropped from the key entirely (adversarial review,
+     * 2026-07-27). This one holds the conversation id constant so only the vessel discriminates.
+     *
+     * <p>A shared cfpId across two vessels cannot happen today — {@code InitiateCNPBehaviour} mints a
+     * fresh UUID per CNP and one CNP serves one vessel — which is exactly why the composite key was
+     * chosen over the bare conversation id, and why that choice needs a test rather than a comment.
+     */
+    @Test
+    void twoVesselsOnOneConversationIdDoNotPoolTheirTugsIntoOneSurcharge() {
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-shared", 2_000L));
+        bus.publish(new TugJobAwardedEvent("V2", "tug_2", 400.0, "cnp-shared", 2_000L));
+
+        assertEquals(List.of(), wallet.incomeHistory(),
+                "one tug each — pooling them under the conversation alone would invent a €500 surcharge");
     }
 
     @Test
@@ -214,6 +241,37 @@ class LedgerCoordinatorTest {
 
         assertEquals(1_000.0, wallet.incomeHistory().stream().mapToDouble(IncomeEvent::amount).sum(), EPS,
                 "extraTugSurcharge(3) = 2 x 500");
+    }
+
+    /**
+     * Audit B-1 (2026-07-27). The surcharge means "tugs beyond the first ON THIS ESCORT", but the
+     * key was the vessel's set of every distinct tug ever awarded to it, for its whole life. Task
+     * 20 justified that against the only re-award path that existed then — {@code CnpRetryBehaviour},
+     * which fires on ZERO bids and so re-awards the same non-bidders. Task 24's weather hold added
+     * a SECOND re-award path four tasks later: {@code holdVessel} CANCELs the assigned tugs and the
+     * clear sweep runs a FRESH Contract Net, whose winners are usually DIFFERENT tugs (R12's score
+     * is fuel-dominated, and the released pair burned fuel travelling).
+     *
+     * <p>On the shipped {@code storm} script this is not a hypothetical: T901 is awarded 2 tugs,
+     * held at t=990 s, and re-escorted by 2 more at t=1980 s. Pre-fix the port credited itself
+     * €1,500 — one surcharge for the real second tug, then €500 each for tug_3 and tug_4 as though
+     * the vessel had held four tugs at once. It lands in {@code IncomeRules.aggregateForDay}, so it
+     * inflates the EOD income line the demo puts on screen and can flip the +2 daily-target bonus.
+     */
+    @Test
+    void aSecondEscortAfterAWeatherHoldBillsItsOwnSurchargeNotACumulativeOne() {
+        // CNP #1: the original escort, two tugs -> one extra tug.
+        bus.publish(new TugJobAwardedEvent("T901", "tug_1", 400.0, "cnp-storm-1", 2_000L));
+        bus.publish(new TugJobAwardedEvent("T901", "tug_2", 450.0, "cnp-storm-1", 2_000L));
+        // Storm hold CANCELs both; the clear sweep re-tenders and two DIFFERENT tugs win.
+        bus.publish(new TugJobAwardedEvent("T901", "tug_3", 420.0, "cnp-storm-2", 9_000L));
+        bus.publish(new TugJobAwardedEvent("T901", "tug_4", 430.0, "cnp-storm-2", 9_000L));
+
+        assertEquals(4, wallet.expenseHistory().size(), "four real escort jobs — the expense side was right");
+        assertEquals(1_000.0, wallet.incomeHistory().stream().mapToDouble(IncomeEvent::amount).sum(), EPS,
+                "one extra tug per escort = 2 x 500, NOT 3 x 500");
+        assertEquals(List.of(IncomeRules.SOURCE_EXTRA_TUG, IncomeRules.SOURCE_EXTRA_TUG),
+                wallet.incomeHistory().stream().map(IncomeEvent::source).toList());
     }
 
     @Test
