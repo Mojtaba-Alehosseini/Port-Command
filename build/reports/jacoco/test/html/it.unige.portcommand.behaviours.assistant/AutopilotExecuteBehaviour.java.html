@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AutopilotExecuteBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.assistant</a> &gt; <span class="el_source">AutopilotExecuteBehaviour.java</span></div><h1>AutopilotExecuteBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.assistant;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
+import it.unige.portcommand.artifacts.PolicyRule;
+import it.unige.portcommand.artifacts.PolicyRule.PolicyAction;
+import it.unige.portcommand.assistant.Recommendation;
+import it.unige.portcommand.assistant.RecommendationAlgorithm;
+import it.unige.portcommand.assistant.RecommendationCache;
+import it.unige.portcommand.assistant.RecommendationCandidate;
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
+import it.unige.portcommand.gui.events.AssistantChatEvent;
+import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.PlayerCommandEvent;
+import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
+import jade.core.Agent;
+import jade.core.behaviours.OneShotBehaviour;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The autopilot plan (planning/10 Â§10.7). While autopilot is enabled, every
+ * {@link NegotiationOpenedEvent} first checks the player's policies ({@link PolicyRegistryArtifact
+ * #firstMatching}) â€” a match short-circuits the EV algorithm entirely â€” and only runs
+ * {@link RecommendationAlgorithm} when nothing matches. The chosen action is dispatched to HM
+ * exactly as if it came from the player's own chat ({@link PlayerCommandEvent}), same as
+ * {@link RecommendOnDemandBehaviour}'s subscribe-once-react-many shape.
+ */
+public final class AutopilotExecuteBehaviour extends OneShotBehaviour {
+
+<span class="fc" id="L37">    private static final Logger log = LoggerFactory.getLogger(AutopilotExecuteBehaviour.class);</span>
+
+    private final RecommendationAlgorithm algorithm;
+    private final PolicyRegistryArtifact policyRegistry;
+    private final EventBus eventBus;
+    private final RecommendationCache cache;
+    private final AtomicBoolean autopilotEnabled;
+
+    public AutopilotExecuteBehaviour(Agent agent, RecommendationAlgorithm algorithm,
+                                     PolicyRegistryArtifact policyRegistry, EventBus eventBus,
+                                     RecommendationCache cache, AtomicBoolean autopilotEnabled) {
+<span class="fc" id="L48">        super(agent);</span>
+<span class="fc" id="L49">        this.algorithm = algorithm;</span>
+<span class="fc" id="L50">        this.policyRegistry = policyRegistry;</span>
+<span class="fc" id="L51">        this.eventBus = eventBus;</span>
+<span class="fc" id="L52">        this.cache = cache;</span>
+<span class="fc" id="L53">        this.autopilotEnabled = autopilotEnabled;</span>
+<span class="fc" id="L54">    }</span>
+
+    /** Held so AssistantAgent cancels on takedown (task 22): the bus outlives the agent,
+     * and a respawn would otherwise leave this handler subscribed alongside the new one,
+     * double-firing every reaction. */
+    private volatile Subscription&lt;NegotiationOpenedEvent&gt; subscription;
+
+    @Override
+    public void action() {
+<span class="fc" id="L63">        subscription = eventBus.subscribe(NegotiationOpenedEvent.class, this::onNegotiationOpened, DeliveryMode.ASYNC);</span>
+<span class="fc" id="L64">        log.debug(&quot;subscribed to NegotiationOpenedEvent&quot;);</span>
+<span class="fc" id="L65">    }</span>
+
+    /** Cancels the bus subscription; safe if {@link #action()} never ran. */
+    public void cancelSubscription() {
+<span class="fc" id="L69">        Subscription&lt;NegotiationOpenedEvent&gt; s = subscription;</span>
+<span class="pc bpc" id="L70" title="1 of 2 branches missed.">        if (s != null) {</span>
+<span class="fc" id="L71">            s.cancel();</span>
+        }
+<span class="fc" id="L73">    }</span>
+
+    public void onNegotiationOpened(NegotiationOpenedEvent event) {
+<span class="fc bfc" id="L76" title="All 2 branches covered.">        if (!autopilotEnabled.get()) {</span>
+<span class="fc" id="L77">            return;</span>
+        }
+<span class="fc" id="L79">        WalkInDialogueSnapshot snapshot = event.snapshot();</span>
+<span class="fc" id="L80">        Optional&lt;PolicyRule&gt; matched = policyRegistry.firstMatching(snapshot);</span>
+
+        // TODO(task 11): a matched policy dispatches straight to HM with no
+        // PrologQueries.isCompatible check (the EV path enforces it â€” see
+        // RecommendationAlgorithm.run â€” the policy path does not). Defensible for now: this
+        // dispatches as a player-equivalent PlayerCommandEvent, and CLAUDE.md rule 4 already
+        // requires HM to query Prolog before any binding decision, exactly as it must for a
+        // human typing &quot;accept&quot; against an incompatible berth. Flagging so task 11 confirms
+        // that gate actually fires on this path too.
+        String action;
+        double price;
+<span class="fc bfc" id="L91" title="All 2 branches covered.">        if (matched.isPresent()) {</span>
+<span class="fc" id="L92">            PolicyAction policyAction = matched.get().action();</span>
+<span class="fc" id="L93">            action = policyAction.kind();</span>
+<span class="fc" id="L94">            price = priceFor(policyAction, snapshot);</span>
+<span class="fc" id="L95">            log.info(&quot;{}: policy '{}' matched -&gt; {}&quot;, event.dialogueId(), matched.get().trigger(), action);</span>
+<span class="fc" id="L96">        } else {</span>
+<span class="fc" id="L97">            Recommendation rec = algorithm.run(snapshot);</span>
+<span class="fc" id="L98">            cache.put(RecommendOnDemandBehaviour.decisionId(event.dialogueId(), snapshot), rec);</span>
+<span class="fc" id="L99">            action = rec.action();</span>
+<span class="fc" id="L100">            price = rec.price();</span>
+        }
+<span class="fc" id="L102">        dispatch(event.dialogueId(), snapshot, action, price);</span>
+<span class="fc" id="L103">    }</span>
+
+    private static double priceFor(PolicyAction action, WalkInDialogueSnapshot snapshot) {
+<span class="pc bpc" id="L106" title="2 of 3 branches missed.">        return switch (action.kind()) {</span>
+<span class="nc" id="L107">            case RecommendationCandidate.COUNTER -&gt; snapshot.lastVesselOffer() * (1.0 + action.counterPct());</span>
+            // Mirrors RecommendationAlgorithm.scoreRejectSilent: no price is on the table.
+<span class="fc" id="L109">            case RecommendationCandidate.REJECT_SILENT -&gt; 0.0;</span>
+<span class="nc" id="L110">            default -&gt; snapshot.lastVesselOffer(); // accept: take the vessel's own standing offer</span>
+        };
+    }
+
+    private void dispatch(String dialogueId, WalkInDialogueSnapshot snapshot, String action, double price) {
+        // reject_silent means exactly that: nothing is dispatched, the round simply passes.
+<span class="fc bfc" id="L116" title="All 2 branches covered.">        if (!RecommendationCandidate.REJECT_SILENT.equals(action)) {</span>
+<span class="pc bpc" id="L117" title="2 of 3 branches missed.">            PlayerCommandKind kind = switch (action) {</span>
+<span class="fc" id="L118">                case RecommendationCandidate.ACCEPT -&gt; PlayerCommandKind.ACCEPT;</span>
+<span class="nc" id="L119">                case RecommendationCandidate.COUNTER -&gt; PlayerCommandKind.PROPOSE;</span>
+<span class="pc" id="L120">                default -&gt; throw new IllegalStateException(&quot;unknown autopilot action: &quot; + action);</span>
+            };
+            // &quot;conversation_id&quot; lets HM (task 11) address the real ACL reply to the right
+            // standing negotiation â€” dialogueId is that negotiation's FIPA conversationId.
+<span class="fc" id="L124">            eventBus.publish(new PlayerCommandEvent(kind, snapshot.vesselId(),</span>
+<span class="fc" id="L125">                    Map.of(&quot;price&quot;, price, &quot;conversation_id&quot;, dialogueId)));</span>
+        }
+<span class="fc bfc" id="L127" title="All 2 branches covered.">        String priceSuffix = price &gt; 0 ? &quot; at â‚¬&quot; + Math.round(price) : &quot;&quot;;</span>
+<span class="fc" id="L128">        eventBus.publish(new AssistantChatEvent(dialogueId, &quot;ðŸ¤– Assistant (autopilot): &quot; + action + priceSuffix));</span>
+<span class="fc" id="L129">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

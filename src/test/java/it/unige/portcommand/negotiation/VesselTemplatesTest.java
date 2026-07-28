@@ -33,7 +33,22 @@ class VesselTemplatesTest {
             assertTrue(t.minAcceptablePriceRange()[1] <= t.targetPriceRange()[0],
                     type + " min-acceptable band below target band");
             assertTrue(t.maxWaitMinutesRange()[0] < t.maxWaitMinutesRange()[1], type + " wait range");
+            // 19b duration floor: well-formed, and lo >= 1 is LOAD-BEARING — the engine's
+            // too_short branch is what keeps a degenerate 0/negative proposal out of every
+            // deal, and that only holds if no template can ever draw a floor below 1.
+            assertTrue(t.minDurationRange()[0] < t.minDurationRange()[1], type + " duration floor range");
+            assertTrue(t.minDurationRange()[0] >= 1, type + " duration floor must be >= 1h");
+            assertTrue(t.minDurationRange()[1] <= 18,
+                    type + " a floor above the 6..18h preferred-stay envelope would always clamp");
         }
+    }
+
+    @Test
+    void minDurationSamplingStaysWithinRangeAndIsDeterministic() {
+        VesselTemplate cargo = VesselTemplates.forType("cargo_vessel");
+        int floor = cargo.sampleMinDurationHours(new Random(11));
+        assertTrue(floor >= 6 && floor <= 12, "cargo floor sampled in range: " + floor);
+        assertEquals(floor, cargo.sampleMinDurationHours(new Random(11)), "same seed -> same draw");
     }
 
     @Test
@@ -44,7 +59,10 @@ class VesselTemplatesTest {
         // same seed -> same draw
         assertEquals(tanker.sampleTargetPrice(new Random(7)), tanker.sampleTargetPrice(new Random(7)));
         int wait = tanker.sampleMaxWaitMinutes(new Random(3));
-        assertTrue(wait >= 15 && wait <= 30, "wait sampled in range: " + wait);
+        // Task 24 (2026-07-17): patience recalibrated for live time — tanker band is now
+        // [240,420] sim-minutes (~50-88 wall-s at the default mapping); the stub-era [15,30]
+        // predates a clock that actually advances. See vessel_templates.json's dated header.
+        assertTrue(wait >= 240 && wait <= 420, "wait sampled in range: " + wait);
         Personality p = tanker.samplePersonality(new Random(1));
         assertEquals(p, tanker.samplePersonality(new Random(1)));
     }

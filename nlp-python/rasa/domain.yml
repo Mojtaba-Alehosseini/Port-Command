@@ -1,5 +1,11 @@
 # Rasa domain — Port Command Genova (task 12).
-# 9 intents, 8 entities — EXACTLY per PROJECT_DEFINITION.md 6.3. Do not add/rename.
+# 10 intents, 8 entities — EXACTLY per PROJECT_DEFINITION.md 6.3. Do not add/rename.
+#
+# 2026-07-27 (task 26, decision b): 9 -> 10 intents. out_of_scope was added after the
+# wild-set evaluation measured a 73.7% false-bind rate on turns whose correct answer is
+# "ask a clarifying question": with no "none of these" label, DIET must spread a keyboard
+# mash or a greeting over the nine in-domain intents and one of them wins. Entities are
+# unchanged at 8.
 version: "3.1"
 
 intents:
@@ -17,6 +23,10 @@ intents:
   - set_policy
   - request_help
   - cancel_action
+  # out_of_scope is a ROUTING LABEL ONLY, like set_policy above. NLPPipeline maps it to
+  # the clarification path — it never becomes an ACL performative, so it does not add an
+  # 11th message type to the FIPA set. (Task 26 decision b.)
+  - out_of_scope
 
 entities:
   - vessel_name

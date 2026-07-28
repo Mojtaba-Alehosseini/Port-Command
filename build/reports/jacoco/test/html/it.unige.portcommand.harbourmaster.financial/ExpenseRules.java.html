@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExpenseRules.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.harbourmaster.financial</a> &gt; <span class="el_source">ExpenseRules.java</span></div><h1>ExpenseRules.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.harbourmaster.financial;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
+
+import it.unige.portcommand.harbourmaster.ExpenseEvent;
+import it.unige.portcommand.harbourmaster.WalletLedger;
+import it.unige.portcommand.util.SimClock;
+
+/**
+ * Every way the port spends money (task 20 â€” owns this class; it began life as a constants-only
+ * task-10 stub for {@code marginalCost}).
+ *
+ * &lt;p&gt;Deliberately Java, not Prolog (CLAUDE.md rule 4 / INVARIANTS â€” financial helpers stay out of
+ * the 30-rule kernel). Pure arithmetic; {@link #variableForDay} is the one read-only exception.
+ */
+public final class ExpenseRules {
+
+    /** Source tags for {@link ExpenseEvent#source()} â€” the ledger's audit vocabulary. */
+    public static final String SOURCE_TUG_JOB = &quot;tug_job&quot;;
+    public static final String SOURCE_CUSTOMS = &quot;customs_clearance&quot;;
+    public static final String SOURCE_INCIDENT_FINE = &quot;incident_fine&quot;;
+    public static final String SOURCE_SALARIES = &quot;salaries&quot;;
+    public static final String SOURCE_BERTH_MAINTENANCE = &quot;berth_maintenance&quot;;
+    public static final String SOURCE_TUG_IDLE_LEASE = &quot;tug_idle_lease&quot;;
+    public static final String SOURCE_INSURANCE = &quot;insurance&quot;;
+    public static final String SOURCE_UTILITIES = &quot;utilities&quot;;
+
+    /**
+     * The five fixed daily lines, in canonical order. This map â€” not a literal {@code 5200.0} â€”
+     * is the single source of the daily fixed cost: {@link #dailyFixed()} SUMS it, so the total
+     * cannot drift from its components, and the â‚¬5050 bug CLAUDE.md rule 7 forbids is
+     * unrepresentable without visibly editing one of these five numbers.
+     *
+     * &lt;p&gt;Deliberate deviation from {@code planning/20} Â§20.2's &quot;Configurable in defaults.json&quot;:
+     * kept a hard-coded constant. CLAUDE.md rule 7 pins â‚¬5200 as an invariant and task 24 throws
+     * if it ever reads anything else â€” making it configurable would add exactly the drift vector
+     * that rule exists to forbid, for a number no scenario is allowed to vary.
+     */
+<span class="fc" id="L42">    private static final Map&lt;String, Double&gt; DAILY_FIXED = fixedBreakdown();</span>
+
+    /** Fixed lines are charged once per day by task 24 â€” {@link #variableForDay} must exclude them. */
+<span class="fc" id="L45">    private static final Set&lt;String&gt; FIXED_SOURCES = DAILY_FIXED.keySet();</span>
+
+    /** planning/20: customs_clearance â‚¬100 per clearance. */
+    private static final double CUSTOMS_CLEARANCE_EUR = 100.0;
+    /** planning/20: incident_fine â‚¬2000. */
+    private static final double INCIDENT_FINE_EUR = 2_000.0;
+
+    // ---- marginalCost inputs (task-10's Assistant EV estimate; unchanged by task 20) ----
+
+    // Typical tug count per type (PROJECT_DEFINITION Â§5.2's &quot;expected per type over the
+    // template ranges&quot;: tanker 2 / container 2 / cargo 1-2 / cruise 2 / ferry 0). The real
+    // per-vessel count (PrologQueries.tugsRequired) also needs vessel length, which this
+    // constants-only estimate does not receive.
+<span class="fc" id="L58">    private static final Map&lt;String, Integer&gt; TYPICAL_TUGS = Map.of(</span>
+<span class="fc" id="L59">            &quot;tanker&quot;, 2,</span>
+<span class="fc" id="L60">            &quot;container_vessel&quot;, 2,</span>
+<span class="fc" id="L61">            &quot;cargo_vessel&quot;, 1,</span>
+<span class="fc" id="L62">            &quot;ferry&quot;, 0,</span>
+<span class="fc" id="L63">            &quot;cruise_ship&quot;, 2);</span>
+
+    /** â‚¬/tug job â€” matches AgentRoster's tug baseFare and planning/20's tug_job (350-600) floor. */
+    private static final double AVG_TUG_FEE = 350.0;
+    private static final double CUSTOMS_SHARE = CUSTOMS_CLEARANCE_EUR;
+    /** Amortised berth-occupancy overhead per vessel-hour. */
+    private static final double BERTH_OCCUPANCY_PER_HOUR = 50.0;
+
+    private ExpenseRules() {
+    }
+
+    /**
+     * What a tug escort costs: the winning Contract Net bid, verbatim. A passthrough, because the
+     * price was set by the tug's own PROPOSE ({@code BidInCNPBehaviour}:
+     * {@code baseFare + fuelCostPerKm Ã— distanceKm}) and chosen by Prolog {@code selectBestBids}
+     * â€” re-deriving it here would silently decouple the ledger from the negotiation that produced
+     * it, and a cheaper winning bid would stop saving the port money.
+     */
+    public static double tugJob(double winningBid) {
+<span class="fc bfc" id="L82" title="All 2 branches covered.">        if (winningBid &lt; 0) {</span>
+<span class="fc" id="L83">            throw new IllegalArgumentException(&quot;winningBid must be &gt;= 0: &quot; + winningBid);</span>
+        }
+<span class="fc" id="L85">        return winningBid;</span>
+    }
+
+    /** â‚¬100 per customs clearance granted. */
+    public static double customsClearance() {
+<span class="fc" id="L90">        return CUSTOMS_CLEARANCE_EUR;</span>
+    }
+
+    /** â‚¬2000 per safety incident. */
+    public static double incidentFine() {
+<span class="fc" id="L95">        return INCIDENT_FINE_EUR;</span>
+    }
+
+    /**
+     * The fixed daily cost: &lt;strong&gt;â‚¬5200&lt;/strong&gt;, summed from {@link #dailyFixedBreakdown()}'s
+     * five lines (150Ã—4 salaries + 1200 berth maintenance + 400Ã—4 tug idle lease + 1500 insurance
+     * + 300 utilities). Never â‚¬5050 â€” CLAUDE.md rule 7. Task 24's {@code runEndOfDay} charges
+     * these lines exactly once per day and asserts this total.
+     */
+    public static double dailyFixed() {
+<span class="fc" id="L105">        return DAILY_FIXED.values().stream().mapToDouble(Double::doubleValue).sum();</span>
+    }
+
+    /**
+     * The five fixed daily lines by source tag, in canonical order â€” what task 24 charges
+     * line-by-line so the wallet's history names each cost rather than one opaque â‚¬5200 lump.
+     * {@code LinkedHashMap}-backed and unmodifiable per INVARIANTS' determinism rule.
+     */
+    public static Map&lt;String, Double&gt; dailyFixedBreakdown() {
+<span class="fc" id="L114">        return DAILY_FIXED;</span>
+    }
+
+    /**
+     * Marginal cost of servicing one more vessel (tug escort + berth-occupancy share + customs-
+     * handling share) â€” the Assistant's EV computation input (planning/10 Â§10.2 step 5).
+     * {@code cargoClass} is accepted for a future hazmat surcharge but unused.
+     */
+    public static double marginalCost(String vesselType, String cargoClass, int hours, int tonnage) {
+<span class="fc" id="L123">        Integer tugs = TYPICAL_TUGS.get(vesselType);</span>
+<span class="fc bfc" id="L124" title="All 2 branches covered.">        if (tugs == null) {</span>
+<span class="fc" id="L125">            throw new IllegalArgumentException(&quot;unknown vessel type: &quot; + vesselType);</span>
+        }
+<span class="fc" id="L127">        return tugs * AVG_TUG_FEE + CUSTOMS_SHARE + hours * BERTH_OCCUPANCY_PER_HOUR;</span>
+    }
+
+    /**
+     * Read-only sum of the day's VARIABLE expenses â€” tug jobs, customs clearances, incident fines
+     * â€” consumed by {@code DayRolloverCoordinator} (task 24).
+     *
+     * &lt;p&gt;Excludes the five fixed lines &lt;strong&gt;by source tag&lt;/strong&gt;, not by timing. Task 24
+     * charges the fixed â‚¬5200 into this same ledger, so those events land in the same day's
+     * history; filtering on {@link #FIXED_SOURCES} means this stays correct even if EOD is
+     * recomputed or replayed, rather than depending on being called before the fixed charge.
+     * Does not charge or mutate: these costs were already applied when they happened.
+     */
+    public static double variableForDay(WalletLedger ledger, int day) {
+<span class="fc" id="L141">        return ledger.expenseHistory().stream()</span>
+<span class="fc bfc" id="L142" title="All 2 branches covered.">                .filter(e -&gt; SimClock.gameDayOf(e.simTime()) == day)</span>
+<span class="fc bfc" id="L143" title="All 2 branches covered.">                .filter(e -&gt; !FIXED_SOURCES.contains(e.source()))</span>
+<span class="fc" id="L144">                .mapToDouble(ExpenseEvent::amount)</span>
+<span class="fc" id="L145">                .sum();</span>
+    }
+
+    private static Map&lt;String, Double&gt; fixedBreakdown() {
+<span class="fc" id="L149">        Map&lt;String, Double&gt; lines = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L150">        lines.put(SOURCE_SALARIES, 150.0 * 4);          //  600 â€” 4 staff Ã— â‚¬150</span>
+<span class="fc" id="L151">        lines.put(SOURCE_BERTH_MAINTENANCE, 1_200.0);   // 1200</span>
+<span class="fc" id="L152">        lines.put(SOURCE_TUG_IDLE_LEASE, 400.0 * 4);    // 1600 â€” 4 tugs Ã— â‚¬400</span>
+<span class="fc" id="L153">        lines.put(SOURCE_INSURANCE, 1_500.0);           // 1500</span>
+<span class="fc" id="L154">        lines.put(SOURCE_UTILITIES, 300.0);             //  300</span>
+<span class="fc" id="L155">        return Collections.unmodifiableMap(lines);      // ---- 5200</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

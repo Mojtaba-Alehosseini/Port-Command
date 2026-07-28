@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerCoordinator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.harbourmaster.financial</a> &gt; <span class="el_source">LedgerCoordinator.java</span></div><h1>LedgerCoordinator.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.harbourmaster.financial;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+import it.unige.portcommand.gui.events.ContractedFeeEarnedEvent;
+import it.unige.portcommand.gui.events.CustomsClearedEvent;
+import it.unige.portcommand.gui.events.DealClosedEvent;
+import it.unige.portcommand.gui.events.TugJobAwardedEvent;
+import it.unige.portcommand.gui.events.WithdrawalEvent;
+import it.unige.portcommand.harbourmaster.ExpenseEvent;
+import it.unige.portcommand.harbourmaster.IncomeEvent;
+import it.unige.portcommand.harbourmaster.ReputationLedger;
+import it.unige.portcommand.harbourmaster.WalletLedger;
+import it.unige.portcommand.ontology.Deal;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Turns the game's money-bearing events into ledger entries, as they happen, during the day
+ * (task 20). This is the &quot;per-deal income was already applied during the day&quot; half of the EOD
+ * double-charge guard: task 24 later only READS the day back and charges the fixed â‚¬5200.
+ *
+ * &lt;p&gt;A plain class, not a JADE behaviour â€” the behaviour catalogue stays locked at 51
+ * (INVARIANTS / ADR-01). It subscribes to the bus and never touches an agent, and agents never
+ * call it.
+ *
+ * &lt;h2&gt;Idempotency â€” the reason each key is what it is&lt;/h2&gt;
+ * Every charge is keyed, so a replayed or duplicated event cannot move the wallet twice:
+ * &lt;ul&gt;
+ *   &lt;li&gt;&lt;b&gt;Tug job â†’ {@code conversationId + &quot;|&quot; + tugId}.&lt;/b&gt; {@code conversationId} ALONE is
+ *       wrong: two co-winning tugs for one vessel share a single CNP {@code cfpId}, so keying on
+ *       it collapses two real jobs into one and under-charges. {@code tugId} is the only per-tug
+ *       discriminator that exists.&lt;/li&gt;
+ *   &lt;li&gt;&lt;b&gt;Extra-tug surcharge â†’ {@code vesselId + &quot;|&quot; + conversationId} â†’ that escort's set of
+ *       distinct {@code tugId}s.&lt;/b&gt; The two still COUNT different things â€” the expense counts
+ *       &lt;em&gt;jobs&lt;/em&gt;, the surcharge counts &lt;em&gt;tugs beyond the first on one escort&lt;/em&gt; â€” but as of
+ *       2026-07-27 they no longer &lt;em&gt;partition&lt;/em&gt; differently: a {@code conversationId} is a
+ *       cfpId and belongs to exactly one vessel, so both sets are now keyed inside the same
+ *       (conversation, tug) cell. The earlier note here said &quot;do not simplify them into one key&quot;;
+ *       that rationale is retired, and the honest statement is that the surcharge's own dedupe is
+ *       currently unreachable â€” see {@link #onTugJobAwarded}.
+ *       &lt;p&gt;The conversation id joined the key in &lt;b&gt;audit B-1&lt;/b&gt;. It used to be the vessel alone,
+ *       on the stated assumption that a vessel's tug set never turns over â€” true of the zero-bid
+ *       retry, and NOT true of task 24's weather hold, which cancels the assigned tugs and
+ *       re-tenders a fresh Contract Net that different tugs usually win. On the {@code storm}
+ *       scenario that credited the port â‚¬500 it never earned.&lt;/li&gt;
+ *   &lt;li&gt;&lt;b&gt;Contracted fee â†’ {@code contractId}; customs â†’ {@code vesselId}.&lt;/b&gt;&lt;/li&gt;
+ *   &lt;li&gt;&lt;b&gt;Deal / withdrawal â†’ {@code vesselId}.&lt;/b&gt; A walk-in negotiates once.&lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ * &lt;h2&gt;Threading&lt;/h2&gt;
+ * Subscribes {@link DeliveryMode#CALLER_THREAD}: {@code ASYNC}'s bounded queue drops the oldest
+ * event when it fills, and a dropped money event is money that silently never existed. Handlers
+ * are O(1) â€” a set add plus a ledger write â€” so blocking the publishing agent thread is bounded.
+ * The ledgers are themselves thread-safe; this class's keying sets are concurrent.
+ *
+ * &lt;h2&gt;What is NOT wired, and why&lt;/h2&gt;
+ * {@code IncomeRules} also prices hazmat, pilot service, bunker fuel and water/waste. None of them
+ * is charged here: &lt;strong&gt;no event or message carries them&lt;/strong&gt; â€” nothing in the game today
+ * says &quot;a pilot was used&quot; or &quot;bunker fuel was sold&quot;. Those rules exist for the Â§7.5 calibration
+ * and for whoever adds a producer; inventing a trigger for them would make the wallet report
+ * income the simulation never earned. Likewise {@code ExpenseRules.incidentFine()} â€” there is no
+ * incident event yet.
+ */
+public final class LedgerCoordinator {
+
+<span class="fc" id="L75">    private static final Logger log = LoggerFactory.getLogger(LedgerCoordinator.class);</span>
+
+    private final WalletLedger wallet;
+    private final ReputationLedger reputation;
+
+<span class="fc" id="L80">    private final Set&lt;String&gt; chargedTugJobs = ConcurrentHashMap.newKeySet();</span>
+<span class="fc" id="L81">    private final Set&lt;String&gt; creditedContracts = ConcurrentHashMap.newKeySet();</span>
+<span class="fc" id="L82">    private final Set&lt;String&gt; chargedClearances = ConcurrentHashMap.newKeySet();</span>
+<span class="fc" id="L83">    private final Set&lt;String&gt; creditedDeals = ConcurrentHashMap.newKeySet();</span>
+<span class="fc" id="L84">    private final Set&lt;String&gt; penalisedWithdrawals = ConcurrentHashMap.newKeySet();</span>
+    /** vesselId|conversationId -&gt; the distinct tugs already billed as an extra-tug surcharge on
+     * that ESCORT. Keyed per escort, not per vessel â€” see {@link #onTugJobAwarded} (audit B-1). */
+<span class="fc" id="L87">    private final Map&lt;String, Set&lt;String&gt;&gt; tugsPerEscort = new ConcurrentHashMap&lt;&gt;();</span>
+    /** Task 23 balance: bounds cumulative unengaged-timeout loss at âˆ’5/day; rollover resets. */
+<span class="fc" id="L89">    private final ReputationRules.UnengagedTimeoutDailyCap unengagedCap =</span>
+            new ReputationRules.UnengagedTimeoutDailyCap();
+
+<span class="fc" id="L92">    private final List&lt;Subscription&lt;?&gt;&gt; subscriptions = new ArrayList&lt;&gt;();</span>
+
+<span class="fc" id="L94">    public LedgerCoordinator(EventBus eventBus, WalletLedger wallet, ReputationLedger reputation) {</span>
+<span class="fc" id="L95">        Objects.requireNonNull(eventBus, &quot;eventBus&quot;);</span>
+<span class="fc" id="L96">        this.wallet = Objects.requireNonNull(wallet, &quot;wallet&quot;);</span>
+<span class="fc" id="L97">        this.reputation = Objects.requireNonNull(reputation, &quot;reputation&quot;);</span>
+<span class="fc" id="L98">        subscriptions.add(eventBus.subscribe(DealClosedEvent.class, this::onDealClosed, DeliveryMode.CALLER_THREAD));</span>
+<span class="fc" id="L99">        subscriptions.add(eventBus.subscribe(WithdrawalEvent.class, this::onWithdrawal, DeliveryMode.CALLER_THREAD));</span>
+<span class="fc" id="L100">        subscriptions.add(eventBus.subscribe(</span>
+                TugJobAwardedEvent.class, this::onTugJobAwarded, DeliveryMode.CALLER_THREAD));
+<span class="fc" id="L102">        subscriptions.add(eventBus.subscribe(</span>
+                ContractedFeeEarnedEvent.class, this::onContractedFee, DeliveryMode.CALLER_THREAD));
+<span class="fc" id="L104">        subscriptions.add(eventBus.subscribe(</span>
+                CustomsClearedEvent.class, this::onCustomsCleared, DeliveryMode.CALLER_THREAD));
+        // DayRolloverEvent is the EOD fan-out's LAST event (DayRolloverCoordinator contract),
+        // so the ended day's own withdrawals were all clamped before this reset runs.
+<span class="fc" id="L108">        subscriptions.add(eventBus.subscribe(</span>
+                it.unige.portcommand.lifecycle.events.DayRolloverEvent.class,
+<span class="fc" id="L110">                e -&gt; unengagedCap.resetForNewDay(), DeliveryMode.CALLER_THREAD));</span>
+<span class="fc" id="L111">    }</span>
+
+    /**
+     * A walk-in deal closed: the negotiated fee, plus the premium surcharge if the port's standing
+     * has earned it. Reputation moves per the canonical {@code ReputationRules} table â€” walk-ins
+     * only; a contracted vessel is pre-agreed and earns none (see {@link ReputationRules}).
+     */
+    public void onDealClosed(DealClosedEvent event) {
+<span class="fc" id="L119">        Deal deal = event.deal();</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">        if (deal.outcome() != Deal.Outcome.DEAL) {</span>
+<span class="fc" id="L121">            log.warn(&quot;DealClosedEvent with non-DEAL outcome {} for {} â€” ignoring (WithdrawalEvent's job)&quot;,</span>
+<span class="fc" id="L122">                    deal.outcome(), deal.vesselId());</span>
+<span class="fc" id="L123">            return;</span>
+        }
+<span class="fc bfc" id="L125" title="All 2 branches covered.">        if (!creditedDeals.add(deal.vesselId())) {</span>
+<span class="fc" id="L126">            log.warn(&quot;duplicate DealClosedEvent for {} â€” already credited, ignoring&quot;, deal.vesselId());</span>
+<span class="fc" id="L127">            return;</span>
+        }
+<span class="fc" id="L129">        double base = IncomeRules.berthBase(null, deal.finalHours(), deal.finalPrice());</span>
+<span class="fc" id="L130">        credit(base, IncomeRules.SOURCE_BERTH_BASE, deal.vesselId(), deal.closedAtSimMillis());</span>
+<span class="fc" id="L131">        creditPremium(base, deal.vesselId(), deal.closedAtSimMillis());</span>
+<span class="fc" id="L132">        reputation.adjust(ReputationRules.deltaFor(Deal.Outcome.DEAL), &quot;deal_closed&quot;,</span>
+<span class="fc" id="L133">                deal.vesselId(), deal.closedAtSimMillis());</span>
+<span class="fc" id="L134">    }</span>
+
+    /**
+     * A walk-in left without a deal: no money, and the reputation cost of the outcome. Task 24
+     * (Moji's balance call) splits the TIMEOUT penalty by engagement â€” a never-engaged timeout
+     * (the player never even countered) is the gentler âˆ’1, an abandoned one âˆ’3; every other
+     * outcome ignores the bit. The ledger reason string names the split so the audit history and
+     * the EOD breakdown stay legible.
+     */
+    public void onWithdrawal(WithdrawalEvent event) {
+<span class="fc bfc" id="L144" title="All 2 branches covered.">        if (!penalisedWithdrawals.add(event.vesselId())) {</span>
+<span class="fc" id="L145">            log.warn(&quot;duplicate WithdrawalEvent for {} â€” already penalised, ignoring&quot;, event.vesselId());</span>
+<span class="fc" id="L146">            return;</span>
+        }
+<span class="fc" id="L148">        double delta = ReputationRules.withdrawalDelta(event.outcome(), event.playerEngaged());</span>
+<span class="fc bfc" id="L149" title="All 4 branches covered.">        boolean unengagedTimeout = event.outcome() == Deal.Outcome.TIMEOUT &amp;&amp; !event.playerEngaged();</span>
+<span class="fc bfc" id="L150" title="All 2 branches covered.">        if (unengagedTimeout) {</span>
+            // Task 23 balance (checkpoint-#6): a mostly-idle day was bleeding ~âˆ’8/day from
+            // walk-ins nobody touched. Cumulative unengaged loss is floored at âˆ’5/day;
+            // the engaged âˆ’3 path below stays uncapped.
+<span class="fc" id="L154">            double clamped = unengagedCap.clamp(delta);</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">            if (clamped == 0.0) {</span>
+<span class="fc" id="L156">                log.info(&quot;unengaged timeout for {} â€” daily reputation cap ({}) reached, no further penalty&quot;,</span>
+<span class="fc" id="L157">                        event.vesselId(), ReputationRules.timeoutUnengagedDailyCap());</span>
+<span class="fc" id="L158">                return;</span>
+            }
+<span class="fc" id="L160">            delta = clamped;</span>
+        }
+<span class="fc bfc" id="L162" title="All 2 branches covered.">        String reason = unengagedTimeout</span>
+<span class="fc" id="L163">                ? &quot;timeout_unengaged&quot;</span>
+<span class="fc" id="L164">                : event.outcome().name().toLowerCase(java.util.Locale.ROOT);</span>
+<span class="fc" id="L165">        reputation.adjust(delta, reason, event.vesselId(), event.simTimeMillis());</span>
+<span class="fc" id="L166">    }</span>
+
+    /**
+     * A contracted vessel was granted its berth: the contract's agreed fee, plus premium if
+     * earned. No reputation â€” a pre-agreed contract is not a negotiation handled well or badly.
+     */
+    public void onContractedFee(ContractedFeeEarnedEvent event) {
+<span class="fc bfc" id="L173" title="All 2 branches covered.">        if (!creditedContracts.add(event.contractId())) {</span>
+<span class="fc" id="L174">            log.warn(&quot;duplicate ContractedFeeEarnedEvent for {} â€” already credited, ignoring&quot;,</span>
+<span class="fc" id="L175">                    event.contractId());</span>
+<span class="fc" id="L176">            return;</span>
+        }
+<span class="fc" id="L178">        double base = IncomeRules.berthBase(null, event.hours(), event.fee());</span>
+<span class="fc" id="L179">        credit(base, IncomeRules.SOURCE_BERTH_BASE, event.vesselId(), event.simTimeMillis());</span>
+<span class="fc" id="L180">        creditPremium(base, event.vesselId(), event.simTimeMillis());</span>
+<span class="fc" id="L181">    }</span>
+
+    /**
+     * A tug won a Contract Net: the port pays the winning bid, and bills the vessel â‚¬500 for each
+     * tug beyond the first ON THAT ESCORT. See the class javadoc for why those two use different
+     * keys.
+     *
+     * &lt;p&gt;&lt;b&gt;Audit B-1 (2026-07-27) â€” why the surcharge key gained the conversation id.&lt;/b&gt; It used
+     * to be the vessel's set of every distinct tug ever awarded to it, for the vessel's whole life.
+     * That is only equal to &quot;â‚¬500 per tug beyond the first&quot; if the vessel's tug set never turns
+     * over, and task 20 justified the assumption against the only re-award path that existed then:
+     * {@code CnpRetryBehaviour}, which fires exclusively on ZERO bids and therefore re-awards the
+     * same non-bidders. &lt;b&gt;Task 24's weather hold added a second re-award path four tasks later&lt;/b&gt;
+     * â€” {@code holdVessel} CANCELs the assigned tugs and resets tracking, and the clear sweep runs
+     * a FRESH Contract Net whose winners are usually DIFFERENT tugs (R12's score is fuel-dominated
+     * and the released pair burned fuel travelling). Neither task's diff contained both halves, so
+     * no per-task review could see it.
+     *
+     * &lt;p&gt;On the shipped {@code storm} script that over-credited the port â‚¬500: T901 took 2 tugs,
+     * was held, and was re-escorted by 2 more, which billed as though it had held four at once.
+     * Keying per escort makes the surcharge mean what its name says.
+     *
+     * &lt;p&gt;&lt;b&gt;What changed for the two cases the old key was chosen for&lt;/b&gt; (stated precisely after the
+     * adversarial review corrected an earlier &quot;both behave identically&quot;, which was true only for one
+     * tug): a retry re-awarding the SAME single tug still bills nothing extra, because a fresh cfpId
+     * with one tug in it is a size-1 set; and co-winners on one cfpId still bill exactly once. But a
+     * re-tender that re-awards the same TWO tugs now bills â‚¬500 twice where the old key billed it
+     * once. That is the intended per-escort semantics â€” two real escorts, two extra tugs, matching
+     * the two extra jobs the expense side already pays for â€” and it is a genuine behaviour change,
+     * not a no-op.
+     *
+     * &lt;p&gt;&lt;b&gt;The {@code tugs.add} guard below is currently UNREACHABLE.&lt;/b&gt; {@code chargedTugJobs} is
+     * keyed {@code (conversationId, tugId)} and returns early on a duplicate, and a cfpId belongs to
+     * one vessel â€” so reaching the add implies the pair is new, which implies the tug is not yet in
+     * this escort's set. It is kept as defence in depth against a future change to either key, and
+     * said out loud here rather than left to read as live logic. The {@code synchronized} block
+     * around it is NOT dead: two different tugs on one cfpId can still race, and the add+size pair
+     * must stay atomic together.
+     */
+    public void onTugJobAwarded(TugJobAwardedEvent event) {
+<span class="fc bfc" id="L221" title="All 2 branches covered.">        if (!chargedTugJobs.add(event.conversationId() + &quot;|&quot; + event.tugId())) {</span>
+<span class="fc" id="L222">            log.warn(&quot;duplicate TugJobAwardedEvent for {}/{} â€” already charged, ignoring&quot;,</span>
+<span class="fc" id="L223">                    event.conversationId(), event.tugId());</span>
+<span class="fc" id="L224">            return;</span>
+        }
+<span class="fc" id="L226">        charge(ExpenseRules.tugJob(event.cost()), ExpenseRules.SOURCE_TUG_JOB,</span>
+<span class="fc" id="L227">                event.vesselId(), event.simTimeMillis());</span>
+
+<span class="fc" id="L229">        Set&lt;String&gt; tugs = tugsPerEscort.computeIfAbsent(</span>
+<span class="fc" id="L230">                event.vesselId() + &quot;|&quot; + event.conversationId(), k -&gt; ConcurrentHashMap.newKeySet());</span>
+        // The add+size pair must be atomic TOGETHER. `add` alone is atomic, but reading size()
+        // afterwards is not: two threads adding tug_1 and tug_2 concurrently would both observe
+        // size()==2 and both bill 500-0, inventing a phantom â‚¬500. Unreachable today (every money
+        // publisher is on the single HarbourMaster agent thread), but this class advertises
+        // concurrent keying sets, so the lock keeps that promise honest rather than relying on a
+        // single-threaded caller nobody wrote down. Found by the task-20 adversarial review.
+        int tugsSoFar;
+<span class="fc" id="L238">        synchronized (tugs) {</span>
+<span class="pc bpc" id="L239" title="1 of 2 branches missed.">            if (!tugs.add(event.tugId())) {</span>
+                // Unreachable today â€” see the javadoc. Defence in depth if either key changes.
+<span class="nc" id="L241">                return;</span>
+            }
+<span class="fc" id="L243">            tugsSoFar = tugs.size();</span>
+<span class="fc" id="L244">        }</span>
+<span class="fc" id="L245">        double surcharge = IncomeRules.extraTugSurcharge(tugsSoFar)</span>
+<span class="fc" id="L246">                - IncomeRules.extraTugSurcharge(tugsSoFar - 1);</span>
+<span class="fc bfc" id="L247" title="All 2 branches covered.">        if (surcharge &gt; 0) {</span>
+<span class="fc" id="L248">            credit(surcharge, IncomeRules.SOURCE_EXTRA_TUG, event.vesselId(), event.simTimeMillis());</span>
+        }
+<span class="fc" id="L250">    }</span>
+
+    /** Customs granted a clearance: â‚¬100. */
+    public void onCustomsCleared(CustomsClearedEvent event) {
+<span class="fc bfc" id="L254" title="All 2 branches covered.">        if (!chargedClearances.add(event.vesselId())) {</span>
+<span class="fc" id="L255">            log.warn(&quot;duplicate CustomsClearedEvent for {} â€” already charged, ignoring&quot;, event.vesselId());</span>
+<span class="fc" id="L256">            return;</span>
+        }
+<span class="fc" id="L258">        charge(ExpenseRules.customsClearance(), ExpenseRules.SOURCE_CUSTOMS,</span>
+<span class="fc" id="L259">                event.vesselId(), event.simTimeMillis());</span>
+<span class="fc" id="L260">    }</span>
+
+    private void creditPremium(double base, String vesselId, long simTime) {
+<span class="fc" id="L263">        double premium = IncomeRules.premiumSurcharge(base, reputation.score());</span>
+<span class="fc bfc" id="L264" title="All 2 branches covered.">        if (premium &gt; 0) {</span>
+<span class="fc" id="L265">            credit(premium, IncomeRules.SOURCE_PREMIUM, vesselId, simTime);</span>
+        }
+<span class="fc" id="L267">    }</span>
+
+    private void credit(double amount, String source, String vesselId, long simTime) {
+<span class="pc bpc" id="L270" title="1 of 2 branches missed.">        if (amount &lt;= 0) {</span>
+<span class="nc" id="L271">            return;</span>
+        }
+<span class="fc" id="L273">        wallet.recordIncome(new IncomeEvent(amount, source, vesselId, simTime));</span>
+<span class="fc" id="L274">    }</span>
+
+    private void charge(double amount, String source, String vesselId, long simTime) {
+<span class="pc bpc" id="L277" title="1 of 2 branches missed.">        if (amount &lt;= 0) {</span>
+<span class="nc" id="L278">            return;</span>
+        }
+<span class="fc" id="L280">        wallet.recordExpense(new ExpenseEvent(amount, source, vesselId, simTime));</span>
+<span class="fc" id="L281">    }</span>
+
+    /** Stops feeding the ledgers. For test isolation; production never cancels. */
+    public void close() {
+<span class="fc" id="L285">        subscriptions.forEach(Subscription::cancel);</span>
+<span class="fc" id="L286">        subscriptions.clear();</span>
+<span class="fc" id="L287">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

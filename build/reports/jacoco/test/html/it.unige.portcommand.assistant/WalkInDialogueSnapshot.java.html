@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WalkInDialogueSnapshot.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.assistant</a> &gt; <span class="el_source">WalkInDialogueSnapshot.java</span></div><h1>WalkInDialogueSnapshot.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.assistant;
+
+import java.util.Objects;
+
+import it.unige.portcommand.ontology.VesselSpec;
+
+/**
+ * Observable-only projection of an in-progress walk-in negotiation â€” the sole input to
+ * {@link RecommendationAlgorithm}. Every field here is something the Harbour Master (and
+ * therefore the Assistant, which never outranks the player's own knowledge) could plausibly
+ * see on screen: the vessel's public spec, the berth under discussion, the offers exchanged so
+ * far, and how long the dialogue has run.
+ *
+ * &lt;p&gt;&lt;b&gt;v1.1 hard constraint (P-04):&lt;/b&gt; this type must NOT expose {@code minAcceptablePrice},
+ * {@code targetPrice}, {@code maxWaitMinutes}, {@code personality}, or {@code minDurationHours}
+ * (task 19b's cargo-handling floor) â€” those are the walk-in's HIDDEN beliefs (see
+ * {@code negotiation.WalkInState}, INVARIANTS.md &quot;Agents / behaviours&quot;). {@code durationHours}
+ * here is the OBSERVABLE hours term on the wire (the vessel announces its preferred stay and
+ * every counter carries its current hours), not the floor.
+ * Reading them here would be the exact oral-exam attack rehearsed in job5 Â§5.4 Q2.
+ * {@link WalkInDialogueSnapshotPrivacyTest} guards this reflectively.
+ *
+ * &lt;p&gt;&lt;b&gt;{@code vesselName} (task 16-M2)&lt;/b&gt; is observable, NOT a hidden belief: a vessel's name
+ * is painted on the hull, broadcast over AIS, and spoken in the vessel's own radio hail
+ * (&quot;Harbour Master, this is MV Genoa Starâ€¦&quot;). The 16-M2 DCG resolves vocatives and definite
+ * descriptions against it ({@code DialogueCtx} roster). It is the LAST component so the prior
+ * 13-arg constructor still compiles â€” callers that have no name get {@code vesselId} as a
+ * stand-in (see the compatibility constructor below).
+ */
+public record WalkInDialogueSnapshot(
+        String vesselId,
+        String vesselType,
+        double draft,
+        double length,
+        int tonnage,
+        String cargoClass,
+        String berthId,
+        int durationHours,
+        double lastVesselOffer,
+        double lastPlayerOffer,
+        int roundsUsed,
+        double timeUsedSec,
+        boolean threatenedWithdrawal,
+        String vesselName) {
+
+<span class="fc" id="L46">    public WalkInDialogueSnapshot {</span>
+<span class="fc" id="L47">        Objects.requireNonNull(vesselId, &quot;vesselId&quot;);</span>
+<span class="fc" id="L48">        Objects.requireNonNull(vesselType, &quot;vesselType&quot;);</span>
+<span class="fc" id="L49">        Objects.requireNonNull(cargoClass, &quot;cargoClass&quot;);</span>
+<span class="fc" id="L50">        Objects.requireNonNull(berthId, &quot;berthId&quot;);</span>
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">        vesselName = vesselName == null ? vesselId : vesselName;</span>
+<span class="fc" id="L52">    }</span>
+
+    /**
+     * Backward-compatible constructor for callers that carry no display name: the name defaults
+     * to {@code vesselId}. Keeps every pre-M2 construction site (and the {@code of}/{@code opening}
+     * factories) compiling unchanged while the canonical 14-arg form carries a real name.
+     */
+    public WalkInDialogueSnapshot(String vesselId, String vesselType, double draft, double length, int tonnage,
+                                  String cargoClass, String berthId, int durationHours, double lastVesselOffer,
+                                  double lastPlayerOffer, int roundsUsed, double timeUsedSec,
+                                  boolean threatenedWithdrawal) {
+<span class="fc" id="L63">        this(vesselId, vesselType, draft, length, tonnage, cargoClass, berthId, durationHours, lastVesselOffer,</span>
+                lastPlayerOffer, roundsUsed, timeUsedSec, threatenedWithdrawal, vesselId);
+<span class="fc" id="L65">    }</span>
+
+    /** The round-1 opening move: the vessel has proposed, the player has not countered yet. */
+    public static WalkInDialogueSnapshot opening(String vesselId, VesselSpec spec, String berthId,
+                                                 int durationHours, double openingOffer) {
+<span class="nc" id="L70">        return of(vesselId, spec, berthId, durationHours, openingOffer, 0.0, 1, 0.0, false);</span>
+    }
+
+    /** Builds a snapshot from the vessel's public spec plus the dialogue's observable progress. */
+    public static WalkInDialogueSnapshot of(String vesselId, VesselSpec spec, String berthId, int durationHours,
+                                            double lastVesselOffer, double lastPlayerOffer, int roundsUsed,
+                                            double timeUsedSec, boolean threatenedWithdrawal) {
+<span class="fc" id="L77">        Objects.requireNonNull(spec, &quot;spec&quot;);</span>
+<span class="fc" id="L78">        return new WalkInDialogueSnapshot(vesselId, spec.vesselType(), spec.draft(), spec.length(),</span>
+<span class="fc" id="L79">                spec.tonnage(), spec.cargoClass(), berthId, durationHours, lastVesselOffer, lastPlayerOffer,</span>
+                roundsUsed, timeUsedSec, threatenedWithdrawal);
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

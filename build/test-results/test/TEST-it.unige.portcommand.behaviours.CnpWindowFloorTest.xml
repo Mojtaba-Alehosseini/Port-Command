@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.behaviours.CnpWindowFloorTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:35" hostname="MOJI" time="0.002">
+  <properties/>
+  <testcase name="theFloorStaysBelowEveryShippedScenarioWindow()" classname="it.unige.portcommand.behaviours.CnpWindowFloorTest" time="0.0"/>
+  <testcase name="theShippedScenarioPacingsAreLeftExactlyAsTheyWere()" classname="it.unige.portcommand.behaviours.CnpWindowFloorTest" time="0.0"/>
+  <testcase name="aFastClockCanNeverProduceAZeroLengthWindow()" classname="it.unige.portcommand.behaviours.CnpWindowFloorTest" time="0.001"/>
+  <testcase name="theSandboxDefaultNoLongerCollapsesToSeventeenMillis()" classname="it.unige.portcommand.behaviours.CnpWindowFloorTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

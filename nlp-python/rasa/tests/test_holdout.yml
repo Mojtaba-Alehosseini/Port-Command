@@ -28,12 +28,12 @@ nlu:
     - meet halfway at [1850 euros](price_expression)
 - intent: accept_deal
   examples: |
-    - It's a deal then
-    - Ok, that works
-    - Sure, let's proceed
-    - Agreed, we have a deal
+    - Right then, book it in
+    - Ok, we're on
+    - Fine, that deal works for us
+    - Yes, that price suits us
     - Yes, I accept that
-    - Fine, good deal
+    - We are happy with that offer
     - I'll take that one
     - That's done then
     - Sounds good, I'm in
@@ -46,7 +46,7 @@ nlu:
     - Rejected
     - We won't take that
     - Way too low for us
-    - Sorry, no
+    - No, that price is not good enough
     - That's a hard pass
     - Can't make that work
     - No, decline it
@@ -97,16 +97,24 @@ nlu:
     - Tell me the commands
     - How do things work here
     - Need a hand
-    - What are the available actions
+    - Walk me through my choices
 - intent: cancel_action
   examples: |
     - Let's cancel
     - Scrap the negotiation
     - I'm pulling out
     - Cancel it all
-    - Abort this
+    - Withdraw that request
     - Withdraw the request
-    - Call it off now
+    - Withdraw the whole booking
     - Stop the booking
-    - Never mind then
+    - Let's shut this negotiation down
     - Drop the deal
+- intent: out_of_scope
+  examples: |
+    - qwertyuiop
+    - meh
+    - goodbye
+    - what is the meaning of life
+    - sing me a song
+    - book me a flight to rome

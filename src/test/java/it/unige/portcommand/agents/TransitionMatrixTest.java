@@ -12,12 +12,12 @@ class TransitionMatrixTest {
 
     @Test
     void nextStateReadsCumulativeDistribution() {
-        TransitionMatrix m = TransitionMatrix.defaults(); // sunny: 0.70 / 0.25 / 0.05
+        TransitionMatrix m = TransitionMatrix.defaults(); // sunny: 0.85 / 0.13 / 0.02 (task-19 recalibration)
         assertEquals("sunny", m.nextState("sunny", 0.0));
-        assertEquals("sunny", m.nextState("sunny", 0.69));
-        assertEquals("cloudy", m.nextState("sunny", 0.70)); // boundary -> next bucket
-        assertEquals("cloudy", m.nextState("sunny", 0.94));
-        assertEquals("stormy", m.nextState("sunny", 0.95));
+        assertEquals("sunny", m.nextState("sunny", 0.84));
+        assertEquals("cloudy", m.nextState("sunny", 0.85)); // boundary -> next bucket
+        assertEquals("cloudy", m.nextState("sunny", 0.97));
+        assertEquals("stormy", m.nextState("sunny", 0.98));
         assertEquals("stormy", m.nextState("sunny", 0.999));
     }
 

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ServiceContract.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.ontology</a> &gt; <span class="el_source">ServiceContract.java</span></div><h1>ServiceContract.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.ontology;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+/**
+ * A pre-agreed contracted-vessel service: a fixed fee and duration for a vessel
+ * arriving at a known berth. Drives the automatic contracted-vessel pipeline.
+ *
+ * &lt;p&gt;&lt;b&gt;Task 23 (2026-07-18):&lt;/b&gt; gained {@code vesselType} â€” the live contracted
+ * spawner ({@code scenario.ContractSchedule}) must construct a {@link VesselSpec}
+ * from the contract alone, and the old entries carried no type. Validated against
+ * the 5 canonical types (CLAUDE.md rule 9). {@code expectedArrivalSimMillis} is,
+ * since the same change, a &lt;b&gt;time-of-day offset&lt;/b&gt; (sim-millis past midnight the
+ * vessel is due, e.g. 09:00 = 32_400_000) rather than an absolute instant: the
+ * schedule recurs DAILY, so an absolute stamp would be meaningful for one day only.
+ * The pre-task-23 {@code 0} placeholders were explicitly &quot;superseded by task 23's
+ * scenario loader&quot; ({@code AgentRoster.loadContracts} javadoc).
+ */
+public record ServiceContract(
+        @JsonProperty(&quot;contract_id&quot;) String contractId,
+        @JsonProperty(&quot;vessel_id&quot;) String vesselId,
+        @JsonProperty(&quot;vessel_type&quot;) String vesselType,
+        @JsonProperty(&quot;berth_id&quot;) String berthId,
+        @JsonProperty(&quot;contracted_fee&quot;) double contractedFee,
+        @JsonProperty(&quot;contracted_hours&quot;) int contractedHours,
+        @JsonProperty(&quot;expected_arrival_sim_millis&quot;) long expectedArrivalSimMillis) {
+
+<span class="fc" id="L28">    public ServiceContract {</span>
+<span class="pc bpc" id="L29" title="1 of 2 branches missed.">        if (contractedFee &lt;= 0) {</span>
+<span class="nc" id="L30">            throw new IllegalArgumentException(&quot;contractedFee must be &gt; 0, got &quot; + contractedFee);</span>
+        }
+<span class="pc bpc" id="L32" title="2 of 4 branches missed.">        if (contractedHours &lt; 1 || contractedHours &gt; 24) {</span>
+<span class="nc" id="L33">            throw new IllegalArgumentException(&quot;contractedHours must be in 1..24, got &quot; + contractedHours);</span>
+        }
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">        if (!VesselSpec.knownVesselTypes().contains(vesselType)) {</span>
+<span class="nc" id="L36">            throw new IllegalArgumentException(&quot;unknown vessel type: &quot; + vesselType);</span>
+        }
+<span class="fc" id="L38">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

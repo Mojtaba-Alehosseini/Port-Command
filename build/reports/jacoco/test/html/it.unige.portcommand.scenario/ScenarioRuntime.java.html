@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ScenarioRuntime.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.scenario</a> &gt; <span class="el_source">ScenarioRuntime.java</span></div><h1>ScenarioRuntime.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.scenario;
+
+import java.util.Set;
+
+/**
+ * The scenario-engine bundle a boot threads into the HarbourMaster's spawn args
+ * (found by type, task-22 pattern). Present on EVERY production boot â€” fresh sandbox,
+ * scenario start, and load â€” because the daily contracted stream
+ * ({@link ContractSchedule}) runs in sandbox play too; only bare stub harnesses omit
+ * it (and get no {@link ScriptedEventBehaviour}).
+ *
+ * @param scenario      the active scenario, or null for sandbox play
+ * @param firedEventIds already-fired scripted-event ids from the save being restored
+ *                      (empty on any fresh boot) â€” the replay guard
+ * @param restoredVesselTraces every vessel id the restored save can VOUCH for: the
+ *                      restored active vessels plus the in-progress day's income/expense
+ *                      vessel ids. A fired contracted-spawn id whose vessel left NO trace
+ *                      was caught in its spawned-but-not-yet-granted window by the save â€”
+ *                      the engine un-fires it so the arrival (and its fee) is recovered
+ *                      instead of silently lost (2026-07-18 adversarial-review finding 1)
+ */
+public record ScenarioRuntime(Scenario scenario, Set&lt;String&gt; firedEventIds,
+                              Set&lt;String&gt; restoredVesselTraces) {
+
+<span class="fc" id="L25">    public ScenarioRuntime {</span>
+<span class="pc bpc" id="L26" title="1 of 2 branches missed.">        firedEventIds = firedEventIds == null ? Set.of() : Set.copyOf(firedEventIds);</span>
+<span class="pc bpc" id="L27" title="1 of 2 branches missed.">        restoredVesselTraces = restoredVesselTraces == null ? Set.of()</span>
+<span class="fc" id="L28">                : Set.copyOf(restoredVesselTraces);</span>
+<span class="fc" id="L29">    }</span>
+
+    /** Fresh-boot / test convenience: no restored traces (nothing to vouch for). */
+    public ScenarioRuntime(Scenario scenario, Set&lt;String&gt; firedEventIds) {
+<span class="fc" id="L33">        this(scenario, firedEventIds, Set.of());</span>
+<span class="fc" id="L34">    }</span>
+
+    /** Sandbox boot: no scenario, dailies from day 1, replay guard from the save (or empty). */
+    public static ScenarioRuntime sandbox(Set&lt;String&gt; firedEventIds) {
+<span class="fc" id="L38">        return new ScenarioRuntime(null, firedEventIds, Set.of());</span>
+    }
+
+    /** Sandbox load: replay guard + vessel traces from the save. */
+    public static ScenarioRuntime sandbox(Set&lt;String&gt; firedEventIds, Set&lt;String&gt; restoredVesselTraces) {
+<span class="fc" id="L43">        return new ScenarioRuntime(null, firedEventIds, restoredVesselTraces);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

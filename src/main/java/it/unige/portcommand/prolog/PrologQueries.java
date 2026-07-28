@@ -126,6 +126,35 @@ public final class PrologQueries {
         });
     }
 
+    /**
+     * True iff {@code swellMetres} is within the operating limit (RULE R17). Takes no
+     * vessel context — pure lookup against the static {@code max_swell/1} fact, so
+     * (unlike {@link #operationSafe}) it is cached.
+     */
+    public static boolean swellWithinLimit(double swellMetres) {
+        return engine().hasSolutionCached("swell_within_limit(" + swellMetres + ")");
+    }
+
+    /**
+     * True iff {@code state} (the weather Markov state atom, e.g. {@code stormy}) is
+     * unsafe regardless of the numeric wind/visibility/swell readings (RULE R19). Pure
+     * lookup against a static fact → cached.
+     */
+    public static boolean weatherStateUnsafe(String state) {
+        return engine().hasSolutionCached("weather_state_unsafe(" + quoteAtom(state) + ")");
+    }
+
+    /**
+     * True iff {@code visibility} ({@code good|fair|poor}) is adequate for operations
+     * (RULE R16). Pure lookup against the static {@code visibility_adequate/1} facts →
+     * cached. Added by task 24 (adversarial review M1): {@code WeatherAlertPolicy} needs
+     * the visibility dimension of {@code operation_safe} as a standalone transition
+     * check, through the same rule the HarbourMaster's hold gate evaluates.
+     */
+    public static boolean visibilityOk(String visibility) {
+        return engine().hasSolutionCached("visibility_ok(" + quoteAtom(visibility) + ")");
+    }
+
     // --- Customs (R21–R24) -------------------------------------------------
 
     /**
@@ -154,6 +183,35 @@ public final class PrologQueries {
                 .map(m -> PrologTerms.toDouble(m.get("P")))
                 .orElseThrow(() -> new PrologException(
                         "inspection_probability undefined for " + vesselType + "/" + cargoClass));
+    }
+
+    // --- Ontology existence checks (task 16, for nlp.OntologyValidator) -----
+
+    /**
+     * True iff {@code berthId} names a berth instance in the ontology ({@code berth_1}..
+     * {@code berth_4}). Narrowed to berth subclasses so a vessel type can never answer it.
+     *
+     * <p><b>Deliberately NOT cached</b>, unlike the other read-only lookups here. {@code
+     * instance_of/2} is declared {@code dynamic} and is the very predicate {@link #isCompatible}
+     * / {@link #tugsRequired} / {@link #operationSafe} assert transient per-vessel facts under —
+     * so this goal reads a dynamic predicate, which INVARIANTS.md forbids caching. It happens to
+     * be safe today only because temp vessels live in a disjoint {@code tmp_v_<uuid>} namespace
+     * and the grammar only ever emits {@code berth_1}..{@code berth_4}; that is a coincidence of
+     * two unrelated conventions, not a guarantee, and it would break silently the day either
+     * changes. This runs once per typed chat line, so the cache would buy nothing measurable.
+     */
+    public static boolean berthExists(String berthId) {
+        return engine().hasSolution(
+                "( instance_of(" + quoteAtom(berthId) + ", C), subclass_of(C, berth) )");
+    }
+
+    /**
+     * True iff {@code vesselType} is one of the five ontology vessel types. {@code vessel_type/1}
+     * is a static generated fact (never dynamic, never asserted at runtime), so this one IS a
+     * genuinely pure goal → cached, same as {@link #isHazmat}.
+     */
+    public static boolean vesselTypeExists(String vesselType) {
+        return engine().hasSolutionCached("vessel_type(" + quoteAtom(vesselType) + ")");
     }
 
     // --- Priority (R25–R30) ------------------------------------------------

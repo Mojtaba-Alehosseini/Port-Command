@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SimClock.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.util</a> &gt; <span class="el_source">SimClock.java</span></div><h1>SimClock.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.util;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * Simulated game time, decoupled from the wall clock.
+ *
+ * &lt;p&gt;The clock is &lt;strong&gt;pure&lt;/strong&gt;: it never reads
+ * {@code System.currentTimeMillis()}. The caller (the wall-clock tick driver,
+ * wired in task 24) supplies elapsed real milliseconds to {@link #advance(long)};
+ * that keeps the clock fully deterministic for tests.
+ *
+ * &lt;p&gt;Mapping is governed by {@code realSecondsPerGameDay} (default 300 â€” five real
+ * minutes per simulated 24&amp;nbsp;h). Injected via constructor; never a global static
+ * singleton, so tests can use their own deterministic instance.
+ *
+ * &lt;p&gt;Thread-safe: the sim-time counter is an {@link AtomicLong} and midnight
+ * detection uses a CAS, so concurrent agent advances are safe.
+ */
+public final class SimClock {
+
+    private static final long MILLIS_PER_DAY = 86_400_000L;
+    private static final long MILLIS_PER_HOUR = 3_600_000L;
+    private static final long MILLIS_PER_MINUTE = 60_000L;
+    private static final long SECONDS_PER_DAY = 86_400L;
+
+    /**
+     * Volatile, not final, since task 22: {@link #restore} may adopt a save file's rate
+     * (the simâ†”wall mapping is sim state â€” a save made at 300&amp;nbsp;s/day must not speed up
+     * to a --day-length 75 relaunch). Written only at construction and in {@code restore}.
+     */
+    private volatile long realSecondsPerGameDay;
+<span class="fc" id="L33">    private final AtomicLong simMillisSinceStart = new AtomicLong(0);</span>
+<span class="fc" id="L34">    private final AtomicLong lastObservedDay = new AtomicLong(1);</span>
+    private volatile boolean paused;
+
+<span class="fc" id="L37">    public SimClock(long realSecondsPerGameDay) {</span>
+<span class="fc bfc" id="L38" title="All 2 branches covered.">        if (realSecondsPerGameDay &lt;= 0) {</span>
+<span class="fc" id="L39">            throw new IllegalArgumentException(</span>
+                    &quot;realSecondsPerGameDay must be &gt; 0, got &quot; + realSecondsPerGameDay);
+        }
+<span class="fc" id="L42">        this.realSecondsPerGameDay = realSecondsPerGameDay;</span>
+<span class="fc" id="L43">    }</span>
+
+    /**
+     * Sim-millisecond delta for an elapsed real interval, given the mapping.
+     * {@code realMs / 1000 / realSecondsPerGameDay} game-days, times 86_400_000
+     * ms/day. Static + side-effect-free so the conversion can be unit-tested in
+     * isolation.
+     */
+    public static long simMillisDelta(long realMillisElapsed, long realSecondsPerGameDay) {
+<span class="fc" id="L52">        return realMillisElapsed * MILLIS_PER_DAY / (realSecondsPerGameDay * 1_000L);</span>
+    }
+
+    /** Advances sim time by the sim-equivalent of {@code realMillisElapsed}; no-op while paused. */
+    public void advance(long realMillisElapsed) {
+<span class="fc bfc" id="L57" title="All 2 branches covered.">        if (paused) {</span>
+<span class="fc" id="L58">            return;</span>
+        }
+<span class="fc" id="L60">        simMillisSinceStart.addAndGet(simMillisDelta(realMillisElapsed, realSecondsPerGameDay));</span>
+<span class="fc" id="L61">    }</span>
+
+    /** Stops {@link #advance(long)} from accumulating. Idempotent. */
+    public void pause() {
+<span class="fc" id="L65">        paused = true;</span>
+<span class="fc" id="L66">    }</span>
+
+    /** Re-enables {@link #advance(long)}. Idempotent (no-op if not paused). */
+    public void resume() {
+<span class="fc" id="L70">        paused = false;</span>
+<span class="fc" id="L71">    }</span>
+
+    /** Whether {@link #advance(long)} is currently a no-op. */
+    public boolean isPaused() {
+<span class="fc" id="L75">        return paused;</span>
+    }
+
+    /**
+     * Jumps sim time to the next midnight boundary in one atomic step. Used by the
+     * {@code DayRolloverCoordinator} (task 24). A subsequent {@link #isMidnightCrossed()}
+     * then reports the crossing.
+     */
+    public void advanceToNextDay() {
+<span class="fc" id="L84">        simMillisSinceStart.updateAndGet(cur -&gt; ((cur / MILLIS_PER_DAY) + 1) * MILLIS_PER_DAY);</span>
+<span class="fc" id="L85">    }</span>
+
+    /** Resets to the start of day 1, unpaused. */
+    public void reset() {
+<span class="fc" id="L89">        simMillisSinceStart.set(0);</span>
+<span class="fc" id="L90">        lastObservedDay.set(1);</span>
+<span class="fc" id="L91">        paused = false;</span>
+<span class="fc" id="L92">    }</span>
+
+    /**
+     * Adopts a persisted clock state (task 22 load). Sets sim time and the mapping rate, and
+     * â€” load-bearing â€” seeds {@code lastObservedDay} to the restored instant's own day so
+     * {@link #isMidnightCrossed()} does not fire a phantom crossing for days that settled
+     * before the save. Leaves the clock paused; the load orchestrator resumes it once the
+     * rebuilt world is ready.
+     */
+    public void restore(long simMillis, long realSecondsPerGameDay) {
+<span class="pc bpc" id="L102" title="1 of 2 branches missed.">        if (simMillis &lt; 0) {</span>
+<span class="nc" id="L103">            throw new IllegalArgumentException(&quot;simMillis must be &gt;= 0, got &quot; + simMillis);</span>
+        }
+<span class="pc bpc" id="L105" title="1 of 2 branches missed.">        if (realSecondsPerGameDay &lt;= 0) {</span>
+<span class="nc" id="L106">            throw new IllegalArgumentException(</span>
+                    &quot;realSecondsPerGameDay must be &gt; 0, got &quot; + realSecondsPerGameDay);
+        }
+<span class="fc" id="L109">        paused = true;</span>
+<span class="fc" id="L110">        this.realSecondsPerGameDay = realSecondsPerGameDay;</span>
+<span class="fc" id="L111">        simMillisSinceStart.set(simMillis);</span>
+<span class="fc" id="L112">        lastObservedDay.set(gameDayOf(simMillis));</span>
+<span class="fc" id="L113">    }</span>
+
+    public long nowSimMillis() {
+<span class="fc" id="L116">        return simMillisSinceStart.get();</span>
+    }
+
+    public int simHour() {
+<span class="fc" id="L120">        return (int) ((nowSimMillis() / MILLIS_PER_HOUR) % 24);</span>
+    }
+
+    public int simMinute() {
+<span class="fc" id="L124">        return (int) ((nowSimMillis() / MILLIS_PER_MINUTE) % 60);</span>
+    }
+
+    public int gameDay() {
+<span class="fc" id="L128">        return gameDayOf(nowSimMillis());</span>
+    }
+
+    /**
+     * The 1-based game day a sim-millis instant falls in â€” the pure, static form of
+     * {@link #gameDay()}, which delegates here.
+     *
+     * &lt;p&gt;Added by task 20 so the financial ledgers can bucket a recorded
+     * {@code IncomeEvent}/{@code ExpenseEvent} by day from its own {@code simTime} stamp
+     * instead of carrying a separate day field. Deriving it means an event's day can never
+     * disagree with its timestamp, and a day aggregation stays reproducible from history
+     * alone â€” no clock instance, no read of live mutable state.
+     */
+    public static int gameDayOf(long simMillis) {
+<span class="fc" id="L142">        return (int) (simMillis / MILLIS_PER_DAY) + 1;</span>
+    }
+
+    /**
+     * Returns {@code true} exactly once per simulated midnight: the first call
+     * after the game day advances wins the CAS; later calls in the same day return
+     * {@code false}.
+     */
+    public boolean isMidnightCrossed() {
+<span class="fc" id="L151">        long current = gameDay();</span>
+<span class="fc" id="L152">        long last = lastObservedDay.get();</span>
+<span class="pc bpc" id="L153" title="1 of 4 branches missed.">        return current &gt; last &amp;&amp; lastObservedDay.compareAndSet(last, current);</span>
+    }
+
+    /**
+     * Converts a simulated-second interval back to wall-clock milliseconds at the
+     * current mapping â€” the inverse of {@link #advance(long)}. Used by
+     * {@code SimTickerBehaviour} and {@code WakerBehaviour} deadlines so timers
+     * scale with {@code realSecondsPerGameDay} instead of hard-coding wall delays.
+     */
+    public long simSecondsToWallMs(long simSeconds) {
+        // Inverse of simMillisDelta: realMs = simSeconds * rate * 1000 / secondsPerDay.
+<span class="fc" id="L164">        return simSeconds * realSecondsPerGameDay * 1_000L / SECONDS_PER_DAY;</span>
+    }
+
+    public long realSecondsPerGameDay() {
+<span class="fc" id="L168">        return realSecondsPerGameDay;</span>
+    }
+
+    /**
+     * Changes ONLY the simâ†”wall mapping rate, live, without touching accumulated sim time or
+     * the pause/day state (task 21's Settings day-length slider). Distinct from {@link #restore}:
+     * that adopts a whole persisted clock (and pauses); this is the &quot;speed dial&quot; â€” the already
+     * accumulated {@code simMillis} is left exactly where it is, so game time is continuous and
+     * only FUTURE {@link #advance(long)} deltas map at the new rate. Thread-safe: the field is
+     * {@code volatile} and every reader ({@code WallClockAdvancer}, the countdown) re-reads it.
+     */
+    public void setRealSecondsPerGameDay(long realSecondsPerGameDay) {
+<span class="nc bnc" id="L180" title="All 2 branches missed.">        if (realSecondsPerGameDay &lt;= 0) {</span>
+<span class="nc" id="L181">            throw new IllegalArgumentException(</span>
+                    &quot;realSecondsPerGameDay must be &gt; 0, got &quot; + realSecondsPerGameDay);
+        }
+<span class="nc" id="L184">        this.realSecondsPerGameDay = realSecondsPerGameDay;</span>
+<span class="nc" id="L185">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

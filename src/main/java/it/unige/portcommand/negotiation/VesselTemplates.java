@@ -5,8 +5,9 @@ import java.io.InputStream;
 import java.util.Map;
 import java.util.Set;
 
+import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 
 /**
  * Loads {@code data/vessel_templates.json} from the classpath once (the data is
@@ -33,11 +34,14 @@ public final class VesselTemplates {
     }
 
     private static Map<String, VesselTemplate> load() {
+        // ALLOW_JAVA_COMMENTS so the data file can carry the ADR-13 semantic note at source
+        // (task 19); keys/values are unchanged. Jackson 2.16 non-deprecated builder API.
+        JsonMapper mapper = JsonMapper.builder().enable(JsonReadFeature.ALLOW_JAVA_COMMENTS).build();
         try (InputStream in = VesselTemplates.class.getResourceAsStream("/data/vessel_templates.json")) {
             if (in == null) {
                 throw new IllegalStateException("vessel_templates.json not found on classpath (/data/)");
             }
-            return new ObjectMapper().readValue(in, new TypeReference<Map<String, VesselTemplate>>() {
+            return mapper.readValue(in, new TypeReference<Map<String, VesselTemplate>>() {
             });
         } catch (IOException e) {
             throw new IllegalStateException("failed to load vessel_templates.json", e);

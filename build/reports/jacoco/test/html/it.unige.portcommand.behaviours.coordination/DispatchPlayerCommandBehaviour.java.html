@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DispatchPlayerCommandBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.coordination</a> &gt; <span class="el_source">DispatchPlayerCommandBehaviour.java</span></div><h1>DispatchPlayerCommandBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.coordination;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.PlayerCommandEvent;
+import it.unige.portcommand.harbourmaster.PlayerCommand;
+import it.unige.portcommand.harbourmaster.VesselTracking;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.Subscription;
+import jade.core.AID;
+import jade.core.Agent;
+import jade.core.behaviours.OneShotBehaviour;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Translates player-originated commands (from the GUI chat, or the Assistant's
+ * autopilot â€” planning/10 Â§10.7 â€” both arrive as the SAME {@link PlayerCommandEvent})
+ * into outbound ACL messages to the target vessel, preserving the negotiation
+ * conversation id ({@code &quot;nego-&quot;+vesselId}, deterministic â€” matches
+ * {@code WalkInVesselAgent}'s own construction) so the vessel's frozen task-07
+ * negotiation behaviours pick them up. Subscribes to the EventBus ONCE
+ * (INVARIANTS.md's established subscribe-once/public-handler pattern â€”
+ * {@code onPlayerCommand} is also callable directly by tests, which several
+ * existing ITs still do to drive it deterministically on the calling thread
+ * rather than relying on the real bus's ASYNC delivery timing).
+ *
+ * &lt;p&gt;&lt;b&gt;Task 19 fix (found via real play-testing, not a unit test):&lt;/b&gt; the agent
+ * reference is captured in {@link #hm}, a plain field set once in the constructor â€”
+ * NEVER read from the inherited {@code myAgent} inside {@link #onPlayerCommand}. JADE's
+ * {@code Agent.removeBehaviour} calls {@code Behaviour.setAgent(null)}
+ * (bytecode-verified against jade-4.6.0.jar), and the scheduler runs exactly that once a
+ * {@link OneShotBehaviour}'s {@code action()} completes and {@code done()} reports
+ * {@code true} â€” so {@code myAgent} goes null shortly after {@link #action()} returns,
+ * while the {@code this::onPlayerCommand} method reference stays subscribed on the bus
+ * indefinitely. The first real chat message sent after that window NPE'd here
+ * (every other subscribe-once/public-handler behaviour in {@code behaviours.assistant}
+ * already avoids this by capturing its own dependencies as constructor fields and
+ * never touching {@code myAgent} post-construction â€” this class just hadn't).
+ */
+public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
+
+<span class="fc" id="L48">    private static final Logger log = LoggerFactory.getLogger(DispatchPlayerCommandBehaviour.class);</span>
+
+    private final HarbourMasterAgent hm;
+    /** Held so the OWNING AGENT can cancel on takedown (task 22): the bus outlives the agent,
+     * and a HarbourMaster respawn (save/load teardown-rebuild) would otherwise leave this
+     * handler â€” with its dead {@code hm} reference â€” subscribed alongside the new agent's,
+     * double-dispatching every player command. Written on the agent thread in {@link #action()};
+     * volatile because {@code onTakeDown} may run after a kill from another thread. */
+    private volatile Subscription&lt;PlayerCommandEvent&gt; subscription;
+
+    public DispatchPlayerCommandBehaviour(Agent agent) {
+<span class="fc" id="L59">        super(agent);</span>
+<span class="fc" id="L60">        this.hm = (HarbourMasterAgent) agent;</span>
+<span class="fc" id="L61">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L65">        subscription = hm.eventBus().subscribe(PlayerCommandEvent.class, this::onPlayerCommand, DeliveryMode.ASYNC);</span>
+<span class="fc" id="L66">        log.debug(&quot;subscribed to PlayerCommandEvent&quot;);</span>
+<span class="fc" id="L67">    }</span>
+
+    /** Cancels the bus subscription; safe if {@link #action()} never ran. HM's takedown calls this. */
+    public void cancelSubscription() {
+<span class="fc" id="L71">        Subscription&lt;PlayerCommandEvent&gt; s = subscription;</span>
+<span class="pc bpc" id="L72" title="1 of 2 branches missed.">        if (s != null) {</span>
+<span class="fc" id="L73">            s.cancel();</span>
+        }
+<span class="fc" id="L75">    }</span>
+
+    public void onPlayerCommand(PlayerCommandEvent event) {
+<span class="fc" id="L78">        PlayerCommand cmd = PlayerCommand.from(event);</span>
+<span class="fc" id="L79">        VesselTracking tracking = hm.activeVessels().get(cmd.targetVesselId());</span>
+<span class="pc bpc" id="L80" title="1 of 2 branches missed.">        if (tracking == null) {</span>
+<span class="nc" id="L81">            log.warn(&quot;PlayerCommand {} for untracked vessel {} â€” dropped&quot;, cmd.kind(), cmd.targetVesselId());</span>
+<span class="nc" id="L82">            return;</span>
+        }
+<span class="fc" id="L84">        AID target = tracking.aid();</span>
+<span class="fc" id="L85">        String conversationId = &quot;nego-&quot; + cmd.targetVesselId();</span>
+
+<span class="fc bfc" id="L87" title="All 5 branches covered.">        ACLMessage out = switch (cmd.kind()) {</span>
+<span class="fc" id="L88">            case PROPOSE -&gt; proposeMessage(hm, cmd, conversationId);</span>
+<span class="fc" id="L89">            case ACCEPT -&gt; plainMessage(ACLMessage.ACCEPT_PROPOSAL, cmd);</span>
+<span class="fc" id="L90">            case REJECT -&gt; plainMessage(ACLMessage.REJECT_PROPOSAL, cmd);</span>
+<span class="fc" id="L91">            case ASK -&gt; plainMessage(ACLMessage.QUERY_REF, cmd);</span>
+<span class="fc" id="L92">            case WITHDRAW -&gt; withdrawMessage();</span>
+        };
+<span class="fc" id="L94">        out.addReceiver(target);</span>
+<span class="fc" id="L95">        out.setConversationId(conversationId);</span>
+<span class="fc" id="L96">        hm.sendLogged(out);</span>
+<span class="fc" id="L97">        log.info(&quot;PlayerCommand {} -&gt; {} ({})&quot;, cmd.kind(), target.getLocalName(),</span>
+<span class="fc" id="L98">                ACLMessage.getPerformative(out.getPerformative()));</span>
+<span class="fc" id="L99">    }</span>
+
+    /**
+     * PROPOSE needs {@code berth_id} â€” the walk-in vessel's own
+     * {@code EvaluateCounterOfferBehaviour} REFUSEs on a null one â€” reusing the
+     * berth {@code ForwardWalkInToPlayerBehaviour} already picked for this dialogue
+     * (same conversationId key) unless the player's command explicitly supplied one.
+     */
+    private ACLMessage proposeMessage(HarbourMasterAgent hm, PlayerCommand cmd, String conversationId) {
+<span class="fc" id="L108">        Map&lt;String, Object&gt; content = new LinkedHashMap&lt;&gt;(cmd.content());</span>
+<span class="pc" id="L109">        content.computeIfAbsent(&quot;berth_id&quot;, k -&gt; hm.negotiationBerths().get(conversationId));</span>
+<span class="fc" id="L110">        ACLMessage m = MessageFactory.create(ACLMessage.PROPOSE);</span>
+<span class="fc" id="L111">        m.setContent(TerminalJson.write(content));</span>
+<span class="fc" id="L112">        return m;</span>
+    }
+
+    private static ACLMessage plainMessage(int performative, PlayerCommand cmd) {
+<span class="fc" id="L116">        ACLMessage m = MessageFactory.create(performative);</span>
+<span class="fc" id="L117">        m.setContent(TerminalJson.write(cmd.content()));</span>
+<span class="fc" id="L118">        return m;</span>
+    }
+
+    private static ACLMessage withdrawMessage() {
+<span class="fc" id="L122">        ACLMessage m = MessageFactory.create(ACLMessage.CANCEL);</span>
+<span class="fc" id="L123">        m.setContent(TerminalJson.write(Map.of(&quot;reason&quot;, &quot;player_withdrew&quot;)));</span>
+<span class="fc" id="L124">        return m;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

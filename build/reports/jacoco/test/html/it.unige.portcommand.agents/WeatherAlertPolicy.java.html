@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WeatherAlertPolicy.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">WeatherAlertPolicy.java</span></div><h1>WeatherAlertPolicy.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import java.util.Optional;
+
+import it.unige.portcommand.prolog.PrologQueries;
+
+/**
+ * When is a weather change ALERT-WORTHY, and in which direction? (task 24 â€” the
+ * cadence/threshold/priority rework filed at planning/24.)
+ *
+ * &lt;p&gt;The severity of a reading is a composite of the four dimensions the
+ * HarbourMaster's safety gate evaluates: the discrete wind band
+ * (30/35/40/45&amp;nbsp;kn â€” the {@code rules_weather.pl} {@code wind_limit}
+ * threshold set), visibility, the swell limit, and the unsafe-state flag. The
+ * last three are answered by the SAME Prolog rules the HarbourMaster's
+ * {@code HandleWeatherAlertBehaviour} gate evaluates
+ * ({@code visibilityOk} (R16, inside {@code operationSafe}) /
+ * {@code swellWithinLimit} / {@code weatherStateUnsafe}, all cached pure
+ * goals), so the agent's notion of &quot;alert-worthy&quot; can never drift from the
+ * hub's notion of &quot;unsafe&quot; (CLAUDE.md rule: Prolog first). Visibility was the
+ * adversarial review's M1: without it, a fog-only worsening never held anyone,
+ * and a fog-only recovery never fired the clear signal â€” a held vessel could
+ * strand until some unrelated crossing happened by.
+ *
+ * &lt;p&gt;A transition fires ONLY on a genuine crossing between two consecutive
+ * broadcast readings â€” worsening when any dimension degrades, clearing when
+ * any dimension recovers and none degrades (a mixed change reads as WORSENED:
+ * safety first). Same-band wind drift (33â†’31&amp;nbsp;kn) is silent, which is what
+ * kills the every-broadcast-URGENT behaviour observed at the task-18
+ * checkpoint.
+ */
+public final class WeatherAlertPolicy {
+
+    /** The canonical alert thresholds (kn) â€” mirrors {@code rules_weather.pl} wind_limit values. */
+<span class="fc" id="L35">    static final int[] WIND_THRESHOLDS = {30, 35, 40, 45};</span>
+
+<span class="fc" id="L37">    public enum Direction { WORSENED, CLEARED }</span>
+
+    private WeatherAlertPolicy() {
+    }
+
+    /**
+     * The alert direction for the change {@code prev â†’ current}, or empty when nothing
+     * alert-worthy happened. {@code prev == null} (the first reading) is the baseline and
+     * never alerts.
+     */
+    public static Optional&lt;Direction&gt; transition(WeatherSnapshot prev, WeatherSnapshot current) {
+<span class="fc bfc" id="L48" title="All 2 branches covered.">        if (prev == null) {</span>
+<span class="fc" id="L49">            return Optional.empty();</span>
+        }
+<span class="fc bfc" id="L51" title="All 2 branches covered.">        boolean windUp = windBand(current.wind()) &gt; windBand(prev.wind());</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">        boolean windDown = windBand(current.wind()) &lt; windBand(prev.wind());</span>
+<span class="fc bfc" id="L53" title="All 4 branches covered.">        boolean visUp = visUnsafe(current.visibility()) &amp;&amp; !visUnsafe(prev.visibility());</span>
+<span class="fc bfc" id="L54" title="All 4 branches covered.">        boolean visDown = !visUnsafe(current.visibility()) &amp;&amp; visUnsafe(prev.visibility());</span>
+<span class="pc bpc" id="L55" title="1 of 4 branches missed.">        boolean swellUp = swellUnsafe(current.swell()) &amp;&amp; !swellUnsafe(prev.swell());</span>
+<span class="fc bfc" id="L56" title="All 4 branches covered.">        boolean swellDown = !swellUnsafe(current.swell()) &amp;&amp; swellUnsafe(prev.swell());</span>
+<span class="fc bfc" id="L57" title="All 4 branches covered.">        boolean stateUp = stateUnsafe(current.state()) &amp;&amp; !stateUnsafe(prev.state());</span>
+<span class="fc bfc" id="L58" title="All 4 branches covered.">        boolean stateDown = !stateUnsafe(current.state()) &amp;&amp; stateUnsafe(prev.state());</span>
+
+<span class="pc bpc" id="L60" title="1 of 8 branches missed.">        if (windUp || visUp || swellUp || stateUp) {</span>
+<span class="fc" id="L61">            return Optional.of(Direction.WORSENED);</span>
+        }
+<span class="pc bpc" id="L63" title="1 of 8 branches missed.">        if (windDown || visDown || swellDown || stateDown) {</span>
+<span class="fc" id="L64">            return Optional.of(Direction.CLEARED);</span>
+        }
+<span class="fc" id="L66">        return Optional.empty();</span>
+    }
+
+    /** How many alert thresholds {@code wind} sits at or above (0..4). */
+    static int windBand(double wind) {
+<span class="fc" id="L71">        int band = 0;</span>
+<span class="fc bfc" id="L72" title="All 2 branches covered.">        for (int threshold : WIND_THRESHOLDS) {</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">            if (wind &gt;= threshold) {</span>
+<span class="fc" id="L74">                band++;</span>
+            }
+        }
+<span class="fc" id="L77">        return band;</span>
+    }
+
+    private static boolean visUnsafe(String visibility) {
+<span class="fc bfc" id="L81" title="All 2 branches covered.">        return !PrologQueries.visibilityOk(visibility);</span>
+    }
+
+    private static boolean swellUnsafe(double swell) {
+<span class="fc bfc" id="L85" title="All 2 branches covered.">        return !PrologQueries.swellWithinLimit(swell);</span>
+    }
+
+    private static boolean stateUnsafe(String state) {
+<span class="fc" id="L89">        return PrologQueries.weatherStateUnsafe(state);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

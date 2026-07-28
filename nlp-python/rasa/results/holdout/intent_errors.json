@@ -1,18 +1,50 @@
 [
   {
-    "text": "Bar tanker from the inner harbour",
-    "intent": "set_constraint",
+    "text": "Keep a hard floor at 2k",
+    "intent": "set_policy",
     "intent_prediction": {
-      "name": "query_status",
-      "confidence": 0.47951769828796387
+      "name": "set_constraint",
+      "confidence": 0.8823726177215576
     }
   },
   {
-    "text": "Hold Ponte Vecchio until further notice",
-    "intent": "set_constraint",
+    "text": "qwertyuiop",
+    "intent": "out_of_scope",
+    "intent_prediction": {
+      "name": "set_constraint",
+      "confidence": 0.7151727080345154
+    }
+  },
+  {
+    "text": "goodbye",
+    "intent": "out_of_scope",
+    "intent_prediction": {
+      "name": "accept_deal",
+      "confidence": 0.9999998807907104
+    }
+  },
+  {
+    "text": "what is the meaning of life",
+    "intent": "out_of_scope",
     "intent_prediction": {
       "name": "query_status",
-      "confidence": 0.9477344751358032
+      "confidence": 0.9999995231628418
+    }
+  },
+  {
+    "text": "sing me a song",
+    "intent": "out_of_scope",
+    "intent_prediction": {
+      "name": "query_status",
+      "confidence": 0.9999697208404541
+    }
+  },
+  {
+    "text": "book me a flight to rome",
+    "intent": "out_of_scope",
+    "intent_prediction": {
+      "name": "accept_deal",
+      "confidence": 0.47949880361557007
     }
   }
 ]

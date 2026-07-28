@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PerformativeColours.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.commlog</a> &gt; <span class="el_source">PerformativeColours.java</span></div><h1>PerformativeColours.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.commlog;
+
+import java.awt.Color;
+import java.util.Map;
+
+import jade.lang.acl.ACLMessage;
+
+/**
+ * Maps each canonical FIPA performative (PROJECT_DEFINITION Â§6.1) to a
+ * distinct Swing colour for the comm log (task 18/19 render). An
+ * unrecognised performative (e.g. {@code QUERY_REF}, which the player's
+ * &quot;ASK&quot; command and the NLP {@code query_status}/{@code ask} paths really do
+ * send) falls back to a neutral grey rather than throwing or returning
+ * {@code null}.
+ */
+public final class PerformativeColours {
+
+<span class="fc" id="L18">    private static final Color DEFAULT = new Color(120, 120, 120);</span>
+
+<span class="fc" id="L20">    private static final Map&lt;Integer, Color&gt; COLOURS = Map.ofEntries(</span>
+<span class="fc" id="L21">            Map.entry(ACLMessage.REQUEST, new Color(66, 133, 244)),</span>
+<span class="fc" id="L22">            Map.entry(ACLMessage.PROPOSE, new Color(251, 188, 5)),</span>
+<span class="fc" id="L23">            Map.entry(ACLMessage.ACCEPT_PROPOSAL, new Color(52, 168, 83)),</span>
+<span class="fc" id="L24">            Map.entry(ACLMessage.REJECT_PROPOSAL, new Color(234, 67, 53)),</span>
+<span class="fc" id="L25">            Map.entry(ACLMessage.CFP, new Color(171, 71, 188)),</span>
+<span class="fc" id="L26">            Map.entry(ACLMessage.CONFIRM, new Color(0, 150, 136)),</span>
+<span class="fc" id="L27">            Map.entry(ACLMessage.INFORM, new Color(96, 125, 139)),</span>
+<span class="fc" id="L28">            Map.entry(ACLMessage.REFUSE, new Color(230, 74, 25)),</span>
+<span class="fc" id="L29">            Map.entry(ACLMessage.CANCEL, new Color(158, 158, 158)),</span>
+<span class="fc" id="L30">            Map.entry(ACLMessage.DISCONFIRM, new Color(216, 27, 96)));</span>
+
+    private PerformativeColours() {
+    }
+
+    public static Color colourFor(int performative) {
+<span class="fc" id="L36">        return COLOURS.getOrDefault(performative, DEFAULT);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

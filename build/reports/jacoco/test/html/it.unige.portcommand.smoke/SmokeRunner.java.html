@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SmokeRunner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.smoke</a> &gt; <span class="el_source">SmokeRunner.java</span></div><h1>SmokeRunner.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.smoke;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
+
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.bootstrap.BootstrapConfig;
+import it.unige.portcommand.bootstrap.JadeBootstrap;
+import it.unige.portcommand.gui.events.CommLogEvent;
+import it.unige.portcommand.gui.events.SimClockTickEvent;
+import it.unige.portcommand.harbourmaster.financial.Leaderboard;
+import it.unige.portcommand.harbourmaster.financial.PerformativeCounter;
+import it.unige.portcommand.persistence.GameSession;
+import it.unige.portcommand.persistence.SaveLoadManager;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * {@code --smoke}: boots each of the three shipped scenarios headlessly, at a compressed day
+ * length, and checks the demo claims that &lt;b&gt;no single test covers&lt;/b&gt; (planning/26 Â§26.2).
+ *
+ * &lt;h2&gt;What it checks, and what it deliberately does not&lt;/h2&gt;
+ *
+ * &lt;p&gt;The one criterion nothing else can reach is &lt;b&gt;DEMO_CHECKLIST row 10&lt;/b&gt;: &quot;all 10 FIPA
+ * performatives across {@code tutorial} + {@code busy_day} + {@code storm} combined&quot;. It is a
+ * cross-scenario, whole-project claim â€” every individual IT runs one world, and the end-of-day
+ * summary shows one day. This runner is the only thing that plays all three and takes the union,
+ * so that is what it exists for. Alongside it, it checks each scenario boots, runs its whole
+ * script, keeps its clock ticking, and raises no uncaught exception.
+ *
+ * &lt;p&gt;&lt;b&gt;It does not pretend to automate the other nine checklist rows.&lt;/b&gt; Rows 1-9 each have a
+ * half that is a claim about pixels â€” a banner appears, a dialog shows, the comm log does not
+ * fight the reader's scroll â€” and a headless runner that printed PASS for those would be
+ * manufacturing evidence, which is worse than no evidence. Their ENGINE halves are already
+ * covered by named integration tests; {@link #COVERAGE} maps each row to whichever it is, and
+ * {@code docs/DEMO_CHECKLIST.md} carries the same mapping so the two cannot drift silently.
+ *
+ * &lt;h2&gt;Honesty rules this class follows&lt;/h2&gt;
+ * &lt;ul&gt;
+ *   &lt;li&gt;A scenario that fails to reach its assertions is a FAILURE, never a skip.&lt;/li&gt;
+ *   &lt;li&gt;A missing performative names itself and the scenarios that were searched.&lt;/li&gt;
+ *   &lt;li&gt;An exception that reaches a thread's default handler fails the run. &lt;b&gt;Scope, stated
+ *       rather than overclaimed:&lt;/b&gt; JADE catches a Throwable thrown inside a behaviour and kills
+ *       that agent itself, so this handler will not see most behaviour bugs. What DOES catch those
+ *       is the liveness check below â€” a dead HarbourMaster stops the sim clock, and a scenario
+ *       whose ticks stop is failed by name.&lt;/li&gt;
+ * &lt;/ul&gt;
+ */
+public final class SmokeRunner {
+
+<span class="fc" id="L63">    private static final Logger log = LoggerFactory.getLogger(SmokeRunner.class);</span>
+
+    /** The three shipped scenarios, in the order the demo plays them. */
+<span class="fc" id="L66">    private static final List&lt;String&gt; SCENARIOS = List.of(&quot;tutorial&quot;, &quot;busy_day&quot;, &quot;storm&quot;);</span>
+
+    /**
+     * A dedicated JADE Main Container port, NOT the 1099 default. A running {@code --gui}
+     * session holds 1099 and a smoke run against it dies with the misleading null-container NPE
+     * (docs/testing.md); 18099 is the integration lane's. Override with
+     * {@code -Djade.main.port}.
+     */
+    private static final int DEFAULT_SMOKE_PORT = 18299;
+
+    /**
+     * Fallback day length, used only for a scenario that declares no
+     * {@code settingsOverride.realSecondsPerGameDay} â€” all three shipped ones do (900/900/1800),
+     * so in practice each scenario runs at ITS OWN declared pacing.
+     *
+     * &lt;p&gt;&lt;b&gt;This runner deliberately does NOT compress the day&lt;/b&gt;, unlike the integration tests.
+     * The first version pinned 5 s/day the way the ITs do, and the storm's whole timeline then
+     * drained in about a tenth of a second: the tanker had not been granted a berth, let alone
+     * assigned a tug, by the time the wind crossed 30 kn, so there was no escort to CANCEL and
+     * the run reported a missing performative that the game produces perfectly well. The scripted
+     * timings encode a reaction window measured against the scenario's own pacing (that is the
+     * whole point of the 2026-07-18 relative-time fix), and a smoke run at a pacing the demo
+     * never uses proves nothing about the demo. Measured cost: ~100 s for all three (tutorial 48 s,
+     * busy_day 19 s, storm 30 s) plus teardown, against ~10 s at the compressed pacing.
+     */
+    private static final long DAY_SECONDS = 900L;
+
+    /**
+     * Wall-clock bound per scenario: the longest script drains in ~31 s (tutorial, 1500 sim-s at
+     * 1800 s/day), and the ACL cascades it triggers need room after that.
+     */
+    private static final long SCENARIO_TIMEOUT_MS = 120_000L;
+
+    /** Sim ticks a scenario must produce after its script drains â€” proof the world is still live. */
+    private static final int TICKS_AFTER_SCRIPT = 10;
+
+    /** DEMO_CHECKLIST row -&gt; what actually establishes it. Mirrored in docs/DEMO_CHECKLIST.md. */
+<span class="fc" id="L103">    private static final Map&lt;String, String&gt; COVERAGE = new LinkedHashMap&lt;&gt;();</span>
+
+    static {
+<span class="fc" id="L106">        COVERAGE.put(&quot;1  Channel A fully automatic&quot;,</span>
+                &quot;engine: ContractedVesselAgentIT + ScenarioSessionIT | GUI half: manual&quot;);
+<span class="fc" id="L108">        COVERAGE.put(&quot;2  Walk-in negotiation, happy path&quot;,</span>
+                &quot;engine: WalkInVesselAgentIT + NegotiationEngine tests | GUI half: manual&quot;);
+<span class="fc" id="L110">        COVERAGE.put(&quot;3  Walk-in withdrawal, timeout&quot;,</span>
+                &quot;engine: WalkInVesselAgentIT | GUI half: manual&quot;);
+<span class="fc" id="L112">        COVERAGE.put(&quot;4  Walk-in withdrawal, over-priced&quot;,</span>
+                &quot;engine: WalkInVesselAgentIT | GUI half: manual&quot;);
+<span class="fc" id="L114">        COVERAGE.put(&quot;5  Autopilot ON&quot;,</span>
+                &quot;engine: AssistantAgentIT | Settings toggle + GUI half: manual&quot;);
+<span class="fc" id="L116">        COVERAGE.put(&quot;6  Policy parsing via PolicyParser&quot;,</span>
+                &quot;engine: PolicyParserTest | GUI half: manual&quot;);
+<span class="fc" id="L118">        COVERAGE.put(&quot;7  Weather event, tanker hold&quot;,</span>
+                &quot;engine: WeatherAgentIT + PrologRulesIT (R15-R20) | GUI half: manual&quot;);
+<span class="fc" id="L120">        COVERAGE.put(&quot;8  Save &amp; load&quot;,</span>
+                &quot;engine: SaveLoadSessionIT + SaveLoadMidTransitIT | dialog + previews: manual&quot;);
+<span class="fc" id="L122">        COVERAGE.put(&quot;9  End-of-day summary&quot;,</span>
+                &quot;engine: GameLifecycleIT + EndOfDaySummaryModelTest | dialog: manual&quot;);
+<span class="fc" id="L124">        COVERAGE.put(&quot;10 All 10 performatives across the 3 scenarios&quot;,</span>
+                &quot;THIS RUNNER â€” nothing else plays all three and takes the union&quot;);
+<span class="fc" id="L126">    }</span>
+
+    private SmokeRunner() {
+    }
+
+    /** @return the number of failures; 0 means green. Prints its own report to stdout. */
+    public static int runAll() {
+<span class="fc" id="L133">        List&lt;String&gt; failures = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L134">        Map&lt;String, Set&lt;String&gt;&gt; seenByScenario = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L135">        ConcurrentLinkedQueue&lt;String&gt; uncaught = new ConcurrentLinkedQueue&lt;&gt;();</span>
+<span class="fc" id="L136">        Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();</span>
+<span class="fc" id="L137">        Thread.setDefaultUncaughtExceptionHandler((t, e) -&gt;</span>
+<span class="nc" id="L138">                uncaught.add(t.getName() + &quot;: &quot; + e));</span>
+
+        try {
+<span class="fc bfc" id="L141" title="All 2 branches covered.">            for (String scenario : SCENARIOS) {</span>
+                try {
+<span class="fc" id="L143">                    seenByScenario.put(scenario, runScenario(scenario, failures));</span>
+<span class="nc" id="L144">                } catch (Exception e) {</span>
+                    // A scenario that throws is a FAILURE, not a skip â€” the whole point of a
+                    // smoke run is that it cannot quietly cover less than it claims.
+<span class="nc" id="L147">                    log.error(&quot;scenario {} blew up&quot;, scenario, e);</span>
+<span class="nc" id="L148">                    failures.add(&quot;scenario &quot; + scenario + &quot; failed to run: &quot; + e);</span>
+<span class="nc" id="L149">                    seenByScenario.put(scenario, Set.of());</span>
+<span class="fc" id="L150">                }</span>
+<span class="fc" id="L151">            }</span>
+        } finally {
+<span class="fc" id="L153">            Thread.setDefaultUncaughtExceptionHandler(previous);</span>
+        }
+
+<span class="pc" id="L156">        uncaught.forEach(u -&gt; failures.add(&quot;uncaught exception on a live thread: &quot; + u));</span>
+
+<span class="fc" id="L158">        Set&lt;String&gt; union = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc" id="L159">        seenByScenario.values().forEach(union::addAll);</span>
+<span class="fc" id="L160">        List&lt;String&gt; missing = PerformativeCounter.canonicalNames().stream()</span>
+<span class="pc bpc" id="L161" title="1 of 2 branches missed.">                .filter(name -&gt; !union.contains(name))</span>
+<span class="fc" id="L162">                .toList();</span>
+<span class="pc bpc" id="L163" title="1 of 2 branches missed.">        if (!missing.isEmpty()) {</span>
+<span class="nc" id="L164">            failures.add(&quot;DEMO_CHECKLIST row 10 FAILS: &quot; + missing</span>
+                    + &quot; never appeared across &quot; + SCENARIOS + &quot;. This is the &quot;
+                    + &quot;'all 10 performatives across the three scenarios combined' criterion &quot;
+                    + &quot;(PROJECT_DEFINITION Â§13) â€” CANCEL comes from the storm's weather hold and &quot;
+                    + &quot;DISCONFIRM from busy_day's scripted BerthFlood, so a miss usually means one &quot;
+                    + &quot;of those scripted events did not fire, not that the tally is broken.&quot;);
+        }
+
+<span class="fc" id="L172">        report(seenByScenario, missing, failures);</span>
+<span class="fc" id="L173">        return failures.size();</span>
+    }
+
+    /** @return the canonical performative names the HarbourMaster saw during this scenario. */
+    private static Set&lt;String&gt; runScenario(String scenario, List&lt;String&gt; failures) throws Exception {
+<span class="fc" id="L178">        log.info(&quot;--smoke: booting scenario '{}'&quot;, scenario);</span>
+<span class="fc" id="L179">        Set&lt;String&gt; seen = ConcurrentHashMap.newKeySet();</span>
+<span class="fc" id="L180">        AtomicInteger ticks = new AtomicInteger();</span>
+
+<span class="fc" id="L182">        int port = Integer.getInteger(&quot;jade.main.port&quot;, DEFAULT_SMOKE_PORT);</span>
+        // Deliberately NOT setting simclock.day.length.explicit: that marker is how an explicit
+        // --day-length overrides a scenario's own pacing, and here the scenario's pacing is
+        // precisely what we want to exercise (see DAY_SECONDS).
+<span class="fc" id="L186">        JadeBootstrap boot = new JadeBootstrap();</span>
+<span class="fc" id="L187">        Path work = Files.createTempDirectory(&quot;port-command-smoke-&quot; + scenario);</span>
+<span class="fc" id="L188">        Subscription&lt;CommLogEvent&gt; commLog = null;</span>
+<span class="fc" id="L189">        Subscription&lt;SimClockTickEvent&gt; tickSub = null;</span>
+        try {
+<span class="fc" id="L191">            BootstrapConfig cfg = new BootstrapConfig(port, false, &quot;realtime&quot;, DAY_SECONDS);</span>
+<span class="fc" id="L192">            GameSession session = new GameSession(boot, cfg,</span>
+<span class="fc" id="L193">                    new SaveLoadManager(work), new Leaderboard(work.resolve(&quot;scores.json&quot;)));</span>
+
+            // Boot the platform FIRST, purely so the EventBus exists and can be subscribed to
+            // before any world does. GameSession creates the bus inside startScenario, and a
+            // subscription taken after it returns would miss every message the agent spawn and
+            // the t=0 scripted events already produced â€” in the storm scenario that is the
+            // tanker's opening REQUEST. startScenario then tears this container down and
+            // rebuilds it (its normal teardown/rebuild body), and the EventBus deliberately
+            // SURVIVES that cycle (JadeBootstrap creates it only when null, so the GUI can hold
+            // it across a load) â€” which is exactly what makes this subscription outlive the
+            // restart. Costs one extra container boot per scenario; buys a complete tally.
+<span class="fc" id="L204">            boot.start(cfg);</span>
+
+            // CALLER_THREAD for the same reason PerformativeCounter uses it: ASYNC's bounded
+            // queue drops the OLDEST event when full, and a dropped CommLogEvent here is a
+            // performative silently missing from the row-10 union.
+<span class="fc" id="L209">            commLog = boot.getEventBus().subscribe(CommLogEvent.class,</span>
+<span class="fc" id="L210">                    e -&gt; seen.add(jade.lang.acl.ACLMessage.getPerformative(e.performative())),</span>
+                    DeliveryMode.CALLER_THREAD);
+<span class="fc" id="L212">            tickSub = boot.getEventBus().subscribe(SimClockTickEvent.class,</span>
+<span class="fc" id="L213">                    e -&gt; ticks.incrementAndGet(), DeliveryMode.CALLER_THREAD);</span>
+
+<span class="fc" id="L215">            session.startScenario(scenario);</span>
+
+<span class="fc" id="L217">            HarbourMasterAgent hm = (HarbourMasterAgent) session.directory()</span>
+<span class="fc" id="L218">                    .byName(&quot;harbour_master&quot;).orElseThrow(() -&gt;</span>
+<span class="nc" id="L219">                            new IllegalStateException(&quot;no harbour_master after startScenario&quot;));</span>
+
+<span class="pc bpc" id="L221" title="1 of 4 branches missed.">            if (!waitUntil(() -&gt; !hm.scriptedWaveActive(), SCENARIO_TIMEOUT_MS)) {</span>
+<span class="nc" id="L222">                failures.add(scenario + &quot;: the scripted event wave never drained within &quot;</span>
+                        + SCENARIO_TIMEOUT_MS + &quot; ms&quot;);
+            }
+<span class="fc" id="L225">            int afterScript = ticks.get();</span>
+<span class="pc bpc" id="L226" title="1 of 4 branches missed.">            if (!waitUntil(() -&gt; ticks.get() &gt;= afterScript + TICKS_AFTER_SCRIPT, 30_000)) {</span>
+<span class="nc" id="L227">                failures.add(scenario + &quot;: the sim clock stopped ticking after the script drained &quot;</span>
+<span class="nc" id="L228">                        + &quot;(saw &quot; + ticks.get() + &quot; ticks, wanted &quot; + (afterScript + TICKS_AFTER_SCRIPT)</span>
+                        + &quot;) â€” a deadlocked world, not a finished one&quot;);
+            }
+<span class="fc" id="L231">            log.info(&quot;--smoke: '{}' done â€” {} performative(s): {}&quot;, scenario, seen.size(), sorted(seen));</span>
+<span class="fc" id="L232">            return new LinkedHashSet&lt;&gt;(sorted(seen));</span>
+        } finally {
+<span class="pc bpc" id="L234" title="1 of 2 branches missed.">            if (commLog != null) {</span>
+<span class="fc" id="L235">                commLog.cancel();</span>
+            }
+<span class="pc bpc" id="L237" title="1 of 2 branches missed.">            if (tickSub != null) {</span>
+<span class="fc" id="L238">                tickSub.cancel();</span>
+            }
+<span class="pc bpc" id="L240" title="1 of 2 branches missed.">            if (boot.isStarted()) {</span>
+<span class="fc" id="L241">                boot.shutdown();</span>
+            }
+<span class="fc" id="L243">            deleteRecursively(work);</span>
+        }
+    }
+
+    private static void report(Map&lt;String, Set&lt;String&gt;&gt; seenByScenario, List&lt;String&gt; missing,
+                              List&lt;String&gt; failures) {
+<span class="fc" id="L249">        StringBuilder sb = new StringBuilder(&quot;\n=== --smoke: Port Command Genova ===\n\n&quot;);</span>
+<span class="fc" id="L250">        sb.append(&quot;DEMO_CHECKLIST row 10 â€” all 10 FIPA performatives across the three scenarios\n\n&quot;);</span>
+<span class="fc" id="L251">        sb.append(String.format(&quot;| %-16s |&quot;, &quot;performative&quot;));</span>
+<span class="fc" id="L252">        seenByScenario.keySet().forEach(s -&gt; sb.append(String.format(&quot; %-9s |&quot;, s)));</span>
+<span class="fc" id="L253">        sb.append(&quot; union |\n&quot;);</span>
+<span class="fc bfc" id="L254" title="All 2 branches covered.">        for (String name : PerformativeCounter.canonicalNames()) {</span>
+<span class="fc" id="L255">            sb.append(String.format(&quot;| %-16s |&quot;, name));</span>
+<span class="fc" id="L256">            boolean any = false;</span>
+<span class="fc bfc" id="L257" title="All 2 branches covered.">            for (Set&lt;String&gt; seen : seenByScenario.values()) {</span>
+<span class="fc" id="L258">                boolean hit = seen.contains(name);</span>
+<span class="fc" id="L259">                any |= hit;</span>
+<span class="fc bfc" id="L260" title="All 2 branches covered.">                sb.append(String.format(&quot; %-9s |&quot;, hit ? &quot;yes&quot; : &quot;-&quot;));</span>
+<span class="fc" id="L261">            }</span>
+<span class="pc bpc" id="L262" title="1 of 2 branches missed.">            sb.append(String.format(&quot; %-5s |%n&quot;, any ? &quot;YES&quot; : &quot;NO&quot;));</span>
+<span class="fc" id="L263">        }</span>
+
+<span class="fc" id="L265">        sb.append(&quot;\nChecklist coverage (what establishes each row â€” mirrored in docs/DEMO_CHECKLIST.md):\n&quot;);</span>
+<span class="fc" id="L266">        COVERAGE.forEach((row, how) -&gt; sb.append(String.format(&quot;  %-42s %s%n&quot;, row, how)));</span>
+<span class="fc" id="L267">        sb.append(&quot;\nRows 1-9 have a GUI half that only a human can sign off. This runner does not\n&quot;</span>
+                + &quot;claim them, and DEMO_CHECKLIST.md records them as manual with a tester and a date.\n&quot;);
+
+<span class="pc bpc" id="L270" title="1 of 2 branches missed.">        if (failures.isEmpty()) {</span>
+<span class="fc" id="L271">            sb.append(&quot;\nRESULT: PASS â€” 10/10 performatives observed, all three scenarios ran clean.\n&quot;);</span>
+        } else {
+<span class="nc" id="L273">            sb.append(&quot;\nRESULT: FAIL (&quot;).append(failures.size()).append(&quot;)\n&quot;);</span>
+<span class="nc" id="L274">            failures.forEach(f -&gt; sb.append(&quot;  - &quot;).append(f).append('\n'));</span>
+<span class="nc bnc" id="L275" title="All 2 branches missed.">            if (!missing.isEmpty()) {</span>
+<span class="nc" id="L276">                sb.append(&quot;  missing performatives: &quot;).append(missing).append('\n');</span>
+            }
+        }
+<span class="fc" id="L279">        System.out.println(sb);</span>
+<span class="fc" id="L280">    }</span>
+
+    private static List&lt;String&gt; sorted(Set&lt;String&gt; names) {
+<span class="fc" id="L283">        return PerformativeCounter.canonicalNames().stream().filter(names::contains).toList();</span>
+    }
+
+    /** The committed bounded sleep-poll pattern (CLAUDE.md rule 5): every wait has a deadline. */
+    private static boolean waitUntil(BooleanSupplier condition, long timeoutMs)
+            throws InterruptedException {
+<span class="fc" id="L289">        long deadline = System.currentTimeMillis() + timeoutMs;</span>
+<span class="pc bpc" id="L290" title="1 of 2 branches missed.">        while (System.currentTimeMillis() &lt; deadline) {</span>
+<span class="fc bfc" id="L291" title="All 2 branches covered.">            if (condition.getAsBoolean()) {</span>
+<span class="fc" id="L292">                return true;</span>
+            }
+<span class="fc" id="L294">            Thread.sleep(100);</span>
+        }
+<span class="nc" id="L296">        return condition.getAsBoolean();</span>
+    }
+
+    private static void deleteRecursively(Path dir) {
+<span class="fc" id="L300">        try (var paths = Files.walk(dir)) {</span>
+<span class="fc" id="L301">            paths.sorted(java.util.Comparator.reverseOrder()).forEach(p -&gt; {</span>
+                try {
+<span class="fc" id="L303">                    Files.deleteIfExists(p);</span>
+<span class="nc" id="L304">                } catch (Exception ignored) {</span>
+                    // A leftover temp dir is not worth failing a smoke run over.
+<span class="fc" id="L306">                }</span>
+<span class="fc" id="L307">            });</span>
+<span class="nc" id="L308">        } catch (Exception ignored) {</span>
+            // ditto
+<span class="fc" id="L310">        }</span>
+<span class="fc" id="L311">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.DialogueCtxTermTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:45" hostname="MOJI" time="0.003">
+  <properties/>
+  <testcase name="wholePricesRenderAsIntegersNotFloats()" classname="it.unige.portcommand.nlp.DialogueCtxTermTest" time="0.0"/>
+  <testcase name="aHostileVesselNameIsEscapedAndCannotInjectAGoal()" classname="it.unige.portcommand.nlp.DialogueCtxTermTest" time="0.0"/>
+  <testcase name="offersRosterAndLastMentionedRenderInFull()" classname="it.unige.portcommand.nlp.DialogueCtxTermTest" time="0.0"/>
+  <testcase name="anAbsentOfferSideAndDurationRenderAsNone()" classname="it.unige.portcommand.nlp.DialogueCtxTermTest" time="0.0"/>
+  <testcase name="theEmptyContextRendersTheNeutralTerm()" classname="it.unige.portcommand.nlp.DialogueCtxTermTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

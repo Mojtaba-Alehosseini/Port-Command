@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.regression.DcgRegressionIT" tests="158" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:22:04" hostname="MOJI" time="0.253">
+  <properties/>
+  <testcase name="[plain/none] I will give you 2000 for 5 hours at berth 3" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.039"/>
+  <testcase name="[plain/none] I will give you 2000 for 5 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I will give you 2000" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I'll pay 1800 euros for berth 3" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I'll give you 2200 for 6 hours at berth 2" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.002"/>
+  <testcase name="[plain/none] We will offer 3000 for 8 hours at berth 1" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] We offer 2200 for 6 hours by 19:30" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.002"/>
+  <testcase name="[plain/none] Give you 2000 USD for 5h" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I will pay 1500 dollars for 4 hrs at berth 4" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.002"/>
+  <testcase name="[plain/none] Let me offer 1900 for 3 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I will give you 2000 please" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Offer 2500 EUR for 12 hours at berth 2, thanks" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I will give them 1700 for 2 hours in berth 3" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I'll only give you 1500" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I can only do 1500" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] How about 1800?" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] How about 1800 for 5 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] What about 1750 at berth 3" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] 1900 instead" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Only 1600 for 4 hours at berth 2" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I can only do 2000 euros for 6 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] How about 2100 USD" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] I'll only pay 1400 for 3 hours at berth 4" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Deal" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.002"/>
+  <testcase name="[plain/none] DEAL!" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Yes" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] Agreed" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.002"/>
+  <testcase name="[plain/none] Accept" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Ok" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Fine" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Sounds good" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] You got it" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] That works" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] Yes please" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Deal, thanks" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Too low" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Too cheap" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] Too high" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Too expensive" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Too short" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Too long" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] No deal" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] No" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Not interested" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Forget it" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] Pass" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] Refuse" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] No deal, mate" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Too low please" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] What berths are free?" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] Which berths are free" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] What free berths do you have" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Are berths available?" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] How many tugs do you have?" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] How many tugs are free" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] What tugs are available" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] What's your best price?" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] What is your best price" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] What's the weather?" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] How's the wind" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] What berth do I get" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] Where is my berth?" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] I will give you 2000 at berth 1" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I will give you 2000 at berth 4" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I will give you 2000 for 1 hour" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I will give you 2000 for 24 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] We offer 2200 by 00:00" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] We offer 2200 by 23:59" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] We offer 2200 by 9:30" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I will give you €2,000" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.002"/>
+  <testcase name="[plain/none] I will give you 2000€" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I will give you $2000" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] I will give you 2000 at berth2" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I'll pay €2,000 for 5hrs at berth 3 by 19:30" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I will give you 2000 at berth 9" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] I will give you 2000 at berth 0" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] I will give you 2000 for 99 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] I will give you 2000 for 0 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] We offer 2200 by 25:99" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] ok but that's too low" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Yes if you drop to 1500" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] No, I'll give you 1500" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] Deal, but only for 3 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] I accept, but at berth 2" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] We offer 2200 by tomorrow" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[plain/none] asdf qwer" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] The weather is nice today" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[plain/none] I will give you" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[ellipsis/focus] make it 2200" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.005"/>
+  <testcase name="[ellipsis/focus] 2200" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.002"/>
+  <testcase name="[ellipsis/focus] make it 1800" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[ellipsis/focus] 1800" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[ellipsis/focus] make it 6 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[ellipsis/focus] same but 6 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[ellipsis/focus] same but 2000" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[ellipsis/focus] make it 2200 for 8 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[ellipsis/none] make it 2200" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[ellipsis/none] 2200" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[ellipsis/none] same but 6 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[ellipsis/focus] make it 2200 but leave by 19:30" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[ellipsis/focus] same but cheaper" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[delta/focus] 200 more" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[delta/focus] 200 less" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[delta/focus] 500 more" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[delta/focus] 10% more" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[delta/focus] 10% less" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[delta/focus] split the difference" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[delta/focus] meet me in the middle" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[delta/focus] meet in the middle" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[delta/none] 200 more" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[delta/none] split the difference" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[delta/one_sided] split the difference" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[delta/focus] 5000 less" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[delta/focus] 200 more but only if you drop" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[delta/focus] 10% less or nothing" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[negation/focus] nothing below 2000" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[negation/focus] nothing above 3000" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[negation/focus] not for less than 6 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[negation/focus] not for more than 8 hours" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[negation/none] nothing below 2000" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[negation/focus] not nothing below 2000" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[negation/focus] nothing not below 2000" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[negation/focus] nothing below" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[negation/focus] not for less than 6" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/focus] 1800 for that berth" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/focus] 1800 for the same berth" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/focus] deal the tanker" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/focus] accept the tanker" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[anaphora/focus] no the tanker" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/focus] deal it" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/focus] no it" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/none] 1800 for that berth" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/none] deal it" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/none] accept the tanker" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/two_tankers] accept the tanker" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/focus] accept the tanker but not the ferry" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[anaphora/focus] 1800 for that berth or berth 2" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[vocative/focus] Genoa Star: deal" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[vocative/focus] Genoa Star: no deal" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[vocative/focus] tell the tanker no" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[vocative/focus] Carthago: too low" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[vocative/focus] Genoa Star: I will give you 2000 for 5 hours at berth 3" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[vocative/focus] zzz unknown: deal" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[vocative/focus] tell the ferry no" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[vocative/focus] Genoa Star: hold all tankers" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[vocative/two_tankers] tell the tanker no" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[vocative/none] Genoa Star: deal" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[command/focus] hold all tankers" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[command/focus] hold all tankers until the wind drops" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[command/focus] send two tugs to the Carthago" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[command/focus] send 2 tugs" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.0"/>
+  <testcase name="[command/focus] hold any ferry" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[command/focus] dispatch three tugs" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[command/none] hold all tankers" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[command/focus] cancel the tug" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[command/none] cancel the tug" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[command/focus] hold tankers" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <testcase name="[command/focus] send two tugs to the Ferrari" classname="it.unige.portcommand.nlp.regression.DcgRegressionIT" time="0.001"/>
+  <system-out><![CDATA[00:22:04.074 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+# DCG per-phenomenon accuracy (task 25 golden corpus)
+
+| block | passed | total | accuracy |
+|---|---|---|---|
+| plain | 88 | 88 | 100.0% |
+| ellipsis | 13 | 13 | 100.0% |
+| delta | 14 | 14 | 100.0% |
+| anaphora | 13 | 13 | 100.0% |
+| negation | 9 | 9 | 100.0% |
+| vocative | 10 | 10 | 100.0% |
+| command | 11 | 11 | 100.0% |
+| **all** | **158** | **158** | **100.0%** |
+
+DCG per-phenomenon table written to C:\Projects\SDAI and NLP joint Project\PortCommand\port-command-genova\build\reports\nlp-dcg\per-phenomenon.md
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

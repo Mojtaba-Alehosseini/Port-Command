@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TugMath.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">TugMath.java</span></div><h1>TugMath.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import it.unige.portcommand.ontology.Position;
+
+/**
+ * Pure unit-conversion + geometry for the tug fleet. The &lt;strong&gt;single documented
+ * home&lt;/strong&gt; of the two map/speed scale constants (task 08 Â§8.0):
+ * {@link #PIXELS_PER_KM} (map pixels â†’ km) and {@link #KNOT_TO_KMH} (knots â†’ km/h).
+ *
+ * &lt;p&gt;Every tug cost/ETA/fuel/movement number routes through these methods, so the
+ * bid ETA ({@code BidInCNPBehaviour}) and the per-tick transit movement
+ * ({@code TransitToVesselBehaviour} via {@link TugAgent#advanceToward}) use identical
+ * conversions â€” proven to agree by {@code TugMathTest} (simulated arrival time â‰ˆ
+ * quoted {@code etaMinutes}).
+ *
+ * &lt;p&gt;Order of conversion, always and everywhere: (1) pixelsâ†’km via
+ * {@link #PIXELS_PER_KM} at the single boundary, THEN (2) knotsâ†’km/h via
+ * {@link #KNOT_TO_KMH}. Raw map pixels never reach a cost/ETA/fuel formula.
+ */
+public final class TugMath {
+
+    /** Map scale: 10 map-pixels = 1&amp;nbsp;km (demo value; defined ONLY here). */
+    public static final double PIXELS_PER_KM = 10.0;
+
+    /** 1 knot = 1.852&amp;nbsp;km/h, exact (nautical mile Ã· 1000). */
+    public static final double KNOT_TO_KMH = 1.852;
+
+    /** Arrival tolerance (km): a movement leg is &quot;arrived&quot; once the gap drops below this. */
+    public static final double ARRIVAL_EPS_KM = 1.0e-6;
+
+    private TugMath() {
+    }
+
+    /**
+     * Straight-line map distance between two positions, converted pixelsâ†’km â€” the
+     * single conversion boundary. Downstream cost/ETA/fuel formulas take the km result.
+     */
+    public static double distanceKm(Position from, Position to) {
+<span class="fc" id="L39">        double dxPx = to.x() - from.x();</span>
+<span class="fc" id="L40">        double dyPx = to.y() - from.y();</span>
+<span class="fc" id="L41">        return Math.hypot(dxPx, dyPx) / PIXELS_PER_KM;</span>
+    }
+
+    /**
+     * Minutes to cover {@code distanceKm} at {@code topSpeedKnots}: knotsâ†’km/h first
+     * ({@code topSpeedKnots * KNOT_TO_KMH} is km/h), then hoursâ†’minutes. NOT
+     * {@code distanceKm / topSpeedKnots * 60} â€” that would drop the 1.852 factor.
+     */
+    public static double etaMinutes(double distanceKm, double topSpeedKnots) {
+<span class="fc" id="L50">        return distanceKm / (topSpeedKnots * KNOT_TO_KMH) * 60.0;</span>
+    }
+
+    /**
+     * Km travelled in {@code dtSimSeconds} at {@code topSpeedKnots} â€” the SAME
+     * knotsâ†’km/h conversion as {@link #etaMinutes}, so integrating this over the ETA
+     * sim-time exactly covers the route ({@code stepKm} summed = {@code distanceKm}
+     * when elapsed sim-time = {@code etaMinutes}).
+     */
+    public static double stepKm(double topSpeedKnots, double dtSimSeconds) {
+<span class="fc" id="L60">        return topSpeedKnots * KNOT_TO_KMH * (dtSimSeconds / 3600.0);</span>
+    }
+
+    /**
+     * A new position {@code stepPx} pixels along the straight line {@code from}â†’{@code to},
+     * clamped to {@code to} (never overshoots). Heading is set to the bearing of travel
+     * (degrees clockwise from north, screen coords with y increasing downward) for the
+     * GUI (task 18); the sim ignores heading.
+     */
+    public static Position moveToward(Position from, Position to, double stepPx) {
+<span class="fc" id="L70">        double dxPx = to.x() - from.x();</span>
+<span class="fc" id="L71">        double dyPx = to.y() - from.y();</span>
+<span class="fc" id="L72">        double distPx = Math.hypot(dxPx, dyPx);</span>
+<span class="fc" id="L73">        double headingDeg = bearingDeg(dxPx, dyPx, from.headingDeg());</span>
+<span class="pc bpc" id="L74" title="1 of 4 branches missed.">        if (distPx &lt;= 1.0e-9 || stepPx &gt;= distPx) {</span>
+<span class="fc" id="L75">            return new Position(to.x(), to.y(), headingDeg);</span>
+        }
+<span class="fc" id="L77">        double f = stepPx / distPx;</span>
+<span class="fc" id="L78">        return new Position(from.x() + dxPx * f, from.y() + dyPx * f, headingDeg);</span>
+    }
+
+    /** Bearing (deg clockwise from north) of screen-vector (dx,dy); keeps the prior heading if stationary. */
+    private static double bearingDeg(double dxPx, double dyPx, double priorHeadingDeg) {
+<span class="pc bpc" id="L83" title="1 of 2 branches missed.">        if (Math.hypot(dxPx, dyPx) &lt;= 1.0e-9) {</span>
+<span class="nc" id="L84">            return priorHeadingDeg;</span>
+        }
+<span class="fc" id="L86">        double deg = Math.toDegrees(Math.atan2(dxPx, -dyPx));</span>
+<span class="fc" id="L87">        return (deg % 360.0 + 360.0) % 360.0;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

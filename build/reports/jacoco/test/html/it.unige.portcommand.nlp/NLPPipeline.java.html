@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>NLPPipeline.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">NLPPipeline.java</span></div><h1>NLPPipeline.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.function.Predicate;
+
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import jade.lang.acl.ACLMessage;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Orchestrates one chat turn through the canonical DCG-first pipeline (PROJECT_DEFINITION.md
+ * Â§6.1): preprocess &amp;rarr; DCG &amp;rarr; (on a frame: validate &amp;rarr; {@link FrameToAcl}) &amp;rarr;
+ * Rasa fallback &amp;rarr; {@link ConfidenceGate} &amp;rarr; clarification. A clean negotiation move
+ * that the DCG parses never calls Rasa at all, so a Rasa outage never blocks it â€” since task 16
+ * the DCG slot holds the real {@link PrologDcgParser} over {@code dcg_negotiation.pl}, so that
+ * short-circuit is live rather than theoretical ({@link NoOpDCGParser} survives for tests that
+ * want to force the Rasa branch).
+ *
+ * &lt;p&gt;&lt;b&gt;Never blocks the calling thread and never throws.&lt;/b&gt; {@link #processChatInput} runs
+ * entirely on the injected {@code executor} (typically {@code
+ * Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())}) â€” safe to call
+ * from a JADE agent thread or the Swing EDT. A Rasa request timeout (3&amp;nbsp;s, fixed) resolves
+ * to {@link PipelineResult.NeedsClarification}, never an exception; any other unhandled
+ * service failure resolves to {@link PipelineResult.Error} rather than an exceptionally-
+ * completed future, so callers never need their own retry/catch scaffolding.
+ */
+public final class NLPPipeline {
+
+<span class="fc" id="L38">    private static final Logger log = LoggerFactory.getLogger(NLPPipeline.class);</span>
+
+    private final PreprocessRegex preprocess;
+    private final RasaBridge rasa;
+    private final ConfidenceGate gate;
+    private final DCGParser dcgParser;
+    private final Predicate&lt;Frame&gt; frameValidator;
+    private final ExecutorService executor;
+
+    /**
+     * @param frameValidator the frame-path &quot;WordNet/validate&quot; seam (planning/14): whatever the
+     *                       DCG returns, this predicate gates whether {@link FrameToAcl} runs.
+     *                       Production wires {@link OntologyValidator} here (task 16), so a frame
+     *                       naming an entity outside the ontology becomes a clarification rather
+     *                       than a malformed ACL.
+     */
+    public NLPPipeline(PreprocessRegex preprocess, RasaBridge rasa, ConfidenceGate gate,
+<span class="fc" id="L55">                        DCGParser dcgParser, Predicate&lt;Frame&gt; frameValidator, ExecutorService executor) {</span>
+<span class="fc" id="L56">        this.preprocess = Objects.requireNonNull(preprocess, &quot;preprocess&quot;);</span>
+<span class="fc" id="L57">        this.rasa = Objects.requireNonNull(rasa, &quot;rasa&quot;);</span>
+<span class="fc" id="L58">        this.gate = Objects.requireNonNull(gate, &quot;gate&quot;);</span>
+<span class="fc" id="L59">        this.dcgParser = Objects.requireNonNull(dcgParser, &quot;dcgParser&quot;);</span>
+<span class="fc" id="L60">        this.frameValidator = Objects.requireNonNull(frameValidator, &quot;frameValidator&quot;);</span>
+<span class="fc" id="L61">        this.executor = Objects.requireNonNull(executor, &quot;executor&quot;);</span>
+<span class="fc" id="L62">    }</span>
+
+    /**
+     * @param text the raw chat line
+     * @param ctx  the v1.1 dialogue context (see {@link DialogueCtx}); pass {@link
+     *             DialogueCtx#NONE} when no negotiation is active yet
+     */
+    public CompletableFuture&lt;PipelineResult&gt; processChatInput(String text, DialogueCtx ctx) {
+<span class="fc" id="L70">        Objects.requireNonNull(ctx, &quot;ctx&quot;);</span>
+<span class="fc" id="L71">        return CompletableFuture.supplyAsync(() -&gt; processSync(text, ctx), executor);</span>
+    }
+
+    private PipelineResult processSync(String text, DialogueCtx ctx) {
+        try {
+<span class="fc" id="L76">            Objects.requireNonNull(text, &quot;text&quot;);</span>
+<span class="fc" id="L77">            PreprocessRegex.Extracted extracted = preprocess.extract(text);</span>
+<span class="fc" id="L78">            log.debug(&quot;preprocess extracted: {}&quot;, extracted);</span>
+
+<span class="fc" id="L80">            Optional&lt;Frame&gt; frame = dcgParser.parse(text, ctx);</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">            if (frame.isPresent()) {</span>
+<span class="fc" id="L82">                return routeFrame(frame.get(), ctx);</span>
+            }
+
+<span class="fc" id="L85">            Optional&lt;RasaParseResult&gt; parsed = callRasaWithTimeout(text);</span>
+<span class="fc bfc" id="L86" title="All 2 branches covered.">            if (parsed.isEmpty()) {</span>
+<span class="fc" id="L87">                return clarification();</span>
+            }
+<span class="fc" id="L89">            return routeRasaResult(text, parsed.get(), ctx);</span>
+<span class="fc" id="L90">        } catch (RuntimeException e) {</span>
+<span class="fc" id="L91">            log.warn(&quot;pipeline failed to route chat input&quot;, e);</span>
+<span class="fc" id="L92">            return new PipelineResult.Error(String.valueOf(e.getMessage()));</span>
+        }
+    }
+
+    /** Per-dialogue negotiation moves â€” the ones that are ambiguous when two walk-ins are active and
+     * neither is addressed or focused. A command / constraint / query is not tied to one dialogue. */
+<span class="fc" id="L98">    private static final Set&lt;String&gt; PER_DIALOGUE_MOVES = Set.of(&quot;propose&quot;, &quot;counter&quot;, &quot;accept&quot;, &quot;reject&quot;);</span>
+
+    private PipelineResult routeFrame(Frame frame, DialogueCtx ctx) {
+<span class="fc bfc" id="L101" title="All 2 branches covered.">        if (!frameValidator.test(frame)) {</span>
+<span class="fc" id="L102">            return clarification();</span>
+        }
+        // 16-M2 vocative: a &quot;Genoa Star: â€¦&quot; binds an addressee; surface it so the caller can route
+        // between concurrent walk-ins. Absent (null) for an unaddressed turn.
+<span class="fc" id="L106">        Object addressee = frame.element(&quot;addressee&quot;);</span>
+        // Routing question as clarification: an UNaddressed per-dialogue move, with two+ active
+        // dialogues and no focused one, is ambiguous â€” which walk-in is it for? Ask rather than guess.
+        // A bound addressee, a single dialogue, or an explicit focus all disambiguate (and the empty
+        // 16-M1 context has an empty roster, so this never fires there).
+<span class="fc bfc" id="L111" title="All 6 branches covered.">        if (addressee == null &amp;&amp; ctx.activeNegotiationId() == null &amp;&amp; ctx.roster().size() &gt;= 2</span>
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">                &amp;&amp; PER_DIALOGUE_MOVES.contains(frame.move())) {</span>
+<span class="fc" id="L113">            return clarification();</span>
+        }
+<span class="fc" id="L115">        ACLMessage msg = FrameToAcl.build(frame, null, ctx.activeNegotiationId());</span>
+<span class="fc bfc" id="L116" title="All 2 branches covered.">        return new PipelineResult.Routed(msg, addressee == null ? null : String.valueOf(addressee));</span>
+    }
+
+    /** Timeout -&amp;gt; {@link Optional#empty()}, no exception propagated (planning/14 Â§Step 3).
+     * Any non-timeout Rasa failure (4xx/5xx after retry, malformed JSON) propagates to the
+     * outer catch in {@link #processSync} and becomes a {@link PipelineResult.Error}. */
+    private Optional&lt;RasaParseResult&gt; callRasaWithTimeout(String text) {
+        try {
+<span class="fc" id="L124">            return Optional.of(rasa.parse(text));</span>
+<span class="fc" id="L125">        } catch (RasaTimeoutException e) {</span>
+<span class="fc" id="L126">            log.debug(&quot;rasa fallback timed out; routing to clarification&quot;);</span>
+<span class="fc" id="L127">            return Optional.empty();</span>
+        }
+    }
+
+    private PipelineResult routeRasaResult(String text, RasaParseResult r, DialogueCtx ctx) {
+<span class="fc" id="L132">        ConfidenceGate.Branch branch = gate.route(r.confidence());</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">        if (branch != ConfidenceGate.Branch.A_HIGH_CONFIDENCE) {</span>
+<span class="fc" id="L134">            return clarification();</span>
+        }
+<span class="fc" id="L136">        return routeHighConfidence(text, r, ctx);</span>
+    }
+
+    /**
+     * A Rasa-classified {@code accept_deal} BINDS a negotiation, so it demands near-certainty:
+     * a throwaway {@code &quot;so?&quot;} that the DCG misses and Rasa reads as {@code accept_deal} must
+     * never silently close a deal (task 19 play-test â€” a bare &quot;so?&quot; classified above the 0.60
+     * gate closed a â‚¬6263 deal with no visible cause). Below this the turn falls to
+     * clarification â€” the player confirms via the explicit &quot;Accept the current offer&quot; button.
+     * The DCG accept path ({@code routeFrame}) and the Accept button (a direct
+     * {@code PlayerCommandEvent}) both bypass Rasa entirely and are unaffected.
+     */
+    private static final double BINDING_ACCEPT_MIN_CONFIDENCE = 0.80;
+
+    /** Branch A (&amp;ge;0.60): map a non-structural intent straight to an action/ACL. A
+     * structural intent ({@code propose_offer}/{@code counter_offer}) that the DCG already
+     * failed to parse still needs clarification â€” Rasa's confidence alone is not enough
+     * structure to build a valid offer/counter frame from. */
+    private PipelineResult routeHighConfidence(String text, RasaParseResult r, DialogueCtx ctx) {
+<span class="fc" id="L155">        String intent = r.intentName();</span>
+<span class="pc bpc" id="L156" title="1 of 2 branches missed.">        if (intent == null) {</span>
+<span class="nc" id="L157">            return clarification();</span>
+        }
+<span class="pc bpc" id="L159" title="1 of 10 branches missed.">        return switch (intent) {</span>
+<span class="fc" id="L160">            case &quot;propose_offer&quot;, &quot;counter_offer&quot; -&gt; clarification();</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">            case &quot;accept_deal&quot; -&gt; r.confidence() &gt;= BINDING_ACCEPT_MIN_CONFIDENCE</span>
+<span class="fc" id="L162">                    ? routed(ACLMessage.ACCEPT_PROPOSAL, entitiesContent(r), ctx)</span>
+<span class="fc" id="L163">                    : clarification();</span>
+<span class="fc" id="L164">            case &quot;reject_deal&quot; -&gt; routed(ACLMessage.REJECT_PROPOSAL, entitiesContent(r), ctx);</span>
+            // An 11th performative beyond the committed 10 (report note, per session brief).
+<span class="fc" id="L166">            case &quot;query_status&quot; -&gt; routed(ACLMessage.QUERY_REF, entitiesContent(r), ctx);</span>
+<span class="fc" id="L167">            case &quot;set_constraint&quot; -&gt; routed(ACLMessage.REQUEST, entitiesContent(r), ctx);</span>
+            // Audit D-06 (2026-07-27): carries an explicit marker instead of Rasa's entities (which
+            // for a bare &quot;help&quot; is an empty object, indistinguishable from set_constraint's). The
+            // GUI needs to tell a HELP request apart from a fleet-wide instruction so it can route
+            // the typed form to the Assistant, exactly as the &quot;Talk to the assistant&quot; clarification
+            // BUTTON already does â€” before this, `help` was classified correctly at F1 1.000 and
+            // then answered with &quot;Fleet-wide commands aren't wired to a dialogue tab yet.&quot;, which
+            // is not merely unhelpful but false: a help request is not a fleet command. Nothing
+            // consumed the entities on this path (there was no consumer at all), so dropping them
+            // costs nothing. Same shape as set_policy's dedicated content below.
+<span class="fc" id="L177">            case &quot;request_help&quot; -&gt; routed(ACLMessage.REQUEST, helpContent(), ctx);</span>
+            // Raw text handed onward to PolicyParser (task 10); Rasa's entities are ignored
+            // on this path â€” PolicyParser owns its own regex-DSL parse of the original text.
+<span class="fc" id="L180">            case &quot;set_policy&quot; -&gt; routed(ACLMessage.REQUEST, policyContent(text), ctx);</span>
+<span class="fc" id="L181">            case &quot;cancel_action&quot; -&gt; routeCancelAction(ctx);</span>
+            // 2026-07-27 (task 26, decision b): the 10th canonical intent. A ROUTING LABEL, like
+            // set_policy â€” it never becomes an ACL, it is the classifier saying &quot;none of the nine
+            // port moves&quot;, which is exactly the clarification path. Written explicitly rather than
+            // left to `default` so the intent's contract is visible where it is enforced: the
+            // whole reason it was added is that without a &quot;none of these&quot; class DIET had to spread
+            // a keyboard mash or a greeting over the nine in-domain intents, and one of them won
+            // (measured: 73.7% false-bind rate on the wild set's should-ask turns).
+<span class="fc" id="L189">            case &quot;out_of_scope&quot; -&gt; clarification();</span>
+<span class="nc" id="L190">            default -&gt; clarification();</span>
+        };
+    }
+
+    /**
+     * v1.1 routing (2026-05-31 audit rule: FIPA CANCEL is reserved for revoking an
+     * already-issued commitment, not for withdrawing from an open negotiation):
+     * &lt;ul&gt;
+     *   &lt;li&gt;no active negotiation -&amp;gt; the target is an issued assignment (tug dispatch,
+     *       berth booking) -&amp;gt; CANCEL&lt;/li&gt;
+     *   &lt;li&gt;active negotiation with a standing offer on the table -&amp;gt; withdrawal of that
+     *       proposal -&amp;gt; REJECT_PROPOSAL&lt;/li&gt;
+     *   &lt;li&gt;active negotiation, nothing currently on the table -&amp;gt; plain withdrawal -&amp;gt;
+     *       INFORM&lt;/li&gt;
+     * &lt;/ul&gt;
+     */
+    private PipelineResult routeCancelAction(DialogueCtx ctx) {
+<span class="fc bfc" id="L207" title="All 2 branches covered.">        if (ctx.activeNegotiationId() == null) {</span>
+<span class="fc" id="L208">            return routed(ACLMessage.CANCEL, &quot;{}&quot;, ctx);</span>
+        }
+<span class="fc bfc" id="L210" title="All 2 branches covered.">        if (ctx.hasStandingOffer()) {</span>
+<span class="fc" id="L211">            return routed(ACLMessage.REJECT_PROPOSAL, &quot;{}&quot;, ctx);</span>
+        }
+<span class="fc" id="L213">        return routed(ACLMessage.INFORM, &quot;{}&quot;, ctx);</span>
+    }
+
+    private static PipelineResult routed(int performative, String content, DialogueCtx ctx) {
+<span class="fc" id="L217">        ACLMessage msg = MessageFactory.create(performative);</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">        if (ctx.activeNegotiationId() != null) {</span>
+<span class="fc" id="L219">            msg.setConversationId(ctx.activeNegotiationId());</span>
+        }
+<span class="fc" id="L221">        msg.setContent(content);</span>
+<span class="fc" id="L222">        return new PipelineResult.Routed(msg);</span>
+    }
+
+    private static String entitiesContent(RasaParseResult r) {
+<span class="fc" id="L226">        Map&lt;String, String&gt; values = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L227">        r.entities().forEach((name, hit) -&gt; values.put(name, hit.value()));</span>
+<span class="fc" id="L228">        return TerminalJson.write(values);</span>
+    }
+
+    private static String policyContent(String text) {
+<span class="fc" id="L232">        return TerminalJson.write(Map.of(&quot;policy_text&quot;, text));</span>
+    }
+
+    /** The {@code request_help} marker the GUI keys on â€” see {@link #HELP_REQUEST_KEY}. */
+    private static String helpContent() {
+<span class="fc" id="L237">        return TerminalJson.write(Map.of(HELP_REQUEST_KEY, true));</span>
+    }
+
+    /** Content key marking a REQUEST as the player asking for help rather than issuing a
+     * fleet-wide instruction (audit D-06). Read by {@code DialogueTabView.dispatchRouted}. */
+    public static final String HELP_REQUEST_KEY = &quot;help_request&quot;;
+
+    private static PipelineResult clarification() {
+<span class="fc" id="L245">        return new PipelineResult.NeedsClarification(ClarificationButtons.defaultOptions());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

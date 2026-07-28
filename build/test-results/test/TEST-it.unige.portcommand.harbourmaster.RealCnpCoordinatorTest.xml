@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.harbourmaster.RealCnpCoordinatorTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:41" hostname="MOJI" time="0.009">
+  <properties/>
+  <testcase name="anIdleCompletionLeavesTheQueueReadyForImmediateLaunch()" classname="it.unige.portcommand.harbourmaster.RealCnpCoordinatorTest" time="0.002"/>
+  <testcase name="onlyOneSessionLaunchesUntilTheFirstCompletes()" classname="it.unige.portcommand.harbourmaster.RealCnpCoordinatorTest" time="0.002"/>
+  <testcase name="sessionsLaunchInArrivalOrder()" classname="it.unige.portcommand.harbourmaster.RealCnpCoordinatorTest" time="0.003"/>
+  <system-out><![CDATA[00:12:41.765 [Test worker] [] INFO  i.u.p.h.RealCnpCoordinator - CNP for V2 queued behind the in-flight session (1 waiting)
+00:12:41.765 [Test worker] [] INFO  i.u.p.h.RealCnpCoordinator - CNP for V3 queued behind the in-flight session (2 waiting)
+00:12:41.765 [Test worker] [] INFO  i.u.p.h.RealCnpCoordinator - CNP session closed -> launching queued CNP for V2 (1 still waiting)
+00:12:41.765 [Test worker] [] INFO  i.u.p.h.RealCnpCoordinator - CNP session closed -> launching queued CNP for V3 (0 still waiting)
+00:12:41.781 [Test worker] [] INFO  i.u.p.h.RealCnpCoordinator - CNP for V2 queued behind the in-flight session (1 waiting)
+00:12:41.781 [Test worker] [] INFO  i.u.p.h.RealCnpCoordinator - CNP for V3 queued behind the in-flight session (2 waiting)
+00:12:41.781 [Test worker] [] INFO  i.u.p.h.RealCnpCoordinator - CNP session closed -> launching queued CNP for V2 (1 still waiting)
+00:12:41.781 [Test worker] [] INFO  i.u.p.h.RealCnpCoordinator - CNP session closed -> launching queued CNP for V3 (0 still waiting)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

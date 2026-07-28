@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Paraphraser.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.commlog</a> &gt; <span class="el_source">Paraphraser.java</span></div><h1>Paraphraser.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.commlog;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import it.unige.portcommand.core.TerminalJson;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Converts an {@link ACLMessage} to a one-line natural-language string for the
+ * comm log (task 18/19 render it, coloured by {@link PerformativeColours}).
+ * Purely deterministic â€” never calls the LLM. Exactly 10 templates, one per
+ * canonical FIPA performative (PROJECT_DEFINITION Â§6.1 / Â§7.4): REQUEST,
+ * PROPOSE, ACCEPT_PROPOSAL, REJECT_PROPOSAL, CFP, CONFIRM, INFORM, REFUSE,
+ * CANCEL, DISCONFIRM. Content shapes are grounded in every real
+ * {@code MessageFactory} call site in this codebase (auto-flow, walk-in
+ * negotiation, CNP, weather, customs, player commands, NLP/DCG routing) â€” see
+ * each helper's javadoc for the shapes it handles.
+ *
+ * &lt;p&gt;&lt;b&gt;Never throws.&lt;/b&gt; A performative outside the 10 (e.g. {@code QUERY_REF},
+ * which the player's &quot;ASK&quot; command and the NLP {@code query_status}/{@code ask}
+ * paths really do send), a {@code null}/empty content body (the CNP loser's
+ * REJECT_PROPOSAL carries none), or malformed JSON all fall through to a safe
+ * generic fallback instead of a template match or an exception.
+ */
+public final class Paraphraser {
+
+<span class="fc" id="L28">    private static final Logger log = LoggerFactory.getLogger(Paraphraser.class);</span>
+
+    /** The HarbourMaster's DF/local name â€” the sender whose PROPOSE is a demand, not an offer. */
+    private static final String HARBOUR_MASTER = &quot;harbour_master&quot;;
+
+    private Paraphraser() {
+    }
+
+    /**
+     * Sender-agnostic overload â€” derives the sender from the message's own {@code getSender()}
+     * (null when no live AID is attached, e.g. in unit tests). The comm-log path should prefer
+     * the {@link #paraphrase(ACLMessage, String)} overload with the already-resolved local name.
+     */
+    public static String paraphrase(ACLMessage msg) {
+<span class="pc bpc" id="L42" title="1 of 4 branches missed.">        String sender = msg == null || msg.getSender() == null ? null : msg.getSender().getLocalName();</span>
+<span class="fc" id="L43">        return paraphrase(msg, sender);</span>
+    }
+
+    /**
+     * @param senderLocalName the message's sender local name (the comm-log call site already
+     *                        resolves it); load-bearing ONLY for PROPOSE, where a HarbourMaster
+     *                        PROPOSE is a price DEMAND (&quot;Demanding â‚¬X&quot;) while a vessel's own
+     *                        offer or a tug's CNP escort bid stays &quot;Offering&quot; (checkpoint #5â€“#7,
+     *                        2026-07-18). Paraphrase layer only â€” the ACL performative is
+     *                        untouched.
+     */
+    public static String paraphrase(ACLMessage msg, String senderLocalName) {
+<span class="fc bfc" id="L55" title="All 2 branches covered.">        if (msg == null) {</span>
+<span class="fc" id="L56">            return &quot;(no message)&quot;;</span>
+        }
+        try {
+<span class="fc" id="L59">            return paraphraseInternal(msg, senderLocalName);</span>
+<span class="nc" id="L60">        } catch (RuntimeException e) {</span>
+<span class="nc" id="L61">            log.warn(&quot;Paraphraser: falling back to a generic rendering for an unparseable message&quot;, e);</span>
+<span class="nc" id="L62">            return genericFallback(msg);</span>
+        }
+    }
+
+    private static String paraphraseInternal(ACLMessage msg, String senderLocalName) {
+<span class="fc" id="L67">        JsonNode content = TerminalJson.readTreeOrNull(msg.getContent());</span>
+<span class="fc bfc" id="L68" title="All 11 branches covered.">        return switch (msg.getPerformative()) {</span>
+<span class="fc" id="L69">            case ACLMessage.REQUEST -&gt; &quot;Requesting &quot; + requestObject(content);</span>
+<span class="fc" id="L70">            case ACLMessage.PROPOSE -&gt; proposeVerb(senderLocalName) + offer(content);</span>
+<span class="fc" id="L71">            case ACLMessage.ACCEPT_PROPOSAL -&gt; &quot;Granted &quot; + deal(content);</span>
+<span class="fc" id="L72">            case ACLMessage.REJECT_PROPOSAL -&gt; &quot;Declined the offer&quot; + reasonSuffix(content);</span>
+<span class="fc" id="L73">            case ACLMessage.CFP -&gt; &quot;Escort needed for &quot; + vessel(content);</span>
+<span class="fc" id="L74">            case ACLMessage.CONFIRM -&gt; &quot;Cleared &quot; + clearance(content);</span>
+<span class="fc" id="L75">            case ACLMessage.INFORM -&gt; &quot;Notifying: &quot; + notice(content, msg);</span>
+<span class="fc" id="L76">            case ACLMessage.REFUSE -&gt; &quot;Refusing&quot; + reasonSuffix(content);</span>
+<span class="fc" id="L77">            case ACLMessage.CANCEL -&gt; &quot;Cancelling&quot; + reasonSuffix(content);</span>
+<span class="fc" id="L78">            case ACLMessage.DISCONFIRM -&gt; &quot;Retracting &quot; + retraction(content);</span>
+<span class="fc" id="L79">            default -&gt; genericFallback(msg);</span>
+        };
+    }
+
+    private static String genericFallback(ACLMessage msg) {
+        String name;
+        try {
+<span class="fc" id="L86">            name = ACLMessage.getPerformative(msg.getPerformative());</span>
+<span class="nc" id="L87">        } catch (RuntimeException e) {</span>
+<span class="nc" id="L88">            name = &quot;message&quot;;</span>
+<span class="fc" id="L89">        }</span>
+<span class="fc" id="L90">        return &quot;Sent a &quot; + name + &quot; message&quot;;</span>
+    }
+
+    /**
+     * REQUEST shapes: {@code {intent:&quot;request_berth&quot;, contract, vessel_spec:{vessel_id}}}
+     * (vesselâ†’HM), a 9-field {@code BerthRequest} (HMâ†’terminal, top-level {@code vessel_id}
+     * + {@code berth_id}), {@code {vessel_id, vessel_type, cargo_class}} (HMâ†’customs), or an
+     * NLP/DCG-routed flat entity map with no recognisable vessel id at all.
+     */
+    private static String requestObject(JsonNode content) {
+<span class="pc bpc" id="L100" title="1 of 2 branches missed.">        if (content == null) {</span>
+<span class="nc" id="L101">            return &quot;assistance&quot;;</span>
+        }
+<span class="fc" id="L103">        String vesselId = vesselIdOf(content);</span>
+<span class="fc" id="L104">        String berthId = text(content, &quot;berth_id&quot;);</span>
+<span class="pc bpc" id="L105" title="1 of 4 branches missed.">        if (vesselId != null &amp;&amp; berthId != null) {</span>
+<span class="fc" id="L106">            return &quot;berth &quot; + berthId + &quot; for &quot; + vesselId;</span>
+        }
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">        if (vesselId != null) {</span>
+<span class="fc" id="L109">            return &quot;action for &quot; + vesselId;</span>
+        }
+<span class="nc" id="L111">        return &quot;assistance&quot;;</span>
+    }
+
+    /**
+     * PROPOSE verb (#6): the HarbourMaster PROPOSEs a price to a walk-in as a DEMAND
+     * (&quot;Demanding â‚¬X&quot;); a vessel PROPOSEs its own offer and a tug PROPOSEs a CNP escort bid,
+     * both of which stay &quot;Offering&quot;. A null sender (no live AID â€” unit tests) reads as an offer.
+     */
+    private static String proposeVerb(String senderLocalName) {
+<span class="fc bfc" id="L120" title="All 2 branches covered.">        return HARBOUR_MASTER.equals(senderLocalName) ? &quot;Demanding &quot; : &quot;Offering &quot;;</span>
+    }
+
+    /**
+     * PROPOSE shapes: {@code {intent:&quot;opening_offer&quot;|&quot;counter_offer&quot;, price, hours, vessel_spec}}
+     * (walk-in negotiation), a tug CNP bid {@code {cost, eta_minutes, fuel_state, position}}
+     * (no price/vessel id at all), or a player-command/DCG-frame map that may carry only a
+     * bare {@code price}.
+     */
+    private static String offer(JsonNode content) {
+<span class="pc bpc" id="L130" title="1 of 2 branches missed.">        if (content == null) {</span>
+<span class="nc" id="L131">            return &quot;terms&quot;;</span>
+        }
+<span class="pc bpc" id="L133" title="1 of 4 branches missed.">        if (content.has(&quot;cost&quot;) &amp;&amp; content.has(&quot;eta_minutes&quot;)) {</span>
+<span class="fc" id="L134">            return &quot;escort bid: â‚¬&quot; + moneyText(content, &quot;cost&quot;) + &quot; (ETA &quot; + moneyText(content, &quot;eta_minutes&quot;) + &quot;m)&quot;;</span>
+        }
+<span class="fc" id="L136">        Double price = numOrNull(content, &quot;price&quot;);</span>
+<span class="pc bpc" id="L137" title="1 of 2 branches missed.">        if (price != null) {</span>
+<span class="fc" id="L138">            String vesselId = vesselIdOf(content);</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">            return &quot;â‚¬&quot; + money(price) + (vesselId != null ? &quot; to &quot; + vesselId : &quot;&quot;);</span>
+        }
+<span class="nc" id="L141">        return &quot;terms&quot;;</span>
+    }
+
+    /**
+     * ACCEPT_PROPOSAL shapes: {@code {berth_id, price, hours}} (HM grants a berth â€” both
+     * contracted and walk-in), {@code {intent:&quot;accept&quot;, price, hours}} (vessel accepts a
+     * counter), {@code {vessel_id, berth_position}} (CNP award to the winning tug â€” no price),
+     * or an empty/arbitrary player-command map.
+     */
+    private static String deal(JsonNode content) {
+<span class="pc bpc" id="L151" title="1 of 2 branches missed.">        if (content == null) {</span>
+<span class="nc" id="L152">            return &quot;the request&quot;;</span>
+        }
+<span class="fc" id="L154">        String berthId = text(content, &quot;berth_id&quot;);</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">        if (berthId != null) {</span>
+<span class="fc" id="L156">            return &quot;berth &quot; + berthId;</span>
+        }
+<span class="pc bpc" id="L158" title="1 of 4 branches missed.">        if (content.has(&quot;vessel_id&quot;) &amp;&amp; content.has(&quot;berth_position&quot;)) {</span>
+<span class="fc" id="L159">            return &quot;the escort contract for &quot; + text(content, &quot;vessel_id&quot;);</span>
+        }
+<span class="fc" id="L161">        Double price = numOrNull(content, &quot;price&quot;);</span>
+<span class="fc bfc" id="L162" title="All 2 branches covered.">        if (price != null) {</span>
+<span class="fc" id="L163">            return &quot;at â‚¬&quot; + money(price);</span>
+        }
+<span class="fc" id="L165">        return &quot;the request&quot;;</span>
+    }
+
+    /** CFP shape: {@code {target_vessel_id, target_vessel_position, reply_by}} â€” one producer, one shape. */
+    private static String vessel(JsonNode content) {
+<span class="fc" id="L170">        String v = text(content, &quot;target_vessel_id&quot;);</span>
+<span class="pc bpc" id="L171" title="1 of 2 branches missed.">        return v != null ? v : &quot;a vessel&quot;;</span>
+    }
+
+    /**
+     * CONFIRM shapes: {@code {intent:&quot;deal_confirmed&quot;, price, hours}} (vessel confirms),
+     * {@code {berth_id, crane_assigned}} (terminal confirms), or {@code {ref:&quot;CL-2026-N&quot;}}
+     * (customs clearance).
+     */
+    private static String clearance(JsonNode content) {
+<span class="pc bpc" id="L180" title="1 of 2 branches missed.">        if (content == null) {</span>
+<span class="nc" id="L181">            return &quot;the request&quot;;</span>
+        }
+<span class="fc" id="L183">        String ref = text(content, &quot;ref&quot;);</span>
+<span class="fc bfc" id="L184" title="All 2 branches covered.">        if (ref != null) {</span>
+<span class="fc" id="L185">            return &quot;clearance &quot; + ref;</span>
+        }
+<span class="fc" id="L187">        String berthId = text(content, &quot;berth_id&quot;);</span>
+<span class="fc bfc" id="L188" title="All 2 branches covered.">        if (berthId != null) {</span>
+<span class="fc" id="L189">            return &quot;berth &quot; + berthId + &quot; assignment&quot;;</span>
+        }
+<span class="fc" id="L191">        Double price = numOrNull(content, &quot;price&quot;);</span>
+<span class="pc bpc" id="L192" title="1 of 2 branches missed.">        if (price != null) {</span>
+<span class="fc" id="L193">            return &quot;the deal at â‚¬&quot; + money(price);</span>
+        }
+<span class="nc" id="L195">        return &quot;the request&quot;;</span>
+    }
+
+    /**
+     * INFORM shapes discriminate on whichever of three top-level keys is present â€”
+     * {@code intent} (withdraw/departed/service_complete â€” vessel-originated),
+     * {@code event} (tug_hold/escort_complete/flagged/routine_inspection/weather_hold/
+     * weather_threshold/weather_clear/weather_resume), or {@code notice} (handling_complete)
+     * â€” plus the routine weather
+     * broadcast, which has none of the three. {@code priority=high} is an ACL envelope
+     * parameter (weather threshold + customs flagged), never JSON content, so it is read off
+     * {@code msg} directly.
+     */
+    private static String notice(JsonNode content, ACLMessage msg) {
+<span class="fc bfc" id="L209" title="All 2 branches covered.">        String prefix = &quot;high&quot;.equals(msg.getUserDefinedParameter(&quot;priority&quot;)) ? &quot;URGENT &quot; : &quot;&quot;;</span>
+<span class="fc bfc" id="L210" title="All 2 branches covered.">        if (content == null) {</span>
+<span class="fc" id="L211">            return prefix + &quot;an update&quot;;</span>
+        }
+<span class="fc" id="L213">        String intent = text(content, &quot;intent&quot;);</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">        if (intent != null) {</span>
+<span class="pc bpc" id="L215" title="1 of 4 branches missed.">            return prefix + switch (intent) {</span>
+<span class="fc" id="L216">                case &quot;withdraw&quot; -&gt; &quot;withdrawal&quot; + reasonSuffix(content);</span>
+<span class="fc" id="L217">                case &quot;departed&quot; -&gt; orVessel(content) + &quot; has departed&quot;;</span>
+<span class="fc" id="L218">                case &quot;service_complete&quot; -&gt; &quot;service complete for &quot; + orVessel(content);</span>
+<span class="pc" id="L219">                default -&gt; humanize(intent);</span>
+            };
+        }
+<span class="fc" id="L222">        String event = text(content, &quot;event&quot;);</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">        if (event != null) {</span>
+<span class="pc bpc" id="L224" title="1 of 9 branches missed.">            return prefix + switch (event) {</span>
+<span class="fc" id="L225">                case &quot;tug_hold&quot; -&gt; &quot;tug hold&quot; + reasonSuffix(content);</span>
+<span class="fc" id="L226">                case &quot;escort_complete&quot; -&gt; &quot;escort complete for &quot; + orVessel(content);</span>
+<span class="fc" id="L227">                case &quot;flagged&quot; -&gt; &quot;customs flag&quot; + reasonSuffix(content);</span>
+<span class="nc" id="L228">                case &quot;routine_inspection&quot; -&gt; &quot;routine inspection&quot;;</span>
+<span class="fc" id="L229">                case &quot;weather_hold&quot; -&gt; &quot;weather hold (wind &quot; + moneyText(content, &quot;wind_knots&quot;) + &quot;kn)&quot;;</span>
+                case &quot;weather_threshold&quot; -&gt;
+<span class="fc" id="L231">                        &quot;weather alert (wind &quot; + moneyText(content, &quot;wind_knots&quot;) + &quot;kn, &quot; + text(content, &quot;state&quot;) + &quot;)&quot;;</span>
+                // Task 24: the recovery-direction signals (weather_clear = agentâ†’HM crossing
+                // alert; weather_resume = HMâ†’vessel re-dispatch notice). Deliberately calm
+                // wording â€” only worsening alerts carry priority=high/URGENT.
+                case &quot;weather_clear&quot; -&gt;
+<span class="fc" id="L236">                        &quot;weather clearing (wind &quot; + moneyText(content, &quot;wind_knots&quot;) + &quot;kn, &quot; + text(content, &quot;state&quot;) + &quot;)&quot;;</span>
+<span class="fc" id="L237">                case &quot;weather_resume&quot; -&gt; &quot;weather cleared â€” resuming escort for &quot; + orVessel(content);</span>
+<span class="fc" id="L238">                default -&gt; humanize(event);</span>
+            };
+        }
+<span class="fc" id="L241">        String notice = text(content, &quot;notice&quot;);</span>
+<span class="fc bfc" id="L242" title="All 2 branches covered.">        if (notice != null) {</span>
+<span class="pc bpc" id="L243" title="1 of 2 branches missed.">            return prefix + switch (notice) {</span>
+<span class="fc" id="L244">                case &quot;handling_complete&quot; -&gt; &quot;cargo handling complete at berth &quot; + text(content, &quot;berth&quot;);</span>
+<span class="pc" id="L245">                default -&gt; humanize(notice);</span>
+            };
+        }
+<span class="pc bpc" id="L248" title="2 of 4 branches missed.">        if (content.has(&quot;wind_knots&quot;) &amp;&amp; content.has(&quot;state&quot;)) {</span>
+<span class="fc" id="L249">            return prefix + &quot;conditions: wind &quot; + moneyText(content, &quot;wind_knots&quot;) + &quot;kn, &quot; + text(content, &quot;state&quot;);</span>
+        }
+<span class="nc" id="L251">        return prefix + &quot;an update&quot;;</span>
+    }
+
+    /** Every REFUSE/CANCEL/withdraw/tug_hold/flagged shape carries a plain {@code reason} string. */
+    private static String reasonSuffix(JsonNode content) {
+<span class="fc bfc" id="L256" title="All 2 branches covered.">        if (content == null) {</span>
+<span class="fc" id="L257">            return &quot;&quot;;</span>
+        }
+<span class="fc" id="L259">        String reason = text(content, &quot;reason&quot;);</span>
+<span class="fc bfc" id="L260" title="All 2 branches covered.">        return reason != null ? &quot; (&quot; + humanize(reason) + &quot;)&quot; : &quot;&quot;;</span>
+    }
+
+    /** DISCONFIRM shape: {@code {notice:&quot;retracted&quot;, berth_id}} â€” one producer, one shape. */
+    private static String retraction(JsonNode content) {
+<span class="fc" id="L265">        String berthId = text(content, &quot;berth_id&quot;);</span>
+<span class="pc bpc" id="L266" title="1 of 2 branches missed.">        return berthId != null ? &quot;berth &quot; + berthId + &quot; confirmation&quot; : &quot;the assignment&quot;;</span>
+    }
+
+    private static String vesselIdOf(JsonNode content) {
+<span class="fc" id="L270">        String top = text(content, &quot;vessel_id&quot;);</span>
+<span class="fc bfc" id="L271" title="All 2 branches covered.">        if (top != null) {</span>
+<span class="fc" id="L272">            return top;</span>
+        }
+<span class="fc" id="L274">        JsonNode spec = content.get(&quot;vessel_spec&quot;);</span>
+<span class="fc bfc" id="L275" title="All 2 branches covered.">        return spec != null ? text(spec, &quot;vessel_id&quot;) : null;</span>
+    }
+
+    private static String orVessel(JsonNode content) {
+<span class="fc" id="L279">        String v = vesselIdOf(content);</span>
+<span class="pc bpc" id="L280" title="1 of 2 branches missed.">        return v != null ? v : &quot;a vessel&quot;;</span>
+    }
+
+    private static String humanize(String s) {
+<span class="fc" id="L284">        return s.replace('_', ' ');</span>
+    }
+
+    private static String text(JsonNode node, String field) {
+<span class="pc bpc" id="L288" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L289">            return null;</span>
+        }
+<span class="fc" id="L291">        JsonNode v = node.get(field);</span>
+<span class="pc bpc" id="L292" title="1 of 4 branches missed.">        return v == null || v.isNull() ? null : v.asText();</span>
+    }
+
+    private static Double numOrNull(JsonNode node, String field) {
+<span class="pc bpc" id="L296" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L297">            return null;</span>
+        }
+<span class="fc" id="L299">        JsonNode v = node.get(field);</span>
+<span class="pc bpc" id="L300" title="2 of 6 branches missed.">        return v == null || v.isNull() || !v.isNumber() ? null : v.asDouble();</span>
+    }
+
+    /** Formats a numeric field for display, dropping a trailing {@code .0} for whole numbers. */
+    private static String moneyText(JsonNode node, String field) {
+<span class="fc" id="L305">        Double v = numOrNull(node, field);</span>
+<span class="pc bpc" id="L306" title="1 of 2 branches missed.">        return v == null ? &quot;?&quot; : money(v);</span>
+    }
+
+    private static String money(double v) {
+<span class="fc bfc" id="L310" title="All 2 branches covered.">        return v == Math.rint(v) ? String.valueOf((long) v) : String.format(&quot;%.2f&quot;, v);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

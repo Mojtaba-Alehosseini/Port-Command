@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Settings.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.core</a> &gt; <span class="el_source">Settings.java</span></div><h1>Settings.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.core;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Set;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+/**
+ * The single canonical game-settings record (task 15; {@code planning/15_negotiation_engine.md}
+ * Â§15.1). Lives in {@code core} rather than {@code negotiation} because it is consumed
+ * cross-cutting (tasks 15/20/21/22/24). Loaded once from {@code data/defaults.json} on the
+ * classpath (static config, not live shared state â€” same rationale as
+ * {@link it.unige.portcommand.negotiation.VesselTemplates}, mirrored here). {@code randomSeed} is
+ * deliberately NOT a field â€” it lives on {@code GameState} (task 22) and is captured in the save
+ * file.
+ *
+ * &lt;p&gt;{@code defaults.json} also carries two unrelated blocks that their owners read independently
+ * â€” {@code llm.timeout_ms} ({@link it.unige.portcommand.nlp.LLMBridge}) and {@code reputation}
+ * ({@code harbourmaster.financial.ReputationRules}, a per-outcome delta TABLE rather than the flat
+ * scalars this record holds). {@link JsonIgnoreProperties} lets this record bind against that same
+ * shared file without choking on the extra objects.
+ *
+ * &lt;p&gt;{@code dailyTargetEur} was added by task 20 (the canonical â‚¬5,000 daily target,
+ * {@code planning/20} &quot;Notes&quot;); it lives here rather than in a financial-only config because the
+ * HUD and the EOD summary both read it, and this record is the designed cross-task home.
+ *
+ * &lt;p&gt;{@code bankruptcyFloorEur} was added by task 24 (session brief, 2026-07-17; ADR-14): the
+ * game-over rule is &quot;wallet below this floor at end-of-day for 3 CONSECUTIVE days&quot;, âˆ’â‚¬20,000
+ * canonical â€” NOT planning/24's older &quot;any negative wallet at EOD&quot;, which would bankrupt a
+ * zero-deal day-1 run on the â‚¬5,200 fixed cost alone. {@code GameOverGuard} is the sole consumer.
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
+public record Settings(
+        @JsonProperty(&quot;roundLimit&quot;) int roundLimit,
+        @JsonProperty(&quot;timeLimitSeconds&quot;) int timeLimitSeconds,
+        @JsonProperty(&quot;autopilotEnabled&quot;) boolean autopilotEnabled,
+        @JsonProperty(&quot;difficulty&quot;) String difficulty,
+        @JsonProperty(&quot;realSecondsPerGameDay&quot;) long realSecondsPerGameDay,
+        @JsonProperty(&quot;maxGameDays&quot;) int maxGameDays,
+        @JsonProperty(&quot;firstLaunch&quot;) boolean firstLaunch,
+        @JsonProperty(&quot;llmModel&quot;) String llmModel,
+        @JsonProperty(&quot;withdrawalPenaltyEur&quot;) double withdrawalPenaltyEur,
+        @JsonProperty(&quot;cnpReplyBySimSeconds&quot;) int cnpReplyBySimSeconds,
+        @JsonProperty(&quot;cnpRetryAfterSimSeconds&quot;) int cnpRetryAfterSimSeconds,
+        @JsonProperty(&quot;dailyTargetEur&quot;) double dailyTargetEur,
+        @JsonProperty(&quot;bankruptcyFloorEur&quot;) double bankruptcyFloorEur) {
+
+<span class="fc" id="L51">    private static final Set&lt;String&gt; VALID_DIFFICULTIES = Set.of(&quot;EASY&quot;, &quot;NORMAL&quot;, &quot;HARD&quot;);</span>
+<span class="fc" id="L52">    private static final Settings CACHED = readFromClasspath();</span>
+
+<span class="fc" id="L54">    public Settings {</span>
+<span class="pc bpc" id="L55" title="2 of 4 branches missed.">        if (roundLimit &lt; 2 || roundLimit &gt; 8) {</span>
+<span class="nc" id="L56">            throw new IllegalArgumentException(&quot;roundLimit out of range 2..8: &quot; + roundLimit);</span>
+        }
+<span class="pc bpc" id="L58" title="2 of 4 branches missed.">        if (timeLimitSeconds &lt; 30 || timeLimitSeconds &gt; 180) {</span>
+<span class="nc" id="L59">            throw new IllegalArgumentException(&quot;timeLimitSeconds out of range 30..180: &quot; + timeLimitSeconds);</span>
+        }
+<span class="pc bpc" id="L61" title="1 of 2 branches missed.">        if (!VALID_DIFFICULTIES.contains(difficulty)) {</span>
+<span class="nc" id="L62">            throw new IllegalArgumentException(&quot;difficulty must be EASY/NORMAL/HARD: &quot; + difficulty);</span>
+        }
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">        if (dailyTargetEur &lt;= 0) {</span>
+<span class="nc" id="L65">            throw new IllegalArgumentException(&quot;dailyTargetEur must be &gt; 0: &quot; + dailyTargetEur);</span>
+        }
+<span class="pc bpc" id="L67" title="1 of 2 branches missed.">        if (bankruptcyFloorEur &gt;= 0) {</span>
+<span class="nc" id="L68">            throw new IllegalArgumentException(&quot;bankruptcyFloorEur must be &lt; 0: &quot; + bankruptcyFloorEur);</span>
+        }
+<span class="fc" id="L70">    }</span>
+
+    /** The hard-coded fallback values (task-15 brief, Â§15.1) â€” also what ships in defaults.json. */
+    public static Settings defaults() {
+<span class="fc" id="L74">        return new Settings(4, 60, false, &quot;NORMAL&quot;, 300L, 30, true,</span>
+                &quot;microsoft/Phi-4-mini-instruct&quot;, 500.0, 5, 30, 5_000.0, -20_000.0);
+    }
+
+    /** The classpath-loaded settings, read once and cached (mirrors {@code VesselTemplates}). */
+    public static Settings load() {
+<span class="fc" id="L80">        return CACHED;</span>
+    }
+
+    private static Settings readFromClasspath() {
+<span class="fc" id="L84">        try (InputStream in = Settings.class.getResourceAsStream(&quot;/data/defaults.json&quot;)) {</span>
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">            if (in == null) {</span>
+<span class="nc" id="L86">                throw new IllegalStateException(&quot;defaults.json not found on classpath (/data/)&quot;);</span>
+            }
+<span class="fc" id="L88">            return new ObjectMapper().readValue(in, Settings.class);</span>
+<span class="nc" id="L89">        } catch (IOException e) {</span>
+<span class="nc" id="L90">            throw new IllegalStateException(&quot;failed to load defaults.json&quot;, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

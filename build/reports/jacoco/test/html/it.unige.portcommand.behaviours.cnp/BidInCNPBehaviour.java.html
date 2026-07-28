@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BidInCNPBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.cnp</a> &gt; <span class="el_source">BidInCNPBehaviour.java</span></div><h1>BidInCNPBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.cnp;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import it.unige.portcommand.agents.TugAgent;
+import it.unige.portcommand.agents.TugMath;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.ontology.Position;
+import jade.core.behaviours.CyclicBehaviour;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Tug side of the Contract Net: answers every {@code CFP} from the HarbourMaster
+ * with a {@code PROPOSE} (if available) or a {@code REFUSE} (task 08 Â§8.2). The
+ * REFUSE is emitted inline here â€” {@code RefuseAssignmentBehaviour} stays a parked
+ * stub (task-07 precedent).
+ *
+ * &lt;p&gt;Bid maths route entirely through {@link TugMath}: pixelsâ†’km at the single
+ * boundary, then knotsâ†’km/h, so the quoted {@code eta_minutes} matches what the
+ * transit leg will actually take. Every reply goes through {@link MessageFactory#reply}
+ * (preserves conversation-id + in-reply-to, re-stamps the {@code port_command_v1}/{@code json}
+ * envelope).
+ */
+public final class BidInCNPBehaviour extends CyclicBehaviour {
+
+<span class="fc" id="L32">    private static final Logger log = LoggerFactory.getLogger(BidInCNPBehaviour.class);</span>
+<span class="fc" id="L33">    private static final MessageTemplate TEMPLATE = MessageTemplate.and(</span>
+<span class="fc" id="L34">            MessageTemplate.MatchPerformative(ACLMessage.CFP),</span>
+<span class="fc" id="L35">            MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));</span>
+
+    private final TugAgent tug;
+
+    public BidInCNPBehaviour(TugAgent tug) {
+<span class="fc" id="L40">        super(tug);</span>
+<span class="fc" id="L41">        this.tug = tug;</span>
+<span class="fc" id="L42">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L46">        ACLMessage cfp = myAgent.receive(TEMPLATE);</span>
+<span class="fc bfc" id="L47" title="All 2 branches covered.">        if (cfp == null) {</span>
+<span class="fc" id="L48">            block();</span>
+<span class="fc" id="L49">            return;</span>
+        }
+
+<span class="fc" id="L52">        JsonNode content = TerminalJson.readTreeOrNull(cfp.getContent());</span>
+<span class="fc" id="L53">        Position pickup = position(content, &quot;target_vessel_position&quot;);</span>
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">        if (pickup == null) {</span>
+<span class="nc" id="L55">            refuse(cfp, &quot;malformed&quot;);</span>
+<span class="nc" id="L56">            return;</span>
+        }
+<span class="fc bfc" id="L58" title="All 2 branches covered.">        if (tug.currentJob() != null) {</span>
+<span class="fc" id="L59">            refuse(cfp, &quot;busy&quot;);</span>
+<span class="fc" id="L60">            return;</span>
+        }
+<span class="fc bfc" id="L62" title="All 2 branches covered.">        if (tug.fuelState() &lt; TugAgent.LOW_FUEL_THRESHOLD) {</span>
+<span class="fc" id="L63">            refuse(cfp, &quot;low_fuel&quot;);</span>
+<span class="fc" id="L64">            return;</span>
+        }
+
+<span class="fc" id="L67">        double distanceKm = TugMath.distanceKm(tug.position(), pickup);</span>
+        // Whole-cent bid (checkpoint-#6 F6, fixed 2026-07-18): the raw fare+fuel product
+        // carries arbitrary float fractions, and a winning bid's cost flows verbatim into the
+        // wallet â€” two summed bids left the balance with a permanent sub-cent tail
+        // (â€¦532.615951895947). Money is rounded HERE, at bid construction, so the quote, the
+        // Prolog scoring, the award event and the charge all see the same whole-cent figure.
+<span class="fc" id="L73">        double cost = round(tug.baseFare() + tug.fuelCostPerKm() * distanceKm);</span>
+<span class="fc" id="L74">        double etaMinutes = TugMath.etaMinutes(distanceKm, tug.topSpeedKnots());</span>
+
+<span class="fc" id="L76">        String conversationId = cfp.getConversationId();</span>
+<span class="fc" id="L77">        tug.rememberBid(conversationId, pickup);</span>
+<span class="fc" id="L78">        warnIfLate(content, conversationId);</span>
+
+<span class="fc" id="L80">        Map&lt;String, Object&gt; bid = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L81">        bid.put(&quot;cost&quot;, cost);</span>
+<span class="fc" id="L82">        bid.put(&quot;eta_minutes&quot;, etaMinutes);</span>
+<span class="fc" id="L83">        bid.put(&quot;fuel_state&quot;, tug.fuelState());</span>
+<span class="fc" id="L84">        bid.put(&quot;position&quot;, tug.position());</span>
+<span class="fc" id="L85">        ACLMessage propose = MessageFactory.reply(cfp, ACLMessage.PROPOSE);</span>
+<span class="fc" id="L86">        propose.setContent(TerminalJson.write(bid));</span>
+<span class="fc" id="L87">        myAgent.send(propose);</span>
+<span class="fc" id="L88">        log.info(&quot;{} PROPOSE cost={} eta={}min fuel={} -&gt; {}&quot;,</span>
+<span class="fc" id="L89">                tug.tugId(), round(cost), round(etaMinutes), tug.fuelState(),</span>
+<span class="fc" id="L90">                cfp.getSender().getLocalName());</span>
+<span class="fc" id="L91">    }</span>
+
+    private void refuse(ACLMessage cfp, String reason) {
+<span class="fc" id="L94">        ACLMessage reply = MessageFactory.reply(cfp, ACLMessage.REFUSE);</span>
+<span class="fc" id="L95">        reply.setContent(TerminalJson.write(Map.of(&quot;reason&quot;, reason)));</span>
+<span class="fc" id="L96">        myAgent.send(reply);</span>
+<span class="fc" id="L97">        log.info(&quot;{} REFUSE {} -&gt; {}&quot;, tug.tugId(), reason, cfp.getSender().getLocalName());</span>
+<span class="fc" id="L98">    }</span>
+
+    /**
+     * Best-effort late-bid WARN against a sim-millisecond {@code reply_by} deadline
+     * carried in the CFP content (task 08: the tug still replies, but a missed
+     * deadline is logged). Read from the SimClock, never the wall clock.
+     */
+    private void warnIfLate(JsonNode content, String conversationId) {
+<span class="pc bpc" id="L106" title="2 of 6 branches missed.">        if (content == null || !content.hasNonNull(&quot;reply_by&quot;) || tug.simClock() == null) {</span>
+<span class="fc" id="L107">            return;</span>
+        }
+<span class="fc" id="L109">        long replyBySimMillis = content.get(&quot;reply_by&quot;).asLong();</span>
+<span class="fc bfc" id="L110" title="All 2 branches covered.">        if (tug.simClock().nowSimMillis() &gt; replyBySimMillis) {</span>
+<span class="fc" id="L111">            log.warn(&quot;{} bidding past reply_by on CNP {} (sim now {} &gt; {})&quot;,</span>
+<span class="fc" id="L112">                    tug.tugId(), conversationId, tug.simClock().nowSimMillis(), replyBySimMillis);</span>
+        }
+<span class="fc" id="L114">    }</span>
+
+    /** Extracts a nested {x, y, heading_deg?} object as a {@link Position}, or {@code null} if absent/blank. */
+    private static Position position(JsonNode content, String field) {
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">        if (content == null) {</span>
+<span class="nc" id="L119">            return null;</span>
+        }
+<span class="fc" id="L121">        JsonNode node = content.get(field);</span>
+<span class="pc bpc" id="L122" title="3 of 6 branches missed.">        if (node == null || !node.hasNonNull(&quot;x&quot;) || !node.hasNonNull(&quot;y&quot;)) {</span>
+<span class="nc" id="L123">            return null;</span>
+        }
+<span class="pc bpc" id="L125" title="1 of 2 branches missed.">        double heading = node.hasNonNull(&quot;heading_deg&quot;) ? node.get(&quot;heading_deg&quot;).asDouble() : 0.0;</span>
+<span class="fc" id="L126">        return new Position(node.get(&quot;x&quot;).asDouble(), node.get(&quot;y&quot;).asDouble(), heading);</span>
+    }
+
+    /** Whole-cent rounding â€” the bid's money value (checkpoint-#6 F6) and the log figures. */
+    private static double round(double v) {
+<span class="fc" id="L131">        return Math.round(v * 100.0) / 100.0;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,9 +1,35 @@
+// Canonical walk-in economy = PROJECT_DEFINITION §7.5 (task 07b; keys are wire/save-stable).
+// Buyer semantics (2026-07-17, task 19 / ADR-13): the vessel is the BUYER of berth time.
+//   target_price_range        = the hidden BUDGET CEILING (top the vessel will pay; a player
+//                               fee demand is accepted only at or below it).
+//   min_acceptable_price_range = the OPENING-ASK basis (vessel opens low at ~0.70-0.85 x target;
+//                               the player negotiates the fee UPWARD toward the ceiling).
+// The original task-15 engine read these seller-inverted; RealNegotiationEngine was rewritten.
+// Values are unchanged — only the reading is corrected.
+// Live-time patience recalibration (2026-07-17, task 24 / ADR-14):
+//   max_wait_minutes_range     = the hidden patience window in SIM-minutes, enforced by
+//                               TimeoutWithdrawalBehaviour against elapsed sim time. Until task
+//                               24 the clock never advanced, so the stub-era 5-40 sim-min values
+//                               were never exercised; at the default 300 s/game-day mapping
+//                               (1 sim-min ≈ 0.208 wall-s) they would time every walk-in out
+//                               1-8 WALL-seconds after hailing. Rescaled ~x14-x20 so windows land
+//                               around Settings.timeLimitSeconds (60 real-s nominal): ferry
+//                               (scheduled, impatient) < container (brisk) < tanker = cruise <
+//                               cargo (pragmatic, most patient) — the task-07 relative ordering,
+//                               preserved. §7.5 price columns untouched.
+// Task 19b (§7.3 duration bargaining):
+//   min_duration_range         = the draw range of the HIDDEN cargo-handling floor (hours). The
+//                               spawn clamps the draw to the vessel's announced preferred stay
+//                               (6..18h), so floor <= preferred always. The floor's FIELD never
+//                               goes on the wire (P-04); its value surfaces only as the hours
+//                               term of a "we need at least Nh" counter.
 {
   "tanker": {
     "personality_distribution": {"AGGRESSIVE": 0.30, "NEUTRAL": 0.55, "DESPERATE": 0.15},
     "min_acceptable_price_range": [4000, 5200],
     "target_price_range": [5500, 8000],
-    "max_wait_minutes_range": [15, 30],
+    "max_wait_minutes_range": [240, 420],
+    "min_duration_range": [8, 14],
     "draft_range": [12.0, 15.5],
     "length_range": [180.0, 240.0],
     "tonnage_range": [50000, 120000]
@@ -12,7 +38,8 @@
     "personality_distribution": {"AGGRESSIVE": 0.35, "NEUTRAL": 0.50, "DESPERATE": 0.15},
     "min_acceptable_price_range": [1800, 2500],
     "target_price_range": [2600, 3500],
-    "max_wait_minutes_range": [10, 20],
+    "max_wait_minutes_range": [170, 280],
+    "min_duration_range": [6, 12],
     "draft_range": [10.0, 14.0],
     "length_range": [200.0, 300.0],
     "tonnage_range": [40000, 90000]
@@ -21,7 +48,8 @@
     "personality_distribution": {"AGGRESSIVE": 0.20, "NEUTRAL": 0.55, "DESPERATE": 0.25},
     "min_acceptable_price_range": [1400, 1800],
     "target_price_range": [1900, 2200],
-    "max_wait_minutes_range": [20, 40],
+    "max_wait_minutes_range": [280, 480],
+    "min_duration_range": [6, 12],
     "draft_range": [8.0, 12.0],
     "length_range": [120.0, 180.0],
     "tonnage_range": [20000, 50000]
@@ -30,7 +58,8 @@
     "personality_distribution": {"AGGRESSIVE": 0.25, "NEUTRAL": 0.60, "DESPERATE": 0.15},
     "min_acceptable_price_range": [1100, 1500],
     "target_price_range": [1600, 2000],
-    "max_wait_minutes_range": [5, 12],
+    "max_wait_minutes_range": [140, 240],
+    "min_duration_range": [2, 5],
     "draft_range": [4.0, 6.5],
     "length_range": [80.0, 140.0],
     "tonnage_range": [5000, 15000]
@@ -39,7 +68,8 @@
     "personality_distribution": {"AGGRESSIVE": 0.15, "NEUTRAL": 0.65, "DESPERATE": 0.20},
     "min_acceptable_price_range": [3200, 4200],
     "target_price_range": [4500, 5500],
-    "max_wait_minutes_range": [15, 30],
+    "max_wait_minutes_range": [240, 420],
+    "min_duration_range": [8, 14],
     "draft_range": [7.5, 9.5],
     "length_range": [250.0, 330.0],
     "tonnage_range": [80000, 160000]

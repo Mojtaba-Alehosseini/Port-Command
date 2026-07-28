@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AgentDirectory.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.persistence</a> &gt; <span class="el_source">AgentDirectory.java</span></div><h1>AgentDirectory.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.persistence;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
+
+import jade.core.Agent;
+
+/**
+ * Live registry of this session's agent OBJECTS, keyed by local name (task 22). JADE's
+ * {@code jade.wrapper} API deliberately hides the {@link Agent} behind
+ * {@code AgentController}, so a snapshot walk cannot reach an agent's beliefs through the
+ * container â€” the established workaround is the self-reference seam
+ * ({@code HarbourMasterAgent}'s optional args future); this class is that seam generalised:
+ * each {@code PortCommandAgent} finds the directory among its spawn args, registers itself
+ * at setup, and unregisters at takedown.
+ *
+ * &lt;p&gt;NOT a static registry (ADR-02): one instance is constructed per session by
+ * {@code GameSession}/tests and injected through the args channel like every other shared
+ * service. It intentionally survives the save/load teardown-rebuild â€” dying agents remove
+ * themselves, respawned agents re-register â€” so the snapshot walk after a reload sees
+ * exactly the live world.
+ */
+<span class="fc" id="L26">public final class AgentDirectory {</span>
+
+<span class="fc" id="L28">    private final Map&lt;String, Agent&gt; agents = new ConcurrentHashMap&lt;&gt;();</span>
+
+    /** Called by {@code PortCommandAgent.setup()} when it finds this directory in its args. */
+    public void register(Agent agent) {
+<span class="fc" id="L32">        register(agent.getLocalName(), agent);</span>
+<span class="fc" id="L33">    }</span>
+
+    /** Explicit-name variant ({@code Agent.getLocalName()} is final and container-bound â€”
+     * unit tests register unbound agents under a chosen name through this form). */
+    public void register(String localName, Agent agent) {
+<span class="fc" id="L38">        agents.put(localName, agent);</span>
+<span class="fc" id="L39">    }</span>
+
+    /** Called by {@code PortCommandAgent.takeDown()}; removes only this exact instance. */
+    public void unregister(Agent agent) {
+<span class="fc" id="L43">        unregister(agent.getLocalName(), agent);</span>
+<span class="fc" id="L44">    }</span>
+
+    /** Explicit-name variant, mirroring {@link #register(String, Agent)}. */
+    public void unregister(String localName, Agent agent) {
+<span class="fc" id="L48">        agents.remove(localName, agent);</span>
+<span class="fc" id="L49">    }</span>
+
+    public Optional&lt;Agent&gt; byName(String localName) {
+<span class="fc" id="L52">        return Optional.ofNullable(agents.get(localName));</span>
+    }
+
+    /** Live agents of {@code type}, sorted by local name â€” the serialized-map determinism rule. */
+    public &lt;T&gt; List&lt;T&gt; byType(Class&lt;T&gt; type) {
+<span class="fc" id="L57">        return agents.entrySet().stream()</span>
+<span class="fc" id="L58">                .filter(e -&gt; type.isInstance(e.getValue()))</span>
+<span class="fc" id="L59">                .sorted(Map.Entry.comparingByKey())</span>
+<span class="fc" id="L60">                .map(e -&gt; type.cast(e.getValue()))</span>
+<span class="fc" id="L61">                .toList();</span>
+    }
+
+    /** Live agents matching {@code filter}, sorted by local name. */
+    public List&lt;Agent&gt; matching(Predicate&lt;Agent&gt; filter) {
+<span class="nc" id="L66">        return agents.entrySet().stream()</span>
+<span class="nc" id="L67">                .filter(e -&gt; filter.test(e.getValue()))</span>
+<span class="nc" id="L68">                .sorted(Map.Entry.comparingByKey())</span>
+<span class="nc" id="L69">                .map(Map.Entry::getValue)</span>
+<span class="nc" id="L70">                .toList();</span>
+    }
+
+    public int size() {
+<span class="fc" id="L74">        return agents.size();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>VesselStateDTO.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.persistence.dto</a> &gt; <span class="el_source">VesselStateDTO.java</span></div><h1>VesselStateDTO.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.persistence.dto;
+
+import java.util.List;
+import java.util.Set;
+
+/**
+ * ONE flat record for every persisted active vessel â€” walk-in and contracted alike
+ * (task 22 hard constraint: a {@code channel} discriminator field, NO
+ * {@code @JsonTypeInfo}/{@code @JsonSubTypes} polymorphism; the LOADER branches on
+ * {@code channel}, the JSON shape never does). Fields for the other channel are null.
+ *
+ * &lt;p&gt;Extends planning/22's sketch ({@code id, vesselType, channel, draft, tonnage,
+ * currentPhase, contractRef, agreedPrice, personality, minAcceptablePrice, targetPrice,
+ * maxWaitMinutes, roundsRemaining, negotiationStartedAt}) with what a real resume needs
+ * (documented deviations, 2026-07-17): {@code length}/{@code cargoClass}/{@code
+ * etaArrivalSimMillis} because {@code VesselSpec}'s validating constructor requires them;
+ * the HM-side tracking fields ({@code stage}, {@code assignedBerth}, {@code assignedTugs},
+ * {@code blocked}, {@code weatherHeld}) so the rebuilt HarbourMaster can re-track and â€” for
+ * a tug-less AWAITING_TUG vessel â€” re-run the Contract Net; the vessel-side flow position
+ * ({@code currentPhase} âˆˆ TRANSIT | DOCKED | DEPARTING + {@code phaseDeadlineSimMillis})
+ * so a mid-transit vessel resumes instead of restarting; {@code dealHours} + position
+ * because price alone cannot resume a docked stay; {@code minDurationHours} because task
+ * 19b added it to the hidden-belief set; and {@code negotiationRound} (the raw round â€”
+ * planning's {@code roundsRemaining} is a derived display figure). Times are sim-millis
+ * longs, not ISO strings â€” this codebase has no calendar epoch ({@code EndOfDayEvent}
+ * javadoc).
+ *
+ * &lt;p&gt;&lt;b&gt;Hidden walk-in beliefs ARE here&lt;/b&gt; ({@code personality} â€¦ {@code
+ * minDurationHours}) â€” persisted verbatim so a loaded game is deterministic, still hidden
+ * from the GUI: the save file is not a player surface, and the round-trip privacy test
+ * asserts none of these values ever reaches an ACL message or bus event after a load.
+ */
+<span class="fc" id="L33">public record VesselStateDTO(</span>
+        String id,
+        String vesselType,          // tanker | container_vessel | cargo_vessel | ferry | cruise_ship
+        String channel,             // contracted | walk_in
+        double draft,
+        double length,
+        int tonnage,
+        String cargoClass,
+        long etaArrivalSimMillis,
+        String stage,               // VesselTracking.Stage name (HM-side view)
+        String currentPhase,        // TRANSIT | DOCKED | DEPARTING (vessel-side flow position)
+        long phaseDeadlineSimMillis,
+        String assignedBerth,
+        double dealPrice,
+        int dealHours,
+        List&lt;String&gt; assignedTugs,
+        boolean blocked,
+        boolean weatherHeld,
+        double posX,
+        double posY,
+        double posHeading,
+        // contracted-only (null when channel == walk_in)
+        String contractRef,
+        // walk-in-only hidden beliefs (null when channel == contracted)
+        String personality,
+        Double minAcceptablePrice,
+        Double targetPrice,
+        Integer maxWaitMinutes,
+        Integer minDurationHours,
+        Integer negotiationRound,
+        Long negotiationStartedAtSimMillis) {
+
+    public static final String CHANNEL_CONTRACTED = &quot;contracted&quot;;
+    public static final String CHANNEL_WALK_IN = &quot;walk_in&quot;;
+
+<span class="fc" id="L68">    public static final Set&lt;String&gt; PHASES = Set.of(&quot;TRANSIT&quot;, &quot;DOCKED&quot;, &quot;DEPARTING&quot;);</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

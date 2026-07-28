@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:41" hostname="MOJI" time="0.025">
+  <properties/>
+  <testcase name="aMetTargetIsMarkedMet()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.008"/>
+  <testcase name="rendersAllTenPerformativesIncludingTheZeroes()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.001"/>
+  <testcase name="netMarginIsIncomeMinusTotalExpense()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.0"/>
+  <testcase name="rendersTheDaysFiguresWithLocaleIndependentThousandsSeparators()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.001"/>
+  <testcase name="aMissedTargetIsMarkedMissed()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.001"/>
+  <testcase name="titleNamesTheDayThatEnded()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.0"/>
+  <testcase name="summaryRejectsANonPositiveDay()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.0"/>
+  <testcase name="totalMessagesSumsTheBreakdown()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.0"/>
+  <testcase name="atEightyTheHintSaysPremiumIsActive()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.001"/>
+  <testcase name="breakdownKeepsTheCounterCanonicalOrder()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.0"/>
+  <testcase name="summaryPerformativeCountsAreDefensivelyCopiedAndUnmodifiable()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.001"/>
+  <testcase name="hittingTheTargetExactlyCountsAsMet()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.002"/>
+  <testcase name="belowEightyTheHintNamesThePremiumUnlockAndTheCurrentStanding()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.001"/>
+  <testcase name="leaderboardLineShowsTheBestRun()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.002"/>
+  <testcase name="aNullLeaderboardIsTreatedAsEmpty()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.001"/>
+  <testcase name="anEmptyLeaderboardSaysSoRatherThanShowingAFakeBest()" classname="it.unige.portcommand.gui.model.EndOfDaySummaryModelTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -19,8 +19,11 @@ Two checks (both must pass):
      § 6.4). Sentence-initial capitals and common English words are exempt.
 
 SCOPE vs the Java validator: the Java side ALSO runs a positive-control
-(planning/10 step 3) — every number in the output must be a member of
-``rec.allFigures()``. That needs the full ``Recommendation`` object, which the
+(planning/10 step 3) — every REQUIRED number must be present in the output.
+(Corrected 2026-07-27, audit D-20: this paragraph said "every number in the
+output must be a member of ``rec.allFigures()``", which task 26 narrowed —
+Java check 1 now spans ``requiredFigures()``; only check 3, the no-invented-
+number guard, spans ``allFigures()``.) That needs the full ``Recommendation`` object, which the
 sidecar never receives (it gets only ``required_numbers``/``required_entities``
 over HTTP), so the positive-control stays Java-side. The sidecar performs the
 required-presence + negative-control subset, which is all its inputs allow. The

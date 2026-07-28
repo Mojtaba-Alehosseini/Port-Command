@@ -47,6 +47,7 @@ public final class TransitToVesselBehaviour extends SimTickerBehaviour {
         tug.pushState();
         if (arrived) {
             log.info("{} reached vessel pickup {} -> escorting to berth", tug.tugId(), pickup);
+            tug.setPickupTarget(null); // task 22: the EN_ROUTE leg is over; nothing to resume
             tug.setStatus(TugStatus.ESCORTING);
             EscortToBerthBehaviour escort = new EscortToBerthBehaviour(tug);
             tug.setActiveMovement(escort);

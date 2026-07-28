@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.gui.model.CommLogModelTest" tests="23" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:41" hostname="MOJI" time="0.039">
+  <properties/>
+  <testcase name="receiverFilterShowsOnlyMatchingEntries()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.001"/>
+  <testcase name="knownSendersReturnsFirstSeenOrderNeverShrinks()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="filteredEntriesReturnsEverythingByDefaultInChronologicalOrder()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.001"/>
+  <testcase name="receiverFilterMatchesAnyOneOfMultipleReceivers()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="knownReceiversReturnsFirstSeenOrderNeverShrinks()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="sizeReflectsTheRawUnfilteredCount()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="timeRangeFilterWithBothBoundsNullIsUnbounded()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="onChangeFiresOnAddAndOnEachFilterChange()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="clearDropsAllEntriesArchivingThemAndKeepsFilterVocabulary(Path)" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.008"/>
+  <testcase name="mutingReTogglingTheSameStateDoesNotSpuriouslyNotify()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.001"/>
+  <testcase name="evictionArchivesTheOldestEntryBeforeDiscardingIt(Path)" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.008"/>
+  <testcase name="allFourFiltersCombineWithAndSemantics()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.001"/>
+  <testcase name="timeRangeFilterWithOnlyToBoundIsInclusiveAndUnboundedBelow()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.002"/>
+  <testcase name="boundedAtMaxEntriesEvictsOldestFirst(Path)" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.007"/>
+  <testcase name="senderFilterShowsOnlyMatchingEntries()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="performativeFilterShowsOnlyMatchingEntries()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="unmutingASenderBringsItBack()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="timeRangeFilterWithOnlyFromBoundIsInclusiveAndUnboundedAbove()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="mutingASenderHidesOnlyThatSenderAndShowsEverythingElse()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.001"/>
+  <testcase name="mutingComposesWithTheOtherFiltersAndRemovesTheMutedSenderRegardless()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="timeRangeFilterWithBothBoundsIsInclusiveOnBothEnds()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.001"/>
+  <testcase name="bothFiltersCombineWithAndSemantics()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <testcase name="clearingAFilterWithNullShowsEverythingAgain()" classname="it.unige.portcommand.gui.model.CommLogModelTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

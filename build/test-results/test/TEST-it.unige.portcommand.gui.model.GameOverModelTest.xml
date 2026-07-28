@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.gui.model.GameOverModelTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:41" hostname="MOJI" time="0.004">
+  <properties/>
+  <testcase name="titleNamesTheFinalDay()" classname="it.unige.portcommand.gui.model.GameOverModelTest" time="0.002"/>
+  <testcase name="reasonLinesAreHumanReadable()" classname="it.unige.portcommand.gui.model.GameOverModelTest" time="0.0"/>
+  <testcase name="linesCarryTheFinalStatsLocaleIndependent()" classname="it.unige.portcommand.gui.model.GameOverModelTest" time="0.0"/>
+  <testcase name="thisRunIsMarkedInTheTop5()" classname="it.unige.portcommand.gui.model.GameOverModelTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

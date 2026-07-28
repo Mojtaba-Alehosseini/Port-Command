@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SaveLoadManager.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.persistence</a> &gt; <span class="el_source">SaveLoadManager.java</span></div><h1>SaveLoadManager.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.persistence;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.channels.FileChannel;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.Set;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import it.unige.portcommand.harbourmaster.VesselTracking;
+import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.persistence.dto.VesselStateDTO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The persistence I/O facade (task 22): serialise a {@link GameState} to disk atomically,
+ * read one back through the schema-version gate, validate its invariants. Pure Jackson â€”
+ * no Java serialisation, no default typing ({@code security-audit}: the mapper binds only
+ * the closed {@code GameState} record tree).
+ *
+ * &lt;p&gt;&lt;b&gt;Slots (v1):&lt;/b&gt; exactly {@code save/savegame.json} (Game â†’ Save) and
+ * {@code save/autosave.json} (end-of-day) â€” no multi-slot files (planning/22 scope cut).
+ * {@code save/scores.json} is the leaderboard's own file, owned by task 20.
+ *
+ * &lt;p&gt;&lt;b&gt;Atomic writes:&lt;/b&gt; the JSON goes to a sibling {@code &lt;target&gt;.tmp}, the channel is
+ * fsynced, then {@code Files.move(ATOMIC_MOVE + REPLACE_EXISTING)} publishes it â€” a JVM
+ * killed mid-save can leave a stale {@code .tmp} but never a truncated
+ * {@code savegame.json}. Falls back to a plain {@code REPLACE_EXISTING} move only if the
+ * OS refuses ATOMIC_MOVE (not the case for same-directory moves on NTFS).
+ */
+public final class SaveLoadManager {
+
+    public static final int SCHEMA_VERSION = 1;
+
+<span class="fc" id="L45">    private static final Logger log = LoggerFactory.getLogger(SaveLoadManager.class);</span>
+
+<span class="fc" id="L47">    private final ObjectMapper mapper = JsonMapper.builder()</span>
+            // Jackson 2.16.x â€” records bind natively; NON_NULL keeps the flat VesselStateDTO's
+            // other-channel fields out of the file (planning/22's Step 22.5 sketch; the old
+            // MAPPER_FEATURE.PROPAGATE_TRANSIENT_MARKER note is irrelevant to records).
+<span class="fc" id="L51">            .serializationInclusion(JsonInclude.Include.NON_NULL)</span>
+<span class="fc" id="L52">            .enable(SerializationFeature.INDENT_OUTPUT)</span>
+<span class="fc" id="L53">            .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS)</span>
+<span class="fc" id="L54">            .build();</span>
+
+    private final Path saveDirectory;
+
+    /** Production: the {@code save/} directory next to the working directory (task-01 layout). */
+    public SaveLoadManager() {
+<span class="nc" id="L60">        this(Path.of(&quot;save&quot;));</span>
+<span class="nc" id="L61">    }</span>
+
+    /** Test seam: an explicit directory (a {@code @TempDir}), so tests never touch real saves. */
+<span class="fc" id="L64">    public SaveLoadManager(Path saveDirectory) {</span>
+<span class="fc" id="L65">        this.saveDirectory = saveDirectory;</span>
+<span class="fc" id="L66">    }</span>
+
+    public Path savegamePath() {
+<span class="fc" id="L69">        return saveDirectory.resolve(&quot;savegame.json&quot;);</span>
+    }
+
+    public Path autosavePath() {
+<span class="fc" id="L73">        return saveDirectory.resolve(&quot;autosave.json&quot;);</span>
+    }
+
+    /** {@code true} until a manual save exists â€” task 21's first-launch probe. */
+    public boolean isFirstLaunch() {
+<span class="nc bnc" id="L78" title="All 2 branches missed.">        return !Files.exists(savegamePath());</span>
+    }
+
+    /**
+     * A save slot's headline metadata for task 21's {@code SaveLoadDialog} preview â€” day, wallet
+     * and the wall-clock save instant. Deliberately NOT a full {@link #load}: the dialog must
+     * show every slot's summary on open without rebuilding the world (a real load tears the JADE
+     * container down), so this reads only the three scalar fields off the JSON tree.
+     */
+<span class="fc" id="L87">    public record SaveSlotInfo(int day, double wallet, String savedAt) {</span>
+    }
+
+    /**
+     * Reads a slot's {@link SaveSlotInfo} without materialising a {@link GameState}. Returns empty
+     * for a missing file, unreadable JSON, a non-object root, or a wrong-{@code schemaVersion}
+     * file â€” the preview simply shows &quot;empty&quot; for any slot it cannot summarise, and never throws
+     * on the EDT.
+     */
+    public java.util.Optional&lt;SaveSlotInfo&gt; peek(Path source) {
+<span class="fc bfc" id="L97" title="All 2 branches covered.">        if (!Files.exists(source)) {</span>
+<span class="fc" id="L98">            return java.util.Optional.empty();</span>
+        }
+<span class="fc" id="L100">        try (var in = Files.newInputStream(source)) {</span>
+<span class="fc" id="L101">            JsonNode root = mapper.readTree(in);</span>
+<span class="pc bpc" id="L102" title="2 of 6 branches missed.">            if (root == null || !root.isObject() || root.path(&quot;schemaVersion&quot;).asInt(-1) != SCHEMA_VERSION) {</span>
+<span class="fc" id="L103">                return java.util.Optional.empty();</span>
+            }
+<span class="fc" id="L105">            long simMillis = root.path(&quot;simClock&quot;).path(&quot;simMillis&quot;).asLong(0L);</span>
+<span class="fc" id="L106">            double wallet = root.path(&quot;wallet&quot;).asDouble(0.0);</span>
+<span class="pc bpc" id="L107" title="1 of 4 branches missed.">            String savedAt = root.path(&quot;savedAt&quot;).isMissingNode() || root.path(&quot;savedAt&quot;).isNull()</span>
+<span class="fc" id="L108">                    ? null : root.path(&quot;savedAt&quot;).asText();</span>
+<span class="fc" id="L109">            return java.util.Optional.of(new SaveSlotInfo(</span>
+<span class="fc" id="L110">                    it.unige.portcommand.util.SimClock.gameDayOf(simMillis), wallet, savedAt));</span>
+<span class="pc bpc" id="L111" title="1 of 2 branches missed.">        } catch (IOException e) {</span>
+<span class="fc" id="L112">            log.warn(&quot;peek of {} failed â€” slot shown as empty&quot;, source, e);</span>
+<span class="fc" id="L113">            return java.util.Optional.empty();</span>
+        }
+    }
+
+    /** The shared, identically-configured mapper â€” fixtures and agents' Mementoable impls use it
+     * so a hand-built test state and a production save round-trip through the SAME modules. */
+    public ObjectMapper mapper() {
+<span class="nc" id="L120">        return mapper;</span>
+    }
+
+    /**
+     * Serialises {@code state} and atomically publishes it at {@code target}. Returns the
+     * target path; logs path, schema version and byte count at INFO (logging-patterns).
+     */
+    public Path save(Path target, GameState state) throws IOException {
+<span class="fc" id="L128">        Path parent = target.getParent();</span>
+<span class="pc bpc" id="L129" title="1 of 2 branches missed.">        if (parent != null) {</span>
+<span class="fc" id="L130">            Files.createDirectories(parent);</span>
+        }
+<span class="fc" id="L132">        byte[] json = mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(state);</span>
+<span class="fc" id="L133">        Path temp = target.resolveSibling(target.getFileName() + &quot;.tmp&quot;);</span>
+<span class="fc" id="L134">        try (OutputStream out = Files.newOutputStream(temp, StandardOpenOption.CREATE,</span>
+                StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE)) {
+<span class="fc" id="L136">            out.write(json);</span>
+        }
+        // fsync via a re-opened channel (Files.newOutputStream exposes no FD), so the rename
+        // below never publishes unflushed bytes.
+<span class="fc" id="L140">        try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE)) {</span>
+<span class="fc" id="L141">            channel.force(true);</span>
+        }
+        try {
+<span class="fc" id="L144">            Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);</span>
+<span class="nc" id="L145">        } catch (AtomicMoveNotSupportedException e) {</span>
+<span class="nc" id="L146">            log.warn(&quot;ATOMIC_MOVE unsupported for {} â€” falling back to REPLACE_EXISTING&quot;, target);</span>
+<span class="nc" id="L147">            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);</span>
+<span class="fc" id="L148">        }</span>
+<span class="fc" id="L149">        log.info(&quot;saved {} (schemaVersion {}, {} bytes)&quot;, target, state.schemaVersion(), json.length);</span>
+<span class="fc" id="L150">        return target;</span>
+    }
+
+    /**
+     * Reads and validates a save. Missing file, unparseable JSON, a binding failure or an
+     * invariant violation â†’ {@link CorruptSaveException}; a parseable file whose
+     * {@code schemaVersion} is not {@value #SCHEMA_VERSION} â†’ {@link SchemaVersionException}
+     * (checked FIRST, so a future-version file reports its version, not a binding error).
+     */
+    public GameState load(Path source) throws SchemaVersionException, CorruptSaveException {
+        JsonNode root;
+        try {
+<span class="fc" id="L162">            root = mapper.readTree(Files.newInputStream(source));</span>
+<span class="fc" id="L163">        } catch (NoSuchFileException e) {</span>
+<span class="fc" id="L164">            throw new CorruptSaveException(&quot;Save file not found: &quot; + source, e);</span>
+<span class="fc" id="L165">        } catch (IOException e) {</span>
+<span class="fc" id="L166">            throw new CorruptSaveException(&quot;Save file is not readable JSON: &quot; + source, e);</span>
+<span class="fc" id="L167">        }</span>
+<span class="pc bpc" id="L168" title="2 of 4 branches missed.">        if (root == null || !root.isObject()) {</span>
+<span class="nc" id="L169">            throw new CorruptSaveException(&quot;Save file is not a JSON object: &quot; + source);</span>
+        }
+<span class="fc" id="L171">        int version = root.path(&quot;schemaVersion&quot;).asInt(-1);</span>
+<span class="fc bfc" id="L172" title="All 2 branches covered.">        if (version != SCHEMA_VERSION) {</span>
+<span class="fc" id="L173">            throw new SchemaVersionException(version);</span>
+        }
+        GameState state;
+        try {
+<span class="fc" id="L177">            state = mapper.treeToValue(root, GameState.class);</span>
+<span class="fc" id="L178">        } catch (IOException | IllegalArgumentException e) {</span>
+            // IllegalArgumentException covers Jackson's wrapping of a record compact
+            // constructor's validation throw (e.g. Settings range checks, VesselSpec types).
+<span class="fc" id="L181">            throw new CorruptSaveException(&quot;Save file failed to bind: &quot; + e.getMessage(), e);</span>
+<span class="fc" id="L182">        }</span>
+<span class="fc" id="L183">        validate(state, source.toString());</span>
+<span class="fc" id="L184">        log.info(&quot;loaded {} (schemaVersion {}, day {}, wallet {})&quot;,</span>
+<span class="pc bpc" id="L185" title="1 of 2 branches missed.">                source, version, state.simClock() == null ? &quot;?&quot; : gameDayOf(state), state.wallet());</span>
+<span class="fc" id="L186">        return state;</span>
+    }
+
+    /**
+     * The same invariant gate {@link #load} applies, for a state built in memory â€” task
+     * 23's scenario boot runs its {@code GameStateBuilder.fromScenario} output through
+     * this before teardown, so a scenario-built state is provably save-shaped and a bad
+     * one fails BEFORE the running game is touched (the task-22 validate-first rule).
+     */
+    public void validateState(GameState state, String label) throws CorruptSaveException {
+<span class="fc" id="L196">        validate(state, label);</span>
+<span class="fc" id="L197">    }</span>
+
+    private static String gameDayOf(GameState state) {
+<span class="fc" id="L200">        return String.valueOf(it.unige.portcommand.util.SimClock.gameDayOf(state.simClock().simMillis()));</span>
+    }
+
+    /** Schema invariants beyond type binding â€” each failure is one clear message. */
+    private static void validate(GameState state, String source) throws CorruptSaveException {
+<span class="pc bpc" id="L205" title="1 of 2 branches missed.">        require(state.settings() != null, &quot;settings missing&quot;, source);</span>
+<span class="pc bpc" id="L206" title="1 of 2 branches missed.">        require(state.simClock() != null, &quot;simClock missing&quot;, source);</span>
+<span class="pc bpc" id="L207" title="1 of 2 branches missed.">        require(state.simClock().simMillis() &gt;= 0, &quot;simClock.simMillis negative&quot;, source);</span>
+<span class="pc bpc" id="L208" title="1 of 2 branches missed.">        require(state.simClock().realSecondsPerGameDay() &gt; 0, &quot;simClock.realSecondsPerGameDay not positive&quot;, source);</span>
+<span class="pc bpc" id="L209" title="2 of 4 branches missed.">        require(state.reputation() &gt;= 0 &amp;&amp; state.reputation() &lt;= 100,</span>
+<span class="fc" id="L210">                &quot;reputation out of 0..100: &quot; + state.reputation(), source);</span>
+<span class="pc bpc" id="L211" title="1 of 2 branches missed.">        require(state.agents() != null, &quot;agents missing&quot;, source);</span>
+<span class="pc bpc" id="L212" title="1 of 4 branches missed.">        require(state.agents().tugs() != null &amp;&amp; state.agents().tugs().size() == 4,</span>
+                &quot;expected exactly 4 tugs&quot;, source);
+<span class="fc" id="L214">        Set&lt;String&gt; tugIds = new java.util.HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L215" title="All 2 branches covered.">        for (var tug : state.agents().tugs()) {</span>
+<span class="fc" id="L216">            tugIds.add(tug.tugId());</span>
+<span class="fc" id="L217">        }</span>
+<span class="fc" id="L218">        require(tugIds.equals(Set.of(&quot;tug_1&quot;, &quot;tug_2&quot;, &quot;tug_3&quot;, &quot;tug_4&quot;)),</span>
+                &quot;tug ids must be exactly tug_1..tug_4, got &quot; + tugIds, source);
+<span class="pc bpc" id="L220" title="2 of 4 branches missed.">        require(state.agents().terminals() != null &amp;&amp; state.agents().terminals().size() == 2,</span>
+                &quot;expected exactly 2 terminals&quot;, source);
+<span class="pc bpc" id="L222" title="1 of 2 branches missed.">        require(state.agents().harbourMaster() != null, &quot;agents.harbourMaster missing&quot;, source);</span>
+<span class="pc bpc" id="L223" title="2 of 4 branches missed.">        require(state.agents().weather() != null &amp;&amp; state.agents().weather().current() != null,</span>
+                &quot;agents.weather.current missing&quot;, source);
+<span class="pc bpc" id="L225" title="1 of 2 branches missed.">        require(state.agents().customs() != null, &quot;agents.customs missing&quot;, source);</span>
+<span class="fc" id="L226">        Set&lt;String&gt; channels = Set.of(VesselStateDTO.CHANNEL_CONTRACTED, VesselStateDTO.CHANNEL_WALK_IN);</span>
+<span class="pc bpc" id="L227" title="1 of 4 branches missed.">        for (VesselStateDTO v : state.agents().activeVessels() == null</span>
+<span class="pc" id="L228">                ? java.util.List.&lt;VesselStateDTO&gt;of() : state.agents().activeVessels()) {</span>
+<span class="pc bpc" id="L229" title="2 of 4 branches missed.">            require(v.id() != null &amp;&amp; !v.id().isBlank(), &quot;vessel with blank id&quot;, source);</span>
+<span class="fc" id="L230">            require(VesselSpec.knownVesselTypes().contains(v.vesselType()),</span>
+<span class="fc" id="L231">                    &quot;unknown vessel type '&quot; + v.vesselType() + &quot;' for &quot; + v.id()</span>
+                            + &quot; (the 5 canonical types only â€” never 'pleasure')&quot;, source);
+<span class="fc" id="L233">            require(channels.contains(v.channel()),</span>
+<span class="fc" id="L234">                    &quot;unknown channel '&quot; + v.channel() + &quot;' for &quot; + v.id(), source);</span>
+<span class="pc bpc" id="L235" title="2 of 4 branches missed.">            require(v.currentPhase() != null &amp;&amp; VesselStateDTO.PHASES.contains(v.currentPhase()),</span>
+<span class="fc" id="L236">                    &quot;unknown flow phase '&quot; + v.currentPhase() + &quot;' for &quot; + v.id(), source);</span>
+<span class="fc" id="L237">            require(stageExists(v.stage()), &quot;unknown tracking stage '&quot; + v.stage() + &quot;' for &quot; + v.id(), source);</span>
+<span class="fc" id="L238">        }</span>
+<span class="fc" id="L239">    }</span>
+
+    private static boolean stageExists(String stage) {
+<span class="pc bpc" id="L242" title="1 of 2 branches missed.">        if (stage == null) {</span>
+<span class="nc" id="L243">            return false;</span>
+        }
+        try {
+<span class="fc" id="L246">            VesselTracking.Stage.valueOf(stage);</span>
+<span class="fc" id="L247">            return true;</span>
+<span class="nc" id="L248">        } catch (IllegalArgumentException e) {</span>
+<span class="nc" id="L249">            return false;</span>
+        }
+    }
+
+    private static void require(boolean condition, String message, String source) throws CorruptSaveException {
+<span class="fc bfc" id="L254" title="All 2 branches covered.">        if (!condition) {</span>
+<span class="fc" id="L255">            throw new CorruptSaveException(&quot;Invalid save &quot; + source + &quot;: &quot; + message);</span>
+        }
+<span class="fc" id="L257">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

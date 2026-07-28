@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LLMResponse.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">LLMResponse.java</span></div><h1>LLMResponse.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+/**
+ * Result of {@link LLMBridge#explain}: generated prose plus the sidecar's hallucination-
+ * validator verdict. {@code validated} is {@code false} when the caller did not request
+ * validation (the sidecar returns JSON {@code null} in that case). Per task 13/14 note: this
+ * verdict is weaker than the Java-side check (it lacks the positive-control {@code
+ * allFigures()} pass, which stays Java-side) â€” advisory only.
+ */
+<span class="fc" id="L10">public record LLMResponse(String text, boolean validated) {</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

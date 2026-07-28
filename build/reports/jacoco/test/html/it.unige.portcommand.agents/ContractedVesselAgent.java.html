@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ContractedVesselAgent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">ContractedVesselAgent.java</span></div><h1>ContractedVesselAgent.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import it.unige.portcommand.behaviours.auto_flow.AnnounceArrivalBehaviour;
+import it.unige.portcommand.persistence.dto.VesselStateDTO;
+
+/**
+ * Auto-flow vessel with a pre-negotiated contract (Channel A). On arrival it
+ * announces to the HarbourMaster and awaits a berth grant; the rest of the flow
+ * (transit â†’ dock â†’ depart) is driven by the auto-flow behaviours. {@code contractId}
+ * is injected at {@code args[3]}.
+ */
+<span class="fc" id="L12">public final class ContractedVesselAgent extends BaseVesselAgent {</span>
+
+    private String contractId;
+
+    @Override
+    protected void onSetup() {
+<span class="fc" id="L18">        this.contractId = argAt(3, String.class);</span>
+<span class="fc" id="L19">        super.onSetup();</span>
+<span class="fc" id="L20">    }</span>
+
+    @Override
+    protected void onArrival() {
+<span class="fc" id="L24">        log.info(&quot;{} arrived (contracted, {}) -&gt; announce arrival&quot;, getLocalName(), contractId);</span>
+<span class="fc" id="L25">        addBehaviour(new AnnounceArrivalBehaviour(this, contractId));</span>
+<span class="fc" id="L26">    }</span>
+
+    /** Task 22 restore: the granted contract came from the save; no re-announcement happens. */
+    @Override
+    protected void onRestore(VesselStateDTO dto) {
+<span class="fc" id="L31">        this.contractId = dto.contractRef();</span>
+<span class="fc" id="L32">    }</span>
+
+    /** The flat persisted record, contracted side (task 22); HM-side fields filled by the builder. */
+    @Override
+    public VesselStateDTO snapshotDto() {
+<span class="fc" id="L37">        return new VesselStateDTO(</span>
+<span class="fc" id="L38">                spec.vesselId(), spec.vesselType(), VesselStateDTO.CHANNEL_CONTRACTED,</span>
+<span class="fc" id="L39">                spec.draft(), spec.length(), spec.tonnage(), spec.cargoClass(),</span>
+<span class="fc" id="L40">                spec.etaArrivalSimMillis(),</span>
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">                null, flowPhase() == null ? null : flowPhase().name(), phaseDeadlineSimMillis(),</span>
+<span class="fc" id="L42">                assignedBerth(), dealPrice(), dealHours(),</span>
+                null, false, false,
+<span class="fc" id="L44">                position().x(), position().y(), position().headingDeg(),</span>
+                contractId,
+                null, null, null, null, null, null, null);
+    }
+
+    String contractId() {
+<span class="nc" id="L50">        return contractId;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

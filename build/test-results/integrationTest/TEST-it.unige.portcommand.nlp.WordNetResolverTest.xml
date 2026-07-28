@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.WordNetResolverTest" tests="30" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:22:01" hostname="MOJI" time="0.579">
+  <properties/>
+  <testcase name="leskDisambiguatesDockToBerthInANegotiationContext()" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.396"/>
+  <testcase name="aNonContextSensitiveWordIgnoresTheContextEntirely()" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="tableIsConsultedBeforeTheDictionary()" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.002"/>
+  <testcase name="blankInputIsReturnedUnchanged()" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="contextThatOverlapsNoSenseKeepsTheTableDefault()" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.01"/>
+  <testcase name="withoutADictionaryTheTableStillResolves()" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="ships -&gt; ship (WordNet morphology)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.029"/>
+  <testcase name="vessels -&gt; vessel (WordNet morphology)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="berths -&gt; berth (WordNet morphology)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="tankers -&gt; tanker (WordNet morphology)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.0"/>
+  <testcase name="ferries -&gt; ferry (WordNet morphology)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="piers -&gt; pier (WordNet morphology)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="contextFreeDockKeepsTheTableDefault()" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="theWordNetDictionaryActuallyLoaded()" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.003"/>
+  <testcase name="zzzznotaword is unknown to WordNet -&gt; returned verbatim" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.003"/>
+  <testcase name="maersk is unknown to WordNet -&gt; returned verbatim" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="carthago is unknown to WordNet -&gt; returned verbatim" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.0"/>
+  <testcase name="cargo is a known WordNet noun and survives lookup" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.0"/>
+  <testcase name="ship is a known WordNet noun and survives lookup" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="vessel is a known WordNet noun and survives lookup" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.0"/>
+  <testcase name="quay is a known WordNet noun and survives lookup" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="wharf is a known WordNet noun and survives lookup" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="harbor is a known WordNet noun and survives lookup" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.0"/>
+  <testcase name="freighter -&gt; cargo_vessel (handcrafted)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="merchantman -&gt; cargo_vessel (handcrafted)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="cargo ship -&gt; cargo_vessel (handcrafted)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="slip -&gt; berth (handcrafted)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="loading -&gt; berth (handcrafted)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="FREIGHTER -&gt; cargo_vessel (handcrafted)" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.001"/>
+  <testcase name="leskRefusesTheBerthMappingInACourtroomContext()" classname="it.unige.portcommand.nlp.WordNetResolverTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JadeBootstrap.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.bootstrap</a> &gt; <span class="el_source">JadeBootstrap.java</span></div><h1>JadeBootstrap.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.bootstrap;
+
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.http.HttpClient;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
+import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.nlp.ConfidenceGate;
+import it.unige.portcommand.nlp.DcgTokenizer;
+import it.unige.portcommand.nlp.LLMBridge;
+import it.unige.portcommand.nlp.NLPPipeline;
+import it.unige.portcommand.nlp.OntologyValidator;
+import it.unige.portcommand.nlp.PreprocessRegex;
+import it.unige.portcommand.nlp.PrologDcgParser;
+import it.unige.portcommand.nlp.RasaBridge;
+import it.unige.portcommand.ontology.OntologyValidation;
+import it.unige.portcommand.prolog.PrologEngine;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.RandomSource;
+import it.unige.portcommand.util.SimClock;
+import jade.core.AID;
+import jade.core.Profile;
+import jade.core.ProfileImpl;
+import jade.core.Runtime;
+import jade.wrapper.AgentContainer;
+import jade.wrapper.StaleProxyException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Owns the JADE Main Container lifecycle: build a {@link Profile}, boot a single
+ * Main Container, spawn a {@link BootstrapProbeAgent} for liveness + a DF
+ * self-check, expose the shared {@link SimClock}/{@link JadeAgentSpawner}/
+ * {@link ServiceLocator}, and tear down cleanly.
+ *
+ * &lt;p&gt;Not a {@link jade.core.Agent}: it uses only the {@code jade.wrapper} API and
+ * never calls the agent-side DF directly. Instance methods are guarded by a
+ * {@link ReentrantLock}; one instance per JVM.
+ */
+<span class="fc" id="L53">public final class JadeBootstrap {</span>
+
+<span class="fc" id="L55">    private static final Logger log = LoggerFactory.getLogger(JadeBootstrap.class);</span>
+    private static final long READY_TIMEOUT_SECONDS = 5L;
+    private static final int PORT_PROBE_TIMEOUT_MS = 300;
+    // Fixed master seed for reproducible runs; task 22/23 override it via RandomSource.setSeed on load/scenario.
+    private static final long DEFAULT_RANDOM_SEED = 20260622L;
+
+    // JVM-global, mirroring JADE's own Runtime singleton: once a Main Container has
+    // booted in this JVM, its RMI registry persists across shutdown and is reused on
+    // restart, so the held-port probe must run only on the FIRST (cold) boot â€” a
+    // foreign orphan can only wedge that one. Not DI/registry state; pure boot latch.
+    private static volatile boolean jadeBootedInThisJvm;
+
+<span class="fc" id="L67">    private final ReentrantLock lock = new ReentrantLock();</span>
+    // Written under the lock in start()/shutdown(); volatile so the lock-free
+    // getters publish their values safely to other threads.
+    private volatile boolean started;
+    private volatile AgentContainer mainContainer;
+    private volatile SimClock simClock;
+    private volatile PortStateArtifact portStateArtifact;
+    private volatile RandomSource randomSource;
+    private volatile MarketHistoryArtifact marketHistory;
+    private volatile PolicyRegistryArtifact policyRegistry;
+    private volatile JadeAgentSpawner spawner;
+<span class="fc" id="L78">    private volatile List&lt;AID&gt; bootDfSelfCheck = List.of();</span>
+    private volatile RasaBridge rasaBridge;
+    private volatile LLMBridge llmBridge;
+    private volatile EventBus eventBus;
+    private volatile NLPPipeline nlpPipeline;
+    private volatile ExecutorService nlpExecutor;
+
+    public void start(BootstrapConfig cfg) {
+<span class="fc" id="L86">        lock.lock();</span>
+        try {
+<span class="pc bpc" id="L88" title="1 of 2 branches missed.">            if (started) {</span>
+<span class="nc" id="L89">                log.warn(&quot;start() called while already started â€” ignoring&quot;);</span>
+<span class="nc" id="L90">                return;</span>
+            }
+            // Task 02 guarantee: the ontology must have loaded before any agent runs.
+<span class="pc bpc" id="L93" title="1 of 2 branches missed.">            if (OntologyValidation.getVesselTypes().isEmpty()) {</span>
+<span class="nc" id="L94">                throw new IllegalStateException(&quot;ontology not loaded (no vessel types) â€” aborting bootstrap&quot;);</span>
+            }
+
+            // Fail fast on a held port: createMainContainer() blocks indefinitely on a
+            // contended RMI bind (a stale JADE container once wedged the build ~1h25m),
+            // and our awaitReady timeout only covers the probe AFTER the container exists.
+            // Cold boot only â€” a restart reuses this JVM's own persistent registry.
+<span class="fc bfc" id="L101" title="All 2 branches covered.">            if (!jadeBootedInThisJvm) {</span>
+<span class="fc" id="L102">                assertPortAvailable(cfg.mainPort());</span>
+            }
+
+<span class="fc" id="L105">            Profile profile = new ProfileImpl();</span>
+<span class="fc" id="L106">            profile.setParameter(Profile.MAIN_HOST, &quot;localhost&quot;);</span>
+<span class="fc" id="L107">            profile.setParameter(Profile.MAIN_PORT, String.valueOf(cfg.mainPort()));</span>
+<span class="fc" id="L108">            profile.setParameter(Profile.GUI, String.valueOf(cfg.enableRMA()));</span>
+
+<span class="fc" id="L110">            Runtime rt = Runtime.instance();</span>
+<span class="fc" id="L111">            rt.setCloseVM(false); // we own JVM shutdown, not JADE</span>
+<span class="fc" id="L112">            mainContainer = rt.createMainContainer(profile);</span>
+<span class="pc bpc" id="L113" title="1 of 2 branches missed.">            if (mainContainer == null) {</span>
+<span class="nc" id="L114">                throw new IllegalStateException(&quot;createMainContainer returned null â€” JADE failed to boot&quot;);</span>
+            }
+<span class="fc" id="L116">            jadeBootedInThisJvm = true; // registry now persists in this JVM; skip the probe on restart</span>
+
+            // Task 22: the shared services are CREATE-IF-ABSENT so a save/load restart cycle
+            // (shutdown() then start()) keeps the SAME instances â€” the GUI holds references to
+            // the bus/clock/artifacts from the first boot, and the loader restores their state
+            // in place. Only the container-bound spawner is rebuilt each start.
+<span class="fc bfc" id="L122" title="All 2 branches covered.">            if (simClock == null) {</span>
+<span class="fc" id="L123">                simClock = new SimClock(cfg.realSecondsPerGameDay());</span>
+            }
+<span class="fc bfc" id="L125" title="All 2 branches covered.">            if (portStateArtifact == null) {</span>
+<span class="fc" id="L126">                portStateArtifact = new PortStateArtifact();</span>
+            }
+<span class="fc bfc" id="L128" title="All 2 branches covered.">            if (randomSource == null) {</span>
+<span class="fc" id="L129">                randomSource = new RandomSource(DEFAULT_RANDOM_SEED);</span>
+            }
+<span class="fc bfc" id="L131" title="All 2 branches covered.">            if (marketHistory == null) {</span>
+<span class="fc" id="L132">                marketHistory = new MarketHistoryArtifact();</span>
+            }
+<span class="fc bfc" id="L134" title="All 2 branches covered.">            if (policyRegistry == null) {</span>
+                // Promoted from AgentRoster's per-boot construction (task 22): the save file
+                // persists the registry's triggers, so the instance must survive the reload
+                // (the loader clears + re-parses into it on a cross-JVM load).
+<span class="fc" id="L138">                policyRegistry = new PolicyRegistryArtifact();</span>
+            }
+            // Single shared bus for every agent + the (future, task 17) GUI â€” one instance so a
+            // publish from one agent is visible to a subscriber on another (task 10 needs this
+            // for the Assistant; the real dispatcher arrives in task 17, this is still the stub).
+<span class="fc bfc" id="L143" title="All 2 branches covered.">            if (eventBus == null) {</span>
+<span class="fc" id="L144">                eventBus = new EventBus();</span>
+            }
+<span class="fc" id="L146">            spawner = new JadeAgentSpawner(mainContainer);</span>
+
+<span class="fc" id="L148">            CountDownLatch ready = new CountDownLatch(1);</span>
+<span class="fc" id="L149">            CompletableFuture&lt;List&lt;AID&gt;&gt; dfCheck = new CompletableFuture&lt;&gt;();</span>
+<span class="fc" id="L150">            spawner.spawn(&quot;bootstrap_probe&quot;, BootstrapProbeAgent.class,</span>
+                    new Object[] {mainContainer, ready, dfCheck});
+<span class="fc" id="L152">            awaitReady(ready, cfg.mainPort());</span>
+<span class="fc" id="L153">            bootDfSelfCheck = dfCheck.getNow(List.of());</span>
+
+            // One shared HttpClient for both NLP bridges (thread-safe; planning/14's own
+            // note). Single Rasa pipeline on port 5005 â€” there is no second instance.
+            // Create-if-absent since task 22 (restart cycle keeps the GUI's captured refs).
+<span class="fc bfc" id="L158" title="All 2 branches covered.">            if (rasaBridge == null) {</span>
+<span class="fc" id="L159">                HttpClient sharedHttpClient = RasaBridge.newClientBuilder().build();</span>
+<span class="fc" id="L160">                ObjectMapper sharedJson = new ObjectMapper();</span>
+<span class="fc" id="L161">                rasaBridge = new RasaBridge(RasaBridge.resolveParseUri(), sharedHttpClient, sharedJson);</span>
+<span class="fc" id="L162">                llmBridge = new LLMBridge(LLMBridge.resolveExplainUri(), LLMBridge.resolveHealthUri(),</span>
+                        sharedHttpClient, sharedJson);
+            }
+
+            // Prolog kernel up before any agent makes a binding decision. Independent
+            // of JADE (pure JPL); idempotent, so a restart cycle re-enters as a no-op.
+<span class="fc" id="L168">            PrologEngine.getInstance().init();</span>
+
+            // The NL chat pipeline (task 16). Constructed AFTER PrologEngine.init() because the
+            // DCG parser runs goals against the grammar that init() consults. This is the first
+            // production construction site: task 14 shipped NLPPipeline with a NoOp DCG stub and
+            // no caller at all, leaving the real wiring to this task. The DCG slot now holds the
+            // real grammar and the frame-validator seam holds the real ontology check, so a clean
+            // negotiation move routes WITHOUT Rasa (PROJECT_DEFINITION Â§6.1's DCG-first order).
+            // The GUI's ChatPanel (task 19) is the intended consumer.
+            // java.lang.Runtime spelled out: the bare name `Runtime` in this file is
+            // jade.core.Runtime (imported for the container lifecycle).
+            // Create-if-absent since task 22: MainWindow captured a method reference to THIS
+            // pipeline at first boot; recreating it on a load-restart would leave chat wired
+            // to a dead executor.
+<span class="fc bfc" id="L182" title="All 2 branches covered.">            if (nlpPipeline == null) {</span>
+<span class="fc" id="L183">                nlpExecutor = Executors.newFixedThreadPool(</span>
+<span class="fc" id="L184">                        java.lang.Runtime.getRuntime().availableProcessors(),</span>
+                        r -&gt; {
+<span class="nc" id="L186">                            Thread t = new Thread(r, &quot;nlp-pipeline&quot;);</span>
+<span class="nc" id="L187">                            t.setDaemon(true); // must never hold the JVM up at shutdown</span>
+<span class="nc" id="L188">                            return t;</span>
+                        });
+<span class="fc" id="L190">                nlpPipeline = new NLPPipeline(</span>
+                        new PreprocessRegex(),
+                        rasaBridge,
+                        new ConfidenceGate(),
+<span class="fc" id="L194">                        new PrologDcgParser(PrologEngine.getInstance(), new DcgTokenizer()),</span>
+                        new OntologyValidator(),
+                        nlpExecutor);
+            }
+
+<span class="fc" id="L199">            started = true;</span>
+<span class="fc" id="L200">            log.info(&quot;JADE Main Container up on port {}&quot;, cfg.mainPort());</span>
+        } finally {
+<span class="fc" id="L202">            lock.unlock();</span>
+        }
+<span class="fc" id="L204">    }</span>
+
+    private void awaitReady(CountDownLatch ready, int port) {
+        try {
+<span class="pc bpc" id="L208" title="1 of 2 branches missed.">            if (!ready.await(READY_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {</span>
+<span class="nc" id="L209">                throw new IllegalStateException(</span>
+                        &quot;bootstrap probe did not signal readiness within &quot; + READY_TIMEOUT_SECONDS
+                                + &quot;s on port &quot; + port);
+            }
+<span class="nc" id="L213">        } catch (InterruptedException e) {</span>
+<span class="nc" id="L214">            Thread.currentThread().interrupt();</span>
+<span class="nc" id="L215">            throw new IllegalStateException(&quot;interrupted waiting for bootstrap readiness&quot;, e);</span>
+<span class="fc" id="L216">        }</span>
+<span class="fc" id="L217">    }</span>
+
+    /**
+     * Throws fast if {@code port} has an &lt;em&gt;active listener&lt;/em&gt; (typically a stale
+     * JADE container), rather than letting {@code createMainContainer} block on the
+     * contended RMI bind. Probes by &lt;em&gt;connecting&lt;/em&gt; to the loopback port: a
+     * successful TCP handshake means something is listening â†’ fail fast; a refused
+     * connection means the port is free to bind.
+     *
+     * &lt;p&gt;A connect probe â€” not a bind probe â€” is used deliberately: a clean
+     * {@link #shutdown()} leaves the port re-bindable but may leave {@code TIME_WAIT}
+     * remnants from the RMI connections, which a {@code ServerSocket} bind (without
+     * {@code SO_REUSEADDR}) would reject as a false positive. Connecting only detects
+     * a live listener, so the startâ†’shutdownâ†’start restart cycle is unaffected.
+     */
+    private static void assertPortAvailable(int port) {
+        boolean listenerPresent;
+<span class="fc" id="L234">        try (Socket probe = new Socket()) {</span>
+<span class="fc" id="L235">            probe.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), PORT_PROBE_TIMEOUT_MS);</span>
+<span class="fc" id="L236">            listenerPresent = true; // handshake completed â†’ an active listener holds the port</span>
+<span class="fc" id="L237">        } catch (IOException refusedOrUnreachable) {</span>
+<span class="fc" id="L238">            listenerPresent = false; // connection refused / no listener â†’ free to bind</span>
+<span class="fc" id="L239">        }</span>
+<span class="fc bfc" id="L240" title="All 2 branches covered.">        if (listenerPresent) {</span>
+<span class="fc" id="L241">            throw new IllegalStateException(</span>
+                    &quot;JADE main port &quot; + port + &quot; already in use â€” kill the stale java process holding it&quot;);
+        }
+<span class="fc" id="L244">    }</span>
+
+    public void shutdown() {
+<span class="fc" id="L247">        lock.lock();</span>
+        try {
+<span class="pc bpc" id="L249" title="1 of 2 branches missed.">            if (!started) {</span>
+<span class="nc" id="L250">                log.warn(&quot;shutdown() called while not started â€” ignoring&quot;);</span>
+<span class="nc" id="L251">                return;</span>
+            }
+            try {
+<span class="fc" id="L254">                mainContainer.kill();</span>
+<span class="nc" id="L255">            } catch (StaleProxyException e) {</span>
+<span class="nc" id="L256">                log.warn(&quot;main container kill raised&quot;, e);</span>
+<span class="fc" id="L257">            }</span>
+            // Task 22: the NLP executor is NOT shut down here any more â€” shutdown() is also the
+            // save/load restart teardown, and the pipeline (with MainWindow's captured method
+            // reference into it) must survive the cycle. Its threads are daemons; JVM exit
+            // reaps them.
+<span class="fc" id="L262">            Runtime.instance().shutDown();</span>
+<span class="fc" id="L263">            started = false;</span>
+<span class="fc" id="L264">            log.info(&quot;JADE Main Container down&quot;);</span>
+        } finally {
+<span class="fc" id="L266">            lock.unlock();</span>
+        }
+<span class="fc" id="L268">    }</span>
+
+    /** The Main Container handle; {@code null} before {@link #start(BootstrapConfig)}. */
+    public AgentContainer getMainContainer() {
+<span class="fc" id="L272">        return mainContainer;</span>
+    }
+
+    public SimClock getSimClock() {
+<span class="fc" id="L276">        return simClock;</span>
+    }
+
+    /** Shared port-state store; {@code null} before {@link #start(BootstrapConfig)}. */
+    public PortStateArtifact getPortStateArtifact() {
+<span class="fc" id="L281">        return portStateArtifact;</span>
+    }
+
+    /** Master seeded RNG; agents derive named sub-streams via {@code forStream}. */
+    public RandomSource getRandomSource() {
+<span class="fc" id="L286">        return randomSource;</span>
+    }
+
+    /** Shared market-history store (deal outcomes); {@code null} before start. */
+    public MarketHistoryArtifact getMarketHistoryArtifact() {
+<span class="fc" id="L291">        return marketHistory;</span>
+    }
+
+    /** Session-stable autopilot policy registry (task 22 promotion); {@code null} before start. */
+    public PolicyRegistryArtifact getPolicyRegistryArtifact() {
+<span class="fc" id="L296">        return policyRegistry;</span>
+    }
+
+    /** Single shared publish/subscribe bus for every agent + the GUI; {@code null} before start. */
+    public EventBus getEventBus() {
+<span class="fc" id="L301">        return eventBus;</span>
+    }
+
+    public JadeAgentSpawner getSpawner() {
+<span class="fc" id="L305">        return spawner;</span>
+    }
+
+    /** AIDs found by the boot-time {@code smoke-test} DF self-check (expected empty). */
+    public List&lt;AID&gt; bootDfSelfCheck() {
+<span class="fc" id="L310">        return bootDfSelfCheck;</span>
+    }
+
+    /** The single Rasa NLU pipeline client (port 5005); {@code null} before start. */
+    public RasaBridge getRasaBridge() {
+<span class="fc" id="L315">        return rasaBridge;</span>
+    }
+
+    /** The Flask LLM sidecar client (port 5006); {@code null} before start. */
+    public LLMBridge getLLMBridge() {
+<span class="fc" id="L320">        return llmBridge;</span>
+    }
+
+    /**
+     * The DCG-first NL chat pipeline (PROJECT_DEFINITION.md Â§6.1); {@code null} before start.
+     * Wired with the real {@code dcg_negotiation.pl} grammar and ontology validation (task 16),
+     * so a clean negotiation move routes to an ACL message without Rasa being up at all.
+     */
+    public NLPPipeline getNlpPipeline() {
+<span class="nc" id="L329">        return nlpPipeline;</span>
+    }
+
+    public boolean isStarted() {
+<span class="fc" id="L333">        return started;</span>
+    }
+
+    /** Test seam: clears the JVM cold-boot latch so a unit test can exercise the held-port probe. */
+    static void resetBootLatchForTest() {
+<span class="fc" id="L338">        jadeBootedInThisJvm = false;</span>
+<span class="fc" id="L339">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

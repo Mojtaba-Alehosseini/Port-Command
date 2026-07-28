@@ -65,7 +65,12 @@ public final class BidInCNPBehaviour extends CyclicBehaviour {
         }
 
         double distanceKm = TugMath.distanceKm(tug.position(), pickup);
-        double cost = tug.baseFare() + tug.fuelCostPerKm() * distanceKm;
+        // Whole-cent bid (checkpoint-#6 F6, fixed 2026-07-18): the raw fare+fuel product
+        // carries arbitrary float fractions, and a winning bid's cost flows verbatim into the
+        // wallet — two summed bids left the balance with a permanent sub-cent tail
+        // (…532.615951895947). Money is rounded HERE, at bid construction, so the quote, the
+        // Prolog scoring, the award event and the charge all see the same whole-cent figure.
+        double cost = round(tug.baseFare() + tug.fuelCostPerKm() * distanceKm);
         double etaMinutes = TugMath.etaMinutes(distanceKm, tug.topSpeedKnots());
 
         String conversationId = cfp.getConversationId();
@@ -121,6 +126,7 @@ public final class BidInCNPBehaviour extends CyclicBehaviour {
         return new Position(node.get("x").asDouble(), node.get("y").asDouble(), heading);
     }
 
+    /** Whole-cent rounding — the bid's money value (checkpoint-#6 F6) and the log figures. */
     private static double round(double v) {
         return Math.round(v * 100.0) / 100.0;
     }

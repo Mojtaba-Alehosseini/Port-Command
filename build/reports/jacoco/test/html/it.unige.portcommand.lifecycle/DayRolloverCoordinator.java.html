@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DayRolloverCoordinator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.lifecycle</a> &gt; <span class="el_source">DayRolloverCoordinator.java</span></div><h1>DayRolloverCoordinator.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.lifecycle;
+
+import java.util.Map;
+
+import it.unige.portcommand.core.Settings;
+import it.unige.portcommand.gui.events.EndOfDayCompletedEvent;
+import it.unige.portcommand.gui.events.EndOfDayEvent;
+import it.unige.portcommand.harbourmaster.ExpenseEvent;
+import it.unige.portcommand.harbourmaster.ReputationLedger;
+import it.unige.portcommand.harbourmaster.WalletLedger;
+import it.unige.portcommand.harbourmaster.financial.EndOfDaySummary;
+import it.unige.portcommand.harbourmaster.financial.ExpenseRules;
+import it.unige.portcommand.harbourmaster.financial.IncomeRules;
+import it.unige.portcommand.harbourmaster.financial.PerformativeCounter;
+import it.unige.portcommand.harbourmaster.financial.ReputationRules;
+import it.unige.portcommand.lifecycle.events.AutosaveRequestedEvent;
+import it.unige.portcommand.lifecycle.events.DayRolloverEvent;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.SimClock;
+import it.unige.portcommand.util.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * &lt;strong&gt;The single owner of end-of-day computation&lt;/strong&gt; (task 24;
+ * INVARIANTS &quot;EOD math belongs to DayRolloverCoordinator&quot; / MASTER_PLAN Â§8 fix
+ * 2). Tasks 11 and 20 only emit events toward it: the HarbourMaster's
+ * {@code EndOfDayDetectBehaviour} detects midnight and publishes the bare
+ * {@link EndOfDayEvent}; {@code LedgerCoordinator} applies per-deal money
+ * DURING the day. This class settles the day: read-only aggregation, the one
+ * fixed â‚¬5,200 charge, the daily-target reputation bonus, the counter freeze,
+ * and the completed-day event fan-out.
+ *
+ * &lt;p&gt;Constructed by {@code HarbourMasterAgent.onSetup()} â€” the
+ * {@code LedgerCoordinator} precedent â€” because every collaborator (ledgers,
+ * counter) is agent-owned state. Like it, this is a plain bus subscriber, NOT
+ * a JADE behaviour: the catalogue stays locked at 51 (ADR-01).
+ *
+ * &lt;h2&gt;Why this is race-free without pausing the clock&lt;/h2&gt;
+ * Every money mutation in the game is published on the HarbourMaster's JADE
+ * thread ({@code DealClosedEvent}, {@code TugJobAwardedEvent},
+ * {@code ContractedFeeEarnedEvent}, {@code CustomsClearedEvent} â€” all sent by
+ * HM behaviours; {@code LedgerCoordinator} writes on the publisher's thread via
+ * CALLER_THREAD). {@link EndOfDayEvent} is published by
+ * {@code EndOfDayDetectBehaviour} on that same thread, and this coordinator
+ * subscribes CALLER_THREAD â€” so the entire settlement runs synchronously
+ * between two HM behaviour steps, serialized with every ledger write. The
+ * task-file sketch's {@code simClock.pause()}/{@code resume()} bracket is
+ * dropped (ADR-14): with settlement on the writer thread there is nothing to
+ * freeze out, and an unconditional resume would clobber a player pause or a
+ * game-over that fires mid-sequence. Likewise {@code advanceToNextDay()} is
+ * NOT called: detection happens after midnight has already crossed, so the
+ * clock is in the new day before the sequence starts, and jumping again would
+ * skip a day.
+ *
+ * &lt;p&gt;Publish order is a published contract:
+ * {@link EndOfDayCompletedEvent} first (dialog + bankruptcy check read the
+ * ended day), then {@link AutosaveRequestedEvent} (task 22's hook â€” state is
+ * consistent once the summary exists), then {@link DayRolloverEvent} last
+ * (day-cap check; &quot;must fire before DayRolloverEvent&quot; per
+ * {@code EndOfDayCompletedEvent}'s own javadoc).
+ */
+public final class DayRolloverCoordinator {
+
+<span class="fc" id="L66">    private static final Logger log = LoggerFactory.getLogger(DayRolloverCoordinator.class);</span>
+    private static final long MILLIS_PER_DAY = 86_400_000L;
+
+    private final EventBus eventBus;
+    private final SimClock simClock;
+    private final WalletLedger walletLedger;
+    private final ReputationLedger reputationLedger;
+    private final PerformativeCounter performativeCounter;
+    private final Subscription&lt;EndOfDayEvent&gt; subscription;
+
+    /** EOD fires exactly once per game day (planning/24 hard constraint). */
+<span class="fc" id="L77">    private volatile int lastEndOfDayProcessed = 0;</span>
+
+    public DayRolloverCoordinator(EventBus eventBus, SimClock simClock, WalletLedger walletLedger,
+<span class="fc" id="L80">                                  ReputationLedger reputationLedger, PerformativeCounter performativeCounter) {</span>
+<span class="fc" id="L81">        this.eventBus = eventBus;</span>
+<span class="fc" id="L82">        this.simClock = simClock;</span>
+<span class="fc" id="L83">        this.walletLedger = walletLedger;</span>
+<span class="fc" id="L84">        this.reputationLedger = reputationLedger;</span>
+<span class="fc" id="L85">        this.performativeCounter = performativeCounter;</span>
+<span class="fc" id="L86">        this.subscription = eventBus.subscribe(EndOfDayEvent.class, this::onEndOfDay, DeliveryMode.CALLER_THREAD);</span>
+<span class="fc" id="L87">    }</span>
+
+    /** Public so tests drive it directly (the task-10 subscribe-once precedent). */
+    public void onEndOfDay(EndOfDayEvent event) {
+<span class="fc" id="L91">        int day = event.gameDay();</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">        if (day &lt;= lastEndOfDayProcessed) {</span>
+<span class="fc" id="L93">            log.debug(&quot;EOD for day {} already settled â€” ignoring duplicate&quot;, day);</span>
+<span class="fc" id="L94">            return;</span>
+        }
+<span class="fc" id="L96">        lastEndOfDayProcessed = day;</span>
+
+        // 1. Read-only aggregation of the day's already-applied per-deal money (task 20's
+        //    double-charge guard: money lands when it happens; EOD only reads it back).
+<span class="fc" id="L100">        double income = IncomeRules.aggregateForDay(walletLedger, day);</span>
+<span class="fc" id="L101">        double variableExpense = ExpenseRules.variableForDay(walletLedger, day);</span>
+
+        // 2. The ONLY EOD charge: the five fixed lines, iterated from the canonical breakdown
+        //    (never re-typed â€” CLAUDE.md rule 7). Stamped at the ended day's final millisecond
+        //    so the history buckets them into the day they paid for; variableForDay excludes
+        //    them by SOURCE TAG regardless (replay-safe).
+<span class="fc" id="L107">        long stamp = endOfDayStamp(day);</span>
+<span class="fc bfc" id="L108" title="All 2 branches covered.">        for (Map.Entry&lt;String, Double&gt; line : ExpenseRules.dailyFixedBreakdown().entrySet()) {</span>
+<span class="fc" id="L109">            walletLedger.recordExpense(new ExpenseEvent(line.getValue(), line.getKey(), null, stamp));</span>
+<span class="fc" id="L110">        }</span>
+<span class="fc" id="L111">        double fixedExpense = ExpenseRules.dailyFixed();</span>
+
+        // 3. Daily-target reputation (+2 canonical) BEFORE the summary snapshot, so the ended
+        //    day's own summary shows the reputation it earned.
+<span class="fc" id="L115">        double net = income - variableExpense - fixedExpense;</span>
+<span class="fc bfc" id="L116" title="All 2 branches covered.">        if (net &gt;= Settings.load().dailyTargetEur()) {</span>
+<span class="fc" id="L117">            reputationLedger.adjust(ReputationRules.dailyTargetBonus(), &quot;daily_target&quot;, null, stamp);</span>
+        }
+
+        // 4. Freeze the performative tally â€” resetForNewDay()'s atomic swap IS the freeze
+        //    (snapshot-then-reset would lose boundary messages; task-20 measured 17/4000).
+<span class="fc" id="L122">        Map&lt;String, Integer&gt; performatives = performativeCounter.resetForNewDay();</span>
+
+<span class="fc" id="L124">        EndOfDaySummary summary = new EndOfDaySummary(day, income, variableExpense + fixedExpense,</span>
+<span class="fc" id="L125">                walletLedger.balance(), (int) Math.round(reputationLedger.score()), performatives);</span>
+<span class="fc" id="L126">        log.info(&quot;day {} settled: income={} expense={} wallet={} reputation={} messages={}&quot;,</span>
+<span class="fc" id="L127">                day, summary.income(), summary.totalExpense(), summary.endingWallet(),</span>
+<span class="fc" id="L128">                summary.endingReputation(), summary.totalMessages());</span>
+
+        // 5-7. The contracted fan-out order (see class javadoc).
+<span class="fc" id="L131">        eventBus.publish(new EndOfDayCompletedEvent(summary));</span>
+<span class="fc" id="L132">        eventBus.publish(new AutosaveRequestedEvent(day));</span>
+<span class="fc" id="L133">        eventBus.publish(new DayRolloverEvent(simClock.gameDay(), summary));</span>
+<span class="fc" id="L134">    }</span>
+
+    /** The last sim-millisecond of 1-based {@code day} â€” {@code gameDayOf(stamp) == day}. */
+    static long endOfDayStamp(int day) {
+<span class="fc" id="L138">        return day * MILLIS_PER_DAY - 1;</span>
+    }
+
+    /** Unsubscribes â€” the HM's {@code onTakeDown()} calls this (respawn double-settle guard). */
+    public void close() {
+<span class="fc" id="L143">        subscription.cancel();</span>
+<span class="fc" id="L144">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

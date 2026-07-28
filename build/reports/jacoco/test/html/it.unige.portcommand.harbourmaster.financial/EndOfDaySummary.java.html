@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EndOfDaySummary.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.harbourmaster.financial</a> &gt; <span class="el_source">EndOfDaySummary.java</span></div><h1>EndOfDaySummary.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.harbourmaster.financial;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * One game day's settled figures â€” the payload of {@code EndOfDayCompletedEvent} and the thing
+ * {@code EndOfDaySummaryDialog} renders. Finalised by task 20 (it was a task-17 stub sized from
+ * planning/24's usage sketch).
+ *
+ * &lt;p&gt;&lt;strong&gt;This is a DTO, not a calculator.&lt;/strong&gt; It is BUILT by
+ * {@code DayRolloverCoordinator} (task 24), which owns the EOD math (CLAUDE.md rule 6 /
+ * INVARIANTS); task 20 owns the shape and the display. Nothing here computes anything the
+ * coordinator did not already settle â€” the one derived accessor, {@link #net()}, is arithmetic on
+ * fields it was handed.
+ *
+ * &lt;p&gt;&lt;strong&gt;Shape decision (2026-07-17).&lt;/strong&gt; {@code planning/20}'s file table specifies
+ * {@code Map&lt;Integer,Integer&gt; performativeCounts}; the task-17 stub used {@code Map&lt;String,Integer&gt;}.
+ * Kept as {@code String}: it matches {@link PerformativeCounter#snapshot()}'s output, it is what
+ * the demo transcript's report actually shows (&quot;REQUEST: 2 | INFORM: 7 | â€¦&quot;), and it keeps the raw
+ * {@code ACLMessage} int constants out of a display DTO. planning/20's table is the stale one.
+ *
+ * &lt;p&gt;{@code performativeCounts} is copied through {@code LinkedHashMap} +
+ * {@code unmodifiableMap}, never {@code Map.copyOf} â€” INVARIANTS' determinism rule. Here it is
+ * load-bearing for a visible reason rather than a wire-format one: {@code Map.copyOf} randomises
+ * iteration order per JVM launch, so the report's performative columns would shuffle between runs.
+ *
+ * @param gameDay            the day that just ended (1-based)
+ * @param income             total income recorded this day
+ * @param totalExpense       variable expenses + the fixed â‚¬5200, summed
+ * @param endingWallet       wallet balance after this day's settlement
+ * @param endingReputation   reputation after this day's settlement, 0..100
+ * @param performativeCounts FIPA performative name -&amp;gt; count observed this day (all 10, in
+ *                           canonical order, zeroes included)
+ */
+public record EndOfDaySummary(int gameDay, double income, double totalExpense, double endingWallet,
+                               int endingReputation, Map&lt;String, Integer&gt; performativeCounts) {
+
+<span class="fc" id="L40">    public EndOfDaySummary {</span>
+<span class="fc bfc" id="L41" title="All 2 branches covered.">        if (gameDay &lt; 1) {</span>
+<span class="fc" id="L42">            throw new IllegalArgumentException(&quot;gameDay must be &gt;= 1 (1-based): &quot; + gameDay);</span>
+        }
+<span class="pc bpc" id="L44" title="1 of 2 branches missed.">        performativeCounts = performativeCounts == null</span>
+<span class="nc" id="L45">                ? Map.of()</span>
+<span class="fc" id="L46">                : Collections.unmodifiableMap(new LinkedHashMap&lt;&gt;(performativeCounts));</span>
+<span class="fc" id="L47">    }</span>
+
+    /** The day's net margin â€” what the Â§7.5 calibration targets at +â‚¬8,000â€“12,000 on a default day. */
+    public double net() {
+<span class="fc" id="L51">        return income - totalExpense;</span>
+    }
+
+    /** Total FIPA messages the HarbourMaster exchanged this day (the demo's &quot;MAS messages&quot; line). */
+    public int totalMessages() {
+<span class="fc" id="L56">        return performativeCounts.values().stream().mapToInt(Integer::intValue).sum();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

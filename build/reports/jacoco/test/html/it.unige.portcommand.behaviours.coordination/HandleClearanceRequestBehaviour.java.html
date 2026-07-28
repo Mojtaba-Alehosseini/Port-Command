@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HandleClearanceRequestBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.coordination</a> &gt; <span class="el_source">HandleClearanceRequestBehaviour.java</span></div><h1>HandleClearanceRequestBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.coordination;
+
+import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.prolog.PrologQueries;
+import jade.core.Agent;
+import jade.core.behaviours.CyclicBehaviour;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Customs-side handler for clearance REQUESTs. Hazmat cargo â†’ Prolog
+ * {@code clearance_ok}: CONFIRM with a {@code CL-} ref, or INFORM(flagged) +
+ * priority=high if blacklisted. Non-hazmat â†’ a seeded roll against
+ * {@code inspection_probability}: INFORM(routine_inspection) or CONFIRM. All replies
+ * carry the envelope via {@link MessageFactory#reply}.
+ */
+public final class HandleClearanceRequestBehaviour extends CyclicBehaviour {
+
+<span class="fc" id="L27">    private static final Logger log = LoggerFactory.getLogger(HandleClearanceRequestBehaviour.class);</span>
+    private static final int CLEARANCE_YEAR = 2026; // fixed (no wall clock); scenarios may override later
+<span class="fc" id="L29">    private static final MessageTemplate TEMPLATE = MessageTemplate.and(</span>
+<span class="fc" id="L30">            MessageTemplate.MatchPerformative(ACLMessage.REQUEST),</span>
+<span class="fc" id="L31">            MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));</span>
+
+    private final Random customsRng;
+    private final AtomicInteger refSeq;
+
+    public HandleClearanceRequestBehaviour(Agent agent, Random customsRng, AtomicInteger refSeq) {
+<span class="fc" id="L37">        super(agent);</span>
+<span class="fc" id="L38">        this.customsRng = customsRng;</span>
+<span class="fc" id="L39">        this.refSeq = refSeq;</span>
+<span class="fc" id="L40">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L44">        ACLMessage msg = myAgent.receive(TEMPLATE);</span>
+<span class="fc bfc" id="L45" title="All 2 branches covered.">        if (msg == null) {</span>
+<span class="fc" id="L46">            block();</span>
+<span class="fc" id="L47">            return;</span>
+        }
+<span class="fc" id="L49">        JsonNode req = TerminalJson.readTreeOrNull(msg.getContent());</span>
+<span class="fc" id="L50">        String vesselType = text(req, &quot;vessel_type&quot;);</span>
+<span class="fc" id="L51">        String cargoClass = text(req, &quot;cargo_class&quot;);</span>
+<span class="pc bpc" id="L52" title="2 of 4 branches missed.">        if (vesselType == null || cargoClass == null) {</span>
+<span class="nc" id="L53">            flag(msg, &quot;malformed&quot;);</span>
+<span class="nc" id="L54">            return;</span>
+        }
+<span class="fc" id="L56">        log.info(&quot;clearance REQUEST {} / {} from {}&quot;, vesselType, cargoClass, msg.getSender().getLocalName());</span>
+
+<span class="fc bfc" id="L58" title="All 2 branches covered.">        if (PrologQueries.isHazmat(cargoClass)) {</span>
+<span class="fc bfc" id="L59" title="All 2 branches covered.">            if (PrologQueries.clearanceOk(vesselType, cargoClass)) {</span>
+<span class="fc" id="L60">                confirm(msg);</span>
+            } else {
+<span class="fc" id="L62">                flag(msg, &quot;blacklisted&quot;);</span>
+            }
+        } else {
+<span class="fc" id="L65">            double probability = PrologQueries.inspectionProbability(vesselType, cargoClass);</span>
+<span class="fc bfc" id="L66" title="All 2 branches covered.">            if (customsRng.nextDouble() &lt; probability) {</span>
+<span class="fc" id="L67">                routineInspection(msg);</span>
+            } else {
+<span class="fc" id="L69">                confirm(msg);</span>
+            }
+        }
+<span class="fc" id="L72">    }</span>
+
+    private void confirm(ACLMessage original) {
+<span class="fc" id="L75">        ACLMessage reply = MessageFactory.reply(original, ACLMessage.CONFIRM);</span>
+<span class="fc" id="L76">        reply.setContent(TerminalJson.write(</span>
+<span class="fc" id="L77">                Map.of(&quot;ref&quot;, &quot;CL-&quot; + CLEARANCE_YEAR + &quot;-&quot; + refSeq.getAndIncrement())));</span>
+<span class="fc" id="L78">        myAgent.send(reply);</span>
+<span class="fc" id="L79">        log.info(&quot;CONFIRM clearance -&gt; {}&quot;, original.getSender().getLocalName());</span>
+<span class="fc" id="L80">    }</span>
+
+    private void flag(ACLMessage original, String reason) {
+<span class="fc" id="L83">        ACLMessage reply = MessageFactory.reply(original, ACLMessage.INFORM);</span>
+<span class="fc" id="L84">        reply.setContent(TerminalJson.write(Map.of(&quot;event&quot;, &quot;flagged&quot;, &quot;reason&quot;, reason)));</span>
+<span class="fc" id="L85">        reply.addUserDefinedParameter(&quot;priority&quot;, &quot;high&quot;);</span>
+<span class="fc" id="L86">        myAgent.send(reply);</span>
+<span class="fc" id="L87">        log.info(&quot;INFORM flagged ({}) -&gt; {}&quot;, reason, original.getSender().getLocalName());</span>
+<span class="fc" id="L88">    }</span>
+
+    private void routineInspection(ACLMessage original) {
+<span class="fc" id="L91">        ACLMessage reply = MessageFactory.reply(original, ACLMessage.INFORM);</span>
+<span class="fc" id="L92">        reply.setContent(TerminalJson.write(Map.of(&quot;event&quot;, &quot;routine_inspection&quot;)));</span>
+<span class="fc" id="L93">        myAgent.send(reply);</span>
+<span class="fc" id="L94">        log.info(&quot;INFORM routine_inspection -&gt; {}&quot;, original.getSender().getLocalName());</span>
+<span class="fc" id="L95">    }</span>
+
+    private static String text(JsonNode node, String field) {
+<span class="pc bpc" id="L98" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L99">            return null;</span>
+        }
+<span class="fc" id="L101">        JsonNode value = node.get(field);</span>
+<span class="pc bpc" id="L102" title="1 of 2 branches missed.">        return value == null ? null : value.asText();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

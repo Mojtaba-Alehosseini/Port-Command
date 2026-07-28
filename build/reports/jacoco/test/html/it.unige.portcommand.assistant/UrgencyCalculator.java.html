@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UrgencyCalculator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.assistant</a> &gt; <span class="el_source">UrgencyCalculator.java</span></div><h1>UrgencyCalculator.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.assistant;
+
+/**
+ * Pure urgency heuristic for {@link RecommendationAlgorithm} (planning/10 Â§10.1, v1.1 fix).
+ * Blends round-progress, time-progress, and an observed withdrawal threat into a single
+ * [0.4, 1.0] factor that scales each counter candidate's acceptance probability.
+ */
+public final class UrgencyCalculator {
+
+    /**
+     * PROJECT_DEFINITION Â§7.3 â€” walk-in negotiations run up to 4 rounds. This is a fixed game
+     * rule applied identically to every negotiation, never a per-vessel hidden belief, so using
+     * it does not violate the observable-inputs rule (unlike {@code WalkInState.maxWaitMinutes},
+     * which IS hidden and must never be read here).
+     */
+    public static final int DEFAULT_ROUND_LIMIT = 4;
+
+    /**
+     * Nominal negotiation time budget (10 sim-minutes), used ONLY to normalise the urgency
+     * heuristic's time-progress term. This is a fixed, vessel-type-agnostic design constant â€”
+     * NOT any specific vessel's hidden {@code maxWaitMinutes} patience (that field is a hidden
+     * belief per INVARIANTS.md and must never be read here, v1.1 P-04). Chosen as roughly the
+     * midpoint of the observed {@code max_wait_minutes_range} spread across
+     * {@code vessel_templates.json} (5-40 minutes) and the ~4-round cadence (TimeoutWithdrawal
+     * re-checks every 5 sim-seconds; 4 rounds at a couple of minutes each lands near 10 minutes).
+     */
+    public static final double DEFAULT_TIME_LIMIT_SEC = 600.0;
+
+    private UrgencyCalculator() {
+    }
+
+    /**
+     * {@code 0.4 + 0.6 * clamp01(0.4*roundsUsed/roundLimit + 0.4*timeUsedSec/timeLimitSec +
+     * 0.2*(threatened?1:0))} â€” range &lt;b&gt;[0.4, 1.0]&lt;/b&gt;.
+     *
+     * &lt;p&gt;The 0.4 floor is load-bearing: without it, the raw {@code clamp01(...)} term is 0.0 on
+     * the opening offer (roundsUsed=0, timeUsedSecâ‰ˆ0), which zeroes {@code p_accept} for every
+     * counter candidate, drives every priced candidate's EV to the withdrawal penalty (-500),
+     * and makes {@code reject_silent} (EV=0) win by default â€” i.e. the Assistant would
+     * recommend &quot;reject silently&quot; on every first Hint click.
+     */
+    public static double compute(int roundsUsed, int roundLimit, double timeUsedSec, double timeLimitSec,
+                                 boolean threatened) {
+<span class="fc bfc" id="L44" title="All 2 branches covered.">        if (roundLimit &lt;= 0) {</span>
+<span class="fc" id="L45">            throw new IllegalArgumentException(&quot;roundLimit must be &gt; 0, got &quot; + roundLimit);</span>
+        }
+<span class="fc bfc" id="L47" title="All 2 branches covered.">        if (timeLimitSec &lt;= 0) {</span>
+<span class="fc" id="L48">            throw new IllegalArgumentException(&quot;timeLimitSec must be &gt; 0, got &quot; + timeLimitSec);</span>
+        }
+<span class="fc" id="L50">        double roundProgress = (double) roundsUsed / roundLimit;</span>
+<span class="fc" id="L51">        double timeProgress = timeUsedSec / timeLimitSec;</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">        double raw = 0.4 * roundProgress + 0.4 * timeProgress + 0.2 * (threatened ? 1.0 : 0.0);</span>
+<span class="fc" id="L53">        return 0.4 + 0.6 * clamp01(raw);</span>
+    }
+
+    private static double clamp01(double v) {
+<span class="fc" id="L57">        return Math.max(0.0, Math.min(1.0, v));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

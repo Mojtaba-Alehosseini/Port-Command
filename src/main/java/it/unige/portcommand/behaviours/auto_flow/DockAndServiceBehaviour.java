@@ -28,9 +28,19 @@ public final class DockAndServiceBehaviour extends SimTickerBehaviour {
     private final long completeBySimMillis;
 
     public DockAndServiceBehaviour(Agent agent, SimClock simClock) {
+        this(agent, simClock, simClock.nowSimMillis()
+                + (long) ((BaseVesselAgent) agent).dealHours() * SIM_MILLIS_PER_HOUR);
+    }
+
+    /** Task 22 resume: keep serving until the SAVED deadline — hours already served stay served. */
+    public static DockAndServiceBehaviour resuming(Agent agent, SimClock simClock, long completeBySimMillis) {
+        return new DockAndServiceBehaviour(agent, simClock, completeBySimMillis);
+    }
+
+    private DockAndServiceBehaviour(Agent agent, SimClock simClock, long completeBySimMillis) {
         super(agent, simClock, TICK_SIM_MILLIS);
-        int dealHours = ((BaseVesselAgent) agent).dealHours();
-        this.completeBySimMillis = simClock.nowSimMillis() + (long) dealHours * SIM_MILLIS_PER_HOUR;
+        this.completeBySimMillis = completeBySimMillis;
+        ((BaseVesselAgent) agent).reportPhase(BaseVesselAgent.FlowPhase.DOCKED, completeBySimMillis);
     }
 
     @Override

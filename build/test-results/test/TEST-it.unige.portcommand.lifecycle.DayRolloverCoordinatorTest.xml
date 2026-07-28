@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.lifecycle.DayRolloverCoordinatorTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:44" hostname="MOJI" time="0.049">
+  <properties/>
+  <testcase name="missingTheDailyTargetEarnsNothing()" classname="it.unige.portcommand.lifecycle.DayRolloverCoordinatorTest" time="0.027"/>
+  <testcase name="publishOrderIsCompletedThenAutosaveThenRollover()" classname="it.unige.portcommand.lifecycle.DayRolloverCoordinatorTest" time="0.001"/>
+  <testcase name="moneyStampedIntoTheNewDayIsNotSweptIntoTheEndedDay()" classname="it.unige.portcommand.lifecycle.DayRolloverCoordinatorTest" time="0.001"/>
+  <testcase name="settlesADayFromTheLedgerHistoryAndChargesTheFixedCostOnce()" classname="it.unige.portcommand.lifecycle.DayRolloverCoordinatorTest" time="0.002"/>
+  <testcase name="rolloverCarriesTheClockAuthoritativeNewDayAndTheSettledSummary()" classname="it.unige.portcommand.lifecycle.DayRolloverCoordinatorTest" time="0.001"/>
+  <testcase name="aDuplicateEndOfDayEventIsANoOp()" classname="it.unige.portcommand.lifecycle.DayRolloverCoordinatorTest" time="0.004"/>
+  <testcase name="hittingTheDailyTargetEarnsTheReputationBonus()" classname="it.unige.portcommand.lifecycle.DayRolloverCoordinatorTest" time="0.004"/>
+  <testcase name="freezesThePerformativeTallyIntoTheSummaryAndResetsIt()" classname="it.unige.portcommand.lifecycle.DayRolloverCoordinatorTest" time="0.003"/>
+  <system-out><![CDATA[00:12:44.514 [Test worker] [] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=0.0 expense=5200.0 wallet=44800.0 reputation=70 messages=0
+00:12:44.516 [Test worker] [] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=0.0 expense=5200.0 wallet=44800.0 reputation=70 messages=0
+00:12:44.516 [Test worker] [] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=1000.0 expense=5200.0 wallet=46577.0 reputation=70 messages=0
+00:12:44.516 [Test worker] [] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=18950.0 expense=8525.0 wallet=60425.0 reputation=72 messages=0
+00:12:44.516 [Test worker] [] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=1000.0 expense=5200.0 wallet=45800.0 reputation=70 messages=0
+00:12:44.528 [Test worker] [] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=0.0 expense=5200.0 wallet=44800.0 reputation=70 messages=0
+00:12:44.535 [Test worker] [] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=18950.0 expense=5200.0 wallet=63750.0 reputation=72 messages=0
+00:12:44.535 [Test worker] [] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=0.0 expense=5200.0 wallet=44800.0 reputation=70 messages=2
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

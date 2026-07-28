@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.gui.model.HUDModelTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:41" hostname="MOJI" time="0.009">
+  <properties/>
+  <testcase name="walletAndReputationShowTheTaskEighteenPlaceholderUntilTheFirstEvent()" classname="it.unige.portcommand.gui.model.HUDModelTest" time="0.0"/>
+  <testcase name="reputationLabelRoundsThePublishedScore()" classname="it.unige.portcommand.gui.model.HUDModelTest" time="0.0"/>
+  <testcase name="aLaterTickOverwritesAnEarlierOneRatherThanAccumulating()" classname="it.unige.portcommand.gui.model.HUDModelTest" time="0.0"/>
+  <testcase name="onSimClockTickUpdatesDayAndTime()" classname="it.unige.portcommand.gui.model.HUDModelTest" time="0.0"/>
+  <testcase name="walletLabelShowsThePublishedAbsoluteBalance()" classname="it.unige.portcommand.gui.model.HUDModelTest" time="0.001"/>
+  <testcase name="defaultsToDayOneMidnightBeforeAnyTick()" classname="it.unige.portcommand.gui.model.HUDModelTest" time="0.001"/>
+  <testcase name="aLaterWalletEventOverwritesRatherThanAccumulating()" classname="it.unige.portcommand.gui.model.HUDModelTest" time="0.001"/>
+  <testcase name="aNegativeWalletRenders()" classname="it.unige.portcommand.gui.model.HUDModelTest" time="0.001"/>
+  <testcase name="timeLabelZeroPadsSingleDigitHourAndMinute()" classname="it.unige.portcommand.gui.model.HUDModelTest" time="0.0"/>
+  <testcase name="dailyTargetLabelShowsTheCanonicalFiveThousand()" classname="it.unige.portcommand.gui.model.HUDModelTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

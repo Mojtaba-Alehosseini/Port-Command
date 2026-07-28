@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.FrameTest" tests="23" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:45" hostname="MOJI" time="0.019">
+  <properties/>
+  <testcase name="aNumericQuantifierDecodesToLongAndAnAllQuantifierToString()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="elementOrderIsPreserved()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="listValueDecodesToAListOfDecodedItems()" classname="it.unige.portcommand.nlp.FrameTest" time="0.001"/>
+  <testcase name="emptyPrologListDecodesToAnEmptyListNotTheStringBrackets()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="usdPriceDecodesToUpperCaseCurrency()" classname="it.unige.portcommand.nlp.FrameTest" time="0.001"/>
+  <testcase name="elementsAreDefensivelyCopiedAndUnmodifiable()" classname="it.unige.portcommand.nlp.FrameTest" time="0.001"/>
+  <testcase name="toJsonCarriesTheDecodedElements()" classname="it.unige.portcommand.nlp.FrameTest" time="0.003"/>
+  <testcase name="theNewM2NegotiationElementsDecodeAsStrings()" classname="it.unige.portcommand.nlp.FrameTest" time="0.002"/>
+  <testcase name="unmodelledCompoundDegradesToItsTermTextRatherThanThrowing()" classname="it.unige.portcommand.nlp.FrameTest" time="0.001"/>
+  <testcase name="nonFrameTermThrows()" classname="it.unige.portcommand.nlp.FrameTest" time="0.002"/>
+  <testcase name="commandFrameElementOrderAndJsonAreStable()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="constructorPreservesInsertionOrderSoTheWireFormatIsDeterministic()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="nullTermThrows()" classname="it.unige.portcommand.nlp.FrameTest" time="0.001"/>
+  <testcase name="deadlineClockDecodesToItsAtomText()" classname="it.unige.portcommand.nlp.FrameTest" time="0.001"/>
+  <testcase name="frameWithNonListElementsThrows()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="commandFrameHasNoMove()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="bareAcceptFrameDecodesToJustTheMove()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="decimalPriceDecodesToADouble()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="aBoundAddresseeDecodesAsAStringAndKeepsItsPlaceLast()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="rejectReasonDecodesToAnAtomString()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="priceDecodesToAmountAndUpperCaseCurrency()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <testcase name="decodesTheAcceptanceCriterionFrame()" classname="it.unige.portcommand.nlp.FrameTest" time="0.001"/>
+  <testcase name="frameElementThatIsNotAKeyValuePairThrows()" classname="it.unige.portcommand.nlp.FrameTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

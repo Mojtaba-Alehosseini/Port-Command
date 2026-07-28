@@ -1,0 +1,1287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.agents.HarbourMasterAgentIT" tests="28" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:15:14" hostname="MOJI" time="134.862">
+  <properties/>
+  <testcase name="simultaneousRedispatches_serializeIntoDisjointTugAssignments()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="11.372"/>
+  <testcase name="weatherClear_redispatchesHeldVesselExactlyOnce()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="13.163"/>
+  <testcase name="walkInAcceptedTheCounter_isLoggedRatherThanDropped()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.016"/>
+  <testcase name="walkInRefusedTheCounter_reachesThePlayerAndBurnsNoRound()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.014"/>
+  <testcase name="walkInOpeningOffer_publishesNegotiationOpenedEventWithCompatibleBerth()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.02"/>
+  <testcase name="weatherSafe_noCancelSent()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="8.101"/>
+  <testcase name="walkInDealConfirmed_grantsBerthPrologGated()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.012"/>
+  <testcase name="contractedVesselIncompatible_refusedNeverAccepted()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.012"/>
+  <testcase name="contractedAutoFlow_publishesCommLogEventSequence()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="5.095"/>
+  <testcase name="twoConcurrentWalkInsOfTheSameClass_getDifferentBerths()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.022"/>
+  <testcase name="walkInDealConfirmed_dispatchesTugCnpWhenRequired()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="5.097"/>
+  <testcase name="weatherUnsafeStormyState_cancelsInTransitTug()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="5.056"/>
+  <testcase name="walkInDealConfirmed_publishesDealClosedAndNegotiationClosedEvents()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.014"/>
+  <testcase name="endOfDay_publishesExactlyOnceOnMidnightCrossing()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.018"/>
+  <testcase name="walkInNoCompatibleBerth_refusedNeverPublishesEvent()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.016"/>
+  <testcase name="departedVessel_isNeverHeldNorRedispatchedNorCharged()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="11.221"/>
+  <testcase name="walkInWithdraw_publishesWithdrawalAndNegotiationClosedEventsForEveryReason()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.022"/>
+  <testcase name="cnpZeroBids_holdsVesselNeverAccepts()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="7.074"/>
+  <testcase name="dispatchPlayerCommand_translatesEachKindFaithfully()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.019"/>
+  <testcase name="dispatchPlayerCommand_stillWorksAfterItsAgentReferenceIsNulled()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.011"/>
+  <testcase name="cnpTankerTwoTugs_awardsPrologSelectedWinners()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="5.08"/>
+  <testcase name="walkInFullLifecycle_trackingStageMonotone_endsTerminal()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="5.155"/>
+  <testcase name="weatherUnsafeSwell_cancelsInTransitTugAndHoldsVessel()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="5.059"/>
+  <testcase name="customsFlagged_marksBlockedAndNotifies()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.015"/>
+  <testcase name="zeroTugWalkInGrant_tracksInTransitImmediately_neverAwaitingTug()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.012"/>
+  <testcase name="contractedVesselCompatible_acceptsAndDispatchesDownstream()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="5.056"/>
+  <testcase name="ferryContract_skipsCnpEntirely()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.086"/>
+  <testcase name="walkInWithdraw_unrecognisedReasonNeverKillsTheRouterBehaviour()" classname="it.unige.portcommand.agents.HarbourMasterAgentIT" time="3.006"/>
+  <system-out><![CDATA[00:15:14.306 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+00:15:14.929 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:15:14.960 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:15:15.298 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:15:15.501 [harbour_master] [harbour_master] INFO  i.u.p.b.c.HandleWeatherAlertBehaviour - T17V2: weather CLEAR (wind=12.0 state=sunny) -> fresh tug CNP (1 tug(s)) toward berth_3
+00:15:15.504 [harbour_master] [harbour_master] INFO  i.u.p.h.RealCnpCoordinator - CNP for T17V1 queued behind the in-flight session (1 waiting)
+00:15:15.505 [harbour_master] [harbour_master] INFO  i.u.p.b.c.HandleWeatherAlertBehaviour - T17V1: weather CLEAR (wind=12.0 state=sunny) -> fresh tug CNP (1 tug(s)) toward berth_1
+00:15:15.637 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP T17V2 (1 tug(s) required) -> 2 tug(s) on CNP cnp-84b4b89e-e8e4-4768-a2e3-38e6bff6f432
+00:15:20.646 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for T17V2 closed with 2 bid(s)
+00:15:20.650 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T17V2: REJECT -> t17_tug_b
+00:15:20.651 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T17V2: ACCEPT -> t17_tug_a
+00:15:20.659 [harbour_master] [harbour_master] INFO  i.u.p.h.RealCnpCoordinator - CNP session closed -> launching queued CNP for T17V1 (0 still waiting)
+00:15:20.663 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP T17V1 (1 tug(s) required) -> 2 tug(s) on CNP cnp-235a295d-6f2e-49dd-ae5b-e03e9aff934c
+00:15:25.664 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for T17V1 closed with 1 bid(s)
+00:15:25.665 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T17V1: ACCEPT -> t17_tug_b
+Warning: No mapping found for expired timer 1785190525680
+00:15:25.690 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:15:25.726 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:15:25.726 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:15:25.726 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:15:25.771 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - V-t14: ACCEPT berth berth_1 (contract CONTRACT-t14), tugsRequired=2
+00:15:25.776 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP V-t14 (2 tug(s) required) -> 1 tug(s) on CNP cnp-4c2d28e5-7f3d-4aef-b4cb-1bfe76561ba2
+00:15:29.383 [harbour_master] [harbour_master] WARN  i.u.p.b.c.AutoFlowDispatcherBehaviour - no terminal registered in DF after retries; cannot request berth berth_1
+00:15:30.777 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for V-t14 closed with 1 bid(s)
+00:15:30.778 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for V-t14: ACCEPT -> t14_tug
+00:15:30.786 [harbour_master] [harbour_master] INFO  i.u.p.b.c.HandleWeatherAlertBehaviour - V-t14: weather HOLD (wind=55.0 swell=6.0 state=stormy) -> CANCEL 1 tug(s)
+00:15:30.794 [harbour_master] [harbour_master] INFO  i.u.p.b.c.HandleWeatherAlertBehaviour - V-t14: weather CLEAR (wind=12.0 state=sunny) -> fresh tug CNP (2 tug(s)) toward berth_1
+00:15:30.795 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP V-t14 (2 tug(s) required) -> 1 tug(s) on CNP cnp-504fa847-b47c-46b0-a7ae-80ad2e672e38
+00:15:35.796 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for V-t14 closed with 1 bid(s)
+00:15:35.797 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for V-t14: ACCEPT -> t14_tug
+00:15:38.862 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:15:38.882 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:15:38.890 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:15:38.893 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:15:38.910 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W023: opening offer forwarded (round 1, berth berth_1, price 4800.0)
+00:15:41.879 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:15:41.893 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:15:41.906 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:15:41.910 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:15:41.927 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W020: opening offer forwarded (round 1, berth berth_1, price 4800.0)
+00:15:41.957 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - t26_vessel: counter REFUSEd (invalid_price) — surfaced to nego-W020
+00:15:44.894 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:15:44.927 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:15:44.927 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:15:44.927 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:15:44.942 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W001: opening offer forwarded (round 1, berth berth_1, price 4800.0)
+00:15:47.914 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:15:47.923 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:15:47.939 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:15:47.939 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:15:47.955 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - V-t12: ACCEPT berth berth_1 (contract CONTRACT-t12), tugsRequired=2
+00:15:47.955 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP V-t12 (2 tug(s) required) -> 1 tug(s) on CNP cnp-312c7c83-5256-4f2d-b7ea-b28906d1a36e
+00:15:51.563 [harbour_master] [harbour_master] WARN  i.u.p.b.c.AutoFlowDispatcherBehaviour - no terminal registered in DF after retries; cannot request berth berth_1
+00:15:52.957 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for V-t12 closed with 1 bid(s)
+00:15:52.959 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for V-t12: ACCEPT -> t12_tug
+00:15:56.011 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:15:56.039 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:15:56.042 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:15:56.042 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:15:56.059 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W003: opening offer forwarded (round 1, berth berth_1, price 4800.0)
+00:15:56.090 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W003: berth GRANTED berth_1 (price 4900.0, 6h)
+00:15:56.105 [harbour_master] [harbour_master] WARN  i.u.p.b.cnp.InitiateCNPBehaviour - no tug-escort registered in DF; holding vessel W003
+00:15:59.028 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:15:59.047 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:15:59.047 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:15:59.056 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:15:59.056 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - REFUSE incompatible -> t2_vessel
+00:16:02.040 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:02.065 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:02.065 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:02.065 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:02.099 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - CL001: ACCEPT berth berth_1 (contract CONTRACT-CL1), tugsRequired=2
+00:16:02.105 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP CL001 (2 tug(s) required) -> 2 tug(s) on CNP cnp-71758da5-6822-473b-b0d0-f9d3bd07185b
+00:16:07.106 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for CL001 closed with 2 bid(s)
+00:16:07.108 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for CL001: ACCEPT -> cl_tug2
+00:16:07.111 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for CL001: ACCEPT -> cl_tug1
+00:16:07.135 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:07.156 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:07.156 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:07.156 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:07.190 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W021: opening offer forwarded (round 1, berth berth_1, price 4800.0)
+00:16:07.226 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W022: opening offer forwarded (round 1, berth berth_2, price 4800.0)
+00:16:10.158 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:10.174 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:10.174 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:10.174 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:10.207 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W004: opening offer forwarded (round 1, berth berth_1, price 4800.0)
+00:16:10.244 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W004: berth GRANTED berth_1 (price 4900.0, 6h)
+00:16:10.244 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP W004 (2 tug(s) required) -> 1 tug(s) on CNP cnp-375a408f-29b1-4d84-8611-714d10c9e019
+00:16:15.248 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for W004 closed with 1 bid(s)
+00:16:15.249 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for W004: ACCEPT -> t14_tug
+00:16:15.256 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:15.274 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:15.274 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:15.274 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:15.296 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - V-t11: ACCEPT berth berth_1 (contract CONTRACT-t11), tugsRequired=2
+00:16:15.297 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP V-t11 (2 tug(s) required) -> 1 tug(s) on CNP cnp-2fa9f384-7bcc-4410-9718-2d2bd8920e67
+00:16:18.909 [harbour_master] [harbour_master] WARN  i.u.p.b.c.AutoFlowDispatcherBehaviour - no terminal registered in DF after retries; cannot request berth berth_1
+00:16:20.299 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for V-t11 closed with 1 bid(s)
+00:16:20.300 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for V-t11: ACCEPT -> t11_tug
+00:16:20.305 [harbour_master] [harbour_master] INFO  i.u.p.b.c.HandleWeatherAlertBehaviour - V-t11: weather HOLD (wind=10.0 swell=1.0 state=stormy) -> CANCEL 1 tug(s)
+00:16:20.314 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:20.328 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:20.328 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:20.328 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:20.360 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W005: opening offer forwarded (round 1, berth berth_1, price 1500.0)
+00:16:20.391 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W005: berth GRANTED berth_1 (price 1600.0, 6h)
+00:16:20.391 [harbour_master] [harbour_master] WARN  i.u.p.b.cnp.InitiateCNPBehaviour - no tug-escort registered in DF; holding vessel W005
+00:16:23.328 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:23.350 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:23.350 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:23.350 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:23.575 [harbour_master] [harbour_master] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=0.0 expense=5200.0 wallet=4800.0 reputation=70 messages=0
+00:16:23.579 [harbour_master] [harbour_master] INFO  i.u.p.b.c.EndOfDayDetectBehaviour - midnight crossed -> EndOfDayEvent(gameDay=1)
+00:16:26.347 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:26.367 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:26.367 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:26.374 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:26.394 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W002: REFUSE opening offer (no compatible berth)
+00:16:29.363 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:29.382 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:29.382 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:29.386 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:29.415 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - V-t16: ACCEPT berth berth_1 (contract CONTRACT-t16), tugsRequired=2
+00:16:29.416 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP V-t16 (2 tug(s) required) -> 1 tug(s) on CNP cnp-671793b4-dd3a-442a-b4fa-002bd53b9653
+00:16:33.031 [harbour_master] [harbour_master] WARN  i.u.p.b.c.AutoFlowDispatcherBehaviour - no terminal registered in DF after retries; cannot request berth berth_1
+00:16:34.419 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for V-t16 closed with 1 bid(s)
+00:16:34.420 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for V-t16: ACCEPT -> t16_tug
+00:16:34.426 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - V-t16: departed — tracking closed (was IN_TRANSIT, 1 tug(s) assigned)
+00:16:40.585 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:40.613 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:40.616 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:40.621 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:40.644 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W006: opening offer forwarded (round 1, berth berth_1, price 1500.0)
+00:16:40.663 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - t16_vessel: walk-in withdrew (over_priced)
+00:16:40.690 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W007: opening offer forwarded (round 1, berth berth_1, price 1500.0)
+00:16:40.711 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - t17_vessel: walk-in withdrew (timeout)
+00:16:43.607 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:43.618 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:43.625 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:43.625 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:43.643 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - Z001: ACCEPT berth berth_1 (contract CONTRACT-Z1), tugsRequired=2
+00:16:43.643 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP Z001 (2 tug(s) required) -> 1 tug(s) on CNP cnp-81db00d8-de92-4844-ba1f-59b41063b110
+00:16:47.250 [harbour_master] [harbour_master] WARN  i.u.p.b.c.AutoFlowDispatcherBehaviour - no terminal registered in DF after retries; cannot request berth berth_1
+00:16:48.646 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for Z001 closed with 0 bid(s)
+00:16:48.646 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for Z001 held: no_bids
+00:16:48.647 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for Z001: scheduling retry 1/3 in 30 sim-s
+00:16:50.682 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:50.715 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:50.715 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:50.720 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:50.736 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - P001: ACCEPT berth berth_1 (contract CONTRACT-P1), tugsRequired=2
+00:16:50.736 [harbour_master] [harbour_master] WARN  i.u.p.b.cnp.InitiateCNPBehaviour - no tug-escort registered in DF; holding vessel P001
+00:16:50.742 [Test worker] [] INFO  i.u.p.b.c.DispatchPlayerCommandBehaviour - PlayerCommand PROPOSE -> t9_vessel (PROPOSE)
+00:16:50.748 [Test worker] [] INFO  i.u.p.b.c.DispatchPlayerCommandBehaviour - PlayerCommand ACCEPT -> t9_vessel (ACCEPT-PROPOSAL)
+00:16:50.750 [Test worker] [] INFO  i.u.p.b.c.DispatchPlayerCommandBehaviour - PlayerCommand REJECT -> t9_vessel (REJECT-PROPOSAL)
+00:16:50.752 [Test worker] [] INFO  i.u.p.b.c.DispatchPlayerCommandBehaviour - PlayerCommand ASK -> t9_vessel (QUERY-REF)
+00:16:50.752 [Test worker] [] INFO  i.u.p.b.c.DispatchPlayerCommandBehaviour - PlayerCommand WITHDRAW -> t9_vessel (CANCEL)
+00:16:53.701 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:53.709 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:53.727 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:53.731 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:53.743 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - D001: ACCEPT berth berth_1 (contract CONTRACT-D1), tugsRequired=2
+00:16:53.743 [eventbus-async] [] INFO  i.u.p.b.c.DispatchPlayerCommandBehaviour - PlayerCommand ACCEPT -> t20_vessel (ACCEPT-PROPOSAL)
+00:16:53.743 [eventbus-async] [] INFO  i.u.p.b.c.DispatchPlayerCommandBehaviour - PlayerCommand ACCEPT -> t20_vessel (ACCEPT-PROPOSAL)
+00:16:53.746 [harbour_master] [harbour_master] WARN  i.u.p.b.cnp.InitiateCNPBehaviour - no tug-escort registered in DF; holding vessel D001
+00:16:56.712 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:16:56.739 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:16:56.743 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:16:56.743 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:16:56.782 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - T001: ACCEPT berth berth_1 (contract CONTRACT-T1), tugsRequired=2
+00:16:56.783 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP T001 (2 tug(s) required) -> 4 tug(s) on CNP cnp-735d71eb-a82b-4f79-96b0-da9621cf362e
+00:17:00.390 [harbour_master] [harbour_master] WARN  i.u.p.b.c.AutoFlowDispatcherBehaviour - no terminal registered in DF after retries; cannot request berth berth_1
+00:17:01.784 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for T001 closed with 4 bid(s)
+00:17:01.785 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T001: ACCEPT -> t5_tugb
+00:17:01.785 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T001: REJECT -> t5_tugc
+00:17:01.785 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T001: ACCEPT -> t5_tuga
+00:17:01.785 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T001: REJECT -> t5_tugd
+00:17:01.793 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:17:01.814 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:17:01.814 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:17:01.814 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:17:01.846 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W101: opening offer forwarded (round 1, berth berth_1, price 4800.0)
+00:17:01.880 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W101: berth GRANTED berth_1 (price 4900.0, 6h)
+00:17:01.880 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP W101 (2 tug(s) required) -> 1 tug(s) on CNP cnp-b55ba26c-2ff7-469a-a4cf-7b6fac36bda1
+00:17:06.881 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for W101 closed with 1 bid(s)
+00:17:06.882 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for W101: ACCEPT -> t30_tug
+00:17:06.933 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W101: departed — tracking closed (was DEPARTING, 1 tug(s) assigned)
+00:17:06.950 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:17:06.982 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:17:06.982 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:17:06.982 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:17:06.997 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - V-t10: ACCEPT berth berth_1 (contract CONTRACT-t10), tugsRequired=2
+00:17:06.997 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP V-t10 (2 tug(s) required) -> 1 tug(s) on CNP cnp-6534eb5f-135d-43c9-a453-43afd23d7dd8
+00:17:10.601 [harbour_master] [harbour_master] WARN  i.u.p.b.c.AutoFlowDispatcherBehaviour - no terminal registered in DF after retries; cannot request berth berth_1
+00:17:11.998 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for V-t10 closed with 1 bid(s)
+00:17:11.999 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for V-t10: ACCEPT -> t10_tug
+00:17:12.003 [harbour_master] [harbour_master] INFO  i.u.p.b.c.HandleWeatherAlertBehaviour - V-t10: weather HOLD (wind=10.0 swell=6.0 state=cloudy) -> CANCEL 1 tug(s)
+00:17:12.010 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:17:12.031 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:17:12.033 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:17:12.033 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:17:12.049 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - CU1: ACCEPT berth berth_1 (contract CONTRACT-CU1), tugsRequired=2
+00:17:12.049 [harbour_master] [harbour_master] WARN  i.u.p.b.cnp.InitiateCNPBehaviour - no tug-escort registered in DF; holding vessel CU1
+00:17:12.064 [harbour_master] [harbour_master] INFO  i.u.p.b.c.HandleEmergencyBehaviour - CU1: customs FLAGGED (blacklisted) -> BLOCKED
+00:17:15.026 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:17:15.046 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:17:15.049 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:17:15.049 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:17:15.063 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W102: opening offer forwarded (round 1, berth berth_4, price 1500.0)
+00:17:15.098 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W102: berth GRANTED berth_4 (price 1600.0, 6h)
+00:17:15.178 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W102: departed — tracking closed (was DEPARTING, 0 tug(s) assigned)
+00:17:18.039 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:17:18.062 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:17:18.064 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:17:18.066 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:17:18.083 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - C001: ACCEPT berth berth_1 (contract CONTRACT-1), tugsRequired=2
+00:17:18.084 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP C001 (2 tug(s) required) -> 2 tug(s) on CNP cnp-bad518f9-f532-4b36-aa7c-a0323633b232
+00:17:23.086 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for C001 closed with 2 bid(s)
+00:17:23.088 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001: ACCEPT -> t1_tug1
+00:17:23.088 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001: ACCEPT -> t1_tug2
+00:17:23.095 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:17:23.115 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:17:23.115 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:17:23.115 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:17:23.143 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - F001: ACCEPT berth berth_4 (contract CONTRACT-F1), tugsRequired=0
+00:17:26.182 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:17:26.201 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:17:26.201 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:17:26.201 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:17:26.214 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W008: opening offer forwarded (round 1, berth berth_1, price 1500.0)
+00:17:26.246 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - t18_vessel: walk-in withdrew (made_up_reason)
+00:17:26.246 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - withdraw from t18_vessel carried an unrecognised reason 'made_up_reason' -- GUI tab left as-is
+00:17:26.749 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - W009: opening offer forwarded (round 1, berth berth_1, price 1500.0)
+00:17:29.187 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+]]></system-out>
+  <system-err><![CDATA[Jul 28, 2026 12:15:56 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:15:56 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:15:56 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:15:56 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:15:56 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:15:56 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:15:56 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:15:56 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:15:56 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:15:56 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:15:56 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:15:59 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:15:59 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:15:59 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:15:59 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@45295cfd[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:15:59 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:15:59 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:15:59 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:15:59 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:15:59 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:15:59 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:15:59 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:15:59 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:15:59 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:02 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:02 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:02 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:02 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:02 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:02 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:02 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:02 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:02 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:02 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:02 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:02 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:07 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:07 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:07 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:07 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@212c0aff[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:16:07 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:07 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:07 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:07 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:07 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:07 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:07 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:07 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:07 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:10 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:10 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:10 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:10 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:10 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:10 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:10 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:10 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:10 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:10 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:10 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:10 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:10 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:15 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:15 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:15 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:15 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@3966c679[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:16:15 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:15 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:15 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:15 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:15 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:15 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:15 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:15 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:15 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:20 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:20 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:20 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:20 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:20 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:20 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:20 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:20 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:20 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:20 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:20 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:20 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:23 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:23 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:23 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:23 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@b1fa523[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:16:23 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:23 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:23 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:23 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:23 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:23 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:23 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:23 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:23 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:26 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:26 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:26 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:26 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:26 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:26 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:26 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:26 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:26 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:26 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:26 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:29 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:29 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:29 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:29 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@4a86be01[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:16:29 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:29 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:29 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:29 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:29 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:29 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:29 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:29 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:29 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:40 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:40 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:40 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:40 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:40 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:40 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:40 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:40 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:40 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:40 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:40 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:40 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:43 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:43 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:43 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:43 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:43 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@125124ea[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:16:43 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:43 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:43 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:43 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:43 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:43 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:43 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:43 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:43 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:50 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:50 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:50 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:50 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:50 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:50 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:50 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:50 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:50 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:50 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:50 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:50 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:53 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:53 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:53 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:53 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@2f2f92f[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:16:53 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:53 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:53 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:53 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:53 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:53 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:53 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:53 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:53 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:16:56 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:16:56 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:16:56 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:16:56 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:16:56 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:16:56 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:16:56 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:16:56 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:16:56 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:16:56 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:16:56 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:16:56 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:17:01 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:17:01 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:17:01 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:17:01 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@4ac0d49[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:17:01 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:17:01 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:17:01 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:17:01 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:17:01 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:17:01 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:17:01 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:17:01 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:17:01 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:17:06 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:17:06 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:17:06 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:17:06 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:17:06 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:17:06 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:17:06 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:17:06 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:17:06 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:17:06 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:17:06 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:17:06 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:17:12 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:17:12 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:17:12 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:17:12 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@5b1f0f26[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:17:12 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:17:12 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:17:12 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:17:12 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:17:12 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:17:12 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:17:12 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:17:12 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:17:12 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:17:15 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:17:15 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:17:15 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:17:15 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:17:15 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:17:15 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:17:15 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:17:15 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:17:15 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:17:15 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:17:15 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:17:15 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:17:18 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:17:18 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:17:18 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:17:18 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@68de8522[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:17:18 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:17:18 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:17:18 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:17:18 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:17:18 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:17:18 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:17:18 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:17:18 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:17:18 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:17:23 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:17:23 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:17:23 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:17:23 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:17:23 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:17:23 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:17:23 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:17:23 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:17:23 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:17:23 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:17:23 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:17:23 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:17:26 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:17:26 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:17:26 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:17:26 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@2e1e7bc6[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:17:26 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:17:26 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:17:26 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:17:26 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:17:26 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:17:26 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:17:26 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:17:26 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:17:26 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:17:29 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:17:29 AM jade.domain.RequestManagementBehaviour prepareResponse
+WARNING: Agent df - Error handling request
+jade.domain.FIPAAgentManagement.NotRegistered: not-registered
+	at jade.domain.df.DFDeregister(df.java:941)
+	at jade.domain.df.deregisterAction(df.java:1025)
+	at jade.domain.DFFipaAgentManagementBehaviour.performAction(DFFipaAgentManagementBehaviour.java:106)
+	at jade.domain.RequestManagementBehaviour.prepareResponse(RequestManagementBehaviour.java:98)
+	at jade.proto.SimpleAchieveREResponder.action(SimpleAchieveREResponder.java:140)
+	at jade.core.behaviours.Behaviour.actionWrapper(Behaviour.java:344)
+	at jade.core.Agent$ActiveLifeCycle.execute(Agent.java:1651)
+	at jade.core.Agent.run(Agent.java:1590)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+Jul 28, 2026 12:17:29 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+]]></system-err>
+</testsuite>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.persistence.CorruptSaveTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:55" hostname="MOJI" time="0.354">
+  <properties/>
+  <testcase name="wrongTugIdsAreCorruptEvenAtTheRightCount()" classname="it.unige.portcommand.persistence.CorruptSaveTest" time="0.174"/>
+  <testcase name="missingFileIsCorruptNotFileNotFound()" classname="it.unige.portcommand.persistence.CorruptSaveTest" time="0.003"/>
+  <testcase name="unknownVesselTypeIsCorrupt_neverPleasure()" classname="it.unige.portcommand.persistence.CorruptSaveTest" time="0.044"/>
+  <testcase name="unknownChannelIsCorrupt()" classname="it.unige.portcommand.persistence.CorruptSaveTest" time="0.047"/>
+  <testcase name="wrongTugCountIsCorrupt()" classname="it.unige.portcommand.persistence.CorruptSaveTest" time="0.035"/>
+  <testcase name="wrongTypesAreCorrupt()" classname="it.unige.portcommand.persistence.CorruptSaveTest" time="0.034"/>
+  <testcase name="truncatedFileIsCorrupt()" classname="it.unige.portcommand.persistence.CorruptSaveTest" time="0.013"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

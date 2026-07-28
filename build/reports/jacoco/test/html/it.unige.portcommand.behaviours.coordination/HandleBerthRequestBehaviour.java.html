@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HandleBerthRequestBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.coordination</a> &gt; <span class="el_source">HandleBerthRequestBehaviour.java</span></div><h1>HandleBerthRequestBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.coordination;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import it.unige.portcommand.agents.BerthOccupancy;
+import it.unige.portcommand.agents.BerthRequest;
+import it.unige.portcommand.agents.TerminalState;
+import it.unige.portcommand.artifacts.BerthOccupancyUpdate;
+import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.prolog.PrologQueries;
+import jade.core.Agent;
+import jade.core.behaviours.CyclicBehaviour;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Terminal-side handler for berth-assignment REQUESTs from the HarbourMaster.
+ * Replies CONFIRM (with the assigned crane) or one of five REFUSE reasons. The
+ * malformed guard runs first so a bad payload never reaches the compatibility or
+ * state logic. All replies go through {@link MessageFactory#reply} so the
+ * {@code port_command_v1}/{@code json} envelope and conversation id are preserved.
+ */
+public final class HandleBerthRequestBehaviour extends CyclicBehaviour {
+
+<span class="fc" id="L30">    private static final Logger log = LoggerFactory.getLogger(HandleBerthRequestBehaviour.class);</span>
+<span class="fc" id="L31">    private static final MessageTemplate TEMPLATE = MessageTemplate.and(</span>
+<span class="fc" id="L32">            MessageTemplate.MatchPerformative(ACLMessage.REQUEST),</span>
+<span class="fc" id="L33">            MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));</span>
+
+    private final TerminalState state;
+    private final PortStateArtifact portState;
+
+    public HandleBerthRequestBehaviour(Agent agent, TerminalState state, PortStateArtifact portState) {
+<span class="fc" id="L39">        super(agent);</span>
+<span class="fc" id="L40">        this.state = state;</span>
+<span class="fc" id="L41">        this.portState = portState;</span>
+<span class="fc" id="L42">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L46">        ACLMessage msg = myAgent.receive(TEMPLATE);</span>
+<span class="fc bfc" id="L47" title="All 2 branches covered.">        if (msg == null) {</span>
+<span class="fc" id="L48">            block();</span>
+<span class="fc" id="L49">            return;</span>
+        }
+<span class="fc" id="L51">        log.info(&quot;REQUEST received from {}&quot;, msg.getSender().getLocalName());</span>
+
+<span class="fc" id="L53">        BerthRequest req = TerminalJson.readOrNull(msg.getContent(), BerthRequest.class);</span>
+<span class="pc bpc" id="L54" title="1 of 4 branches missed.">        if (req == null || !valid(req)) {</span>
+<span class="fc" id="L55">            refuse(msg, &quot;malformed&quot;, null);</span>
+<span class="fc" id="L56">            return;</span>
+        }
+<span class="fc bfc" id="L58" title="All 2 branches covered.">        if (!state.manages(req.berthId())) {</span>
+<span class="fc" id="L59">            refuse(msg, &quot;wrong_terminal&quot;, null);</span>
+<span class="fc" id="L60">            return;</span>
+        }
+<span class="fc bfc" id="L62" title="All 2 branches covered.">        if (!PrologQueries.isCompatible(req.berthId(), req.vesselType(), req.draft(), req.length(), req.tonnage())) {</span>
+<span class="fc" id="L63">            refuse(msg, &quot;incompatible&quot;, null);</span>
+<span class="fc" id="L64">            return;</span>
+        }
+<span class="fc" id="L66">        TerminalState.Result result =</span>
+<span class="fc" id="L67">                state.requestBerth(req.berthId(), req.vesselId(), req.etaSim(), req.durationHours());</span>
+<span class="fc bfc" id="L68" title="All 2 branches covered.">        if (!result.confirmed()) {</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">            Long freeAt = &quot;berth_busy&quot;.equals(result.reason())</span>
+<span class="fc" id="L70">                    ? state.berth(req.berthId()).map(BerthOccupancy::expectedFreeAtSim).orElse(null)</span>
+<span class="fc" id="L71">                    : null;</span>
+<span class="fc" id="L72">            refuse(msg, result.reason(), freeAt);</span>
+<span class="fc" id="L73">            return;</span>
+        }
+<span class="fc" id="L75">        state.berth(req.berthId())</span>
+<span class="fc" id="L76">                .ifPresent(occ -&gt; portState.update(new BerthOccupancyUpdate(req.berthId(), occ)));</span>
+<span class="fc" id="L77">        confirm(msg, req.berthId(), result.craneId());</span>
+<span class="fc" id="L78">    }</span>
+
+    private boolean valid(BerthRequest r) {
+<span class="pc bpc" id="L81" title="3 of 6 branches missed.">        return notBlank(r.vesselId()) &amp;&amp; notBlank(r.vesselType()) &amp;&amp; notBlank(r.berthId())</span>
+<span class="pc bpc" id="L82" title="4 of 8 branches missed.">                &amp;&amp; r.draft() &gt; 0 &amp;&amp; r.length() &gt; 0 &amp;&amp; r.tonnage() &gt; 0 &amp;&amp; r.durationHours() &gt; 0;</span>
+    }
+
+    private static boolean notBlank(String s) {
+<span class="pc bpc" id="L86" title="2 of 4 branches missed.">        return s != null &amp;&amp; !s.isBlank();</span>
+    }
+
+    private void confirm(ACLMessage original, String berthId, int craneId) {
+<span class="fc" id="L90">        ACLMessage reply = MessageFactory.reply(original, ACLMessage.CONFIRM);</span>
+<span class="fc" id="L91">        reply.setContent(TerminalJson.write(Map.of(&quot;berth_id&quot;, berthId, &quot;crane_assigned&quot;, craneId)));</span>
+<span class="fc" id="L92">        myAgent.send(reply);</span>
+<span class="fc" id="L93">        log.info(&quot;CONFIRM berth={} crane={} -&gt; {}&quot;, berthId, craneId, original.getSender().getLocalName());</span>
+<span class="fc" id="L94">    }</span>
+
+    private void refuse(ACLMessage original, String reason, Long freeAtSim) {
+<span class="fc" id="L97">        Map&lt;String, Object&gt; content = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L98">        content.put(&quot;reason&quot;, reason);</span>
+<span class="fc bfc" id="L99" title="All 2 branches covered.">        if (freeAtSim != null) {</span>
+<span class="fc" id="L100">            content.put(&quot;free_at_sim&quot;, freeAtSim);</span>
+        }
+<span class="fc" id="L102">        ACLMessage reply = MessageFactory.reply(original, ACLMessage.REFUSE);</span>
+<span class="fc" id="L103">        reply.setContent(TerminalJson.write(content));</span>
+<span class="fc" id="L104">        myAgent.send(reply);</span>
+<span class="fc" id="L105">        log.info(&quot;REFUSE {} -&gt; {}&quot;, reason, original.getSender().getLocalName());</span>
+<span class="fc" id="L106">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

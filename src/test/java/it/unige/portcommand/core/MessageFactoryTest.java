@@ -23,12 +23,15 @@ class MessageFactoryTest {
         assertEquals("json", m.getLanguage(), "language stamped");
     }
 
-    // The 10 FIPA performatives the project must exercise (CLAUDE.md success criteria).
+    // The 10 FIPA performatives the project must exercise (CLAUDE.md success criteria) —
+    // matches PerformativeColours' COLOURS map / PerformativeColoursTest's own CANONICAL_TEN,
+    // not an independently-invented list (this fixture had drifted: AGREE/FAILURE/NOT_UNDERSTOOD
+    // are never actually sent anywhere in the codebase; CANCEL/CONFIRM/DISCONFIRM are).
     @ParameterizedTest(name = "performative {0} carries the envelope")
     @ValueSource(ints = {
-            ACLMessage.REQUEST, ACLMessage.AGREE, ACLMessage.REFUSE, ACLMessage.INFORM,
-            ACLMessage.CFP, ACLMessage.PROPOSE, ACLMessage.ACCEPT_PROPOSAL,
-            ACLMessage.REJECT_PROPOSAL, ACLMessage.FAILURE, ACLMessage.NOT_UNDERSTOOD
+            ACLMessage.REQUEST, ACLMessage.PROPOSE, ACLMessage.ACCEPT_PROPOSAL,
+            ACLMessage.REJECT_PROPOSAL, ACLMessage.CFP, ACLMessage.CONFIRM, ACLMessage.INFORM,
+            ACLMessage.REFUSE, ACLMessage.CANCEL, ACLMessage.DISCONFIRM
     })
     void everyPerformativeCarriesTheEnvelope(int performative) {
         ACLMessage m = MessageFactory.create(performative);

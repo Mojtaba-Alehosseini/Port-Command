@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DcgTokenizer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">DcgTokenizer.java</span></div><h1>DcgTokenizer.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import it.unige.portcommand.prolog.PrologTerms;
+
+/**
+ * Turns a raw chat line into the Prolog token list {@code dcg_negotiation.pl} expects.
+ *
+ * &lt;p&gt;&lt;b&gt;The tokeniser owns ALL normalisation.&lt;/b&gt; The grammar never lowercases or rewrites
+ * anything â€” per the project's tokenisation contract, duplicating normalisation in Prolog
+ * would make case mismatches fail silently. Everything the grammar's terminals match
+ * ({@code eur}, {@code h}, {@code '14:20'}) is produced here, in this order:
+ *
+ * &lt;ol&gt;
+ *   &lt;li&gt;lowercase, and fold the typographic apostrophe (U+2019) to ASCII {@code '} â€” a line
+ *       pasted from a word processor must tokenise identically to one typed in the chat box;&lt;/li&gt;
+ *   &lt;li&gt;drop thousands separators ({@code 2,000} &amp;rarr; {@code 2000}) â€” the punctuation strip
+ *       below would otherwise split it into two tokens, {@code 2} and {@code 000};&lt;/li&gt;
+ *   &lt;li&gt;normalise currency and duration BEFORE any stripping, so the grammar sees clean
+ *       tokens: {@code â‚¬2000}/{@code 2000â‚¬} &amp;rarr; {@code 2000 eur}, {@code $2000}/{@code 2000$}
+ *       &amp;rarr; {@code 2000 usd}, {@code 5h}/{@code 5hrs}/{@code 5hours} &amp;rarr; {@code 5 h};&lt;/li&gt;
+ *   &lt;li&gt;strip stray punctuation, preserving three characters that carry meaning:
+ *       &lt;ul&gt;
+ *         &lt;li&gt;{@code :} â€” clock times ({@code 14:20} stays ONE token);&lt;/li&gt;
+ *         &lt;li&gt;{@code '} â€” clitics and names ({@code i'll}, {@code o'brien}) stay one token,
+ *             which is what makes {@link PrologTerms#escape} load-bearing rather than
+ *             decorative (see {@link #toPrologList});&lt;/li&gt;
+ *         &lt;li&gt;{@code .} â€” but only between digits, so {@code 1800.50} survives as one number
+ *             while a sentence-final {@code please.} does not become the atom {@code 'please.'}.
+ *             A dropped decimal would silently turn &quot;1800.50&quot; into a 1800 offer with a stray
+ *             50 â€” the same silent-slot-corruption class the grammar's mention-guards prevent.&lt;/li&gt;
+ *       &lt;/ul&gt;&lt;/li&gt;
+ *   &lt;li&gt;split a {@code :} that is NOT between digits into its own token, so a vocative
+ *       address ({@code &quot;Genoa Star: 2000&quot;}) yields {@code [genoa, star, :, 2000]} rather than
+ *       a fused {@code 'star:'} atom, while {@code 14:20} is left alone.&lt;/li&gt;
+ * &lt;/ol&gt;
+ *
+ * &lt;p&gt;Deviation from planning/16 Step 16.3, recorded in ADR-10: that sketch strips with
+ * {@code [^a-z0-9: ]}, which also deletes apostrophes â€” &quot;I'll pay 1800&quot; would tokenise to
+ * {@code [i, ll, pay, 1800]} and no atom could ever contain a quote, making the
+ * apostrophe-escaping the brief explicitly asks to unit-test unreachable in production, i.e.
+ * vacuous. Keeping {@code '} also matches Rasa's {@code WhitespaceTokenizer} (task 12), so the
+ * two NLU paths agree on token boundaries.
+ */
+<span class="fc" id="L50">public final class DcgTokenizer {</span>
+
+    /** {@code 2,000} -&gt; {@code 2000}. Bounded to exactly-three-digit groups so an ordinary
+     * comma (&quot;2000, please&quot;) is left for the punctuation strip to turn into a separator. */
+<span class="fc" id="L54">    private static final Pattern THOUSANDS_SEPARATOR = Pattern.compile(&quot;(?&lt;=\\d),(?=\\d{3}(?!\\d))&quot;);</span>
+
+    /** Each captures the WHOLE number, not just the adjacent digit: the replacement appends the
+     * currency token after the amount, so {@code â‚¬2000} must capture {@code 2000} â€” capturing
+     * only {@code 2} yields {@code &quot;2 eur000&quot;}. Thousands separators are already gone by here. */
+<span class="fc" id="L59">    private static final Pattern EUR_PREFIX = Pattern.compile(&quot;â‚¬\\s*(\\d[\\d.]*)&quot;);</span>
+<span class="fc" id="L60">    private static final Pattern EUR_SUFFIX = Pattern.compile(&quot;(\\d[\\d.]*)\\s*â‚¬&quot;);</span>
+<span class="fc" id="L61">    private static final Pattern USD_PREFIX = Pattern.compile(&quot;\\$\\s*(\\d[\\d.]*)&quot;);</span>
+<span class="fc" id="L62">    private static final Pattern USD_SUFFIX = Pattern.compile(&quot;(\\d[\\d.]*)\\s*\\$&quot;);</span>
+
+    /** {@code 5h} / {@code 5hrs} / {@code 5hours} -&gt; {@code 5 h}. The trailing {@code \b} keeps
+     * this off a number that merely precedes an h-word (&quot;2000 harbour&quot; is untouched). */
+<span class="fc" id="L66">    private static final Pattern HOUR_UNIT = Pattern.compile(&quot;(\\d)\\s*h(?:rs?|ours?)?\\b&quot;);</span>
+
+    /** {@code 10%} -&gt; {@code 10 percent} (16-M2 delta block: &quot;10% less&quot;). Runs BEFORE the
+     * stray-punctuation strip, which would otherwise delete the {@code %} and silently turn
+     * &quot;10% less&quot; into a &quot;10 less&quot; (subtract 10) â€” the same slot-corruption class the grammar's
+     * mention-guards prevent. The grammar's {@code percent} terminal then matches the word. */
+<span class="fc" id="L72">    private static final Pattern PERCENT_UNIT = Pattern.compile(&quot;(\\d)\\s*%&quot;);</span>
+
+    /** {@code berth2} -&gt; {@code berth 2} (task 19 play-test: players type the fused form â€”
+     * the UI itself displays ids like {@code berth_1}, and {@code _} already splits via the
+     * punctuation strip, but {@code berth2} stayed one token the grammar's {@code [berth, N]}
+     * terminals could never match). */
+<span class="fc" id="L78">    private static final Pattern BERTH_FUSED = Pattern.compile(&quot;\\bberth(\\d)&quot;);</span>
+
+    /** Everything outside this set becomes a separator. See the class javadoc for why
+     * {@code :}, {@code '} and {@code .} survive. */
+<span class="fc" id="L82">    private static final Pattern STRAY_PUNCTUATION = Pattern.compile(&quot;[^a-z0-9:'. ]&quot;);</span>
+
+<span class="fc" id="L84">    private static final Pattern DOT_NOT_AFTER_DIGIT = Pattern.compile(&quot;(?&lt;!\\d)\\.&quot;);</span>
+<span class="fc" id="L85">    private static final Pattern DOT_NOT_BEFORE_DIGIT = Pattern.compile(&quot;\\.(?!\\d)&quot;);</span>
+
+<span class="fc" id="L87">    private static final Pattern COLON_NOT_AFTER_DIGIT = Pattern.compile(&quot;(?&lt;!\\d):&quot;);</span>
+<span class="fc" id="L88">    private static final Pattern COLON_NOT_BEFORE_DIGIT = Pattern.compile(&quot;:(?!\\d)&quot;);</span>
+
+<span class="fc" id="L90">    private static final Pattern WHITESPACE = Pattern.compile(&quot;\\s+&quot;);</span>
+
+    /** A Prolog number literal: emitted bare into the goal, never quoted. */
+<span class="fc" id="L93">    private static final Pattern NUMBER = Pattern.compile(&quot;\\d+(?:\\.\\d+)?&quot;);</span>
+
+    /**
+     * @param text the raw chat line; {@code null}/blank yields an empty list
+     * @return lowercase tokens, normalised for the grammar
+     */
+    public List&lt;String&gt; tokenize(String text) {
+<span class="fc bfc" id="L100" title="All 4 branches covered.">        if (text == null || text.isBlank()) {</span>
+<span class="fc" id="L101">            return List.of();</span>
+        }
+<span class="fc" id="L103">        String t = text.toLowerCase(Locale.ROOT).replace('â€™', '\'');</span>
+
+<span class="fc" id="L105">        t = THOUSANDS_SEPARATOR.matcher(t).replaceAll(&quot;&quot;);</span>
+
+<span class="fc" id="L107">        t = EUR_PREFIX.matcher(t).replaceAll(&quot;$1 eur&quot;);</span>
+<span class="fc" id="L108">        t = EUR_SUFFIX.matcher(t).replaceAll(&quot;$1 eur&quot;);</span>
+<span class="fc" id="L109">        t = USD_PREFIX.matcher(t).replaceAll(&quot;$1 usd&quot;);</span>
+<span class="fc" id="L110">        t = USD_SUFFIX.matcher(t).replaceAll(&quot;$1 usd&quot;);</span>
+<span class="fc" id="L111">        t = HOUR_UNIT.matcher(t).replaceAll(&quot;$1 h&quot;);</span>
+<span class="fc" id="L112">        t = PERCENT_UNIT.matcher(t).replaceAll(&quot;$1 percent&quot;);</span>
+<span class="fc" id="L113">        t = BERTH_FUSED.matcher(t).replaceAll(&quot;berth $1&quot;);</span>
+
+<span class="fc" id="L115">        t = STRAY_PUNCTUATION.matcher(t).replaceAll(&quot; &quot;);</span>
+<span class="fc" id="L116">        t = DOT_NOT_AFTER_DIGIT.matcher(t).replaceAll(&quot; &quot;);</span>
+<span class="fc" id="L117">        t = DOT_NOT_BEFORE_DIGIT.matcher(t).replaceAll(&quot; &quot;);</span>
+<span class="fc" id="L118">        t = COLON_NOT_AFTER_DIGIT.matcher(t).replaceAll(&quot; : &quot;);</span>
+<span class="fc" id="L119">        t = COLON_NOT_BEFORE_DIGIT.matcher(t).replaceAll(&quot; : &quot;);</span>
+
+<span class="fc" id="L121">        List&lt;String&gt; tokens = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">        for (String token : WHITESPACE.split(t.trim())) {</span>
+<span class="fc bfc" id="L123" title="All 2 branches covered.">            if (!token.isBlank()) {</span>
+<span class="fc" id="L124">                tokens.add(token);</span>
+            }
+        }
+<span class="fc" id="L127">        return List.copyOf(tokens);</span>
+    }
+
+    /**
+     * Renders tokens as a Prolog list literal: numbers bare, everything else as a quoted atom
+     * with backslashes and single quotes escaped (via {@link PrologTerms#quoteAtom}, the same
+     * helper the rule-kernel facade uses â€” a vessel named {@code o'brien} must not be able to
+     * terminate the goal string early and inject a term).
+     */
+    public String toPrologList(List&lt;String&gt; tokens) {
+<span class="fc" id="L137">        return tokens.stream()</span>
+<span class="fc" id="L138">                .map(DcgTokenizer::toPrologToken)</span>
+<span class="fc" id="L139">                .collect(Collectors.joining(&quot;,&quot;, &quot;[&quot;, &quot;]&quot;));</span>
+    }
+
+    private static String toPrologToken(String token) {
+<span class="fc bfc" id="L143" title="All 2 branches covered.">        return NUMBER.matcher(token).matches() ? token : PrologTerms.quoteAtom(token);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.assistant.AssistantPromptBuilderTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:35" hostname="MOJI" time="0.036">
+  <properties/>
+  <testcase name="anEmptyMarketNamesTheFallbackBandInsteadOfQuotingAZeroAverage()" classname="it.unige.portcommand.assistant.AssistantPromptBuilderTest" time="0.016"/>
+  <testcase name="aMaturedMarketStillQuotesTheLiveAverage()" classname="it.unige.portcommand.assistant.AssistantPromptBuilderTest" time="0.001"/>
+  <testcase name="anEmptyMarketPromptAlsoNamesTheBand()" classname="it.unige.portcommand.assistant.AssistantPromptBuilderTest" time="0.003"/>
+  <testcase name="aFaithfulParaphraseOfThePromptSurvivesTheValidatorOnBothMarketBranches()" classname="it.unige.portcommand.assistant.AssistantPromptBuilderTest" time="0.01"/>
+  <testcase name="aSilentRejectionNamesNoPrice()" classname="it.unige.portcommand.assistant.AssistantPromptBuilderTest" time="0.002"/>
+  <testcase name="theTemplateFallbackAlsoSurvivesTheValidatorOnBothMarketBranches()" classname="it.unige.portcommand.assistant.AssistantPromptBuilderTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

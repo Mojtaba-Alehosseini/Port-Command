@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PolicyParseBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.assistant</a> &gt; <span class="el_source">PolicyParseBehaviour.java</span></div><h1>PolicyParseBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.assistant;
+
+import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
+import it.unige.portcommand.artifacts.PolicyRule;
+import it.unige.portcommand.gui.events.NotificationEvent;
+import it.unige.portcommand.gui.events.PolicyParsedEvent;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
+import jade.core.Agent;
+import jade.core.behaviours.OneShotBehaviour;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Registers every parsed policy (planning/10 Â§10.8). Subscribes to {@link PolicyParsedEvent},
+ * published by {@code nlp.PolicyParser} â€” NOT by a Rasa intent; the second Rasa pipeline for
+ * policy expressions was cut (PROJECT_DEFINITION Â§9 item 6).
+ */
+public final class PolicyParseBehaviour extends OneShotBehaviour {
+
+<span class="fc" id="L22">    private static final Logger log = LoggerFactory.getLogger(PolicyParseBehaviour.class);</span>
+
+    private final PolicyRegistryArtifact policyRegistry;
+    private final EventBus eventBus;
+
+    public PolicyParseBehaviour(Agent agent, PolicyRegistryArtifact policyRegistry, EventBus eventBus) {
+<span class="fc" id="L28">        super(agent);</span>
+<span class="fc" id="L29">        this.policyRegistry = policyRegistry;</span>
+<span class="fc" id="L30">        this.eventBus = eventBus;</span>
+<span class="fc" id="L31">    }</span>
+
+    /** Held so AssistantAgent cancels on takedown (task 22): the bus outlives the agent,
+     * and a respawn would otherwise leave this handler subscribed alongside the new one,
+     * double-firing every reaction. */
+    private volatile Subscription&lt;PolicyParsedEvent&gt; subscription;
+
+    @Override
+    public void action() {
+<span class="fc" id="L40">        subscription = eventBus.subscribe(PolicyParsedEvent.class, this::onPolicyParsed, DeliveryMode.ASYNC);</span>
+<span class="fc" id="L41">        log.debug(&quot;subscribed to PolicyParsedEvent&quot;);</span>
+<span class="fc" id="L42">    }</span>
+
+    /** Cancels the bus subscription; safe if {@link #action()} never ran. */
+    public void cancelSubscription() {
+<span class="fc" id="L46">        Subscription&lt;PolicyParsedEvent&gt; s = subscription;</span>
+<span class="pc bpc" id="L47" title="1 of 2 branches missed.">        if (s != null) {</span>
+<span class="fc" id="L48">            s.cancel();</span>
+        }
+<span class="fc" id="L50">    }</span>
+
+    public void onPolicyParsed(PolicyParsedEvent event) {
+<span class="nc" id="L53">        PolicyRule rule = event.rule();</span>
+<span class="nc" id="L54">        policyRegistry.register(rule);</span>
+<span class="nc" id="L55">        log.info(&quot;policy registered: {}&quot;, rule.trigger());</span>
+        // No separate POLICY_REGISTERED channel â€” the HUD update reuses the canonical NotificationEvent.
+<span class="nc" id="L57">        eventBus.publish(new NotificationEvent(</span>
+<span class="nc" id="L58">                &quot;Policy registered: &quot; + rule.trigger(), NotificationEvent.Severity.INFO, 0L));</span>
+<span class="nc" id="L59">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

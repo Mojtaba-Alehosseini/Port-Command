@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PortOntology.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.ontology</a> &gt; <span class="el_source">PortOntology.java</span></div><h1>PortOntology.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.ontology;
+
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+import it.unige.portcommand.prolog.PrologEngine;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Singleton entry point to the generated ontology facts.
+ *
+ * &lt;p&gt;Guarantees that {@code port_ontology.pl} is present on the classpath (so
+ * downstream code can rely on it) and resolves its on-disk path. The actual JPL
+ * consult of the ontology is owned by {@link PrologEngine#init()} (which loads it
+ * first of the six files); {@link #init(PrologEngine)} here is a thin presence
+ * check, kept null-tolerant for callers that have no engine yet.
+ */
+public final class PortOntology {
+
+<span class="fc" id="L24">    private static final Logger log = LoggerFactory.getLogger(PortOntology.class);</span>
+    private static final String ONTOLOGY_RESOURCE = &quot;/prolog/port_ontology.pl&quot;;
+
+    private static final class Holder {
+<span class="fc" id="L28">        private static final PortOntology INSTANCE = new PortOntology();</span>
+    }
+
+<span class="fc" id="L31">    PortOntology() {</span>
+<span class="fc" id="L32">        validateClasspath();</span>
+<span class="fc" id="L33">    }</span>
+
+    public static PortOntology getInstance() {
+<span class="fc" id="L36">        return Holder.INSTANCE;</span>
+    }
+
+    /**
+     * Asserts the generated ontology is on the classpath. Downstream tasks (04+)
+     * rely on this guarantee; it fails fast if the converter was never run.
+     */
+    private void validateClasspath() {
+<span class="pc bpc" id="L44" title="1 of 2 branches missed.">        if (PortOntology.class.getResource(ONTOLOGY_RESOURCE) == null) {</span>
+<span class="nc" id="L45">            throw new IllegalStateException(</span>
+                    ONTOLOGY_RESOURCE + &quot; not on classpath â€” run ontology_to_assets.py to generate it&quot;);
+        }
+<span class="fc" id="L48">    }</span>
+
+    /**
+     * Resolves the on-disk path of {@code port_ontology.pl}, forward-slashed so it
+     * is safe as a Prolog {@code consult/1} atom on Windows. Task 04 replaces the
+     * caller's stub with a real JPL consult; here it only verifies the file exists.
+     *
+     * @return absolute, forward-slash path to the ontology file
+     */
+    public String consultOntologyFile() {
+<span class="fc" id="L58">        URL url = PortOntology.class.getResource(ONTOLOGY_RESOURCE);</span>
+<span class="pc bpc" id="L59" title="1 of 2 branches missed.">        if (url == null) {</span>
+<span class="nc" id="L60">            throw new IllegalStateException(ONTOLOGY_RESOURCE + &quot; not on classpath&quot;);</span>
+        }
+        try {
+<span class="fc" id="L63">            Path path = Paths.get(url.toURI());</span>
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">            if (!Files.exists(path)) {</span>
+<span class="nc" id="L65">                throw new IllegalStateException(&quot;ontology file missing on disk: &quot; + path);</span>
+            }
+<span class="fc" id="L67">            return path.toString().replace('\\', '/');</span>
+<span class="nc" id="L68">        } catch (URISyntaxException e) {</span>
+<span class="nc" id="L69">            throw new IllegalStateException(&quot;bad URI for &quot; + ONTOLOGY_RESOURCE + &quot;: &quot; + url, e);</span>
+        }
+    }
+
+    /**
+     * Thin presence check: verifies the ontology resolves on disk and notes
+     * whether the supplied engine has already consulted it. The consult itself is
+     * {@link PrologEngine#init()}'s responsibility â€” this does not consult.
+     *
+     * @param engine the Prolog engine, or {@code null} if none is wired yet
+     */
+    public void init(PrologEngine engine) {
+<span class="fc" id="L81">        String path = consultOntologyFile();</span>
+<span class="pc bpc" id="L82" title="3 of 4 branches missed.">        if (engine != null &amp;&amp; !engine.isInitialised()) {</span>
+<span class="nc" id="L83">            log.warn(&quot;PortOntology.init: engine not initialised â€” call PrologEngine.init() to consult {}&quot;,</span>
+                    path);
+        } else {
+<span class="fc" id="L86">            log.info(&quot;PortOntology present at {} (consult owned by PrologEngine.init)&quot;, path);</span>
+        }
+<span class="fc" id="L88">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

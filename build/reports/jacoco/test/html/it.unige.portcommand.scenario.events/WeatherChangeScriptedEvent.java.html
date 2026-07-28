@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WeatherChangeScriptedEvent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.scenario.events</a> &gt; <span class="el_source">WeatherChangeScriptedEvent.java</span></div><h1>WeatherChangeScriptedEvent.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.scenario.events;
+
+import java.util.List;
+
+import it.unige.portcommand.agents.WeatherAgent;
+import it.unige.portcommand.gui.events.DebugWeatherEvent;
+import it.unige.portcommand.gui.events.WeatherChangeEvent;
+import it.unige.portcommand.scenario.GameContext;
+import jade.core.behaviours.OneShotBehaviour;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Scripted weather force. Distinct class from the GUI bus event
+ * {@code gui.events.WeatherChangeEvent} despite the related name (planning/23 Â§23.4).
+ *
+ * &lt;p&gt;&lt;b&gt;Reconciled mechanism (2026-07-18):&lt;/b&gt; the Â§23.4 sketch (&quot;send an INFORM to
+ * WeatherAgent&quot;) predates task 24's {@code DebugWeatherOverrideBehaviour} â€” the
+ * WeatherAgent already subscribes to {@link DebugWeatherEvent} and adopts the forced
+ * snapshot into its shared cell (CALLER_THREAD, so it lands synchronously here). The
+ * next {@code PeriodicWeatherBroadcastBehaviour} tick (â‰¤ 15 sim-min) then drives
+ * threshold alerts, holds and re-dispatches through the REAL pipeline. The canonical
+ * {@link WeatherChangeEvent} is additionally published immediately so the map overlay
+ * and HUD chip react at the scripted instant rather than a tick later
+ * ({@code thresholdCrossed=false} â€” genuine crossings stay the broadcast's call).
+ *
+ * &lt;p&gt;Vocabulary is the canonical task-09 {@code WeatherSnapshot} one: category
+ * visibility {@code good|fair|poor}, Markov state {@code sunny|cloudy|stormy}
+ * (the sketch's {@code visibilityNm} double predates it).
+ */
+<span class="fc" id="L31">public record WeatherChangeScriptedEvent(</span>
+        long simTimeSeconds,
+        int windKn,
+        String visibility,
+        double swell,
+        String state) implements ScriptedEvent {
+
+<span class="fc" id="L38">    private static final Logger log = LoggerFactory.getLogger(WeatherChangeScriptedEvent.class);</span>
+
+    @Override
+    public void apply(GameContext ctx) {
+<span class="fc" id="L42">        ctx.eventBus().publish(new DebugWeatherEvent(windKn, visibility, swell, state));</span>
+<span class="fc" id="L43">        ctx.eventBus().publish(new WeatherChangeEvent(windKn, visibility, swell, state, false));</span>
+<span class="fc" id="L44">        broadcastImmediately(ctx);</span>
+<span class="fc" id="L45">        log.info(&quot;scripted weather: wind={}kn vis={} swell={} state={}&quot;, windKn, visibility, swell, state);</span>
+<span class="fc" id="L46">    }</span>
+
+    /**
+     * Forces the alert out NOW instead of on the next 15-sim-minute broadcast tick (task 26,
+     * 2026-07-27).
+     *
+     * &lt;p&gt;&lt;b&gt;The bug this fixes.&lt;/b&gt; The DebugWeatherEvent above lands the new snapshot in the
+     * WeatherAgent's cell synchronously, but the INFORM that makes the HarbourMaster hold vessels
+     * and CANCEL their escorts only left on the next {@code PeriodicWeatherBroadcastBehaviour}
+     * tick â€” 15 sim-minutes apart. A vessel's channel-to-berth leg is 2 sim-minutes
+     * ({@code TransitToBerthBehaviour}), so the alert had roughly a one-in-eight chance of ever
+     * catching a vessel in transit, and in the storm scenario it never did: the tanker docked
+     * about six sim-minutes before the scripted 32-kn change even fired. The result was a
+     * scenario whose EMERGENCY banner read &quot;Escorts cancelled, vessels held offshore&quot; while
+     * nothing was cancelled and nothing was held, and a CANCEL performative that
+     * PROJECT_DEFINITION Â§13 claims for {@code storm} but the shipped game never produced.
+     * Found by {@code --smoke} (task 26), which is the first thing to have played all three
+     * scenarios and taken the union of what they emit.
+     *
+     * &lt;p&gt;Runs on the WEATHER agent's own thread via a {@code OneShotBehaviour} â€” this method
+     * executes on the HarbourMaster's, and the broadcast touches the weather agent's
+     * {@code lastObserved}. Same pattern as {@link TugRefuelCompleteEvent}, including capturing
+     * the agent in a final local rather than touching {@code myAgent} (task 19's lesson).
+     */
+    private void broadcastImmediately(GameContext ctx) {
+<span class="pc bpc" id="L71" title="1 of 2 branches missed.">        if (ctx.directory() == null) {</span>
+<span class="nc" id="L72">            return; // stub harness (queue-mechanics unit tests) â€” nothing to broadcast to</span>
+        }
+<span class="fc" id="L74">        List&lt;WeatherAgent&gt; agents = ctx.directory().byType(WeatherAgent.class);</span>
+<span class="pc bpc" id="L75" title="1 of 2 branches missed.">        if (agents.isEmpty()) {</span>
+<span class="nc" id="L76">            log.warn(&quot;scripted weather: no WeatherAgent in the directory â€” the alert waits for the &quot;</span>
+                    + &quot;next periodic broadcast&quot;);
+<span class="nc" id="L78">            return;</span>
+        }
+<span class="fc" id="L80">        WeatherAgent weather = agents.get(0);</span>
+<span class="fc" id="L81">        weather.addBehaviour(new OneShotBehaviour(weather) {</span>
+            @Override
+            public void action() {
+<span class="fc" id="L84">                weather.broadcastWeatherNow();</span>
+<span class="fc" id="L85">            }</span>
+        });
+<span class="fc" id="L87">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ServiceLocator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.bootstrap</a> &gt; <span class="el_source">ServiceLocator.java</span></div><h1>ServiceLocator.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.bootstrap;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+
+import jade.core.AID;
+import jade.core.Agent;
+import jade.domain.DFService;
+import jade.domain.FIPAException;
+import jade.domain.FIPAAgentManagement.DFAgentDescription;
+import jade.domain.FIPAAgentManagement.ServiceDescription;
+import jade.wrapper.AgentContainer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Thin wrapper over the JADE Directory Facilitator {@code search}, with a 1-second
+ * TTL cache to limit DF round-trips. No agent calls {@code DFService.search}
+ * directly â€” they go through here (task 05 hard rule).
+ *
+ * &lt;p&gt;{@code DFService.search} requires an {@link Agent}, so a locator is bound to
+ * one caller agent and its lookups MUST run on that agent's own thread.
+ */
+public final class ServiceLocator {
+
+<span class="fc" id="L30">    private static final Logger log = LoggerFactory.getLogger(ServiceLocator.class);</span>
+    private static final long TTL_MILLIS = 1_000L;
+
+    @SuppressWarnings(&quot;unused&quot;) // kept per the task-03 constructor contract; reserved for future use
+    private final AgentContainer container;
+    private final Agent callerAgent;
+<span class="fc" id="L36">    private final Map&lt;String, CacheEntry&gt; cache = new ConcurrentHashMap&lt;&gt;();</span>
+
+<span class="fc" id="L38">    public ServiceLocator(AgentContainer container, Agent callerAgent) {</span>
+<span class="fc" id="L39">        this.container = Objects.requireNonNull(container, &quot;container&quot;);</span>
+<span class="fc" id="L40">        this.callerAgent = Objects.requireNonNull(callerAgent, &quot;callerAgent&quot;);</span>
+<span class="fc" id="L41">    }</span>
+
+    /** All AIDs advertising {@code serviceType}, or an empty list. */
+    public List&lt;AID&gt; findAll(String serviceType) {
+<span class="fc" id="L45">        return List.copyOf(lookup(serviceType));</span>
+    }
+
+    /** The single AID for {@code serviceType}; empty if none. Logs WARN and returns the first if &amp;gt;1. */
+    public Optional&lt;AID&gt; findUnique(String serviceType) {
+<span class="fc" id="L50">        List&lt;AID&gt; all = lookup(serviceType);</span>
+<span class="pc bpc" id="L51" title="1 of 2 branches missed.">        if (all.isEmpty()) {</span>
+<span class="nc" id="L52">            return Optional.empty();</span>
+        }
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">        if (all.size() &gt; 1) {</span>
+<span class="nc" id="L55">            log.warn(&quot;findUnique({}) found {} providers; returning the first&quot;, serviceType, all.size());</span>
+        }
+<span class="fc" id="L57">        return Optional.of(all.get(0));</span>
+    }
+
+    private List&lt;AID&gt; lookup(String serviceType) {
+<span class="fc" id="L61">        Objects.requireNonNull(serviceType, &quot;serviceType&quot;);</span>
+        // Wall clock here is fine: it gates a DF-chatter cache TTL, not game logic.
+<span class="fc" id="L63">        long now = System.currentTimeMillis();</span>
+<span class="fc" id="L64">        CacheEntry cached = cache.get(serviceType);</span>
+<span class="fc bfc" id="L65" title="All 4 branches covered.">        if (cached != null &amp;&amp; (now - cached.timestamp()) &lt; TTL_MILLIS) {</span>
+<span class="fc" id="L66">            return cached.aids();</span>
+        }
+<span class="fc" id="L68">        List&lt;AID&gt; result = search(serviceType);</span>
+<span class="fc" id="L69">        cache.put(serviceType, new CacheEntry(result, now));</span>
+<span class="fc" id="L70">        return result;</span>
+    }
+
+    private List&lt;AID&gt; search(String serviceType) {
+<span class="fc" id="L74">        DFAgentDescription template = new DFAgentDescription();</span>
+<span class="fc" id="L75">        ServiceDescription sd = new ServiceDescription();</span>
+<span class="fc" id="L76">        sd.setType(serviceType);</span>
+<span class="fc" id="L77">        template.addServices(sd);</span>
+        try {
+<span class="fc" id="L79">            DFAgentDescription[] results = DFService.search(callerAgent, template);</span>
+<span class="fc" id="L80">            List&lt;AID&gt; aids = new ArrayList&lt;&gt;(results.length);</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">            for (DFAgentDescription dfd : results) {</span>
+<span class="fc" id="L82">                aids.add(dfd.getName());</span>
+            }
+<span class="fc" id="L84">            return aids;</span>
+<span class="nc" id="L85">        } catch (FIPAException e) {</span>
+<span class="nc" id="L86">            log.warn(&quot;DF search for service '{}' failed&quot;, serviceType, e);</span>
+<span class="nc" id="L87">            return List.of();</span>
+        }
+    }
+
+<span class="fc" id="L91">    private record CacheEntry(List&lt;AID&gt; aids, long timestamp) {</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

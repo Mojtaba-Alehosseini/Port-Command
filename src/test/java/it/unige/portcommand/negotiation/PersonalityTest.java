@@ -10,9 +10,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PersonalityTest {
 
     @Test
-    void openingModifiersOrderedAggressiveHighest() {
-        assertTrue(Personality.AGGRESSIVE.openingModifier() > Personality.NEUTRAL.openingModifier());
-        assertTrue(Personality.NEUTRAL.openingModifier() > Personality.DESPERATE.openingModifier());
+    void openingFractionSubBandsAreContiguousAndOrderedAggressiveLowest() {
+        // AGGRESSIVE lowballs deepest (holds out longest elsewhere in the engine),
+        // DESPERATE opens closest to target (settles fastest elsewhere in the engine).
+        assertTrue(Personality.AGGRESSIVE.openingFractionMax() <= Personality.NEUTRAL.openingFractionMin());
+        assertTrue(Personality.NEUTRAL.openingFractionMax() <= Personality.DESPERATE.openingFractionMin());
+    }
+
+    @Test
+    void openingFractionSubBandsSpanTheFullSevenZeroToEightFiveRange() {
+        assertEquals(0.70, Personality.AGGRESSIVE.openingFractionMin(), 0.0001);
+        assertEquals(0.85, Personality.DESPERATE.openingFractionMax(), 0.0001);
+        for (Personality p : Personality.values()) {
+            assertTrue(p.openingFractionMin() >= 0.70 && p.openingFractionMax() <= 0.85,
+                    p + " must stay inside [0.70,0.85]: [" + p.openingFractionMin() + "," + p.openingFractionMax() + "]");
+        }
+    }
+
+    @Test
+    void sampleOpeningFractionInterpolatesWithinItsOwnBand() {
+        assertEquals(Personality.NEUTRAL.openingFractionMin(), Personality.NEUTRAL.sampleOpeningFraction(0.0), 0.0001);
+        assertEquals(Personality.NEUTRAL.openingFractionMax(), Personality.NEUTRAL.sampleOpeningFraction(1.0), 0.0001);
     }
 
     @Test

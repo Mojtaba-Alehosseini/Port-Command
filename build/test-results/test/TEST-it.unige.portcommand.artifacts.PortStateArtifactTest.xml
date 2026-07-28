@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="it.unige.portcommand.artifacts.PortStateArtifactTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:21" hostname="MOJI" time="0.035">
+<testsuite name="it.unige.portcommand.artifacts.PortStateArtifactTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:35" hostname="MOJI" time="0.052">
   <properties/>
-  <testcase name="subscriberExceptionDoesNotBreakOthers()" classname="it.unige.portcommand.artifacts.PortStateArtifactTest" time="0.016"/>
-  <testcase name="updateTugStoresStatusAndNotifies()" classname="it.unige.portcommand.artifacts.PortStateArtifactTest" time="0.002"/>
-  <testcase name="updateStoresBerthAndNotifiesSubscriber()" classname="it.unige.portcommand.artifacts.PortStateArtifactTest" time="0.014"/>
-  <testcase name="snapshotsAreImmutableCopies()" classname="it.unige.portcommand.artifacts.PortStateArtifactTest" time="0.001"/>
-  <system-out><![CDATA[00:41:21.293 [Test worker] [] WARN  i.u.p.artifacts.PortStateArtifact - PortStateArtifact subscriber threw on BerthDelta
+  <testcase name="subscriberExceptionDoesNotBreakOthers()" classname="it.unige.portcommand.artifacts.PortStateArtifactTest" time="0.019"/>
+  <testcase name="updateTugStoresStatusAndNotifies()" classname="it.unige.portcommand.artifacts.PortStateArtifactTest" time="0.003"/>
+  <testcase name="updateStoresBerthAndNotifiesSubscriber()" classname="it.unige.portcommand.artifacts.PortStateArtifactTest" time="0.024"/>
+  <testcase name="snapshotsAreImmutableCopies()" classname="it.unige.portcommand.artifacts.PortStateArtifactTest" time="0.003"/>
+  <system-out><![CDATA[00:12:35.378 [Test worker] [] WARN  i.u.p.artifacts.PortStateArtifact - PortStateArtifact subscriber threw on BerthDelta
 java.lang.RuntimeException: boom
 	at it.unige.portcommand.artifacts.PortStateArtifactTest.lambda$subscriberExceptionDoesNotBreakOthers$1(PortStateArtifactTest.java:61)
 	at it.unige.portcommand.artifacts.PortStateArtifact.emit(PortStateArtifact.java:64)
@@ -82,7 +82,7 @@ java.lang.RuntimeException: boom
 	at org.gradle.internal.dispatch.ReflectionDispatch.dispatch(ReflectionDispatch.java:24)
 	at org.gradle.internal.dispatch.ContextClassLoaderDispatch.dispatch(ContextClassLoaderDispatch.java:33)
 	at org.gradle.internal.dispatch.ProxyDispatchAdapter$DispatchingInvocationHandler.invoke(ProxyDispatchAdapter.java:92)
-	at jdk.proxy1/jdk.proxy1.$Proxy4.stop(Unknown Source)
+	at jdk.proxy2/jdk.proxy2.$Proxy6.stop(Unknown Source)
 	at org.gradle.api.internal.tasks.testing.worker.TestWorker$3.run(TestWorker.java:200)
 	at org.gradle.api.internal.tasks.testing.worker.TestWorker.executeAndMaintainThreadName(TestWorker.java:132)
 	at org.gradle.api.internal.tasks.testing.worker.TestWorker.execute(TestWorker.java:103)

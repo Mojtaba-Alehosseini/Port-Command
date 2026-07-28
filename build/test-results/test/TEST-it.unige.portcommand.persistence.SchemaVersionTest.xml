@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.persistence.SchemaVersionTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:56" hostname="MOJI" time="0.029">
+  <properties/>
+  <testcase name="missingSchemaVersionIsRefusedNotDefaulted()" classname="it.unige.portcommand.persistence.SchemaVersionTest" time="0.017"/>
+  <testcase name="futureVersionIsRefusedWithItsVersionNumber()" classname="it.unige.portcommand.persistence.SchemaVersionTest" time="0.011"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

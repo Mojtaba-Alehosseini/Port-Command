@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RandomSource.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.util</a> &gt; <span class="el_source">RandomSource.java</span></div><h1>RandomSource.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.util;
+
+import java.util.Random;
+
+/**
+ * Seeded {@link Random} wrapper for reproducible simulation runs. Injected via
+ * agent constructor args (the same {@code Object[]} channel as the init-args
+ * records) â€” deliberately &lt;strong&gt;not&lt;/strong&gt; a global static singleton, so each
+ * test constructs its own {@code new RandomSource(testSeed)} and a loaded save can
+ * restore the production seed via {@link #setSeed(long)}.
+ */
+public final class RandomSource {
+
+    private final Random random;
+    private long seed;
+
+<span class="fc" id="L17">    public RandomSource(long seed) {</span>
+<span class="fc" id="L18">        this.seed = seed;</span>
+<span class="fc" id="L19">        this.random = new Random(seed);</span>
+<span class="fc" id="L20">    }</span>
+
+    public void setSeed(long seed) {
+<span class="fc" id="L23">        this.seed = seed;</span>
+<span class="fc" id="L24">        random.setSeed(seed);</span>
+<span class="fc" id="L25">    }</span>
+
+    /** The live master seed â€” what {@link #forStream} derives from. Captured by task 22's save. */
+    public long currentSeed() {
+<span class="fc" id="L29">        return seed;</span>
+    }
+
+    /**
+     * The seed a save taken at {@code simMillis} stores (task 22; task-09's deferred
+     * &quot;save-seed support&quot;). A &lt;b&gt;pure read&lt;/b&gt; â€” no draw, so taking a save never shifts any
+     * live stream â€” yet it evolves with the save instant: a game loaded from it derives
+     * fresh {@link #forStream} sequences instead of replaying the from-boot ones (the
+     * streams cannot literally continue mid-sequence â€” {@link Random} exposes no cursor â€”
+     * so &quot;continue deterministically&quot; means: a deterministic function of the save file,
+     * identical across repeated loads). Same state + same instant â†’ same seed, which is
+     * what keeps the round-trip byte-diff test exact.
+     */
+    public long saveSeedAt(long simMillis) {
+<span class="fc" id="L43">        return seed ^ stableHash(&quot;save@&quot; + simMillis);</span>
+    }
+
+    /**
+     * A deterministic, independent child RNG for a named sub-stream â€” seeded from
+     * the master seed XORed with a stable 64-bit hash of {@code name}. Adding or
+     * removing randomness in one consumer's stream never shifts another's draw
+     * sequence (each gets its own {@link Random}), yet a single save-file seed still
+     * reproduces the whole game. Used per stochastic agent (task 09: weather, customs).
+     */
+    public Random forStream(String name) {
+<span class="fc" id="L54">        return new Random(seed ^ stableHash(name));</span>
+    }
+
+    /**
+     * Deterministic 64-bit polynomial hash (unlike 32-bit {@link String#hashCode()}),
+     * finished with murmur3's fmix64 avalanche. Without the finalizer (checkpoint-#6 F2,
+     * fixed 2026-07-18) adjacent stream names (&quot;vessel-WALKIN-63&quot;/&quot;-64&quot;) produced child
+     * seeds differing only in low bits, and {@link Random}'s first draw is strongly
+     * correlated across adjacent seeds â€” walk-in personalities (the first draw of each
+     * per-vessel stream) locked into dozens-long single-personality runs. The avalanche
+     * makes every output bit depend on every input bit, decorrelating sibling streams.
+     */
+    private static long stableHash(String s) {
+<span class="fc" id="L67">        long h = 1125899906842597L; // a large prime</span>
+<span class="fc bfc" id="L68" title="All 2 branches covered.">        for (int i = 0; i &lt; s.length(); i++) {</span>
+<span class="fc" id="L69">            h = 31 * h + s.charAt(i);</span>
+        }
+<span class="fc" id="L71">        h ^= h &gt;&gt;&gt; 33;</span>
+<span class="fc" id="L72">        h *= 0xff51afd7ed558ccdL;</span>
+<span class="fc" id="L73">        h ^= h &gt;&gt;&gt; 33;</span>
+<span class="fc" id="L74">        h *= 0xc4ceb9fe1a85ec53L;</span>
+<span class="fc" id="L75">        h ^= h &gt;&gt;&gt; 33;</span>
+<span class="fc" id="L76">        return h;</span>
+    }
+
+    public double nextDouble() {
+<span class="fc" id="L80">        return random.nextDouble();</span>
+    }
+
+    public int nextInt(int bound) {
+<span class="fc" id="L84">        return random.nextInt(bound);</span>
+    }
+
+    public boolean nextBoolean() {
+<span class="fc" id="L88">        return random.nextBoolean();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

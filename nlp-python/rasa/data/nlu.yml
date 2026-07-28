@@ -470,3 +470,39 @@ nlu:
     - forget it, cancel
     - no, cancel
     - stop, abort
+- intent: out_of_scope
+  examples: |
+    - asdfghjkl
+    - sdkfjsldkfj
+    - ;lkjhgfdsa
+    - aaaaaaaaaa
+    - zzzzz
+    - blargh blargh
+    - xyzzy
+    - fdsa fdsa fdsa
+    - mmmmmmm
+    - uhh
+    - errr
+    - hmmmm
+    - eh
+    - uh huh
+    - whatever
+    - oh
+    - good morning
+    - hello there
+    - hi
+    - how are you today
+    - thanks a lot
+    - cheers mate
+    - haha very funny
+    - see you later
+    - nice to meet you
+    - what is the capital of france
+    - tell me a joke
+    - who won the football match last night
+    - can you write me a poem
+    - what time does the pizzeria close
+    - play some music
+    - how do I reset my password
+    - order me a pizza
+    - what is your favourite colour

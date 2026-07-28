@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BootstrapConfig.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.bootstrap</a> &gt; <span class="el_source">BootstrapConfig.java</span></div><h1>BootstrapConfig.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.bootstrap;
+
+/**
+ * Immutable boot configuration for {@link JadeBootstrap}.
+ *
+ * @param mainPort              JADE Main Container port (default 1099; overridable via {@code -Djade.main.port})
+ * @param enableRMA            launch the JADE RMA debug GUI (default false; {@code -Djade.gui=true})
+ * @param simClockMode         descriptive label for the clock pacing mode
+ * @param realSecondsPerGameDay real seconds mapped to one simulated 24&amp;nbsp;h (default 300)
+ */
+public record BootstrapConfig(int mainPort, boolean enableRMA, String simClockMode, long realSecondsPerGameDay) {
+
+    public static final int DEFAULT_PORT = 1099;
+    public static final long DEFAULT_REAL_SECONDS_PER_GAME_DAY = 300L;
+    public static final String DEFAULT_SIMCLOCK_MODE = &quot;realtime&quot;;
+
+<span class="fc" id="L17">    public BootstrapConfig {</span>
+<span class="pc bpc" id="L18" title="2 of 4 branches missed.">        if (mainPort &lt; 1 || mainPort &gt; 65_535) {</span>
+<span class="nc" id="L19">            throw new IllegalArgumentException(&quot;mainPort out of range 1..65535: &quot; + mainPort);</span>
+        }
+<span class="pc bpc" id="L21" title="1 of 2 branches missed.">        if (realSecondsPerGameDay &lt;= 0) {</span>
+<span class="nc" id="L22">            throw new IllegalArgumentException(&quot;realSecondsPerGameDay must be &gt; 0: &quot; + realSecondsPerGameDay);</span>
+        }
+<span class="fc" id="L24">    }</span>
+
+    public static BootstrapConfig defaults() {
+<span class="nc" id="L27">        return new BootstrapConfig(DEFAULT_PORT, false, DEFAULT_SIMCLOCK_MODE, DEFAULT_REAL_SECONDS_PER_GAME_DAY);</span>
+    }
+
+    /** Reads {@code jade.main.port}, {@code jade.gui}, {@code simclock.real.seconds.per.day}, else defaults. */
+    public static BootstrapConfig fromSystemProperties() {
+<span class="nc" id="L32">        int port = Integer.getInteger(&quot;jade.main.port&quot;, DEFAULT_PORT);</span>
+<span class="nc" id="L33">        boolean rma = Boolean.getBoolean(&quot;jade.gui&quot;);</span>
+<span class="nc" id="L34">        long rate = Long.getLong(&quot;simclock.real.seconds.per.day&quot;, DEFAULT_REAL_SECONDS_PER_GAME_DAY);</span>
+<span class="nc" id="L35">        return new BootstrapConfig(port, rma, DEFAULT_SIMCLOCK_MODE, rate);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

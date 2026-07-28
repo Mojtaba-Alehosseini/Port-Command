@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" tests="29" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:43" hostname="MOJI" time="0.1">
+  <properties/>
+  <testcase name="premiumSurcharge(1000, rep=0.0) = 0.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.008"/>
+  <testcase name="premiumSurcharge(1000, rep=79.0) = 0.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="premiumSurcharge(1000, rep=79.99) = 0.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="premiumSurcharge(1000, rep=80.0) = 150.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.0"/>
+  <testcase name="premiumSurcharge(1000, rep=100.0) = 150.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="aggregateForDayBucketsTheDayBoundaryCorrectly()" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.003"/>
+  <testcase name="berthBase(_, 4h, 2200.0) = 2200.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.004"/>
+  <testcase name="berthBase(_, 8h, 5200.0) = 5200.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="berthBase(_, 12h, 1100.0) = 1100.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="berthBaseIgnoresHoursToday_theNineteenBSeam()" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="berthBaseRejectsANegativePrice()" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.004"/>
+  <testcase name="berthFeeRangeRejectsAnUnknownType()" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.002"/>
+  <testcase name="cargo_vessel band = [1400, 2200]" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.007"/>
+  <testcase name="container_vessel band = [1800, 3500]" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="tanker band = [4000, 8000]" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="ferry band = [1100, 2000]" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="cruise_ship band = [3200, 5500]" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="extraTugSurchargeRejectsANegativeCount()" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="flatSurchargesAreTheCanonicalFigures()" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.003"/>
+  <testcase name="berthBaseStillRejectsAWrongTypeWhenOneIsSupplied()" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.003"/>
+  <testcase name="aggregateForDaySumsOnlyThatDaysIncome()" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.002"/>
+  <testcase name="berthBaseAcceptsANullTypeBecauseNeitherLiveEventCarriesOne()" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="extraTugSurcharge(0) = 0.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.003"/>
+  <testcase name="extraTugSurcharge(1) = 0.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.002"/>
+  <testcase name="extraTugSurcharge(2) = 500.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="extraTugSurcharge(3) = 1000.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="extraTugSurcharge(4) = 1500.0" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="aggregateForDayDoesNotMutateTheLedger()" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <testcase name="berthFeeRangeIsBerthIndependent()" classname="it.unige.portcommand.harbourmaster.financial.IncomeRulesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

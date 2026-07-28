@@ -24,7 +24,12 @@ public final class SimClock {
     private static final long MILLIS_PER_MINUTE = 60_000L;
     private static final long SECONDS_PER_DAY = 86_400L;
 
-    private final long realSecondsPerGameDay;
+    /**
+     * Volatile, not final, since task 22: {@link #restore} may adopt a save file's rate
+     * (the sim↔wall mapping is sim state — a save made at 300&nbsp;s/day must not speed up
+     * to a --day-length 75 relaunch). Written only at construction and in {@code restore}.
+     */
+    private volatile long realSecondsPerGameDay;
     private final AtomicLong simMillisSinceStart = new AtomicLong(0);
     private final AtomicLong lastObservedDay = new AtomicLong(1);
     private volatile boolean paused;
@@ -65,6 +70,11 @@ public final class SimClock {
         paused = false;
     }
 
+    /** Whether {@link #advance(long)} is currently a no-op. */
+    public boolean isPaused() {
+        return paused;
+    }
+
     /**
      * Jumps sim time to the next midnight boundary in one atomic step. Used by the
      * {@code DayRolloverCoordinator} (task 24). A subsequent {@link #isMidnightCrossed()}
@@ -81,6 +91,27 @@ public final class SimClock {
         paused = false;
     }
 
+    /**
+     * Adopts a persisted clock state (task 22 load). Sets sim time and the mapping rate, and
+     * — load-bearing — seeds {@code lastObservedDay} to the restored instant's own day so
+     * {@link #isMidnightCrossed()} does not fire a phantom crossing for days that settled
+     * before the save. Leaves the clock paused; the load orchestrator resumes it once the
+     * rebuilt world is ready.
+     */
+    public void restore(long simMillis, long realSecondsPerGameDay) {
+        if (simMillis < 0) {
+            throw new IllegalArgumentException("simMillis must be >= 0, got " + simMillis);
+        }
+        if (realSecondsPerGameDay <= 0) {
+            throw new IllegalArgumentException(
+                    "realSecondsPerGameDay must be > 0, got " + realSecondsPerGameDay);
+        }
+        paused = true;
+        this.realSecondsPerGameDay = realSecondsPerGameDay;
+        simMillisSinceStart.set(simMillis);
+        lastObservedDay.set(gameDayOf(simMillis));
+    }
+
     public long nowSimMillis() {
         return simMillisSinceStart.get();
     }
@@ -94,7 +125,21 @@ public final class SimClock {
     }
 
     public int gameDay() {
-        return (int) (nowSimMillis() / MILLIS_PER_DAY) + 1;
+        return gameDayOf(nowSimMillis());
+    }
+
+    /**
+     * The 1-based game day a sim-millis instant falls in — the pure, static form of
+     * {@link #gameDay()}, which delegates here.
+     *
+     * <p>Added by task 20 so the financial ledgers can bucket a recorded
+     * {@code IncomeEvent}/{@code ExpenseEvent} by day from its own {@code simTime} stamp
+     * instead of carrying a separate day field. Deriving it means an event's day can never
+     * disagree with its timestamp, and a day aggregation stays reproducible from history
+     * alone — no clock instance, no read of live mutable state.
+     */
+    public static int gameDayOf(long simMillis) {
+        return (int) (simMillis / MILLIS_PER_DAY) + 1;
     }
 
     /**
@@ -121,5 +166,21 @@ public final class SimClock {
 
     public long realSecondsPerGameDay() {
         return realSecondsPerGameDay;
+    }
+
+    /**
+     * Changes ONLY the sim↔wall mapping rate, live, without touching accumulated sim time or
+     * the pause/day state (task 21's Settings day-length slider). Distinct from {@link #restore}:
+     * that adopts a whole persisted clock (and pauses); this is the "speed dial" — the already
+     * accumulated {@code simMillis} is left exactly where it is, so game time is continuous and
+     * only FUTURE {@link #advance(long)} deltas map at the new rate. Thread-safe: the field is
+     * {@code volatile} and every reader ({@code WallClockAdvancer}, the countdown) re-reads it.
+     */
+    public void setRealSecondsPerGameDay(long realSecondsPerGameDay) {
+        if (realSecondsPerGameDay <= 0) {
+            throw new IllegalArgumentException(
+                    "realSecondsPerGameDay must be > 0, got " + realSecondsPerGameDay);
+        }
+        this.realSecondsPerGameDay = realSecondsPerGameDay;
     }
 }

@@ -16,9 +16,12 @@ import java.util.regex.Pattern;
  *
  * <p>Three checks, ALL must pass:
  * <ol>
- *   <li>Required-number presence — every figure in {@link Recommendation#allFigures()} that the
- *       template would have shown must appear in the output (v1.1: same numeric normalisation
- *       as check 3, digit-bounded so required "2000" is not satisfied by "12000").</li>
+ *   <li>Required-number presence — every figure in {@link Recommendation#requiredFigures()} must
+ *       appear in the output (v1.1: same numeric normalisation as check 3, digit-bounded so
+ *       required "2000" is not satisfied by "12000"). <b>2026-07-27 (task 26):</b> this used to
+ *       require the whole of {@link Recommendation#allFigures()}; see
+ *       {@link Recommendation#requiredFigures()} for the measurement that narrowed it to the
+ *       decision figures. Check 3 below is unchanged and still spans every figure.</li>
  *   <li>Proper-noun negative control — every capitalised, non-sentence-initial word in the
  *       output that is not a common English/domain word must be in the gazetteer
  *       ({@link Recommendation#namedEntities()}).</li>
@@ -70,10 +73,13 @@ public final class HallucinationValidator {
         if (llmOutput == null || llmOutput.isBlank()) {
             return false;
         }
+        // Two different sets on purpose: the narrow one says what must be THERE (check 1), the
+        // wide one says what is ALLOWED to be there (check 3). Collapsing them back into one is
+        // the change that took this gate from 18/20 to 2/20 — see Recommendation#requiredFigures.
         Set<String> allowedFigures = rec.allFigures();
         String normalisedOutput = stripNumFormatting(llmOutput);
 
-        if (!requiredNumbersPresent(normalisedOutput, allowedFigures)) {
+        if (!requiredNumbersPresent(normalisedOutput, rec.requiredFigures())) {
             return false;
         }
         Set<String> gazetteer = buildGazetteer(rec.namedEntities());

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.OntologyValidatorTest" tests="43" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:52" hostname="MOJI" time="0.055">
+  <properties/>
+  <testcase name="duration 0h rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.002"/>
+  <testcase name="duration -3h rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="duration 25h rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="duration 99h rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="tanker is one of the five vessel types" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="container_vessel is one of the five vessel types" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="cargo_vessel is one of the five vessel types" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="ferry is one of the five vessel types" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.002"/>
+  <testcase name="cruise_ship is one of the five vessel types" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="freighter normalises to an ontology class and is accepted" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="merchantman normalises to an ontology class and is accepted" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="cargo ship normalises to an ontology class and is accepted" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="rejectsAFractionalDuration()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="acceptsTheFullAcceptanceCriterionFrame()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="rejectsADurationThatIsNotANumber()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="nullFrameIsRejectedRatherThanThrowing()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="rejectsAVesselTypeMasqueradingAsABerth()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="pleasure is rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="submarine is rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="berth_1 is rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="vessel is rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.002"/>
+  <testcase name="rejectsNegativeMoney()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="duration 1h accepted" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="duration 5h accepted" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="duration 12h accepted" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="duration 24h accepted" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="rejectsAMoneyElementThatIsNotADecodedPrice()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="oneBadElementRejectsTheWholeFrame()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="absentBerthIsFineBecauseTheHarbourMasterPicksOne()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="rejectsAMoneyAmountThatIsNotANumber()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="berth_1 exists in the ontology" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="berth_2 exists in the ontology" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="berth_3 exists in the ontology" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="berth_4 exists in the ontology" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="theSynonymsAreNotOntologyClassesOnTheirOwn()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="testDelegatesToValidate()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="berth_5 is rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="berth_9 is rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name="berth_0 is rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="quay_1 is rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="not_a_berth is rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <testcase name=" is rejected" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.0"/>
+  <testcase name="acceptsNonNegativeMoney()" classname="it.unige.portcommand.nlp.OntologyValidatorTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

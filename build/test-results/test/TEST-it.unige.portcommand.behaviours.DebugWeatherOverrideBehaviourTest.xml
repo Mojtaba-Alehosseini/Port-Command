@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.behaviours.DebugWeatherOverrideBehaviourTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:35" hostname="MOJI" time="0.025">
+  <properties/>
+  <testcase name="aPublishedOverrideReplacesTheSharedSnapshotVerbatim()" classname="it.unige.portcommand.behaviours.DebugWeatherOverrideBehaviourTest" time="0.021"/>
+  <testcase name="theHandlerSurvivesTheOneShotMyAgentNulling()" classname="it.unige.portcommand.behaviours.DebugWeatherOverrideBehaviourTest" time="0.003"/>
+  <system-out><![CDATA[00:12:35.801 [Test worker] [] INFO  i.u.p.b.DebugWeatherOverrideBehaviour - null: DEBUG weather override -> wind=42 vis=poor swell=5.0 state=stormy
+00:12:35.811 [Test worker] [] INFO  i.u.p.b.DebugWeatherOverrideBehaviour - null: DEBUG weather override -> wind=15 vis=good swell=0.5 state=sunny
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

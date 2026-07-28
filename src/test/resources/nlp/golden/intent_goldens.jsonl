@@ -1,0 +1,50 @@
+{"utterance":"I'd go 2600 for 3 hours at berth 1","intent":"propose_offer","entities":{"price_expression":"2600","time_expression":"3 hours","berth_id":"berth_1"}}
+{"utterance":"Offering 1750 for the full 12 hours","intent":"propose_offer","entities":{"price_expression":"1750","time_expression":"12 hours"}}
+{"utterance":"We'll put up 3200 for 10 hours at berth 4","intent":"propose_offer","entities":{"price_expression":"3200","time_expression":"10 hours","berth_id":"berth_4"}}
+{"utterance":"My opening number is 1400","intent":"propose_offer","entities":{"price_expression":"1400"}}
+{"utterance":"We propose 2900 for 6 hours","intent":"propose_offer","entities":{"price_expression":"2900","time_expression":"6 hours"}}
+{"utterance":"Could you do 2450 instead","intent":"counter_offer","entities":{"price_expression":"2450"}}
+{"utterance":"I'd counter at 1650","intent":"counter_offer","entities":{"price_expression":"1650"}}
+{"utterance":"Let's say 2750 and close it","intent":"counter_offer","entities":{"price_expression":"2750"}}
+{"utterance":"Bump it to 3100","intent":"counter_offer","entities":{"price_expression":"3100"}}
+{"utterance":"Would 1550 euros work","intent":"counter_offer","entities":{"price_expression":"1550 euros"}}
+{"utterance":"Right, we're agreed","intent":"accept_deal","entities":{}}
+{"utterance":"Go ahead and confirm it","intent":"accept_deal","entities":{}}
+{"utterance":"Yeah alright","intent":"accept_deal","entities":{}}
+{"utterance":"Perfect, let's do that","intent":"accept_deal","entities":{}}
+{"utterance":"Fine by me","intent":"accept_deal","entities":{}}
+{"utterance":"That is not acceptable to us","intent":"reject_deal","entities":{}}
+{"utterance":"We'll have to decline","intent":"reject_deal","entities":{}}
+{"utterance":"That price won't work for us","intent":"reject_deal","entities":{}}
+{"utterance":"Nowhere near enough for us","intent":"reject_deal","entities":{}}
+{"utterance":"No, not at that price","intent":"reject_deal","entities":{}}
+{"utterance":"What's the beam on Nordic Breeze","intent":"query_status","entities":{"vessel_name":"Nordic Breeze"}}
+{"utterance":"Where is tug 2 right now","intent":"query_status","entities":{"tug_name":"tug_2"}}
+{"utterance":"How much cargo is Maersk Genova carrying","intent":"query_status","entities":{"vessel_name":"Maersk Genova"}}
+{"utterance":"Any berths open at the moment","intent":"query_status","entities":{}}
+{"utterance":"When does Adriatic Pearl dock","intent":"query_status","entities":{"vessel_name":"Adriatic Pearl"}}
+{"utterance":"Keep ferries away from berth 2","intent":"set_constraint","entities":{"vessel_class":"ferry","berth_id":"berth_2"}}
+{"utterance":"No class 3 cargo tonight","intent":"set_constraint","entities":{"hazmat_code":"hazmat_class_3"}}
+{"utterance":"Close berth 1 to all traffic","intent":"set_constraint","entities":{"berth_id":"berth_1"}}
+{"utterance":"Deny entry to any cruise ship","intent":"set_constraint","entities":{"vessel_class":"cruise_ship"}}
+{"utterance":"Keep general cargo out of berth 3","intent":"set_constraint","entities":{"cargo_class":"general_cargo","berth_id":"berth_3"}}
+{"utterance":"From now on auto-accept anything over 2600","intent":"set_policy","entities":{"price_expression":"2600"}}
+{"utterance":"Default to rejecting first offers","intent":"set_policy","entities":{}}
+{"utterance":"Set a floor of 1750 euros","intent":"set_policy","entities":{"price_expression":"1750 euros"}}
+{"utterance":"Every tanker offer should get a counter","intent":"set_policy","entities":{"vessel_class":"tanker"}}
+{"utterance":"Auto-approve containerized cargo above 2400","intent":"set_policy","entities":{"cargo_class":"containerized_cargo","price_expression":"2400"}}
+{"utterance":"I have no idea how to proceed","intent":"request_help","entities":{}}
+{"utterance":"Give me the list of commands","intent":"request_help","entities":{}}
+{"utterance":"Any guidance","intent":"request_help","entities":{}}
+{"utterance":"What am I supposed to type","intent":"request_help","entities":{}}
+{"utterance":"Explain my options","intent":"request_help","entities":{}}
+{"utterance":"Forget this whole thing","intent":"cancel_action","entities":{}}
+{"utterance":"Back out of this","intent":"cancel_action","entities":{}}
+{"utterance":"Cancel that last request","intent":"cancel_action","entities":{}}
+{"utterance":"Undo the berth booking","intent":"cancel_action","entities":{}}
+{"utterance":"Let's stop here","intent":"cancel_action","entities":{}}
+{"utterance": "kjhgfdsa mnbvcxz", "intent": "out_of_scope", "entities": {}}
+{"utterance": "erm", "intent": "out_of_scope", "entities": {}}
+{"utterance": "good afternoon", "intent": "out_of_scope", "entities": {}}
+{"utterance": "recommend a good restaurant nearby", "intent": "out_of_scope", "entities": {}}
+{"utterance": "are you a robot", "intent": "out_of_scope", "entities": {}}

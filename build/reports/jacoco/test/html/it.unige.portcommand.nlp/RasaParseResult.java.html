@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RasaParseResult.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">RasaParseResult.java</span></div><h1>RasaParseResult.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Typed result of a Rasa {@code /model/parse} call (task 12, the single NLU pipeline on
+ * port 5005). {@code entities} is keyed by entity name; when Rasa reports the same entity
+ * name twice, the last one in response order wins (planning/14 Â§14.1).
+ *
+ * &lt;p&gt;The {@code entities} copy is a {@link LinkedHashMap}, NOT {@code Map.copyOf}: this map is
+ * serialised into ACL {@code content} by {@code NLPPipeline.entitiesContent}, and
+ * {@code Map.copyOf} randomises iteration order per JVM launch â€” the same Rasa reply would then
+ * become different ACL content between runs (INVARIANTS.md &quot;wire format&quot;, the {@link Frame} fix).
+ * Preserving Rasa's response order also keeps the &quot;last one wins&quot; rule above meaningful.
+ */
+public record RasaParseResult(
+        String intentName,
+        double confidence,
+        Map&lt;String, EntityHit&gt; entities,
+        List&lt;RankedIntent&gt; intentRanking) {
+
+<span class="fc" id="L25">    public RasaParseResult {</span>
+<span class="fc bfc" id="L26" title="All 2 branches covered.">        entities = entities == null ? Map.of()</span>
+<span class="fc" id="L27">                : Collections.unmodifiableMap(new LinkedHashMap&lt;&gt;(entities));</span>
+<span class="fc bfc" id="L28" title="All 2 branches covered.">        intentRanking = intentRanking == null ? List.of() : List.copyOf(intentRanking);</span>
+<span class="fc" id="L29">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

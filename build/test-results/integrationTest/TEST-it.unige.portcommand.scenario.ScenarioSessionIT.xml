@@ -1,0 +1,461 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.scenario.ScenarioSessionIT" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:29:07" hostname="MOJI" time="15.627">
+  <properties/>
+  <testcase name="scenarioBootFiresScriptOnceAndAReloadNeverReplays()" classname="it.unige.portcommand.scenario.ScenarioSessionIT" time="8.666"/>
+  <testcase name="sandboxEarnsTheContractedFeesDailyExactlyOnce()" classname="it.unige.portcommand.scenario.ScenarioSessionIT" time="6.959"/>
+  <system-out><![CDATA[00:29:09.895 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:29:09.916 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:29:10.344 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+00:29:10.355 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:29:10.360 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:29:10.408 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - customs_agent: restored clearance sequence at 1
+00:29:10.408 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - weather_agent: restored weather 8 kn / good / sunny
+00:29:10.420 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - restored 0 tracked vessel(s)
+00:29:10.430 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - terminal_general: restored 3 berth occupancy record(s)
+00:29:10.430 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - terminal_container: restored 1 berth occupancy record(s)
+00:29:10.434 [harbour_master] [harbour_master] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'tutorial' armed: 7 pending / 0 already fired
+00:29:10.437 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster respawned from save: 10 fixed agents + 0 restored vessel(s)
+00:29:10.443 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - tug_1 restored: status=IDLE fuel=1.0 job=-
+00:29:10.443 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - tug_2 restored: status=IDLE fuel=1.0 job=-
+00:29:10.444 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - tug_3 restored: status=IDLE fuel=1.0 job=-
+00:29:10.446 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - tug_4 restored: status=IDLE fuel=1.0 job=-
+00:29:10.446 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:10.446 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:10.447 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:10.446 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:10.455 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:29:10.459 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (100 ms/tick, 5 real-s per game day)
+00:29:10.460 [harbour_master] [harbour_master] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 1 advanced
+00:29:10.462 [Test worker] [] INFO  i.u.p.persistence.GameSession - scenario 'tutorial' started (seed 20260101, day length 5s)
+00:29:10.575 [harbour_master] [harbour_master] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 2 advanced
+00:29:10.592 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted C501 (cargo_vessel, contract C-501, eta sim 30528000)
+00:29:10.593 [harbour_master] [harbour_master] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 3 advanced
+00:29:10.595 [vessel_c501] [vessel_c501] INFO  i.u.p.agents.ContractedVesselAgent - vessel_c501 arrived (contracted, C-501) -> announce arrival
+00:29:10.657 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: walk-in WALKIN-S1 (cargo_vessel, beliefs pinned)
+00:29:10.658 [harbour_master] [harbour_master] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 4 advanced
+00:29:10.659 [harbour_master] [harbour_master] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'tutorial' script complete — Poisson walk-in traffic resumes
+00:29:10.659 [harbour_master] [harbour_master] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 5 advanced
+00:29:10.665 [vessel_walkin_s1] [vessel_walkin_s1] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_s1 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:10.671 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-1 (ferry) draft=5.981637253686005 length=108.04952396203984 tonnage=8573
+00:29:10.674 [vessel_walkin_1] [vessel_walkin_1] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_1 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:10.679 [vessel_c501] [vessel_c501] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_c501 announced arrival (contract C-501) -> harbour-master
+00:29:10.710 [vessel_c501] [vessel_c501] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_c501: berth GRANTED berth_1 (price 2000.0, 6h) -> transit
+00:29:10.745 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:10.746 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - C501: ACCEPT berth berth_1 (contract C-501), tugsRequired=2
+00:29:10.745 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:10.754 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:29:10.762 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> harbour_master
+00:29:10.763 [vessel_c501] [vessel_c501] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_c501 reached berth berth_1 -> docking
+00:29:10.764 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-1: opening offer forwarded (round 1, berth berth_4, price 1332.0)
+00:29:10.769 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP C501 (2 tug(s) required) -> 1 tug(s) on CNP cnp-9699194b-7c52-4f51-8d3d-35541313e513
+00:29:10.771 [terminal_general] [terminal_general] INFO  i.u.p.b.c.ProcessCargoHandlingBehaviour - INFORM handling_complete vessel=C501 berth=berth_1 -> harbour-master
+00:29:10.773 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=481.53 eta=177.55min fuel=1.0 -> harbour_master
+00:29:10.774 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:10.777 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-S1: opening offer forwarded (round 1, berth berth_2, price 1436.0)
+00:29:10.782 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:10.782 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal CONFIRM ({"crane_assigned":1,"berth_id":"berth_1"}) <- terminal_general
+00:29:10.832 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for C501 closed with 1 bid(s)
+00:29:10.839 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C501: ACCEPT -> tug_1
+00:29:10.842 [tug_1] [tug_1] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_1 ACCEPTED escort of C501 on CNP cnp-9699194b-7c52-4f51-8d3d-35541313e513 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:29:10.883 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:10.883 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:10.993 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:10.993 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:11.095 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:11.095 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:11.196 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:11.196 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:11.297 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:11.297 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:11.400 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:11.400 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:11.462 [tug_1] [tug_1] INFO  i.u.p.b.c.TransitToVesselBehaviour - tug_1 reached vessel pickup Position[x=700.0, y=200.0, headingDeg=180.0] -> escorting to berth
+00:29:11.465 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_1: walk-in withdrew (timeout)
+00:29:11.501 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:11.501 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:11.603 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:11.603 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:11.705 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:11.705 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:11.745 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-2 (cruise_ship) draft=8.585389160827951 length=295.615303115667 tonnage=102915
+00:29:11.748 [vessel_walkin_2] [vessel_walkin_2] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_2 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:11.752 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-2: every compatible berth [berth_2] is already held — falling back to berth_2; this vessel may collide with an existing one (audit A-02 residual)
+00:29:11.752 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-2: opening offer forwarded (round 1, berth berth_2, price 3692.0)
+00:29:11.775 [tug_1] [tug_1] INFO  i.u.p.b.c.EscortToBerthBehaviour - tug_1 delivered vessel to berth Position[x=400.0, y=150.0, headingDeg=0.0] -> returning to base
+00:29:11.806 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:11.806 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:11.908 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:11.908 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:11.917 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-3 (ferry) draft=4.8751164380701075 length=97.49551549220728 tonnage=8304
+00:29:11.919 [vessel_walkin_3] [vessel_walkin_3] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_3 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:11.922 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-3: opening offer forwarded (round 1, berth berth_4, price 1377.0)
+00:29:11.983 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_s1: walk-in withdrew (timeout)
+00:29:12.019 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:12.019 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:12.069 [vessel_c501] [vessel_c501] INFO  i.u.p.b.a.DockAndServiceBehaviour - vessel_c501 finished service (6h) at berth_1 -> depart
+00:29:12.121 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:12.121 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:12.176 [tug_1] [tug_1] INFO  i.u.p.b.c.ReturnToBaseBehaviour - tug_1 back at base -> idle
+00:29:12.179 [vessel_c501] [vessel_c501] INFO  i.u.p.b.auto_flow.DepartBehaviour - vessel_c501 departed -> doDelete
+00:29:12.181 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - C501: departed — tracking closed (was DEPARTING, 1 tug(s) assigned)
+00:29:12.223 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:12.223 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:12.324 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:12.324 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:12.426 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:12.426 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:12.527 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:12.527 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:12.533 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-4 (cruise_ship) draft=8.479085926374074 length=277.3650525539505 tonnage=127485
+00:29:12.535 [vessel_walkin_4] [vessel_walkin_4] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_4 arrived (walk-in, DESPERATE) -> opening proposal
+00:29:12.538 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-4: every compatible berth [berth_2] is already held — falling back to berth_2; this vessel may collide with an existing one (audit A-02 residual)
+00:29:12.538 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-4: opening offer forwarded (round 1, berth berth_2, price 4456.0)
+00:29:12.628 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:12.628 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:12.672 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_3: walk-in withdrew (timeout)
+00:29:12.729 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:12.729 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:12.745 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-5 (container_vessel) draft=12.789900812162081 length=232.84716471239523 tonnage=68107
+00:29:12.747 [vessel_walkin_5] [vessel_walkin_5] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_5 arrived (walk-in, AGGRESSIVE) -> opening proposal
+00:29:12.751 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-5: every compatible berth [berth_2] is already held — falling back to berth_2; this vessel may collide with an existing one (audit A-02 residual)
+00:29:12.752 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-5: opening offer forwarded (round 1, berth berth_2, price 2235.0)
+00:29:12.830 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:12.830 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:12.931 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:12.931 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:13.032 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:13.032 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:13.134 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:13.134 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:13.182 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_2: walk-in withdrew (timeout)
+00:29:13.235 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:13.235 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:13.337 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:13.337 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:13.375 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_5: walk-in withdrew (timeout)
+00:29:13.379 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_4: walk-in withdrew (timeout)
+00:29:13.380 [harbour_master] [harbour_master] INFO  i.u.p.h.financial.LedgerCoordinator - unengaged timeout for WALKIN-4 — daily reputation cap (-5.0) reached, no further penalty
+00:29:13.438 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:29:13.487 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - saved C:\Users\aleho\AppData\Local\Temp\junit10469746545339729687\savegame.json (schemaVersion 1, 4522 bytes)
+00:29:13.489 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:29:13.514 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-6 (container_vessel) draft=11.31080555997811 length=264.3747837138607 tonnage=61065
+00:29:13.515 [vessel_walkin_6] [vessel_walkin_6] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_6 arrived (walk-in, AGGRESSIVE) -> opening proposal
+00:29:13.520 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-6: opening offer forwarded (round 1, berth berth_2, price 2087.0)
+00:29:13.542 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-7 (cargo_vessel) draft=10.381980366102237 length=166.36835599253897 tonnage=27991
+00:29:13.542 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Users\aleho\AppData\Local\Temp\junit10469746545339729687\savegame.json (schemaVersion 1, day 1, wallet 16518.47)
+00:29:13.543 [vessel_walkin_7] [vessel_walkin_7] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_7 arrived (walk-in, AGGRESSIVE) -> opening proposal
+00:29:13.547 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-7: opening offer forwarded (round 1, berth berth_1, price 1570.0)
+00:29:13.563 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Users\aleho\AppData\Local\Temp\junit10469746545339729687\savegame.json (schemaVersion 1, day 1, wallet 16518.47)
+00:29:13.563 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> LOADING
+00:29:13.582 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:29:13.597 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:29:13.597 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:29:13.597 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:29:13.597 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - restored 0 tracked vessel(s)
+00:29:13.597 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - weather_agent: restored weather 18 kn / fair / cloudy
+00:29:13.606 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - customs_agent: restored clearance sequence at 1
+00:29:13.606 [harbour_master] [harbour_master] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'tutorial' armed: 0 pending / 7 already fired
+00:29:13.609 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - terminal_container: restored 1 berth occupancy record(s)
+00:29:13.609 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster respawned from save: 10 fixed agents + 0 restored vessel(s)
+00:29:13.610 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - terminal_general: restored 3 berth occupancy record(s)
+00:29:13.610 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:29:13.610 [Test worker] [] INFO  i.u.p.persistence.GameSession - loaded C:\Users\aleho\AppData\Local\Temp\junit10469746545339729687\savegame.json — day 1, wallet 16518.47, 0 restored vessel(s)
+00:29:13.611 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - tug_1 restored: status=IDLE fuel=0.34233058049676 job=-
+00:29:13.611 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=0.34233058049676 topSpeed=12.0kn status=IDLE
+00:29:13.612 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - tug_2 restored: status=IDLE fuel=1.0 job=-
+00:29:13.613 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:13.613 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - tug_3 restored: status=IDLE fuel=1.0 job=-
+00:29:13.613 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:13.613 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - tug_4 restored: status=IDLE fuel=1.0 job=-
+00:29:13.614 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:14.079 [harbour_master] [harbour_master] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=2000.0 expense=5681.53 wallet=11318.470000000001 reputation=45 messages=24
+00:29:14.113 [harbour_master] [harbour_master] INFO  i.u.p.persistence.SaveLoadManager - saved C:\Users\aleho\AppData\Local\Temp\junit10469746545339729687\autosave.json (schemaVersion 1, 4266 bytes)
+00:29:14.113 [harbour_master] [harbour_master] INFO  i.u.p.b.c.EndOfDayDetectBehaviour - midnight crossed -> EndOfDayEvent(gameDay=1)
+00:29:14.267 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-6 (cargo_vessel) draft=10.326383316244955 length=174.69835845818363 tonnage=33763
+00:29:14.271 [vessel_walkin_6] [vessel_walkin_6] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_6 arrived (walk-in, AGGRESSIVE) -> opening proposal
+00:29:14.280 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-6: opening offer forwarded (round 1, berth berth_1, price 1452.0)
+00:29:14.589 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-7 (cruise_ship) draft=8.410661816284948 length=298.2997712938413 tonnage=94737
+00:29:14.592 [vessel_walkin_7] [vessel_walkin_7] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_7 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:14.595 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-7: opening offer forwarded (round 1, berth berth_2, price 4196.0)
+00:29:14.715 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-8 (cargo_vessel) draft=10.278435069245633 length=143.28160615504572 tonnage=36392
+00:29:14.716 [vessel_walkin_8] [vessel_walkin_8] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_8 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:14.722 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-8: opening offer forwarded (round 1, berth berth_3, price 1577.0)
+00:29:15.473 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted C001-D2 (cargo_vessel, contract CONTRACT-1-D2, eta sim 118800000)
+00:29:15.866 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_8: walk-in withdrew (timeout)
+00:29:15.885 [vessel_c001_d2] [vessel_c001_d2] INFO  i.u.p.agents.ContractedVesselAgent - vessel_c001_d2 arrived (contracted, CONTRACT-1-D2) -> announce arrival
+00:29:15.886 [vessel_c001_d2] [vessel_c001_d2] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_c001_d2 announced arrival (contract CONTRACT-1-D2) -> harbour-master
+00:29:15.888 [vessel_c001_d2] [vessel_c001_d2] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_c001_d2: berth GRANTED berth_1 (price 5200.0, 8h) -> transit
+00:29:15.891 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - C001-D2: ACCEPT berth berth_1 (contract CONTRACT-1-D2), tugsRequired=2
+00:29:15.891 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:15.891 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:15.891 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:29:15.892 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> harbour_master
+00:29:15.893 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP C001-D2 (2 tug(s) required) -> 4 tug(s) on CNP cnp-24c699c9-099b-43cc-bb7c-6541cb33026f
+00:29:15.894 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:29:15.894 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=481.53 eta=177.55min fuel=0.34233058049676 -> harbour_master
+00:29:15.894 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal CONFIRM ({"crane_assigned":1,"berth_id":"berth_1"}) <- terminal_general
+00:29:15.894 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 PROPOSE cost=480.0 eta=175.49min fuel=1.0 -> harbour_master
+00:29:15.894 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:29:15.946 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for C001-D2 closed with 4 bid(s)
+00:29:15.946 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather WORSENED (wind 30 kn, stormy) -> INFORM to harbour-master
+00:29:15.947 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D2: ACCEPT -> tug_4
+00:29:15.948 [tug_4] [tug_4] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_4 ACCEPTED escort of C001-D2 on CNP cnp-24c699c9-099b-43cc-bb7c-6541cb33026f -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:29:15.948 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D2: ACCEPT -> tug_3
+00:29:15.948 [tug_3] [tug_3] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_3 ACCEPTED escort of C001-D2 on CNP cnp-24c699c9-099b-43cc-bb7c-6541cb33026f -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:29:15.948 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D2: REJECT -> tug_2
+00:29:15.949 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D2: REJECT -> tug_1
+00:29:15.953 [tug_3] [tug_3] INFO  i.u.p.b.c.HandleCancelBehaviour - tug_3 CANCEL from harbour_master -> abort, return to base
+00:29:15.953 [tug_4] [tug_4] INFO  i.u.p.b.c.HandleCancelBehaviour - tug_4 CANCEL from harbour_master -> abort, return to base
+00:29:15.954 [harbour_master] [harbour_master] INFO  i.u.p.b.c.HandleWeatherAlertBehaviour - C001-D2: weather HOLD (wind=30.0 swell=3.5 state=stormy) -> CANCEL 2 tug(s)
+00:29:15.963 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_6: walk-in withdrew (timeout)
+00:29:15.966 [tug_3] [tug_3] INFO  i.u.p.b.c.ReturnToBaseBehaviour - tug_3 back at base -> idle
+00:29:15.967 [vessel_c001_d2] [vessel_c001_d2] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_c001_d2 reached berth berth_1 -> docking
+00:29:15.970 [tug_4] [tug_4] INFO  i.u.p.b.c.ReturnToBaseBehaviour - tug_4 back at base -> idle
+00:29:16.063 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_7: walk-in withdrew (timeout)
+00:29:16.160 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather CLEARED (wind 25 kn, cloudy) -> INFORM to harbour-master
+00:29:16.162 [harbour_master] [harbour_master] INFO  i.u.p.b.c.HandleWeatherAlertBehaviour - C001-D2: weather CLEAR (wind=25.0 state=cloudy) -> fresh tug CNP (2 tug(s)) toward berth_1
+00:29:16.163 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP C001-D2 (2 tug(s) required) -> 4 tug(s) on CNP cnp-77bfebc6-424a-4cc3-82ff-c8033cd7964b
+00:29:16.163 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:29:16.163 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:29:16.163 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 PROPOSE cost=480.0 eta=175.49min fuel=1.0 -> harbour_master
+00:29:16.163 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=481.53 eta=177.55min fuel=0.34233058049676 -> harbour_master
+00:29:16.214 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for C001-D2 closed with 4 bid(s)
+00:29:16.216 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D2: REJECT -> tug_2
+00:29:16.217 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D2: ACCEPT -> tug_4
+00:29:16.217 [tug_4] [tug_4] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_4 ACCEPTED escort of C001-D2 on CNP cnp-77bfebc6-424a-4cc3-82ff-c8033cd7964b -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:29:16.218 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D2: ACCEPT -> tug_3
+00:29:16.218 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D2: REJECT -> tug_1
+00:29:16.218 [tug_3] [tug_3] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_3 ACCEPTED escort of C001-D2 on CNP cnp-77bfebc6-424a-4cc3-82ff-c8033cd7964b -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:29:16.600 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:29:16.648 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:29:16.648 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:29:16.648 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:29:16.670 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:16.670 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+00:29:16.672 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:29:16.672 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:16.672 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:29:16.672 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (100 ms/tick, 5 real-s per game day)
+00:29:16.673 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:16.673 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:16.715 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-1 (container_vessel) draft=13.623214022506025 length=210.9953721851103 tonnage=77208
+00:29:16.717 [vessel_walkin_1] [vessel_walkin_1] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_1 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:16.720 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-1: opening offer forwarded (round 1, berth berth_2, price 2206.0)
+00:29:16.837 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-2 (tanker) draft=12.281240255012664 length=200.73596849921736 tonnage=56153
+00:29:16.838 [vessel_walkin_2] [vessel_walkin_2] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_2 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:16.842 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-2: opening offer forwarded (round 1, berth berth_1, price 4868.0)
+00:29:17.050 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-3 (container_vessel) draft=12.393312490371228 length=212.86046840364605 tonnage=76545
+00:29:17.052 [vessel_walkin_3] [vessel_walkin_3] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_3 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:17.054 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-3: every compatible berth [berth_2] is already held — falling back to berth_2; this vessel may collide with an existing one (audit A-02 residual)
+00:29:17.055 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-3: opening offer forwarded (round 1, berth berth_2, price 2140.0)
+00:29:17.090 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather WORSENED (wind 30 kn, stormy) -> INFORM to harbour-master
+00:29:17.304 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather CLEARED (wind 29 kn, cloudy) -> INFORM to harbour-master
+00:29:17.892 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_3: walk-in withdrew (timeout)
+00:29:18.178 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted C001-D1 (cargo_vessel, contract CONTRACT-1-D1, eta sim 32400000)
+00:29:18.278 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_2: walk-in withdrew (timeout)
+00:29:18.557 [vessel_c001_d1] [vessel_c001_d1] INFO  i.u.p.agents.ContractedVesselAgent - vessel_c001_d1 arrived (contracted, CONTRACT-1-D1) -> announce arrival
+00:29:18.559 [vessel_c001_d1] [vessel_c001_d1] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_c001_d1 announced arrival (contract CONTRACT-1-D1) -> harbour-master
+00:29:18.561 [vessel_c001_d1] [vessel_c001_d1] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_c001_d1: berth GRANTED berth_1 (price 5200.0, 8h) -> transit
+00:29:18.563 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - C001-D1: ACCEPT berth berth_1 (contract CONTRACT-1-D1), tugsRequired=2
+00:29:18.563 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:18.563 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:18.564 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:29:18.565 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> harbour_master
+00:29:18.565 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP C001-D1 (2 tug(s) required) -> 4 tug(s) on CNP cnp-6e0f7fac-6042-4f05-aa67-cc93340a4932
+00:29:18.566 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal CONFIRM ({"crane_assigned":1,"berth_id":"berth_1"}) <- terminal_general
+00:29:18.566 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 PROPOSE cost=480.0 eta=175.49min fuel=1.0 -> harbour_master
+00:29:18.566 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:29:18.566 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=481.53 eta=177.55min fuel=1.0 -> harbour_master
+00:29:18.566 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:29:18.577 [vessel_c001_d1] [vessel_c001_d1] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_c001_d1 reached berth berth_1 -> docking
+00:29:18.617 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for C001-D1 closed with 4 bid(s)
+00:29:18.618 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D1: REJECT -> tug_1
+00:29:18.618 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D1: ACCEPT -> tug_3
+00:29:18.619 [tug_3] [tug_3] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_3 ACCEPTED escort of C001-D1 on CNP cnp-6e0f7fac-6042-4f05-aa67-cc93340a4932 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:29:18.619 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D1: ACCEPT -> tug_4
+00:29:18.619 [tug_4] [tug_4] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_4 ACCEPTED escort of C001-D1 on CNP cnp-6e0f7fac-6042-4f05-aa67-cc93340a4932 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:29:18.619 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D1: REJECT -> tug_2
+00:29:18.838 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-4 (ferry) draft=4.297001867678289 length=87.66480223808774 tonnage=7761
+00:29:18.840 [vessel_walkin_4] [vessel_walkin_4] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_4 arrived (walk-in, DESPERATE) -> opening proposal
+00:29:18.843 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-4: opening offer forwarded (round 1, berth berth_4, price 1579.0)
+00:29:19.000 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-5 (tanker) draft=14.83071386938961 length=197.39399861081745 tonnage=83512
+00:29:19.003 [vessel_walkin_5] [vessel_walkin_5] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_5 arrived (walk-in, AGGRESSIVE) -> opening proposal
+00:29:19.005 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-5: every compatible berth [berth_1] is already held — falling back to berth_1; this vessel may collide with an existing one (audit A-02 residual)
+00:29:19.005 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-5: opening offer forwarded (round 1, berth berth_1, price 4999.0)
+00:29:19.277 [tug_3] [tug_3] INFO  i.u.p.b.c.TransitToVesselBehaviour - tug_3 reached vessel pickup Position[x=700.0, y=200.0, headingDeg=180.0] -> escorting to berth
+00:29:19.283 [tug_4] [tug_4] INFO  i.u.p.b.c.TransitToVesselBehaviour - tug_4 reached vessel pickup Position[x=700.0, y=200.0, headingDeg=180.0] -> escorting to berth
+00:29:19.473 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted F001-D1 (ferry, contract CONTRACT-2-D1, eta sim 54000000)
+00:29:19.477 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_4: walk-in withdrew (timeout)
+00:29:19.578 [tug_4] [tug_4] INFO  i.u.p.b.c.EscortToBerthBehaviour - tug_4 delivered vessel to berth Position[x=400.0, y=150.0, headingDeg=0.0] -> returning to base
+00:29:19.582 [tug_3] [tug_3] INFO  i.u.p.b.c.EscortToBerthBehaviour - tug_3 delivered vessel to berth Position[x=400.0, y=150.0, headingDeg=0.0] -> returning to base
+00:29:19.598 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-6 (cruise_ship) draft=8.785544725357893 length=262.1027575338349 tonnage=128451
+00:29:19.599 [vessel_walkin_6] [vessel_walkin_6] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_6 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:19.602 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-6: every compatible berth [berth_2] is already held — falling back to berth_2; this vessel may collide with an existing one (audit A-02 residual)
+00:29:19.602 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-6: opening offer forwarded (round 1, berth berth_2, price 3628.0)
+00:29:19.801 [vessel_f001_d1] [vessel_f001_d1] INFO  i.u.p.agents.ContractedVesselAgent - vessel_f001_d1 arrived (contracted, CONTRACT-2-D1) -> announce arrival
+00:29:19.802 [vessel_f001_d1] [vessel_f001_d1] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_f001_d1 announced arrival (contract CONTRACT-2-D1) -> harbour-master
+00:29:19.804 [vessel_f001_d1] [vessel_f001_d1] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_f001_d1: berth GRANTED berth_4 (price 1800.0, 4h) -> transit
+00:29:19.806 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - F001-D1: ACCEPT berth berth_4 (contract CONTRACT-2-D1), tugsRequired=0
+00:29:19.806 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:19.806 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:19.807 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:29:19.807 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_4 crane=2 -> harbour_master
+00:29:19.809 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal CONFIRM ({"crane_assigned":2,"berth_id":"berth_4"}) <- terminal_general
+00:29:19.877 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_5: walk-in withdrew (timeout)
+00:29:19.883 [vessel_f001_d1] [vessel_f001_d1] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_f001_d1 reached berth berth_4 -> docking
+00:29:19.893 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-7 (cruise_ship) draft=8.045176812041746 length=288.208589038532 tonnage=138762
+00:29:19.894 [vessel_walkin_7] [vessel_walkin_7] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_7 arrived (walk-in, DESPERATE) -> opening proposal
+00:29:19.899 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-7: every compatible berth [berth_2] is already held — falling back to berth_2; this vessel may collide with an existing one (audit A-02 residual)
+00:29:19.899 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-7: opening offer forwarded (round 1, berth berth_2, price 4347.0)
+00:29:19.990 [tug_4] [tug_4] INFO  i.u.p.b.c.ReturnToBaseBehaviour - tug_4 back at base -> idle
+00:29:19.994 [tug_3] [tug_3] INFO  i.u.p.b.c.ReturnToBaseBehaviour - tug_3 back at base -> idle
+00:29:20.278 [vessel_c001_d1] [vessel_c001_d1] INFO  i.u.p.b.a.DockAndServiceBehaviour - vessel_c001_d1 finished service (8h) at berth_1 -> depart
+00:29:20.279 [terminal_general] [terminal_general] INFO  i.u.p.b.c.ProcessCargoHandlingBehaviour - INFORM handling_complete vessel=C001-D1 berth=berth_1 -> harbour-master
+00:29:20.381 [vessel_c001_d1] [vessel_c001_d1] INFO  i.u.p.b.auto_flow.DepartBehaviour - vessel_c001_d1 departed -> doDelete
+00:29:20.381 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - C001-D1: departed — tracking closed (was DEPARTING, 2 tug(s) assigned)
+00:29:20.683 [terminal_general] [terminal_general] INFO  i.u.p.b.c.ProcessCargoHandlingBehaviour - INFORM handling_complete vessel=F001-D1 berth=berth_4 -> harbour-master
+00:29:20.774 [vessel_f001_d1] [vessel_f001_d1] INFO  i.u.p.b.a.DockAndServiceBehaviour - vessel_f001_d1 finished service (4h) at berth_4 -> depart
+00:29:20.782 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_6: walk-in withdrew (timeout)
+00:29:20.856 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-8 (cargo_vessel) draft=10.246203740404825 length=141.20133888831364 tonnage=48373
+00:29:20.857 [vessel_walkin_8] [vessel_walkin_8] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_8 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:20.861 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-8: opening offer forwarded (round 1, berth berth_1, price 1649.0)
+00:29:20.875 [vessel_f001_d1] [vessel_f001_d1] INFO  i.u.p.b.auto_flow.DepartBehaviour - vessel_f001_d1 departed -> doDelete
+00:29:20.875 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - F001-D1: departed — tracking closed (was DEPARTING, 0 tug(s) assigned)
+00:29:20.982 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_7: walk-in withdrew (timeout)
+00:29:20.982 [harbour_master] [harbour_master] INFO  i.u.p.h.financial.LedgerCoordinator - unengaged timeout for WALKIN-7 — daily reputation cap (-5.0) reached, no further penalty
+00:29:21.091 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-9 (cargo_vessel) draft=10.400679085613447 length=128.36822657850962 tonnage=35638
+00:29:21.092 [vessel_walkin_9] [vessel_walkin_9] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_9 arrived (walk-in, DESPERATE) -> opening proposal
+00:29:21.095 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-9: opening offer forwarded (round 1, berth berth_3, price 1761.0)
+00:29:21.675 [harbour_master] [harbour_master] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=7500.0 expense=6160.38 wallet=51339.62 reputation=65 messages=44
+00:29:21.675 [harbour_master] [harbour_master] INFO  i.u.p.persistence.GameStateBuilder - autosave: dropping WALKIN-1 (stage NEGOTIATING) from the snapshot
+00:29:21.675 [harbour_master] [harbour_master] INFO  i.u.p.persistence.GameStateBuilder - autosave: dropping WALKIN-8 (stage NEGOTIATING) from the snapshot
+00:29:21.675 [harbour_master] [harbour_master] INFO  i.u.p.persistence.GameStateBuilder - autosave: dropping WALKIN-9 (stage NEGOTIATING) from the snapshot
+00:29:21.706 [harbour_master] [harbour_master] INFO  i.u.p.persistence.SaveLoadManager - saved C:\Users\aleho\AppData\Local\Temp\junit16578990649587754303\autosave.json (schemaVersion 1, 4205 bytes)
+00:29:21.706 [harbour_master] [harbour_master] INFO  i.u.p.b.c.EndOfDayDetectBehaviour - midnight crossed -> EndOfDayEvent(gameDay=1)
+00:29:21.719 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather WORSENED (wind 30 kn, stormy) -> INFORM to harbour-master
+00:29:21.937 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather WORSENED (wind 36 kn, stormy) -> INFORM to harbour-master
+00:29:22.155 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather CLEARED (wind 30 kn, cloudy) -> INFORM to harbour-master
+00:29:22.315 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather CLEARED (wind 24 kn, cloudy) -> INFORM to harbour-master
+00:29:22.380 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_8: walk-in withdrew (timeout)
+00:29:22.581 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - vessel_walkin_9: walk-in withdrew (timeout)
+00:29:22.977 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-10 (container_vessel) draft=11.078939336980337 length=294.17762411216415 tonnage=52957
+00:29:22.979 [vessel_walkin_10] [vessel_walkin_10] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_10 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:22.981 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-10: every compatible berth [berth_2] is already held — falling back to berth_2; this vessel may collide with an existing one (audit A-02 residual)
+00:29:22.981 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-10: opening offer forwarded (round 1, berth berth_2, price 2460.0)
+00:29:23.173 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted C001-D2 (cargo_vessel, contract CONTRACT-1-D2, eta sim 118800000)
+00:29:23.414 [harbour_master] [harbour_master] INFO  i.u.p.b.c.PoissonSpawnBehaviour - Poisson spawn: WALKIN-11 (ferry) draft=4.51892001593967 length=131.68287494636536 tonnage=6968
+00:29:23.416 [vessel_walkin_11] [vessel_walkin_11] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_11 arrived (walk-in, AGGRESSIVE) -> opening proposal
+00:29:23.418 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-11: opening offer forwarded (round 1, berth berth_4, price 1299.0)
+00:29:23.551 [vessel_c001_d2] [vessel_c001_d2] INFO  i.u.p.agents.ContractedVesselAgent - vessel_c001_d2 arrived (contracted, CONTRACT-1-D2) -> announce arrival
+00:29:23.552 [vessel_c001_d2] [vessel_c001_d2] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_c001_d2 announced arrival (contract CONTRACT-1-D2) -> harbour-master
+00:29:23.554 [vessel_c001_d2] [vessel_c001_d2] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_c001_d2: berth GRANTED berth_1 (price 5200.0, 8h) -> transit
+00:29:23.556 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - C001-D2: ACCEPT berth berth_1 (contract CONTRACT-1-D2), tugsRequired=2
+00:29:23.556 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:23.556 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:23.556 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:29:23.558 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> harbour_master
+00:29:23.559 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP C001-D2 (2 tug(s) required) -> 4 tug(s) on CNP cnp-7c011595-c2d4-4394-810c-cbf665ca1111
+00:29:23.559 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal CONFIRM ({"crane_assigned":1,"berth_id":"berth_1"}) <- terminal_general
+00:29:23.560 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=481.53 eta=177.55min fuel=1.0 -> harbour_master
+00:29:23.560 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 PROPOSE cost=480.0 eta=175.49min fuel=0.3461542414459077 -> harbour_master
+00:29:23.560 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:29:23.560 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 PROPOSE cost=480.38 eta=176.0min fuel=0.33996806925039924 -> harbour_master
+00:29:23.573 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+]]></system-out>
+  <system-err><![CDATA[Jul 28, 2026 12:29:09 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:29:09 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:29:09 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:29:09 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:29:09 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:29:09 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:29:09 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:29:09 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:29:09 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:29:09 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:29:13 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:29:13 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:29:13 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@ed1d2cf[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:29:13 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:29:13 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:29:13 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:29:13 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:29:13 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:29:13 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:29:13 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:29:13 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:29:13 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:29:16 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:29:16 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:29:16 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:29:16 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:29:16 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:29:16 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:29:16 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:29:16 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:29:16 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:29:16 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:29:16 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:29:23 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+]]></system-err>
+</testsuite>

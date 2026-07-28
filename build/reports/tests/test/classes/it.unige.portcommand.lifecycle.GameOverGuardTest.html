@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - GameOverGuardTest</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>GameOverGuardTest</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/it.unige.portcommand.lifecycle.html">it.unige.portcommand.lifecycle</a> &gt; GameOverGuardTest</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">11</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">0.089s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div id="tabs">
+<ul class="tabLinks">
+<li>
+<a href="#tab0">Tests</a>
+</li>
+<li>
+<a href="#tab1">Standard output</a>
+</li>
+</ul>
+<div id="tab0" class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">aRecoveredDayResetsTheConsecutiveStreak()</td>
+<td class="success">0.007s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">aSkippedDayRestartsTheStreak()</td>
+<td class="success">0.010s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">backToBackTriggersFireExactlyOneGameOver()</td>
+<td class="success">0.013s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">dayPastTheCapEndsTheRun()</td>
+<td class="success">0.007s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">dayThirtyItselfIsStillPlayable()</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">exactlyTheFloorIsNotBelowIt()</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">firesCleanlyFromPausedToo()</td>
+<td class="success">0.009s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">midDayDebtAloneNeverEndsTheGame()</td>
+<td class="success">0.004s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">quitBeforeAnyMoneyEventReportsTheStartingFigures()</td>
+<td class="success">0.009s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">quitUsesTheLatestAbsoluteFiguresFromTheBus()</td>
+<td class="success">0.010s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">threeConsecutiveDeepDebtDaysEndTheRunExactlyOnce()</td>
+<td class="success">0.013s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div id="tab1" class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>00:12:44.687 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:12:44.687 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:12:44.687 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.687 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 1 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.687 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 2 ended at -26000.0 — below the -20000.0 bankruptcy floor (2 consecutive of 3)
+00:12:44.687 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 3 ended at -27000.0 — below the -20000.0 bankruptcy floor (3 consecutive of 3)
+00:12:44.687 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; GAME_OVER
+00:12:44.687 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.700 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (bankrupt): wallet=-27000.0 day=3 reputation=50 highScore=true
+00:12:44.701 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:12:44.701 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:12:44.701 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.701 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; GAME_OVER
+00:12:44.701 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.708 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (day_cap): wallet=12345.0 day=30 reputation=50 highScore=true
+00:12:44.715 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:12:44.715 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:12:44.715 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.717 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 1 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.717 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 2 ended at -25000.0 — below the -20000.0 bankruptcy floor (2 consecutive of 3)
+00:12:44.717 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 3 ended at -25000.0 — below the -20000.0 bankruptcy floor (3 consecutive of 3)
+00:12:44.717 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; GAME_OVER
+00:12:44.717 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.720 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (bankrupt): wallet=-25000.0 day=3 reputation=50 highScore=true
+00:12:44.726 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:12:44.726 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:12:44.726 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.732 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:12:44.732 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:12:44.733 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.734 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 1 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.734 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 3 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.734 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 4 ended at -25000.0 — below the -20000.0 bankruptcy floor (2 consecutive of 3)
+00:12:44.735 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 5 ended at -25000.0 — below the -20000.0 bankruptcy floor (3 consecutive of 3)
+00:12:44.735 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; GAME_OVER
+00:12:44.735 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (bankrupt): wallet=-25000.0 day=5 reputation=50 highScore=true
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; PAUSED
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -&gt; GAME_OVER
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.745 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (quit): wallet=50000.0 day=1 reputation=70 highScore=true
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.751 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 1 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.751 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 2 ended at -25000.0 — below the -20000.0 bankruptcy floor (2 consecutive of 3)
+00:12:44.751 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 4 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.751 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 5 ended at -25000.0 — below the -20000.0 bankruptcy floor (2 consecutive of 3)
+00:12:44.751 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 6 ended at -25000.0 — below the -20000.0 bankruptcy floor (3 consecutive of 3)
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; GAME_OVER
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (bankrupt): wallet=-25000.0 day=6 reputation=50 highScore=true
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.760 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; GAME_OVER
+00:12:44.760 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.764 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (quit): wallet=12345.0 day=2 reputation=70 highScore=true
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; GAME_OVER
+00:12:44.778 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.783 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (quit): wallet=50000.0 day=1 reputation=70 highScore=true
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="http://www.gradle.org">Gradle 8.10.2</a> at Jul 28, 2026, 12:12:59 AM</p>
+</div>
+</div>
+</body>
+</html>

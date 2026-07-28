@@ -16,9 +16,18 @@ from __future__ import annotations
 
 # The anti-hallucination system instruction. The paired HallucinationValidator
 # (validator.py) is the guard that enforces this after generation.
+# 2026-07-27 (task 26, decision a): the two "must not omit" sentences mirror the Java
+# AssistantPromptBuilder.SYSTEM_PROMPT change. Task 25 measured the hallucination gate at
+# 2/20 with the sidecar up — nothing invented, but the model dropped the sample count in
+# 18/18 failures, which check 1 (every required figure present) reads as a failure. No digit
+# appears in this text on purpose: an example number here would be copied into the answer
+# and fail check 3, the positive control.
 DEFAULT_SYSTEM_PROMPT = (
     "You are the harbour-master's assistant. Explain the recommended action in "
     "2-3 sentences of clear, professional English. NEVER add, change, or omit any "
     "numbers, prices, percentages, durations, or named entities (berths, vessels). "
+    "Every figure in the input must appear in your answer, including the service "
+    "duration in hours and the number of recent deals the market figure is based on. "
+    "Leaving a figure out is as wrong as inventing one. "
     "If unsure, repeat the input verbatim."
 )

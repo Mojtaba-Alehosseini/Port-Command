@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Recommendation.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.assistant</a> &gt; <span class="el_source">Recommendation.java</span></div><h1>Recommendation.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.assistant;
+
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
+import it.unige.portcommand.artifacts.MarketStats;
+import it.unige.portcommand.harbourmaster.financial.IncomeRules;
+
+/**
+ * The chosen action from {@link RecommendationAlgorithm#run}, plus everything
+ * {@link AssistantPromptBuilder} and {@link HallucinationValidator} need to build and check the
+ * natural-language explanation: the source figures ({@link #allFigures()}, the positive
+ * control) and the source proper nouns ({@link #namedEntities()}, the gazetteer for the
+ * negative control).
+ *
+ * @param action       {@link RecommendationCandidate#ACCEPT}, {@link RecommendationCandidate#COUNTER},
+ *                     or {@link RecommendationCandidate#REJECT_SILENT}
+ * @param price        the recommended price (0.0 for {@code reject_silent})
+ * @param pAccept      acceptance probability in [0, 1] (1.0 for the deterministic {@code accept} case)
+ * @param ev           expected value of the chosen action
+ * @param prologTrace  Prolog rules actually cited (e.g. {@code &quot;R7&quot;} for the compatibility check);
+ *                     Java-computed figures (fee range, marginal cost) are never cited as {@code Rn}
+ * @param marketStats  the market stats the algorithm scored against (real query or the low-confidence
+ *                     synthesised fallback)
+ * @param vesselType   the vessel type under negotiation
+ * @param berthId      the berth under negotiation
+ * @param durationHours the negotiated service duration
+ * @param prologStatus {@code &quot;compatible&quot;} or {@code &quot;incompatible&quot;} â€” the berth/vessel Prolog verdict
+ * @param fallbackBand the static Â§7.5 fee band the algorithm actually scored against when the
+ *                     market query was low-confidence (&amp;lt; 10 samples), else {@code null}. Carried
+ *                     rather than re-derived so {@link AssistantPromptBuilder} can NAME the band it
+ *                     used instead of printing the zeroed {@code marketStats} â€” the task-24
+ *                     visual-checkpoint finding filed in planning/10 (&quot;Market average â‚¬0 (Â±â‚¬0, 0
+ *                     recent deals)&quot; on the first Hint of a fresh run). Passing it through is what
+ *                     makes the surfaced text and the scoring band structurally the same number.
+ */
+public record Recommendation(
+        String action,
+        double price,
+        double pAccept,
+        double ev,
+        List&lt;String&gt; prologTrace,
+        MarketStats marketStats,
+        String vesselType,
+        String berthId,
+        int durationHours,
+        String prologStatus,
+        IncomeRules.PriceRange fallbackBand) {
+
+<span class="fc" id="L52">    public Recommendation {</span>
+<span class="fc" id="L53">        prologTrace = List.copyOf(prologTrace);</span>
+<span class="fc" id="L54">    }</span>
+
+    /** True when the recommendation was scored against the static Â§7.5 band rather than live
+     * market history â€” i.e. when the explanation must say so instead of quoting a â‚¬0 average. */
+    public boolean usesFallbackBand() {
+<span class="fc bfc" id="L59" title="All 2 branches covered.">        return fallbackBand != null;</span>
+    }
+
+    /** Proper nouns legitimately present in the recommendation trace â€” the negative-control gazetteer. */
+    public Set&lt;String&gt; namedEntities() {
+<span class="fc" id="L64">        return Set.of(berthId);</span>
+    }
+
+    /**
+     * The figures a paraphrase MUST reproduce â€” the decision itself: the price, the acceptance
+     * probability, and the expected value. Check 1 of {@link HallucinationValidator}.
+     *
+     * &lt;p&gt;&lt;b&gt;2026-07-27 (task 26, decision a).&lt;/b&gt; Check 1 used to require the whole of
+     * {@link #allFigures()}. Measured against the real sidecar (Phi-4-mini, ONNX-INT4), that gate
+     * scored 2/20; after task 26 named the dropped figures in the system prompt it scored 15/20,
+     * and the residual failures were all the same shape â€” the model paraphrases the least salient
+     * supporting figure into words instead of digits (&quot;the lack of recent deals&quot; for a sample count
+     * of 3, or a market average quoted without its spread). Those answers are faithful; they are
+     * not hallucinations. Requiring a small model to echo eight figures verbatim measures
+     * instruction-following, not truthfulness, and failing on it pins the Assistant to its template
+     * for no safety gain.
+     *
+     * &lt;p&gt;What is NOT relaxed: {@link #allFigures()} stays the positive control, so a number that
+     * is neither in this set nor anywhere else in the recommendation still fails check 3. Two of
+     * the twenty traces still fail exactly there, and correctly: asked for a 0% acceptance
+     * probability, the model writes &quot;100% likelihood of rejection&quot;, and 100 is a number the
+     * recommendation never contained.
+     *
+     * &lt;p&gt;&lt;b&gt;The precise cost, stated because an adversarial review found the earlier wording
+     * (&quot;may never alter it&quot;) too strong.&lt;/b&gt; A supporting figure may now be omitted, OR replaced
+     * by another figure &lt;i&gt;of the same recommendation&lt;/i&gt;: &quot;based on 500 recent deals&quot; passes
+     * for a trace whose sample count is 12 but whose stddev is 500, because check 1 no longer
+     * demands the 12 and check 3 admits the 500. It may still never be replaced by a number the
+     * recommendation does not contain, which is the case that matters â€” an invented or
+     * arbitrarily wrong figure. Pinned by
+     * {@code HallucinationValidatorTest.outputSwappingASupportingFigureForAnotherOfTheSameTraceIsAcceptedNow}.
+     */
+    public Set&lt;String&gt; requiredFigures() {
+<span class="fc" id="L97">        Set&lt;String&gt; figures = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc" id="L98">        figures.add(fmt(price));</span>
+<span class="fc" id="L99">        figures.add(fmt(pAccept * 100.0));</span>
+<span class="fc" id="L100">        figures.add(fmt(ev));</span>
+<span class="fc" id="L101">        return figures;</span>
+    }
+
+    /**
+     * Every numeric figure that may legitimately appear in the LLM's paraphrase, formatted
+     * exactly as {@link AssistantPromptBuilder} renders them ({@code &quot;%.0f&quot;}, {@link Locale#ROOT})
+     * so {@link HallucinationValidator}'s normalised-string comparison lines up. This is the
+     * POSITIVE CONTROL (check 3): a number outside this set was invented or altered. A superset
+     * of {@link #requiredFigures()}.
+     */
+    public Set&lt;String&gt; allFigures() {
+<span class="fc" id="L112">        Set&lt;String&gt; figures = new LinkedHashSet&lt;&gt;();</span>
+        // Exactly the figures the prompt/template renders, and no others: this set is BOTH the
+        // required-number list (check 1: each must appear) and the positive control (check 3: no
+        // other number may appear). Emitting mean/stddev on the fallback path â€” where the text
+        // deliberately does not print them â€” would make every low-confidence explanation fail
+        // check 1 and silently degrade the Assistant to its template.
+<span class="fc bfc" id="L118" title="All 2 branches covered.">        if (usesFallbackBand()) {</span>
+<span class="fc" id="L119">            figures.add(fmt(fallbackBand.lo()));</span>
+<span class="fc" id="L120">            figures.add(fmt(fallbackBand.hi()));</span>
+        } else {
+<span class="fc" id="L122">            figures.add(fmt(marketStats.mean()));</span>
+<span class="fc" id="L123">            figures.add(fmt(marketStats.stddev()));</span>
+        }
+<span class="fc" id="L125">        figures.add(String.valueOf(marketStats.sampleCount()));</span>
+<span class="fc" id="L126">        figures.add(fmt(price));</span>
+<span class="fc" id="L127">        figures.add(fmt(pAccept * 100.0));</span>
+<span class="fc" id="L128">        figures.add(fmt(ev));</span>
+<span class="fc" id="L129">        figures.add(String.valueOf(durationHours));</span>
+<span class="fc" id="L130">        String berthDigits = berthId.replaceAll(&quot;\\D+&quot;, &quot;&quot;);</span>
+<span class="pc bpc" id="L131" title="1 of 2 branches missed.">        if (!berthDigits.isEmpty()) {</span>
+<span class="fc" id="L132">            figures.add(berthDigits);</span>
+        }
+<span class="fc" id="L134">        return figures;</span>
+    }
+
+    private static String fmt(double v) {
+<span class="fc" id="L138">        return String.format(Locale.ROOT, &quot;%.0f&quot;, v);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

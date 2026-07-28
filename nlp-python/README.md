@@ -49,9 +49,19 @@ regenerate the Rasa YAML — never hand-edit the generated files:
 `train` and `test` splits (leakage), is duplicated within a split, or carries an
 unknown intent — keeping the held-out set honest. Covered by `test_csv_to_nlu.py`.
 
-Corpus size (PROJECT_DEFINITION § 6.3 v1.1): **9 intents × (50 train + 10 holdout) =
-540 utterances** (450 train, 90 holdout), ≈ 34 standard / 8 informal / 5 typo /
-3 fragment-vocative per intent in the training split.
+Corpus size (PROJECT_DEFINITION § 6.3): **9 in-domain intents × (50 train + 10 holdout)
++ `out_of_scope` (34 train + 6 holdout) = 580 utterances** (484 train, 96 holdout),
+≈ 34 standard / 8 informal / 5 typo / 3 fragment-vocative per in-domain intent in the
+training split.
+
+> **2026-07-27 (task 26, decision b): 540 → 580, 9 intents → 10.** `out_of_scope` was added
+> after the wild-set evaluation measured a **73.7 % false-bind rate**: with no "none of these"
+> class, DIET has to spread a keyboard mash or a greeting over the nine in-domain intents and
+> one of them wins with high confidence. Its 40 utterances are four kinds of genuinely
+> off-domain input — keyboard mash, hesitation/filler, social chit-chat, off-topic requests —
+> and are deliberately disjoint from `request_help` ("I don't know what to do" is a HELP
+> request) and `cancel_action` ("never mind" is a cancel). After retraining: false-bind
+> **36.8 %**, clarification recall **26.3 % → 63.2 %**. Full table in `docs/testing.md`.
 
 ## Train
 
@@ -67,7 +77,7 @@ The model is written to `rasa/models/portcmd_nlu.tar.gz` (gitignored).
 ./test_rasa.sh
 ```
 
-- **Gate (the ONLY pass/fail):** intent weighted-F1 **≥ 0.85** on the 90-utterance
+- **Gate (the ONLY pass/fail):** intent weighted-F1 **≥ 0.85** on the 96-utterance
   holdout (`rasa/results/holdout/intent_report.json`).
 - **Reported, NOT gated:** entity (NER) weighted-F1 from the same run
   (`rasa/results/holdout/DIETClassifier_report.json`).
@@ -90,8 +100,13 @@ Invoke-RestMethod -Method Post -Uri http://localhost:5005/model/parse `
 
 ## Intents & entities (PROJECT_DEFINITION § 6.3 — do not add/rename)
 
-**9 intents:** `propose_offer`, `counter_offer`, `accept_deal`, `reject_deal`,
-`query_status`, `set_constraint`, `set_policy`, `request_help`, `cancel_action`.
+**10 intents:** `propose_offer`, `counter_offer`, `accept_deal`, `reject_deal`,
+`query_status`, `set_constraint`, `set_policy`, `request_help`, `cancel_action`,
+`out_of_scope`.
+
+`out_of_scope` (task 26) and `set_policy` are **routing labels**, not moves: the Java pipeline
+maps `out_of_scope` to the clarification path and hands `set_policy`'s raw text to `PolicyParser`,
+ignoring Rasa's entities on that path. Neither becomes an ACL performative.
 
 **8 entities:** `vessel_name`, `vessel_class`, `berth_id`, `tug_name`,
 `time_expression`, `price_expression`, `cargo_class`, `hazmat_code`.
@@ -284,13 +299,13 @@ nlp-python/
 │   └── tests/                # mocked pytest (no weights) + smoke_real_model.py (manual)
 └── rasa/
     ├── config.yml            # DIET pipeline (100 epochs, char_wb 1-4)
-    ├── domain.yml            # 9 intents / 8 entities
+    ├── domain.yml            # 10 intents / 8 entities
     ├── endpoints.yml credentials.yml   # empty (HTTP API only)
     ├── data/
-    │   ├── nlu_authoring.csv # SOURCE OF TRUTH (540 rows)
-    │   ├── nlu.yml           # generated (450 train)
+    │   ├── nlu_authoring.csv # SOURCE OF TRUTH (580 rows)
+    │   ├── nlu.yml           # generated (484 train)
     │   ├── ontology_vocab.yml# entity vocabulary (task 02)
     │   ├── rules.yml stories.yml
-    ├── tests/test_holdout.yml# generated (90 holdout — the F1 gate)
+    ├── tests/test_holdout.yml# generated (96 holdout — the F1 gate)
     └── models/               # portcmd_nlu.tar.gz (gitignored)
 ```

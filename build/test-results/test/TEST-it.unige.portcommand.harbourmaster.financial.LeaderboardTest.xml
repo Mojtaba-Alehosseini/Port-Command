@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:43" hostname="MOJI" time="0.336">
+  <properties/>
+  <testcase name="aCandidateTyingTheWorstEntryExactlyReportsThatItMissed()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.078"/>
+  <testcase name="keepsOnlyTheTopFiveAndDropsTheLoser()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.017"/>
+  <testcase name="aCandidateTruncatedAwayReportsThatItMissed()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.019"/>
+  <testcase name="recordingWritesTheFileAndCreatesItsParentDirectory()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.007"/>
+  <testcase name="tiesOnWalletAreBrokenByTheEarlierDay()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.011"/>
+  <testcase name="ranksByWalletDescending()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.013"/>
+  <testcase name="aNewBestDisplacesTheWorstEntry()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.017"/>
+  <testcase name="orderingIsStableAcrossAReload()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.036"/>
+  <testcase name="aCorruptFileLoadsAsAnEmptyBoardRatherThanThrowing()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.031"/>
+  <testcase name="usesSnakeCaseWireKeys()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.023"/>
+  <testcase name="anOversizedFileIsTruncatedToTheTopFiveOnLoad()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.043"/>
+  <testcase name="anAbsentFileLoadsAsAnEmptyBoard()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.002"/>
+  <testcase name="roundTripsThroughTheFile()" classname="it.unige.portcommand.harbourmaster.financial.LeaderboardTest" time="0.026"/>
+  <system-out><![CDATA[00:12:44.016 [Test worker] [] WARN  i.u.p.h.financial.Leaderboard - could not read leaderboard C:\Users\aleho\AppData\Local\Temp\junit1188379027367702853\save\scores.json (com.fasterxml.jackson.databind.exc.MismatchedInputException: Cannot deserialize value of type `java.util.ArrayList<it.unige.portcommand.harbourmaster.financial.ScoreRecord>` from Object value (token `JsonToken.START_OBJECT`)
+ at [Source: REDACTED (`StreamReadFeature.INCLUDE_SOURCE_IN_LOCATION` disabled); line: 1, column: 1]) — starting from an empty board
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

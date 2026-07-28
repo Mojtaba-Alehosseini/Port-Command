@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AutosaveCoordinator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.persistence</a> &gt; <span class="el_source">AutosaveCoordinator.java</span></div><h1>AutosaveCoordinator.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.persistence;
+
+import java.io.IOException;
+import java.time.Instant;
+import java.util.function.Supplier;
+
+import it.unige.portcommand.lifecycle.events.AutosaveRequestedEvent;
+import it.unige.portcommand.persistence.events.GameSavedEvent;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * THE consumer of task 24's {@link AutosaveRequestedEvent} (planning/22 ownership note:
+ * the coordinator publishes it once per settled day and this class â€” nothing else â€”
+ * subscribes). CALLER_THREAD is load-bearing twice over: the event arrives on the
+ * HarbourMaster thread inside the EOD settlement chain, which is exactly where
+ * {@link GameStateBuilder#build} must run, and it means the autosave file is complete
+ * before {@code DayRolloverEvent} (and the day-cap game-over check) fires.
+ *
+ * &lt;p&gt;Deduped by day ({@code lastAutoSavedDay}) as defence in depth â€” the coordinator's
+ * own EOD idempotency already guarantees one event per day. {@link #resetAfterLoad()}
+ * clears the guard so loading an EARLIER day's save does not suppress that day's
+ * re-settlement autosave.
+ *
+ * &lt;p&gt;Session-scoped like {@code GameOverGuard}: constructed once by {@code GameSession},
+ * survives save/load teardown-rebuild (the {@link AgentDirectory} it snapshots through
+ * always reflects the live world). A failed write is logged and the game continues â€” an
+ * autosave must never take down a running game.
+ */
+public final class AutosaveCoordinator {
+
+<span class="fc" id="L35">    private static final Logger log = LoggerFactory.getLogger(AutosaveCoordinator.class);</span>
+
+    private final SaveLoadManager manager;
+    private final EventBus eventBus;
+    private final Supplier&lt;GameStateBuilder.Sources&gt; sources;
+    private final Subscription&lt;AutosaveRequestedEvent&gt; subscription;
+    private volatile int lastAutoSavedDay;
+
+    public AutosaveCoordinator(EventBus eventBus, SaveLoadManager manager,
+<span class="fc" id="L44">                               Supplier&lt;GameStateBuilder.Sources&gt; sources) {</span>
+<span class="fc" id="L45">        this.eventBus = eventBus;</span>
+<span class="fc" id="L46">        this.manager = manager;</span>
+<span class="fc" id="L47">        this.sources = sources;</span>
+<span class="fc" id="L48">        this.subscription = eventBus.subscribe(AutosaveRequestedEvent.class, this::onAutosaveRequested,</span>
+                DeliveryMode.CALLER_THREAD);
+<span class="fc" id="L50">    }</span>
+
+    /** Public so tests drive it directly (the task-10 subscribe-once precedent). */
+    public void onAutosaveRequested(AutosaveRequestedEvent event) {
+<span class="pc bpc" id="L54" title="1 of 2 branches missed.">        if (event.day() &lt;= lastAutoSavedDay) {</span>
+<span class="nc" id="L55">            log.debug(&quot;autosave for day {} already written â€” ignoring duplicate&quot;, event.day());</span>
+<span class="nc" id="L56">            return;</span>
+        }
+<span class="fc" id="L58">        lastAutoSavedDay = event.day();</span>
+        try {
+<span class="fc" id="L60">            GameState state = GameStateBuilder.build(sources.get(), Instant.now().toString(), true);</span>
+<span class="fc" id="L61">            manager.save(manager.autosavePath(), state);</span>
+<span class="fc" id="L62">            eventBus.publish(new GameSavedEvent(manager.autosavePath().toString(),</span>
+<span class="fc" id="L63">                    sizeOf(manager.autosavePath()), true, event.day()));</span>
+<span class="nc" id="L64">        } catch (SaveNotAllowedException e) {</span>
+<span class="nc" id="L65">            throw new IllegalStateException(&quot;autosave must drop, never refuse&quot;, e); // unreachable</span>
+<span class="nc" id="L66">        } catch (IOException | RuntimeException e) {</span>
+<span class="nc" id="L67">            log.error(&quot;autosave for day {} failed â€” game continues&quot;, event.day(), e);</span>
+<span class="fc" id="L68">        }</span>
+<span class="fc" id="L69">    }</span>
+
+    /** Clears the day guard after a load (an earlier day may legitimately settle again). */
+    public void resetAfterLoad() {
+<span class="fc" id="L73">        lastAutoSavedDay = 0;</span>
+<span class="fc" id="L74">    }</span>
+
+    /** Symmetry with the other session-scoped bus subscribers. */
+    public void close() {
+<span class="nc" id="L78">        subscription.cancel();</span>
+<span class="nc" id="L79">    }</span>
+
+    private static long sizeOf(java.nio.file.Path path) {
+        try {
+<span class="fc" id="L83">            return java.nio.file.Files.size(path);</span>
+<span class="nc" id="L84">        } catch (IOException e) {</span>
+<span class="nc" id="L85">            return -1L;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,94 +1,83 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="it.unige.portcommand.agents.WeatherAgentIT" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:43:21" hostname="MOJI" time="6.629">
+<testsuite name="it.unige.portcommand.agents.WeatherAgentIT" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:18:55" hostname="MOJI" time="23.367">
   <properties/>
-  <testcase name="scriptedStormTripsTankerThresholdToHarbourMaster()" classname="it.unige.portcommand.agents.WeatherAgentIT" time="3.609"/>
-  <testcase name="broadcastsCarryTheEnvelope()" classname="it.unige.portcommand.agents.WeatherAgentIT" time="3.019"/>
-  <system-out><![CDATA[00:43:21.785 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
-00:43:21.785 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
-00:43:21.812 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
-00:43:22.044 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
-00:43:22.044 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
-00:43:22.049 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
-00:43:22.049 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
-00:43:22.052 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent fake_hm spawned (class=SubscriberProbe)
-00:43:22.053 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent wx_sub spawned (class=SubscriberProbe)
-00:43:22.053 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
-00:43:23.097 [weather_agent] [weather_agent] INFO  i.u.p.b.c.WeatherEvolutionBehaviour - scripted weather applied at sim-min 24: wind=32 state=stormy
-00:43:23.156 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather threshold crossed (wind 32) -> high-priority INFORM to harbour-master
-00:43:24.741 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
-00:43:24.771 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
-00:43:24.771 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
-00:43:24.773 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
-00:43:24.776 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
-00:43:24.776 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent weather_agent spawned (class=WeatherAgent)
-00:43:24.777 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - Starting agent weather_agent
-00:43:24.777 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent wx_sub spawned (class=SubscriberProbe)
-00:43:24.778 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - DF registered: type='weather' name='weather_agent'
-00:43:27.771 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+  <testcase name="scriptedStormTripsTankerThresholdToHarbourMaster()" classname="it.unige.portcommand.agents.WeatherAgentIT" time="13.925"/>
+  <testcase name="broadcastsCarryTheEnvelope()" classname="it.unige.portcommand.agents.WeatherAgentIT" time="9.441"/>
+  <system-out><![CDATA[00:18:56.533 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:18:56.561 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:18:56.940 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+00:18:56.950 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:19:09.473 [weather_agent] [weather_agent] INFO  i.u.p.b.c.WeatherEvolutionBehaviour - scripted weather applied at sim-min 24: wind=32 state=stormy
+00:19:09.566 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather WORSENED (wind 32 kn, stormy) -> INFORM to harbour-master
+00:19:09.583 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:19:09.615 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:19:09.615 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:19:09.615 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:19:19.025 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
 ]]></system-out>
-  <system-err><![CDATA[Jul 15, 2026 12:43:21 AM jade.core.Runtime beginContainer
+  <system-err><![CDATA[Jul 28, 2026 12:18:56 AM jade.core.Runtime beginContainer
 INFO: ----------------------------------
     This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
     downloaded in Open Source, under LGPL restrictions,
     at http://jade.tilab.com/
 ----------------------------------------
-Jul 15, 2026 12:43:21 AM jade.imtp.leap.LEAPIMTPManager initialize
+Jul 28, 2026 12:18:56 AM jade.imtp.leap.LEAPIMTPManager initialize
 INFO: Listening for intra-platform commands on address:
-- jicp://10.205.181.230:18099
+- jicp://10.158.73.230:18099
 
-Jul 15, 2026 12:43:21 AM jade.core.BaseService init
+Jul 28, 2026 12:18:56 AM jade.core.BaseService init
 INFO: Service jade.core.management.AgentManagement initialized
-Jul 15, 2026 12:43:21 AM jade.core.BaseService init
+Jul 28, 2026 12:18:56 AM jade.core.BaseService init
 INFO: Service jade.core.messaging.Messaging initialized
-Jul 15, 2026 12:43:21 AM jade.core.BaseService init
+Jul 28, 2026 12:18:56 AM jade.core.BaseService init
 INFO: Service jade.core.resource.ResourceManagement initialized
-Jul 15, 2026 12:43:21 AM jade.core.BaseService init
+Jul 28, 2026 12:18:56 AM jade.core.BaseService init
 INFO: Service jade.core.mobility.AgentMobility initialized
-Jul 15, 2026 12:43:21 AM jade.core.BaseService init
+Jul 28, 2026 12:18:56 AM jade.core.BaseService init
 INFO: Service jade.core.event.Notification initialized
-Jul 15, 2026 12:43:21 AM jade.mtp.http.HTTPServer <init>
+Jul 28, 2026 12:18:56 AM jade.mtp.http.HTTPServer <init>
 INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
-Jul 15, 2026 12:43:21 AM jade.core.messaging.MessagingService boot
+Jul 28, 2026 12:18:56 AM jade.core.messaging.MessagingService boot
 INFO: MTP addresses:
 http://Moji:7778/acc
-Jul 15, 2026 12:43:21 AM jade.core.AgentContainerImpl joinPlatform
+Jul 28, 2026 12:18:56 AM jade.core.AgentContainerImpl joinPlatform
 INFO: --------------------------------------
-Agent container Main-Container@10.205.181.230 is ready.
+Agent container Main-Container@10.158.73.230 is ready.
 --------------------------------------------
-Jul 15, 2026 12:43:24 AM jade.core.messaging.MessageManager shutdown
+Jul 28, 2026 12:19:09 AM jade.core.messaging.MessageManager shutdown
 INFO: MessageManager shutting down ...
-Jul 15, 2026 12:43:24 AM jade.core.Runtime beginContainer
+Jul 28, 2026 12:19:09 AM jade.core.Runtime beginContainer
 INFO: ----------------------------------
     This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
     downloaded in Open Source, under LGPL restrictions,
     at http://jade.tilab.com/
 ----------------------------------------
-Jul 15, 2026 12:43:24 AM jade.imtp.leap.CommandDispatcher addICP
-WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@46d9aec8[Cannot bind server socket to localhost port 18099].
-Jul 15, 2026 12:43:24 AM jade.imtp.leap.LEAPIMTPManager initialize
+Jul 28, 2026 12:19:09 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@61c145cb[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:19:09 AM jade.imtp.leap.LEAPIMTPManager initialize
 INFO: Listening for intra-platform commands on address:
-- jicp://10.205.181.230:18099
+- jicp://10.158.73.230:18099
 
-Jul 15, 2026 12:43:24 AM jade.core.BaseService init
+Jul 28, 2026 12:19:09 AM jade.core.BaseService init
 INFO: Service jade.core.management.AgentManagement initialized
-Jul 15, 2026 12:43:24 AM jade.core.BaseService init
+Jul 28, 2026 12:19:09 AM jade.core.BaseService init
 INFO: Service jade.core.messaging.Messaging initialized
-Jul 15, 2026 12:43:24 AM jade.core.BaseService init
+Jul 28, 2026 12:19:09 AM jade.core.BaseService init
 INFO: Service jade.core.resource.ResourceManagement initialized
-Jul 15, 2026 12:43:24 AM jade.core.BaseService init
+Jul 28, 2026 12:19:09 AM jade.core.BaseService init
 INFO: Service jade.core.mobility.AgentMobility initialized
-Jul 15, 2026 12:43:24 AM jade.core.BaseService init
+Jul 28, 2026 12:19:09 AM jade.core.BaseService init
 INFO: Service jade.core.event.Notification initialized
-Jul 15, 2026 12:43:24 AM jade.mtp.http.HTTPServer <init>
+Jul 28, 2026 12:19:09 AM jade.mtp.http.HTTPServer <init>
 INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
-Jul 15, 2026 12:43:24 AM jade.core.messaging.MessagingService boot
+Jul 28, 2026 12:19:09 AM jade.core.messaging.MessagingService boot
 INFO: MTP addresses:
 http://Moji:7778/acc
-Jul 15, 2026 12:43:24 AM jade.core.AgentContainerImpl joinPlatform
+Jul 28, 2026 12:19:09 AM jade.core.AgentContainerImpl joinPlatform
 INFO: --------------------------------------
-Agent container Main-Container@10.205.181.230 is ready.
+Agent container Main-Container@10.158.73.230 is ready.
 --------------------------------------------
-Jul 15, 2026 12:43:27 AM jade.core.messaging.MessageManager shutdown
+Jul 28, 2026 12:19:19 AM jade.core.messaging.MessageManager shutdown
 INFO: MessageManager shutting down ...
 ]]></system-err>
 </testsuite>

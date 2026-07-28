@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AssistantAgent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">AssistantAgent.java</span></div><h1>AssistantAgent.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
+import it.unige.portcommand.assistant.RecommendationAlgorithm;
+import it.unige.portcommand.assistant.RecommendationCache;
+import it.unige.portcommand.behaviours.assistant.AutopilotExecuteBehaviour;
+import it.unige.portcommand.behaviours.assistant.ExplainEventBehaviour;
+import it.unige.portcommand.behaviours.assistant.PolicyParseBehaviour;
+import it.unige.portcommand.behaviours.assistant.RecommendOnDemandBehaviour;
+import it.unige.portcommand.gui.events.SettingsChangedEvent;
+import it.unige.portcommand.nlp.LLMBridge;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
+
+/**
+ * The ChatBDI-pattern assistant (one instance) â€” the project centerpiece. Full v1.1
+ * implementation (task 10): four plans, each a {@code OneShotBehaviour} that subscribes once to
+ * its {@link EventBus} event and reacts on every subsequent firing â€”
+ * {@link RecommendOnDemandBehaviour} (Hint button), {@link AutopilotExecuteBehaviour}
+ * (autopilot), {@link PolicyParseBehaviour} (policy registration), {@link ExplainEventBehaviour}
+ * (&quot;Why?&quot;). Sends no ACL messages and makes no Swing calls of its own â€” every effect is an
+ * {@link EventBus} event (planning/10's &quot;No GUI calls&quot; hard constraint).
+ *
+ * &lt;p&gt;Args: {@code [MarketHistoryArtifact, PolicyRegistryArtifact, LLMBridge, EventBus]}.
+ */
+<span class="fc" id="L30">public final class AssistantAgent extends PortCommandAgent {</span>
+
+<span class="fc" id="L32">    private final AtomicBoolean autopilotEnabled = new AtomicBoolean(false);</span>
+
+    private RecommendOnDemandBehaviour recommendPlan;
+    private AutopilotExecuteBehaviour autopilotPlan;
+    private PolicyParseBehaviour policyPlan;
+    private ExplainEventBehaviour explainPlan;
+    /** Task 21: the Settings screen's live autopilot toggle, delivered over the bus (never a
+     * direct GUIâ†’agent call â€” INVARIANTS: GUI â†” agents only through EventBus). */
+    private Subscription&lt;SettingsChangedEvent&gt; settingsSubscription;
+
+    @Override
+    protected void registerServices() {
+<span class="fc" id="L44">        registerDfService(&quot;assistant&quot;, getLocalName());</span>
+<span class="fc" id="L45">    }</span>
+
+    @Override
+    protected void onSetup() {
+<span class="fc" id="L49">        MarketHistoryArtifact marketHistory = argAt(0, MarketHistoryArtifact.class);</span>
+<span class="fc" id="L50">        PolicyRegistryArtifact policyRegistry = argAt(1, PolicyRegistryArtifact.class);</span>
+<span class="fc" id="L51">        LLMBridge llmBridge = argAt(2, LLMBridge.class);</span>
+<span class="fc" id="L52">        EventBus eventBus = argAt(3, EventBus.class);</span>
+
+<span class="fc" id="L54">        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(marketHistory);</span>
+<span class="fc" id="L55">        RecommendationCache cache = new RecommendationCache();</span>
+
+<span class="fc" id="L57">        recommendPlan = new RecommendOnDemandBehaviour(this, algorithm, llmBridge, eventBus, cache);</span>
+<span class="fc" id="L58">        autopilotPlan = new AutopilotExecuteBehaviour(this, algorithm, policyRegistry, eventBus, cache,</span>
+                autopilotEnabled);
+<span class="fc" id="L60">        policyPlan = new PolicyParseBehaviour(this, policyRegistry, eventBus);</span>
+<span class="fc" id="L61">        explainPlan = new ExplainEventBehaviour(this, cache, llmBridge, eventBus);</span>
+<span class="fc" id="L62">        addBehaviour(recommendPlan);</span>
+<span class="fc" id="L63">        addBehaviour(autopilotPlan);</span>
+<span class="fc" id="L64">        addBehaviour(policyPlan);</span>
+<span class="fc" id="L65">        addBehaviour(explainPlan);</span>
+
+        // Task 21: the Settings screen flips Channel-B autopilot live. CALLER_THREAD delivery
+        // runs the toggle synchronously on the publisher's thread (the EDT) â€” the target is a
+        // thread-safe AtomicBoolean AutopilotExecuteBehaviour re-reads, so no JADE-thread hop is
+        // needed and no Swing is touched. Subscribed here (not in a behaviour) because the handler
+        // needs no myAgent â€” sidestepping the OneShot-nulls-myAgent trap the four plans work
+        // around; cancelled in onTakeDown so an Assistant respawn (load teardown/rebuild) does not
+        // leave a dead lambda writing a garbage-collected agent's flag.
+<span class="fc" id="L74">        settingsSubscription = eventBus.subscribe(SettingsChangedEvent.class,</span>
+<span class="nc" id="L75">                e -&gt; autopilotEnabled.set(e.autopilotEnabled()), DeliveryMode.CALLER_THREAD);</span>
+<span class="fc" id="L76">    }</span>
+
+    /**
+     * Unsubscribes the four subscribe-once plans (task 22). Load-bearing, same rationale as
+     * {@code HarbourMasterAgent.onTakeDown}: the bus outlives the agent, so an Assistant
+     * respawn (save/load teardown-rebuild) would otherwise double-fire every Hint reply,
+     * autopilot action, policy registration and explanation.
+     */
+    @Override
+    protected void onTakeDown() {
+<span class="pc bpc" id="L86" title="1 of 2 branches missed.">        if (recommendPlan != null) {</span>
+<span class="fc" id="L87">            recommendPlan.cancelSubscription();</span>
+        }
+<span class="pc bpc" id="L89" title="1 of 2 branches missed.">        if (autopilotPlan != null) {</span>
+<span class="fc" id="L90">            autopilotPlan.cancelSubscription();</span>
+        }
+<span class="pc bpc" id="L92" title="1 of 2 branches missed.">        if (policyPlan != null) {</span>
+<span class="fc" id="L93">            policyPlan.cancelSubscription();</span>
+        }
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">        if (explainPlan != null) {</span>
+<span class="fc" id="L96">            explainPlan.cancelSubscription();</span>
+        }
+<span class="pc bpc" id="L98" title="1 of 2 branches missed.">        if (settingsSubscription != null) {</span>
+<span class="fc" id="L99">            settingsSubscription.cancel();</span>
+        }
+<span class="fc" id="L101">    }</span>
+
+    /**
+     * Test/ops seam: flips the autopilot toggle. Task 21's Settings screen wires a real UI
+     * control to this once it exists; autopilot defaults OFF.
+     */
+    public void setAutopilotEnabled(boolean enabled) {
+<span class="nc" id="L108">        autopilotEnabled.set(enabled);</span>
+<span class="nc" id="L109">    }</span>
+
+    private &lt;T&gt; T argAt(int index, Class&lt;T&gt; type) {
+<span class="fc" id="L112">        Object[] a = getArguments();</span>
+<span class="pc bpc" id="L113" title="3 of 6 branches missed.">        if (a == null || a.length &lt;= index || a[index] == null) {</span>
+<span class="nc" id="L114">            throw new IllegalStateException(&quot;AssistantAgent &quot; + getLocalName() + &quot; requires &quot;</span>
+<span class="nc" id="L115">                    + type.getSimpleName() + &quot; at args[&quot; + index + &quot;]&quot;);</span>
+        }
+<span class="fc" id="L117">        return type.cast(a[index]);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

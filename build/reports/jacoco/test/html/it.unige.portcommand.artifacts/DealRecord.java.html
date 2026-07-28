@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DealRecord.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.artifacts</a> &gt; <span class="el_source">DealRecord.java</span></div><h1>DealRecord.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.artifacts;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import it.unige.portcommand.ontology.Deal;
+
+/**
+ * One closed-or-withdrawn negotiation outcome, appended to {@link MarketHistoryArtifact}
+ * by the walk-in vessel's deal behaviours (task 07) and persisted by task 22. Reuses
+ * the canonical {@link Deal.Outcome} enum (task 02) â€” no ad-hoc outcome strings.
+ * snake_case wire keys so the save file (task 22) serializes it directly.
+ *
+ * @param vesselType    vessel type of the negotiating vessel
+ * @param durationHours service duration negotiated
+ * @param price         agreed price (DEAL) or last offer (withdrawal)
+ * @param simTime       sim-millis the outcome was recorded
+ * @param outcome       DEAL / WITHDRAW_PRICE / WITHDRAW_DURATION / TIMEOUT / PLAYER_REFUSED
+ */
+<span class="fc" id="L18">public record DealRecord(</span>
+        @JsonProperty(&quot;vessel_type&quot;) String vesselType,
+        @JsonProperty(&quot;duration_hours&quot;) int durationHours,
+        @JsonProperty(&quot;price&quot;) double price,
+        @JsonProperty(&quot;sim_time&quot;) long simTime,
+        @JsonProperty(&quot;outcome&quot;) Deal.Outcome outcome) {
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

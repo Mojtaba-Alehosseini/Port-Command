@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HarbourMasterStateDTO.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.persistence.dto</a> &gt; <span class="el_source">HarbourMasterStateDTO.java</span></div><h1>HarbourMasterStateDTO.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.persistence.dto;
+
+import java.util.List;
+import java.util.Map;
+
+import it.unige.portcommand.harbourmaster.ExpenseEvent;
+import it.unige.portcommand.harbourmaster.IncomeEvent;
+
+/**
+ * The HarbourMaster's persisted coordination state (task 22). Wallet balance and
+ * reputation live at the {@code GameState} ROOT (planning/22 Â§22.3) â€” this record carries
+ * what only the HM knows:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@code dayIncome}/{@code dayExpense} â€” the IN-PROGRESS day's ledger entries.
+ *       Restored into the ledgers' history WITHOUT re-applying (the root balance already
+ *       includes them); they are exactly what {@code IncomeRules.aggregateForDay}/
+ *       {@code ExpenseRules.variableForDay} read at the loaded day's end-of-day, so the
+ *       next EOD summary shows the money the day really made. Settled days are not
+ *       persisted â€” nothing reads them back (dated note, planning/22).&lt;/li&gt;
+ *   &lt;li&gt;{@code performativeCounts} â€” today's FIPA tally by canonical display name, in
+ *       canonical report order (a LinkedHashMap at snapshot â€” the determinism rule).&lt;/li&gt;
+ *   &lt;li&gt;{@code pendingCustomsChecks} â€” conversationId â†’ vesselId for pre-clearance
+ *       REQUESTs whose reply had not been processed at the save. The reply died with the
+ *       old container; the rebuilt HM re-sends these, and because processing the reply IS
+ *       the charge point, the â‚¬100 lands exactly once either way.&lt;/li&gt;
+ *   &lt;li&gt;{@code walkInSpawnCount} â€” the Poisson spawner's id counter, so post-load
+ *       walk-ins continue {@code WALKIN-&lt;n+1&gt;...} instead of colliding with restored
+ *       vessels' ids (and their derived RNG stream names).&lt;/li&gt;
+ * &lt;/ul&gt;
+ */
+<span class="fc" id="L32">public record HarbourMasterStateDTO(</span>
+        List&lt;IncomeEvent&gt; dayIncome,
+        List&lt;ExpenseEvent&gt; dayExpense,
+        Map&lt;String, Integer&gt; performativeCounts,
+        Map&lt;String, String&gt; pendingCustomsChecks,
+        int walkInSpawnCount) {
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,457 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GameSession.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.persistence</a> &gt; <span class="el_source">GameSession.java</span></div><h1>GameSession.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.persistence;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.artifacts.PolicyRule;
+import it.unige.portcommand.bootstrap.AgentRoster;
+import it.unige.portcommand.bootstrap.BootstrapConfig;
+import it.unige.portcommand.bootstrap.JadeBootstrap;
+import it.unige.portcommand.gui.events.ReputationChangedEvent;
+import it.unige.portcommand.gui.events.SimClockTickEvent;
+import it.unige.portcommand.gui.events.WalletChangedEvent;
+import it.unige.portcommand.harbourmaster.financial.Leaderboard;
+import it.unige.portcommand.lifecycle.GameLifecycle;
+import it.unige.portcommand.lifecycle.GameOverGuard;
+import it.unige.portcommand.nlp.PolicyParser;
+import it.unige.portcommand.persistence.events.GameLoadedEvent;
+import it.unige.portcommand.persistence.events.GameSavedEvent;
+import it.unige.portcommand.util.SimClock;
+import jade.core.behaviours.OneShotBehaviour;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The whole-game orchestrator (task 22): owns the boot â†” world lifecycle that
+ * {@code Main} used to inline, plus save and load. One instance per JVM.
+ *
+ * &lt;p&gt;&lt;b&gt;Stable outer shell, replaceable world.&lt;/b&gt; {@code JadeBootstrap}'s shared
+ * services (EventBus, SimClock, RandomSource, artifacts, NLP stack) and this class's own
+ * {@link GameLifecycle}/{@link Leaderboard}/{@link AgentDirectory}/
+ * {@link AutosaveCoordinator} survive a load; the JADE container, every agent, and the
+ * {@link GameOverGuard} are torn down and rebuilt. Everything that subscribes on the
+ * shared bus and dies with the world MUST close on teardown â€” the agents' takedowns and
+ * the guard's {@code close()} do exactly that (the task-20 double-charge trap).
+ *
+ * &lt;p&gt;&lt;b&gt;Load = validate, then teardown, then rebuild.&lt;/b&gt; The file is parsed and
+ * validated BEFORE anything is torn down, so a corrupt file leaves the running game
+ * untouched. A failure after teardown cannot half-boot: the container is shut down again
+ * and the lifecycle lands in MENU (LOADING â†’ MENU, the May-audit edge).
+ */
+public final class GameSession {
+
+<span class="fc" id="L52">    private static final Logger log = LoggerFactory.getLogger(GameSession.class);</span>
+    private static final long MANUAL_SAVE_TIMEOUT_SECONDS = 5L;
+
+    private final JadeBootstrap boot;
+    private final BootstrapConfig bootConfig;
+    private final SaveLoadManager saveLoadManager;
+    private final Leaderboard leaderboard;
+<span class="fc" id="L59">    private final AgentDirectory directory = new AgentDirectory();</span>
+    /** Task 23: the 3 packaged scenarios, loaded+validated eagerly (a bad file fails here). */
+<span class="fc" id="L61">    private final it.unige.portcommand.scenario.ScenarioRegistry scenarioRegistry =</span>
+            new it.unige.portcommand.scenario.ScenarioRegistry();
+
+    private GameLifecycle lifecycle;
+    private AutosaveCoordinator autosaveCoordinator;
+    private boolean guiRefreshSubscribed;
+    private volatile GameOverGuard gameOverGuard;
+
+    public GameSession(JadeBootstrap boot, BootstrapConfig bootConfig,
+<span class="fc" id="L70">                       SaveLoadManager saveLoadManager, Leaderboard leaderboard) {</span>
+<span class="fc" id="L71">        this.boot = boot;</span>
+<span class="fc" id="L72">        this.bootConfig = bootConfig;</span>
+<span class="fc" id="L73">        this.saveLoadManager = saveLoadManager;</span>
+<span class="fc" id="L74">        this.leaderboard = leaderboard;</span>
+<span class="fc" id="L75">    }</span>
+
+    /** Boots the container + fleet and starts a fresh run (the pre-task-22 Main sequence).
+     * Sandbox play â€” the scenario runtime still rides along (task 23) so the DAILY
+     * contracted stream ({@code ContractSchedule}) spawns {@code contracts.json} arrivals
+     * from day 1: contracted fees are live income in free play, not just scenarios. */
+    public synchronized void startNewGame() {
+<span class="fc" id="L82">        boot.start(bootConfig);</span>
+<span class="fc" id="L83">        ensureSessionServices();</span>
+<span class="fc" id="L84">        AgentRoster.spawnSingletonsAndFleet(boot.getSpawner(), boot.getPortStateArtifact(),</span>
+<span class="fc" id="L85">                boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact(),</span>
+<span class="fc" id="L86">                boot.getLLMBridge(), boot.getEventBus(), directory, boot.getPolicyRegistryArtifact(),</span>
+<span class="fc" id="L87">                it.unige.portcommand.scenario.ScenarioRuntime.sandbox(java.util.Set.of()));</span>
+<span class="fc" id="L88">        this.gameOverGuard = new GameOverGuard(boot.getEventBus(), lifecycle, leaderboard,</span>
+                AgentRoster.STARTING_WALLET, AgentRoster.STARTING_REPUTATION);
+<span class="fc" id="L90">        lifecycle.startNewGame();</span>
+<span class="fc" id="L91">    }</span>
+
+    /**
+     * Task 23: boots a scripted scenario. NOT a parallel boot path â€” the scenario's
+     * opening {@link GameState} is built by {@code GameStateBuilder.fromScenario}, run
+     * through the SAME invariant gate a save file passes, and the world is rebuilt by the
+     * SAME teardown/rebuild body {@link #loadGame} uses (reconciliation dated 2026-07-18;
+     * planning/23's Â§23.10 {@code Main.startScenario} sketch predates task 22). Call OFF
+     * the EDT.
+     *
+     * &lt;p&gt;Seed rule (hard constraint): a null {@code randomSeed} generates a fresh seed â€”
+     * recorded in the built state, hence in every save of the run; {@code 0} is a valid
+     * pinned seed, never a sentinel.
+     */
+    public synchronized void startScenario(String key) throws CorruptSaveException {
+<span class="fc" id="L106">        it.unige.portcommand.scenario.Scenario scenario = scenarioRegistry.findByKey(key)</span>
+<span class="pc" id="L107">                .orElseThrow(() -&gt; new IllegalArgumentException(</span>
+                        &quot;unknown scenario '&quot; + key + &quot;' â€” valid keys: &quot;
+                                + it.unige.portcommand.scenario.ScenarioRegistry.KEYS));
+<span class="pc bpc" id="L110" title="1 of 2 branches missed.">        long seed = scenario.randomSeed() != null ? scenario.randomSeed()</span>
+<span class="pc" id="L111">                : new java.util.Random().nextLong();</span>
+<span class="fc" id="L112">        GameState state = GameStateBuilder.fromScenario(scenario, seed,</span>
+<span class="fc" id="L113">                resolveDayLength(scenario), Instant.now().toString());</span>
+<span class="fc" id="L114">        saveLoadManager.validateState(state, &quot;scenario:&quot; + key); // fail BEFORE teardown (task-22 rule)</span>
+<span class="fc" id="L115">        bootWorld(state, new it.unige.portcommand.scenario.ScenarioRuntime(scenario, Set.of()),</span>
+                &quot;scenario:&quot; + key);
+<span class="fc" id="L117">        boot.getEventBus().publish(</span>
+                new it.unige.portcommand.scenario.events.ScenarioStartedEvent(scenario));
+<span class="fc" id="L119">        boot.getEventBus().publish(new it.unige.portcommand.gui.events.NotificationEvent(</span>
+<span class="fc" id="L120">                &quot;Scenario started: &quot; + scenario.displayName(),</span>
+                it.unige.portcommand.gui.events.NotificationEvent.Severity.INFO,
+<span class="fc" id="L122">                boot.getSimClock().nowSimMillis()));</span>
+<span class="fc" id="L123">        log.info(&quot;scenario '{}' started (seed {}, day length {}s)&quot;, key, seed,</span>
+<span class="fc" id="L124">                state.simClock().realSecondsPerGameDay());</span>
+<span class="fc" id="L125">    }</span>
+
+    /**
+     * Scenario pacing precedence: an EXPLICIT {@code --day-length} (marker property set by
+     * {@code Main}) beats the scenario's {@code settingsOverride.realSecondsPerGameDay}
+     * beats the sandbox default â€” the player's stated intent wins over scenario defaults.
+     */
+    private long resolveDayLength(it.unige.portcommand.scenario.Scenario scenario) {
+<span class="fc" id="L133">        boolean explicitCli = Boolean.getBoolean(&quot;simclock.day.length.explicit&quot;);</span>
+<span class="pc bpc" id="L134" title="1 of 2 branches missed.">        Long scenarioRate = scenario.settingsOverride() == null ? null</span>
+<span class="fc" id="L135">                : scenario.settingsOverride().realSecondsPerGameDay();</span>
+<span class="pc bpc" id="L136" title="1 of 4 branches missed.">        if (!explicitCli &amp;&amp; scenarioRate != null) {</span>
+<span class="fc" id="L137">            return scenarioRate;</span>
+        }
+<span class="fc" id="L139">        return bootConfig.realSecondsPerGameDay();</span>
+    }
+
+    /**
+     * Manual save (Game â†’ Save): quiesce, snapshot ON the HarbourMaster thread, write
+     * atomically. Callable from the EDT â€” the bounded future wait is the planning-file
+     * quiesce (&quot;bounded timeout&quot;), and the game is paused for its duration.
+     *
+     * @throws SaveNotAllowedException while a negotiation is live (Step 22.7)
+     */
+    public Path saveNow() throws SaveNotAllowedException, IOException {
+<span class="fc" id="L150">        boolean pausedHere = lifecycle.pauseIfRunning();</span>
+        try {
+<span class="fc" id="L152">            GameState state = buildOnHarbourMasterThread();</span>
+<span class="fc" id="L153">            Path written = saveLoadManager.save(saveLoadManager.savegamePath(), state);</span>
+<span class="fc" id="L154">            boot.getEventBus().publish(new GameSavedEvent(written.toString(),</span>
+<span class="fc" id="L155">                    java.nio.file.Files.size(written), false,</span>
+<span class="fc" id="L156">                    SimClock.gameDayOf(state.simClock().simMillis())));</span>
+<span class="fc" id="L157">            return written;</span>
+        } finally {
+<span class="pc bpc" id="L159" title="1 of 2 branches missed.">            if (pausedHere) {</span>
+<span class="fc" id="L160">                lifecycle.resumeIfPaused();</span>
+            }
+        }
+    }
+
+    /**
+     * Schedules the snapshot as a one-shot behaviour on the HM agent thread â€” BETWEEN two
+     * behaviour steps, which IS the quiesce phase boundary (no HM behaviour can be mid-step
+     * while ours runs; the clock is paused so nothing sim-driven moves elsewhere) â€” and
+     * waits, bounded. Never called from the HM thread itself (the autosave path, which IS
+     * on that thread, builds inline via {@link AutosaveCoordinator}).
+     */
+    private GameState buildOnHarbourMasterThread() throws SaveNotAllowedException, IOException {
+<span class="fc" id="L173">        HarbourMasterAgent hm = (HarbourMasterAgent) directory.byName(&quot;harbour_master&quot;)</span>
+<span class="pc" id="L174">                .orElseThrow(() -&gt; new IOException(&quot;No running game to save (harbour_master absent)&quot;));</span>
+<span class="fc" id="L175">        CompletableFuture&lt;GameState&gt; future = new CompletableFuture&lt;&gt;();</span>
+<span class="fc" id="L176">        String savedAt = Instant.now().toString();</span>
+<span class="fc" id="L177">        GameStateBuilder.Sources sources = sources();</span>
+<span class="fc" id="L178">        hm.addBehaviour(new OneShotBehaviour(hm) {</span>
+            @Override
+            public void action() {
+                try {
+<span class="fc" id="L182">                    future.complete(GameStateBuilder.build(sources, savedAt, false));</span>
+<span class="fc" id="L183">                } catch (Exception e) {</span>
+<span class="fc" id="L184">                    future.completeExceptionally(e);</span>
+<span class="fc" id="L185">                }</span>
+<span class="fc" id="L186">            }</span>
+        });
+        try {
+<span class="fc" id="L189">            return future.get(MANUAL_SAVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);</span>
+<span class="fc" id="L190">        } catch (ExecutionException e) {</span>
+<span class="pc bpc" id="L191" title="1 of 2 branches missed.">            if (e.getCause() instanceof SaveNotAllowedException notAllowed) {</span>
+<span class="fc" id="L192">                throw notAllowed;</span>
+            }
+<span class="nc" id="L194">            throw new IOException(&quot;Snapshot failed: &quot; + e.getCause(), e.getCause());</span>
+<span class="nc" id="L195">        } catch (TimeoutException e) {</span>
+<span class="nc" id="L196">            throw new IOException(&quot;Snapshot timed out after &quot; + MANUAL_SAVE_TIMEOUT_SECONDS</span>
+                    + &quot;s â€” the HarbourMaster thread did not reach a phase boundary&quot;, e);
+<span class="nc" id="L198">        } catch (InterruptedException e) {</span>
+<span class="nc" id="L199">            Thread.currentThread().interrupt();</span>
+<span class="nc" id="L200">            throw new IOException(&quot;Interrupted while saving&quot;, e);</span>
+        }
+    }
+
+    /**
+     * Full load: validate the file, tear the world down (container kill â†’ every agent's
+     * takedown cancels its bus subscriptions; guard + autosave day-guard closed/reset),
+     * rebuild through the SAME boot, restore shared state in place, respawn the fleet from
+     * the save, and refresh the GUI. Call OFF the EDT (teardown + reboot takes seconds).
+     */
+    public synchronized void loadGame(Path source)
+            throws SchemaVersionException, CorruptSaveException {
+<span class="fc" id="L212">        GameState state = saveLoadManager.load(source); // validate FIRST â€” running game untouched on failure</span>
+<span class="fc" id="L213">        bootWorld(state, runtimeFor(state), source.toString());</span>
+<span class="fc" id="L214">        log.info(&quot;loaded {} â€” day {}, wallet {}, {} restored vessel(s)&quot;, source,</span>
+<span class="fc" id="L215">                SimClock.gameDayOf(state.simClock().simMillis()), state.wallet(),</span>
+<span class="fc" id="L216">                state.agents().activeVessels().size());</span>
+<span class="fc" id="L217">    }</span>
+
+    /**
+     * Task 23: the scenario-engine bundle a load re-arms the HarbourMaster with. A save
+     * that names a scenario resumes its remaining script (events minus the persisted
+     * {@code firedEventIds} â€” the no-replay guarantee); a sandbox save still carries its
+     * fired ids so the daily contracted stream never re-spawns a day's arrivals. The
+     * vessel TRACES (restored vessels + the day's income/expense vessel ids) let the
+     * engine recover a spawn the save caught pre-grant (adversarial-review finding 1)
+     * without ever re-crediting one that already earned.
+     */
+    private it.unige.portcommand.scenario.ScenarioRuntime runtimeFor(GameState state)
+            throws CorruptSaveException {
+<span class="fc" id="L230">        java.util.Set&lt;String&gt; fired = new java.util.HashSet&lt;&gt;(state.firedEventIds());</span>
+<span class="fc" id="L231">        java.util.Set&lt;String&gt; traces = new java.util.HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L232" title="All 2 branches covered.">        for (var vessel : state.agents().activeVessels()) {</span>
+<span class="fc" id="L233">            traces.add(vessel.id());</span>
+<span class="fc" id="L234">        }</span>
+<span class="fc bfc" id="L235" title="All 2 branches covered.">        for (var income : state.agents().harbourMaster().dayIncome()) {</span>
+<span class="pc bpc" id="L236" title="1 of 2 branches missed.">            if (income.vesselId() != null) {</span>
+<span class="fc" id="L237">                traces.add(income.vesselId());</span>
+            }
+<span class="fc" id="L239">        }</span>
+<span class="fc bfc" id="L240" title="All 2 branches covered.">        for (var expense : state.agents().harbourMaster().dayExpense()) {</span>
+<span class="pc bpc" id="L241" title="1 of 2 branches missed.">            if (expense.vesselId() != null) {</span>
+<span class="fc" id="L242">                traces.add(expense.vesselId());</span>
+            }
+<span class="fc" id="L244">        }</span>
+<span class="fc bfc" id="L245" title="All 2 branches covered.">        if (state.activeScenario() == null) {</span>
+<span class="fc" id="L246">            return it.unige.portcommand.scenario.ScenarioRuntime.sandbox(fired, traces);</span>
+        }
+<span class="fc" id="L248">        it.unige.portcommand.scenario.Scenario scenario =</span>
+<span class="fc" id="L249">                scenarioRegistry.findByKey(state.activeScenario())</span>
+<span class="pc" id="L250">                        .orElseThrow(() -&gt; new CorruptSaveException(</span>
+<span class="nc" id="L251">                                &quot;save references unknown scenario '&quot; + state.activeScenario() + &quot;'&quot;));</span>
+<span class="fc" id="L252">        return new it.unige.portcommand.scenario.ScenarioRuntime(scenario, fired, traces);</span>
+    }
+
+    /**
+     * The shared teardown â†’ rebuild body behind {@link #loadGame} and
+     * {@link #startScenario} (task 22's sequence, unchanged semantics â€” task 23 only
+     * threads the scenario runtime through). The caller has already validated
+     * {@code state}, so a failure past this point can only be a boot failure: the catch
+     * shuts the half-built world down and lands in MENU.
+     */
+    private void bootWorld(GameState state, it.unige.portcommand.scenario.ScenarioRuntime runtime,
+                           String sourceLabel) {
+<span class="pc bpc" id="L264" title="1 of 4 branches missed.">        boolean wasLive = lifecycle != null &amp;&amp; boot.isStarted();</span>
+<span class="fc bfc" id="L265" title="All 2 branches covered.">        if (wasLive) {</span>
+<span class="fc" id="L266">            lifecycle.beginLoading();</span>
+        }
+        try {
+<span class="fc bfc" id="L269" title="All 2 branches covered.">            if (boot.isStarted()) {</span>
+<span class="fc" id="L270">                closeWorld();</span>
+<span class="fc" id="L271">                boot.shutdown();</span>
+            }
+<span class="fc" id="L273">            boot.start(bootConfig);</span>
+<span class="fc" id="L274">            ensureSessionServices();</span>
+<span class="fc bfc" id="L275" title="All 2 branches covered.">            if (!wasLive) {</span>
+<span class="fc" id="L276">                lifecycle.beginLoading(); // cold `--load`/`--scenario` start: MENU â†’ LOADING</span>
+            }
+
+            // Shared-service state, restored in place (the GUI holds these instances).
+<span class="fc" id="L280">            boot.getRandomSource().setSeed(state.randomSeed());</span>
+<span class="fc" id="L281">            boot.getSimClock().restore(state.simClock().simMillis(),</span>
+<span class="fc" id="L282">                    state.simClock().realSecondsPerGameDay());</span>
+<span class="fc" id="L283">            boot.getMarketHistoryArtifact().restore(state.marketHistory());</span>
+<span class="fc" id="L284">            restorePolicies(state.policyTriggers());</span>
+
+<span class="fc" id="L286">            CompletableFuture&lt;HarbourMasterAgent&gt; hmReady = new CompletableFuture&lt;&gt;();</span>
+<span class="fc" id="L287">            AgentRoster.respawnFromSave(boot.getSpawner(), boot.getPortStateArtifact(),</span>
+<span class="fc" id="L288">                    boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact(),</span>
+<span class="fc" id="L289">                    boot.getLLMBridge(), boot.getEventBus(), directory,</span>
+<span class="fc" id="L290">                    boot.getPolicyRegistryArtifact(), state, GameStateBuilder.reconcileTerminals(state),</span>
+                    hmReady, runtime);
+<span class="fc" id="L292">            awaitHarbourMasterReady(hmReady);</span>
+
+<span class="fc" id="L294">            GameOverGuard guard = new GameOverGuard(boot.getEventBus(), lifecycle, leaderboard,</span>
+<span class="fc" id="L295">                    state.wallet(), state.reputation());</span>
+<span class="fc" id="L296">            guard.restoreProgress(SimClock.gameDayOf(state.simClock().simMillis()),</span>
+<span class="fc" id="L297">                    state.consecutiveDeepDebtDays(), state.lastDeepDebtDay());</span>
+<span class="fc" id="L298">            this.gameOverGuard = guard;</span>
+<span class="fc" id="L299">            autosaveCoordinator.resetAfterLoad();</span>
+
+<span class="fc" id="L301">            publishRestoredState(state);</span>
+<span class="fc" id="L302">            lifecycle.completeLoading();</span>
+<span class="nc" id="L303">        } catch (RuntimeException e) {</span>
+            // Never a half-boot: kill whatever came up, land in MENU, surface one error.
+<span class="nc" id="L305">            log.error(&quot;boot of {} failed after teardown â€” shutting the half-built world down&quot;,</span>
+                    sourceLabel, e);
+            try {
+<span class="nc" id="L308">                closeWorld();</span>
+<span class="nc bnc" id="L309" title="All 2 branches missed.">                if (boot.isStarted()) {</span>
+<span class="nc" id="L310">                    boot.shutdown();</span>
+                }
+<span class="nc" id="L312">            } catch (RuntimeException cleanup) {</span>
+<span class="nc" id="L313">                log.warn(&quot;cleanup after failed load also failed&quot;, cleanup);</span>
+<span class="nc" id="L314">            }</span>
+            // Guarded (adversarial review #1): on a cold `--load`, boot.start() may have thrown
+            // BEFORE the lifecycle existed or entered LOADING â€” an NPE or an illegal MENUâ†’MENU
+            // transition here would mask the real cause.
+<span class="nc bnc" id="L318" title="All 4 branches missed.">            if (lifecycle != null &amp;&amp; lifecycle.mode() == it.unige.portcommand.lifecycle.GameMode.LOADING) {</span>
+<span class="nc" id="L319">                lifecycle.failLoading();</span>
+            }
+<span class="nc" id="L321">            throw e;</span>
+<span class="fc" id="L322">        }</span>
+<span class="fc" id="L323">    }</span>
+
+    /**
+     * Bounded wait for the rebuilt HarbourMaster's setup (the JadeBootstrap.awaitReady
+     * latch pattern â€” no sleeps): its completion guarantees the directory registration and
+     * the restored ledgers exist, so an immediate post-load save or IT read cannot race the
+     * async spawn (adversarial review #3).
+     */
+    private void awaitHarbourMasterReady(CompletableFuture&lt;HarbourMasterAgent&gt; hmReady) {
+        try {
+<span class="fc" id="L333">            hmReady.get(10, TimeUnit.SECONDS);</span>
+<span class="nc" id="L334">        } catch (ExecutionException | TimeoutException e) {</span>
+<span class="nc" id="L335">            throw new IllegalStateException(&quot;rebuilt HarbourMaster did not finish setup&quot;, e);</span>
+<span class="nc" id="L336">        } catch (InterruptedException e) {</span>
+<span class="nc" id="L337">            Thread.currentThread().interrupt();</span>
+<span class="nc" id="L338">            throw new IllegalStateException(&quot;interrupted awaiting the rebuilt HarbourMaster&quot;, e);</span>
+<span class="fc" id="L339">        }</span>
+<span class="fc" id="L340">    }</span>
+
+    /** The old world's session-scoped subscribers â€” closed BEFORE the new world spawns. */
+    private void closeWorld() {
+<span class="fc bfc" id="L344" title="All 2 branches covered.">        if (gameOverGuard != null) {</span>
+<span class="fc" id="L345">            gameOverGuard.close();</span>
+<span class="fc" id="L346">            gameOverGuard = null;</span>
+        }
+<span class="fc" id="L348">    }</span>
+
+    /** Lifecycle + autosave subscriber exist once, on first boot (both survive reloads). */
+    private void ensureSessionServices() {
+<span class="fc bfc" id="L352" title="All 2 branches covered.">        if (lifecycle == null) {</span>
+<span class="fc" id="L353">            lifecycle = new GameLifecycle(boot.getSimClock(), boot.getEventBus());</span>
+        }
+<span class="fc bfc" id="L355" title="All 2 branches covered.">        if (autosaveCoordinator == null) {</span>
+<span class="fc" id="L356">            autosaveCoordinator = new AutosaveCoordinator(boot.getEventBus(), saveLoadManager,</span>
+                    this::sources);
+        }
+<span class="fc bfc" id="L359" title="All 2 branches covered.">        if (!guiRefreshSubscribed) {</span>
+            // Checkpoint-#6 F3 (fixed 2026-07-18): the ledgers publish only on MUTATION, so a
+            // fresh boot showed &quot;Wallet: â€”&quot; until the first money event â€” only the LOAD path had
+            // a synthetic refresh. The window's one-time GuiReadyEvent (first paint) is the
+            // uniform hook: it fires after startNewGame on a fresh `--gui` boot AND after a cold
+            // `--load` boot (whose publishRestoredState ran before the window existed and was
+            // lost), and this session-scoped subscription is registered before either.
+<span class="fc" id="L366">            boot.getEventBus().subscribe(it.unige.portcommand.gui.events.GuiReadyEvent.class,</span>
+<span class="fc" id="L367">                    e -&gt; publishLiveHudState(&quot;gui_ready&quot;), it.unige.portcommand.util.DeliveryMode.CALLER_THREAD);</span>
+<span class="fc" id="L368">            guiRefreshSubscribed = true;</span>
+        }
+<span class="fc" id="L370">    }</span>
+
+    /** The load-path synthetic refresh (same event shapes), sourced from the LIVE ledgers. */
+    private void publishLiveHudState(String source) {
+<span class="fc" id="L374">        directory.byName(&quot;harbour_master&quot;)</span>
+<span class="fc" id="L375">                .filter(HarbourMasterAgent.class::isInstance)</span>
+<span class="fc" id="L376">                .map(HarbourMasterAgent.class::cast)</span>
+<span class="fc" id="L377">                .ifPresent(hm -&gt; {</span>
+<span class="fc" id="L378">                    long simMillis = boot.getSimClock().nowSimMillis();</span>
+<span class="fc" id="L379">                    boot.getEventBus().publish(new WalletChangedEvent(</span>
+<span class="fc" id="L380">                            hm.walletLedger().balance(), 0.0, source, null, simMillis));</span>
+<span class="fc" id="L381">                    boot.getEventBus().publish(new ReputationChangedEvent(</span>
+<span class="fc" id="L382">                            hm.reputationLedger().score(), 0.0, source, null, simMillis));</span>
+<span class="fc" id="L383">                    boot.getEventBus().publish(new SimClockTickEvent(simMillis,</span>
+<span class="fc" id="L384">                            SimClock.gameDayOf(simMillis), boot.getSimClock().simHour(),</span>
+<span class="fc" id="L385">                            boot.getSimClock().simMinute()));</span>
+<span class="fc" id="L386">                });</span>
+<span class="fc" id="L387">    }</span>
+
+    /** Re-parses persisted policy triggers straight into the session registry (no bus race). */
+    private void restorePolicies(List&lt;String&gt; triggers) {
+<span class="fc" id="L391">        boot.getPolicyRegistryArtifact().clear();</span>
+<span class="fc" id="L392">        PolicyParser parser = new PolicyParser();</span>
+<span class="pc bpc" id="L393" title="2 of 4 branches missed.">        for (String trigger : triggers == null ? List.&lt;String&gt;of() : triggers) {</span>
+<span class="nc" id="L394">            Optional&lt;PolicyRule&gt; rule = parser.parseQuietly(trigger);</span>
+<span class="nc bnc" id="L395" title="All 2 branches missed.">            if (rule.isPresent()) {</span>
+<span class="nc" id="L396">                boot.getPolicyRegistryArtifact().register(rule.get());</span>
+            } else {
+<span class="nc" id="L398">                log.warn(&quot;persisted policy no longer parses â€” dropped: '{}'&quot;, trigger);</span>
+            }
+<span class="nc" id="L400">        }</span>
+<span class="fc" id="L401">    }</span>
+
+    /**
+     * GUI refresh after a load: the loaded-marker event (chat tabs clear on it), then
+     * synthetic absolute wallet/reputation/clock events so the HUD shows restored figures
+     * immediately â€” the ledgers publish only on MUTATION, and restoring is not one.
+     */
+    private void publishRestoredState(GameState state) {
+<span class="fc" id="L409">        long simMillis = state.simClock().simMillis();</span>
+<span class="fc" id="L410">        boot.getEventBus().publish(new GameLoadedEvent(SimClock.gameDayOf(simMillis),</span>
+<span class="fc" id="L411">                state.wallet(), state.reputation()));</span>
+<span class="fc" id="L412">        boot.getEventBus().publish(new WalletChangedEvent(state.wallet(), 0.0, &quot;game_loaded&quot;,</span>
+                null, simMillis));
+<span class="fc" id="L414">        boot.getEventBus().publish(new ReputationChangedEvent(state.reputation(), 0.0, &quot;game_loaded&quot;,</span>
+                null, simMillis));
+<span class="fc" id="L416">        boot.getEventBus().publish(new SimClockTickEvent(simMillis, SimClock.gameDayOf(simMillis),</span>
+<span class="fc" id="L417">                boot.getSimClock().simHour(), boot.getSimClock().simMinute()));</span>
+<span class="fc" id="L418">    }</span>
+
+    // --- accessors for Main / MainWindow / tests ---
+
+    /** Null until the first {@link #startNewGame()} / {@link #loadGame(Path)} boots the shell. */
+    public GameLifecycle lifecycle() {
+<span class="nc" id="L424">        return lifecycle;</span>
+    }
+
+    public Leaderboard leaderboard() {
+<span class="nc" id="L428">        return leaderboard;</span>
+    }
+
+    public SaveLoadManager saveLoadManager() {
+<span class="nc" id="L432">        return saveLoadManager;</span>
+    }
+
+    public AgentDirectory directory() {
+<span class="fc" id="L436">        return directory;</span>
+    }
+
+    public JadeBootstrap boot() {
+<span class="nc" id="L440">        return boot;</span>
+    }
+
+    public GameOverGuard gameOverGuard() {
+<span class="nc" id="L444">        return gameOverGuard;</span>
+    }
+
+    /** The 3 packaged scenarios (task 23) â€” the NewGameDialog's data source. */
+    public it.unige.portcommand.scenario.ScenarioRegistry scenarioRegistry() {
+<span class="nc" id="L449">        return scenarioRegistry;</span>
+    }
+
+    private GameStateBuilder.Sources sources() {
+<span class="fc" id="L453">        return new GameStateBuilder.Sources(boot.getSimClock(), boot.getRandomSource(), directory,</span>
+<span class="fc" id="L454">                boot.getMarketHistoryArtifact(), boot.getPolicyRegistryArtifact(), gameOverGuard);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,80 @@
+{
+  "schemaVersion" : 1,
+  "savedAt" : "2026-07-17T12:00:00Z",
+  "randomSeed" : 123456789,
+  "settings" : {
+    "roundLimit" : 4,
+    "timeLimitSeconds" : 60,
+    "autopilotEnabled" : false,
+    "difficulty" : "NORMAL",
+    "realSecondsPerGameDay" : 300,
+    "maxGameDays" : 30,
+    "firstLaunch" : true,
+    "llmModel" : "microsoft/Phi-4-mini-instruct",
+    "withdrawalPenaltyEur" : 500.0,
+    "cnpReplyBySimSeconds" : 5,
+    "cnpRetryAfterSimSeconds" : 30,
+    "dailyTargetEur" : 5000.0,
+    "bankruptcyFloorEur" : -20000.0
+  },
+  "simClock" : {
+    "simMillis" : 0,
+    "realSecondsPerGameDay" : 300
+  },
+  "wallet" : 50000.0,
+  "reputation" : 70,
+  "consecutiveDeepDebtDays" : 0,
+  "lastDeepDebtDay" : 0,
+  "marketHistory" : [ ],
+  "policyTriggers" : [ ],
+  "agents" : {
+    "harbourMaster" : {
+      "dayIncome" : [ ],
+      "dayExpense" : [ ],
+      "performativeCounts" : { },
+      "pendingCustomsChecks" : { },
+      "walkInSpawnCount" : 0
+    },
+    "weather" : {
+      "current" : {
+        "wind" : 18,
+        "visibility" : "good",
+        "swell" : 0.5,
+        "state" : "sunny",
+        "sim_time" : 0
+      }
+    },
+    "customs" : {
+      "nextClearanceRef" : 1
+    },
+    "tugs" : [ {
+      "tugId" : "tug_1",
+      "status" : "IDLE",
+      "position" : { "x" : 60.0, "y" : 60.0, "heading_deg" : 0.0 },
+      "fuelState" : 1.0
+    }, {
+      "tugId" : "tug_2",
+      "status" : "IDLE",
+      "position" : { "x" : 60.0, "y" : 120.0, "heading_deg" : 0.0 },
+      "fuelState" : 1.0
+    }, {
+      "tugId" : "tug_3",
+      "status" : "IDLE",
+      "position" : { "x" : 60.0, "y" : 180.0, "heading_deg" : 0.0 },
+      "fuelState" : 1.0
+    }, {
+      "tugId" : "tug_4",
+      "status" : "IDLE",
+      "position" : { "x" : 60.0, "y" : 240.0, "heading_deg" : 0.0 },
+      "fuelState" : 1.0
+    } ],
+    "terminals" : [ {
+      "terminalId" : "terminal_container",
+      "occupancies" : [ ]
+    }, {
+      "terminalId" : "terminal_general",
+      "occupancies" : [ ]
+    } ],
+    "activeVessels" : [ ]
+  }
+}

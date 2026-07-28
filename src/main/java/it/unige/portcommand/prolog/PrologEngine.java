@@ -45,19 +45,35 @@ public final class PrologEngine {
     private static final Logger log = LoggerFactory.getLogger(PrologEngine.class);
 
     /**
-     * The exact six files consulted at startup, in load order: the ontology
-     * facts FIRST, then the five rule modules alphabetically. Resolved by name
-     * (not a directory scan): the test classpath overlays a second {@code /prolog}
-     * dir holding {@code smoke.pl} + the PLUnit suites, so a wildcard scan is
-     * ambiguous. A fixed manifest also pins the 5-module / 30-rule invariant.
+     * The exact seven files consulted at startup, in load order: the ontology
+     * facts FIRST, then the DCG grammar, then the five rule modules alphabetically.
+     * Resolved by name (not a directory scan): the test classpath overlays a second
+     * {@code /prolog} dir holding {@code smoke.pl} + the PLUnit suites, so a wildcard
+     * scan is ambiguous. A fixed manifest also pins the 5-module / 30-rule invariant.
+     *
+     * <p><b>6 &rarr; 7 (2026-07-16, task 16.)</b> {@code dcg_negotiation.pl} — the
+     * negotiation-move grammar — joins the manifest. It is NOT a rule module: it
+     * defines no {@code % RULE Rn:} clause and does not touch the 30-rule kernel
+     * (see {@link #RULE_MODULE_COUNT}). It sorts before the {@code rules_*} entries
+     * only because {@code d} &lt; {@code r}; the grammar has no load-order dependency
+     * on the rule modules, but it does read ontology facts, so it must follow
+     * {@code port_ontology.pl}.
      */
     private static final List<String> RESOURCE_MANIFEST = List.of(
             "/prolog/port_ontology.pl",
+            "/prolog/dcg_negotiation.pl",
             "/prolog/rules_compatibility.pl",
             "/prolog/rules_customs.pl",
             "/prolog/rules_escort.pl",
             "/prolog/rules_priority.pl",
             "/prolog/rules_weather.pl");
+
+    /**
+     * The five rule modules of the 30-rule kernel. A literal, not
+     * {@code RESOURCE_MANIFEST.size() - 1}: the manifest now also carries the
+     * ontology and the DCG grammar, neither of which is a rule module.
+     */
+    private static final int RULE_MODULE_COUNT = 5;
 
     private static final class Holder {
         private static final PrologEngine INSTANCE = new PrologEngine();
@@ -83,14 +99,15 @@ public final class PrologEngine {
         return Holder.INSTANCE;
     }
 
-    /** The six resources consulted by {@link #init()}, in load order. */
+    /** The seven resources consulted by {@link #init()}, in load order. */
     public static List<String> resourceManifest() {
         return RESOURCE_MANIFEST;
     }
 
     /**
-     * Idempotently consults the ontology and the five rule modules. The first
-     * call loads all six files (ontology first); later calls are no-ops.
+     * Idempotently consults the ontology, the DCG grammar, and the five rule
+     * modules. The first call loads all seven files (ontology first); later calls
+     * are no-ops.
      *
      * @throws PrologException if any consult fails
      */
@@ -109,8 +126,9 @@ public final class PrologEngine {
                 log.debug("consulted {}", resource);
             }
             initialised = true;
-            log.info("Prolog engine initialised: {} rule modules, {} ontology facts, 30 rules (R1–R30)",
-                    RESOURCE_MANIFEST.size() - 1, ontologyFactCount());
+            log.info("Prolog engine initialised: {} rule modules, {} ontology facts, 30 rules (R1–R30), "
+                            + "DCG negotiation grammar loaded",
+                    RULE_MODULE_COUNT, ontologyFactCount());
         } finally {
             lock.unlock();
         }

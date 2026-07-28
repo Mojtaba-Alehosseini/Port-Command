@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BidCollectorBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.cnp</a> &gt; <span class="el_source">BidCollectorBehaviour.java</span></div><h1>BidCollectorBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.cnp;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.harbourmaster.CnpRequest;
+import jade.core.Agent;
+import jade.core.behaviours.CyclicBehaviour;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Non-blocking bid collector for one Contract Net session: buffers every PROPOSE
+ * (a bid) matching the exact {@code cfpId} until {@link #closeAndAward()} is called
+ * by the paired {@code WakerBehaviour} deadline ({@link InitiateCNPBehaviour}).
+ * Never calls {@code blockingReceive} â€” collecting bids and awarding the contract
+ * happen on separate ticks of the agent's own scheduler, so every other
+ * HarbourMaster behaviour (auto-flow dispatch, walk-in relay, emergency handling)
+ * keeps running during the CFP window.
+ */
+public final class BidCollectorBehaviour extends CyclicBehaviour {
+
+<span class="fc" id="L26">    private static final Logger log = LoggerFactory.getLogger(BidCollectorBehaviour.class);</span>
+<span class="fc" id="L27">    private static final MessageTemplate TEMPLATE_BASE = MessageTemplate.and(</span>
+<span class="fc" id="L28">            MessageTemplate.MatchProtocol(InitiateCNPBehaviour.CNP_PROTOCOL),</span>
+<span class="fc" id="L29">            MessageTemplate.or(</span>
+<span class="fc" id="L30">                    MessageTemplate.MatchPerformative(ACLMessage.PROPOSE),</span>
+<span class="fc" id="L31">                    MessageTemplate.MatchPerformative(ACLMessage.REFUSE)));</span>
+
+    private final CnpRequest req;
+    private final MessageTemplate template;
+<span class="fc" id="L35">    private final List&lt;ACLMessage&gt; bids = new ArrayList&lt;&gt;();</span>
+
+    public BidCollectorBehaviour(Agent agent, String cfpId, CnpRequest req) {
+<span class="fc" id="L38">        super(agent);</span>
+<span class="fc" id="L39">        this.req = req;</span>
+<span class="fc" id="L40">        this.template = MessageTemplate.and(TEMPLATE_BASE, MessageTemplate.MatchConversationId(cfpId));</span>
+<span class="fc" id="L41">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L45">        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;</span>
+<span class="fc" id="L46">        ACLMessage msg = hm.receiveLogged(template);</span>
+<span class="fc bfc" id="L47" title="All 2 branches covered.">        if (msg == null) {</span>
+<span class="fc" id="L48">            block();</span>
+<span class="fc" id="L49">            return;</span>
+        }
+<span class="fc bfc" id="L51" title="All 2 branches covered.">        if (msg.getPerformative() == ACLMessage.PROPOSE) {</span>
+<span class="fc" id="L52">            bids.add(msg);</span>
+        }
+        // REFUSE just isn't counted as a bid â€” no other action needed.
+<span class="fc" id="L55">    }</span>
+
+    /**
+     * Closes the collection window and hands the collected bids off for scoring.
+     * Called exactly once, by the paired {@code WakerBehaviour}.
+     */
+    void closeAndAward() {
+<span class="fc" id="L62">        List&lt;ACLMessage&gt; collected = List.copyOf(bids);</span>
+<span class="fc" id="L63">        myAgent.addBehaviour(new AwardContractBehaviour(myAgent, req, collected));</span>
+<span class="fc" id="L64">        log.info(&quot;CNP for {} closed with {} bid(s)&quot;, req.vesselId(), collected.size());</span>
+<span class="fc" id="L65">        myAgent.removeBehaviour(this); // MUST be last: removeBehaviour nulls myAgent</span>
+<span class="fc" id="L66">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.agents.WeatherAlertPolicyTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:35" hostname="MOJI" time="0.03">
+  <properties/>
+  <testcase name="theFirstReadingIsABaselineNotAnAlert()" classname="it.unige.portcommand.agents.WeatherAlertPolicyTest" time="0.002"/>
+  <testcase name="windBandsFollowTheCanonicalThresholds()" classname="it.unige.portcommand.agents.WeatherAlertPolicyTest" time="0.001"/>
+  <testcase name="sameBandWindDriftIsSilent()" classname="it.unige.portcommand.agents.WeatherAlertPolicyTest" time="0.01"/>
+  <testcase name="upwardWindCrossingWorsens()" classname="it.unige.portcommand.agents.WeatherAlertPolicyTest" time="0.002"/>
+  <testcase name="visibilityCollapsingWorsensAndRecoveringClears()" classname="it.unige.portcommand.agents.WeatherAlertPolicyTest" time="0.001"/>
+  <testcase name="aMixedChangeReadsAsWorsenedSafetyFirst()" classname="it.unige.portcommand.agents.WeatherAlertPolicyTest" time="0.0"/>
+  <testcase name="enteringTheStormStateWorsensEvenAtConstantWind()" classname="it.unige.portcommand.agents.WeatherAlertPolicyTest" time="0.001"/>
+  <testcase name="downwardWindCrossingClears()" classname="it.unige.portcommand.agents.WeatherAlertPolicyTest" time="0.002"/>
+  <testcase name="leavingTheStormStateClearsEvenAtConstantWind()" classname="it.unige.portcommand.agents.WeatherAlertPolicyTest" time="0.002"/>
+  <testcase name="swellCrossingTheLimitWorsensAndRecoveringClears()" classname="it.unige.portcommand.agents.WeatherAlertPolicyTest" time="0.001"/>
+  <testcase name="identicalReadingsAreSilent()" classname="it.unige.portcommand.agents.WeatherAlertPolicyTest" time="0.001"/>
+  <system-out><![CDATA[00:12:35.314 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

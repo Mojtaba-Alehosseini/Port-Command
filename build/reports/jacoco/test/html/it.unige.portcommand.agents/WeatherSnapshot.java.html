@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WeatherSnapshot.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">WeatherSnapshot.java</span></div><h1>WeatherSnapshot.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+/**
+ * Immutable weather reading. {@code visibility} is a category atom
+ * {@code good|fair|poor} (matching the Prolog {@code operation_safe} String
+ * contract, not a nautical-mile double); {@code state} is the Markov state
+ * {@code sunny|cloudy|stormy}. Broadcast on the wire as
+ * {@code {wind_knots, visibility, swell, state, sim_time}}.
+ *
+ * @param wind       wind speed in knots
+ * @param visibility {@code good} / {@code fair} / {@code poor}
+ * @param swell      swell height (metres)
+ * @param state      {@code sunny} / {@code cloudy} / {@code stormy}
+ * @param simTime    sim-millis this reading was taken
+ */
+<span class="fc" id="L18">public record WeatherSnapshot(</span>
+        @JsonProperty(&quot;wind&quot;) int wind,
+        @JsonProperty(&quot;visibility&quot;) String visibility,
+        @JsonProperty(&quot;swell&quot;) double swell,
+        @JsonProperty(&quot;state&quot;) String state,
+        @JsonProperty(&quot;sim_time&quot;) long simTime) {
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

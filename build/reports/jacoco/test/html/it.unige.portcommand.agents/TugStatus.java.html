@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TugStatus.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">TugStatus.java</span></div><h1>TugStatus.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+/**
+ * Lifecycle state of a tug. Declared here (task 06) as a bare enum so the
+ * {@code PortStateArtifact.updateTug(String, Position, TugStatus)} API â€” which
+ * passes position separately â€” is complete before task 08. The tug behaviours
+ * that drive these transitions are owned by task 08; this enum is the agreed
+ * shape (the separate {@code Position} argument in {@code updateTug} means the
+ * status itself carries no position).
+ */
+<span class="fc" id="L11">public enum TugStatus {</span>
+<span class="fc" id="L12">    IDLE,</span>
+<span class="fc" id="L13">    BIDDING,</span>
+<span class="fc" id="L14">    EN_ROUTE_TO_VESSEL,</span>
+<span class="fc" id="L15">    ESCORTING,</span>
+<span class="fc" id="L16">    RETURNING,</span>
+<span class="fc" id="L17">    REFUELING</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

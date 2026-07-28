@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WordNetResolver.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">WordNetResolver.java</span></div><h1>WordNetResolver.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+
+import net.sf.extjwnl.data.IndexWord;
+import net.sf.extjwnl.data.POS;
+import net.sf.extjwnl.data.Synset;
+import net.sf.extjwnl.data.Word;
+import net.sf.extjwnl.dictionary.Dictionary;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Resolves a surface word to an ontology class â€” the &quot;WordNet synonymy&quot; stage of
+ * PROJECT_DEFINITION.md Â§6.1 (&quot;freighter&quot; â‰¡ &quot;cargo ship&quot; â‰¡ &quot;merchantman&quot; &amp;rarr; {@code
+ * cargo_vessel}). Sits between the DCG parse and {@link OntologyValidator}, so a frame naming a
+ * vessel class in the player's words is normalised before the ontology is asked about it.
+ *
+ * &lt;p&gt;&lt;b&gt;The handcrafted table has precedence&lt;/b&gt; (planning/16 Step 16.5): it is consulted BEFORE
+ * the dictionary, which makes the negotiation vocabulary deterministic regardless of the WordNet
+ * version installed. WordNet is the fallthrough for everything else, and it earns its place by
+ * doing work the table cannot: morphological lookup ({@code ships} &amp;rarr; {@code ship},
+ * {@code ferries} &amp;rarr; {@code ferry}) over the whole English noun lexicon.
+ *
+ * &lt;p&gt;&lt;b&gt;Degradation.&lt;/b&gt; If the dictionary cannot be loaded (no {@code extjwnl-data-wn31} on the
+ * classpath), the resolver logs once and serves the handcrafted table alone rather than failing
+ * the whole app. That is deliberately NOT an excuse to leave the layer untested â€” the fallthrough
+ * tests assert real dictionary results and fail loudly if the data jar is missing.
+ */
+public final class WordNetResolver {
+
+<span class="fc" id="L38">    private static final Logger log = LoggerFactory.getLogger(WordNetResolver.class);</span>
+
+    /**
+     * The negotiation vocabulary, source of truth (planning/16 Step 16.5's table). Checked before
+     * WordNet so these mappings cannot drift with the dictionary version.
+     */
+<span class="fc" id="L44">    private static final Map&lt;String, String&gt; HANDCRAFTED = Map.of(</span>
+            &quot;freighter&quot;, &quot;cargo_vessel&quot;,
+            &quot;merchantman&quot;, &quot;cargo_vessel&quot;,
+            &quot;merchant ship&quot;, &quot;cargo_vessel&quot;,
+            &quot;cargo ship&quot;, &quot;cargo_vessel&quot;,
+            &quot;slip&quot;, &quot;berth&quot;,
+            &quot;dock&quot;, &quot;berth&quot;,
+            &quot;loading&quot;, &quot;berth&quot;);
+
+    /**
+     * Words whose port meaning is NOT their dominant WordNet sense, so a bare lookup would resolve
+     * them wrongly and the table's mapping needs defending with real disambiguation.
+     *
+     * &lt;p&gt;Only {@code dock} qualifies, which deviates from planning/16's table â€” it flags
+     * {@code loading} as context-sensitive too. Recorded in ADR-10: {@code loading}'s WordNet
+     * senses are all cargo-sense ({@code [cargo, lading, freight, load, loading, payload, ...]}),
+     * never berth-sense, so running Lesk on it could only ever DELETE the {@code loading -&gt; berth}
+     * mapping the table deliberately makes. That inverts the table-has-precedence rule, so
+     * {@code loading} keeps its unconditional table mapping. {@code dock} is the genuine case: its
+     * first WordNet sense is a courtroom enclosure and its harbour sense is #5.
+     */
+<span class="fc" id="L65">    private static final Set&lt;String&gt; CONTEXT_SENSITIVE = Set.of(&quot;dock&quot;);</span>
+
+    /**
+     * Lemmas that DISCRIMINATE the berth/quay sense of an ambiguous word. Used to ask &quot;which
+     * sense won?&quot; after Lesk â€” the only way to tell dock-the-harbour from dock-the-courtroom.
+     * Drawn from the actual WordNet 3.1 synsets (verified by running):
+     * &lt;pre&gt;
+     *   berth-sense: [pier, wharf, wharfage, dock] Â· [dock, dockage, docking facility]
+     *                [dock, loading dock]          Â· [mooring, moorage, berth, slip]
+     *   other:       [dock] (courtroom) Â· [dock, sorrel, sour grass] Â· [bobtail, bob, dock]
+     * &lt;/pre&gt;
+     *
+     * &lt;p&gt;&lt;b&gt;The ambiguous word itself must NEVER appear here.&lt;/b&gt; &quot;dock&quot; is a member of the
+     * courtroom synset AND the harbour synsets, so listing it would match every sense and the
+     * disambiguation would be a no-op â€” the exact circularity this set exists to break. A
+     * discriminator has to be a lemma the OTHER senses lack ({@code dockage}, {@code wharfage},
+     * {@code moorage}, â€¦). {@code WordNetResolverTest.leskRefusesTheBerthMappingInACourtroomContext}
+     * is the regression guard: it fails the moment &quot;dock&quot; is added back.
+     */
+<span class="fc" id="L84">    private static final Set&lt;String&gt; BERTH_SENSE_LEMMAS = Set.of(</span>
+            &quot;dockage&quot;, &quot;docking facility&quot;, &quot;loading dock&quot;,
+            &quot;pier&quot;, &quot;wharf&quot;, &quot;wharfage&quot;, &quot;mooring&quot;, &quot;moorage&quot;, &quot;berth&quot;, &quot;slip&quot;);
+
+    private final boolean autoLoad;
+    private volatile Dictionary dictionary;
+    private volatile LeskWSD lesk;
+    private volatile boolean loaded;
+
+    /**
+     * Serves the WordNet 3.1 dictionary bundled as a resource jar, loaded LAZILY on first use.
+     * Reading the WordNet database costs seconds, and most callers only ever hit the handcrafted
+     * table â€” so the cost is paid on the first genuine fallthrough, not at construction (which
+     * would tax every {@code JadeBootstrap.start()} and every test that merely builds a validator).
+     */
+<span class="fc" id="L99">    public WordNetResolver() {</span>
+<span class="fc" id="L100">        this.autoLoad = true;</span>
+<span class="fc" id="L101">    }</span>
+
+    /** @param dictionary the WordNet dictionary, or {@code null} to run table-only (degraded). */
+<span class="fc" id="L104">    public WordNetResolver(Dictionary dictionary) {</span>
+<span class="fc" id="L105">        this.autoLoad = false;</span>
+<span class="fc" id="L106">        this.dictionary = dictionary;</span>
+<span class="pc bpc" id="L107" title="1 of 2 branches missed.">        this.lesk = dictionary == null ? null : new LeskWSD(dictionary);</span>
+<span class="fc" id="L108">        this.loaded = true;</span>
+<span class="fc" id="L109">    }</span>
+
+    private Dictionary dictionary() {
+<span class="fc bfc" id="L112" title="All 2 branches covered.">        if (!loaded) {</span>
+<span class="fc" id="L113">            synchronized (this) {</span>
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">                if (!loaded) {</span>
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">                    dictionary = autoLoad ? loadDefaultDictionary() : null;</span>
+<span class="pc bpc" id="L116" title="1 of 2 branches missed.">                    lesk = dictionary == null ? null : new LeskWSD(dictionary);</span>
+<span class="fc" id="L117">                    loaded = true;</span>
+                }
+<span class="fc" id="L119">            }</span>
+        }
+<span class="fc" id="L121">        return dictionary;</span>
+    }
+
+    private LeskWSD lesk() {
+<span class="fc" id="L125">        dictionary(); // forces the lazy load, which also populates lesk</span>
+<span class="fc" id="L126">        return lesk;</span>
+    }
+
+    private static Dictionary loadDefaultDictionary() {
+        try {
+<span class="fc" id="L131">            return Dictionary.getDefaultResourceInstance();</span>
+<span class="nc" id="L132">        } catch (Exception e) {</span>
+<span class="nc" id="L133">            log.warn(&quot;WordNet dictionary unavailable â€” falling back to the handcrafted table only. &quot;</span>
+                    + &quot;Check that extjwnl-data-wn31 is on the classpath.&quot;, e);
+<span class="nc" id="L135">            return null;</span>
+        }
+    }
+
+    /** True iff the WordNet dictionary loaded; false means table-only degradation. */
+    public boolean isDictionaryAvailable() {
+<span class="fc bfc" id="L141" title="All 2 branches covered.">        return dictionary() != null;</span>
+    }
+
+    /**
+     * Context-free resolution: the handcrafted table, then a plain WordNet lookup, then the input.
+     * A context-sensitive word keeps its table mapping â€” this game's utterances are negotiation
+     * context by construction, so the table's scope note is satisfied by default.
+     */
+    public String resolveToOntology(String word, String posHint) {
+<span class="fc" id="L150">        return resolveToOntology(word, posHint, List.of());</span>
+    }
+
+    /**
+     * @param posHint reserved for a future non-noun lookup; every word this resolver is asked
+     *                about today is a noun (vessel class / berth), so it is not yet consulted.
+     * @param context surrounding tokens; when non-empty, a context-sensitive word
+     *                ({@link #CONTEXT_SENSITIVE}) is disambiguated by Lesk rather than trusting
+     *                the table blind
+     */
+    public String resolveToOntology(String word, String posHint, List&lt;String&gt; context) {
+<span class="fc" id="L161">        Objects.requireNonNull(word, &quot;word&quot;);</span>
+<span class="fc" id="L162">        Objects.requireNonNull(context, &quot;context&quot;);</span>
+<span class="fc" id="L163">        String normalised = word.toLowerCase(Locale.ROOT).trim();</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">        if (normalised.isEmpty()) {</span>
+<span class="fc" id="L165">            return word;</span>
+        }
+
+<span class="fc bfc" id="L168" title="All 6 branches covered.">        if (!context.isEmpty() &amp;&amp; CONTEXT_SENSITIVE.contains(normalised) &amp;&amp; lesk() != null) {</span>
+<span class="fc" id="L169">            return resolveContextSensitive(word, normalised, context);</span>
+        }
+
+<span class="fc" id="L172">        String mapped = HANDCRAFTED.get(normalised);</span>
+<span class="fc bfc" id="L173" title="All 2 branches covered.">        if (mapped != null) {</span>
+<span class="fc" id="L174">            return mapped;</span>
+        }
+<span class="fc" id="L176">        return lookupLemma(word);</span>
+    }
+
+    /** Lesk decides which SENSE is meant; only a berth-sense win earns the table's mapping. */
+    private String resolveContextSensitive(String original, String normalised, List&lt;String&gt; context) {
+<span class="fc" id="L181">        Optional&lt;Synset&gt; sense = lesk().disambiguate(normalised, context);</span>
+<span class="fc bfc" id="L182" title="All 2 branches covered.">        if (sense.isEmpty()) {</span>
+            // No signal either way â€” keep the negotiation-domain default rather than inventing one.
+<span class="fc" id="L184">            return HANDCRAFTED.get(normalised);</span>
+        }
+<span class="fc bfc" id="L186" title="All 2 branches covered.">        if (isBerthSense(sense.get())) {</span>
+<span class="fc" id="L187">            return HANDCRAFTED.get(normalised);</span>
+        }
+        // A confidently non-port sense (dock-the-courtroom): do NOT map it into the ontology.
+<span class="fc" id="L190">        log.debug(&quot;Lesk resolved '{}' to a non-port sense ({}) â€” leaving it unmapped&quot;,</span>
+<span class="fc" id="L191">                normalised, sense.get().getGloss());</span>
+<span class="fc" id="L192">        return lookupLemma(original);</span>
+    }
+
+    private static boolean isBerthSense(Synset synset) {
+<span class="fc bfc" id="L196" title="All 2 branches covered.">        for (Word word : synset.getWords()) {</span>
+<span class="fc bfc" id="L197" title="All 2 branches covered.">            if (BERTH_SENSE_LEMMAS.contains(word.getLemma().toLowerCase(Locale.ROOT))) {</span>
+<span class="fc" id="L198">                return true;</span>
+            }
+<span class="fc" id="L200">        }</span>
+<span class="fc" id="L201">        return false;</span>
+    }
+
+    /** The WordNet fallthrough: morphological lookup over the full noun lexicon; unknown words
+     * fall through to the literal input (planning/16 Step 16.5). */
+    private String lookupLemma(String word) {
+<span class="fc" id="L207">        Dictionary dict = dictionary();</span>
+<span class="fc bfc" id="L208" title="All 2 branches covered.">        if (dict == null) {</span>
+<span class="fc" id="L209">            return word;</span>
+        }
+        try {
+<span class="fc" id="L212">            IndexWord indexWord = dict.lookupIndexWord(POS.NOUN, word);</span>
+<span class="fc bfc" id="L213" title="All 2 branches covered.">            return indexWord != null ? indexWord.getLemma() : word;</span>
+<span class="nc" id="L214">        } catch (Exception e) {</span>
+<span class="nc" id="L215">            log.warn(&quot;WordNet lookup failed for '{}' â€” returning it unchanged&quot;, word, e);</span>
+<span class="nc" id="L216">            return word;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="it.unige.portcommand.ontology.RecordRoundtripTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:31" hostname="MOJI" time="0.064">
+<testsuite name="it.unige.portcommand.ontology.RecordRoundtripTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:55" hostname="MOJI" time="0.099">
   <properties/>
-  <testcase name="berthSpecRoundtrips()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.009"/>
-  <testcase name="jsonUsesSnakeCaseKeys()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.015"/>
-  <testcase name="serviceContractRoundtrips()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.005"/>
-  <testcase name="dealRoundtripsForEveryOutcome()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.011"/>
+  <testcase name="berthSpecRoundtrips()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.022"/>
+  <testcase name="jsonUsesSnakeCaseKeys()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.02"/>
+  <testcase name="serviceContractRoundtrips()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.01"/>
+  <testcase name="dealRoundtripsForEveryOutcome()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.019"/>
   <testcase name="offerRoundtrips()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.005"/>
   <testcase name="berthSpecRejectsBadBerthId()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.0"/>
   <testcase name="vesselSpecRejectsUnknownType()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.0"/>
-  <testcase name="vesselSpecRoundtrips()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.005"/>
+  <testcase name="vesselSpecRoundtrips()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.008"/>
   <testcase name="offerRejectsOutOfRangeDuration()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.001"/>
   <testcase name="positionRoundtrips()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.004"/>
   <testcase name="dealRejectsNullOutcome()" classname="it.unige.portcommand.ontology.RecordRoundtripTest" time="0.001"/>

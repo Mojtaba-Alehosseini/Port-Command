@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TugJob.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">TugJob.java</span></div><h1>TugJob.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import it.unige.portcommand.ontology.Position;
+import jade.core.AID;
+
+/**
+ * The escort assignment a tug is currently executing â€” the value behind
+ * {@code TugAgent.currentJob()}. Set when an {@code ACCEPT_PROPOSAL} is honoured,
+ * cleared on completion (return-to-base) or on {@code CANCEL}. {@code currentJob != null}
+ * IS the &quot;busy&quot; gate (task 08 Â§8.2).
+ *
+ * &lt;p&gt;Holds the escort destination ({@code berthPosition}, delivered by the
+ * HarbourMaster in the ACCEPT), the {@code client} (the ACCEPT sender) to INFORM on
+ * {@code escort_complete}, and the CNP {@code conversationId} so that completion
+ * notification is correlated back to the Contract Net session (task 11/15). The
+ * vessel &lt;em&gt;pickup&lt;/em&gt; point is not held here â€” the transit leg consumes it
+ * directly from the tug's own remembered bid, so the tug never reads a vessel agent's
+ * live state.
+ */
+<span class="fc" id="L20">public record TugJob(String vesselId, Position berthPosition, AID client, String conversationId) {</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

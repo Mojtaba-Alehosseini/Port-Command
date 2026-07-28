@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.lifecycle.GameOverGuardTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:44" hostname="MOJI" time="0.095">
+  <properties/>
+  <testcase name="threeConsecutiveDeepDebtDaysEndTheRunExactlyOnce()" classname="it.unige.portcommand.lifecycle.GameOverGuardTest" time="0.013"/>
+  <testcase name="dayPastTheCapEndsTheRun()" classname="it.unige.portcommand.lifecycle.GameOverGuardTest" time="0.007"/>
+  <testcase name="backToBackTriggersFireExactlyOneGameOver()" classname="it.unige.portcommand.lifecycle.GameOverGuardTest" time="0.013"/>
+  <testcase name="midDayDebtAloneNeverEndsTheGame()" classname="it.unige.portcommand.lifecycle.GameOverGuardTest" time="0.004"/>
+  <testcase name="aSkippedDayRestartsTheStreak()" classname="it.unige.portcommand.lifecycle.GameOverGuardTest" time="0.01"/>
+  <testcase name="firesCleanlyFromPausedToo()" classname="it.unige.portcommand.lifecycle.GameOverGuardTest" time="0.009"/>
+  <testcase name="aRecoveredDayResetsTheConsecutiveStreak()" classname="it.unige.portcommand.lifecycle.GameOverGuardTest" time="0.007"/>
+  <testcase name="quitUsesTheLatestAbsoluteFiguresFromTheBus()" classname="it.unige.portcommand.lifecycle.GameOverGuardTest" time="0.01"/>
+  <testcase name="exactlyTheFloorIsNotBelowIt()" classname="it.unige.portcommand.lifecycle.GameOverGuardTest" time="0.004"/>
+  <testcase name="dayThirtyItselfIsStillPlayable()" classname="it.unige.portcommand.lifecycle.GameOverGuardTest" time="0.003"/>
+  <testcase name="quitBeforeAnyMoneyEventReportsTheStartingFigures()" classname="it.unige.portcommand.lifecycle.GameOverGuardTest" time="0.009"/>
+  <system-out><![CDATA[00:12:44.687 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.687 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.687 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.687 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 1 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.687 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 2 ended at -26000.0 — below the -20000.0 bankruptcy floor (2 consecutive of 3)
+00:12:44.687 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 3 ended at -27000.0 — below the -20000.0 bankruptcy floor (3 consecutive of 3)
+00:12:44.687 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> GAME_OVER
+00:12:44.687 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.700 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (bankrupt): wallet=-27000.0 day=3 reputation=50 highScore=true
+00:12:44.701 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.701 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.701 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.701 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> GAME_OVER
+00:12:44.701 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.708 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (day_cap): wallet=12345.0 day=30 reputation=50 highScore=true
+00:12:44.715 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.715 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.715 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.717 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 1 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.717 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 2 ended at -25000.0 — below the -20000.0 bankruptcy floor (2 consecutive of 3)
+00:12:44.717 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 3 ended at -25000.0 — below the -20000.0 bankruptcy floor (3 consecutive of 3)
+00:12:44.717 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> GAME_OVER
+00:12:44.717 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.720 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (bankrupt): wallet=-25000.0 day=3 reputation=50 highScore=true
+00:12:44.726 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.726 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.726 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.732 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.732 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.733 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.734 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 1 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.734 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 3 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.734 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 4 ended at -25000.0 — below the -20000.0 bankruptcy floor (2 consecutive of 3)
+00:12:44.735 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 5 ended at -25000.0 — below the -20000.0 bankruptcy floor (3 consecutive of 3)
+00:12:44.735 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> GAME_OVER
+00:12:44.735 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (bankrupt): wallet=-25000.0 day=5 reputation=50 highScore=true
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> GAME_OVER
+00:12:44.736 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.745 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (quit): wallet=50000.0 day=1 reputation=70 highScore=true
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.751 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 1 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.751 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 2 ended at -25000.0 — below the -20000.0 bankruptcy floor (2 consecutive of 3)
+00:12:44.751 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 4 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:12:44.751 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 5 ended at -25000.0 — below the -20000.0 bankruptcy floor (2 consecutive of 3)
+00:12:44.751 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 6 ended at -25000.0 — below the -20000.0 bankruptcy floor (3 consecutive of 3)
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> GAME_OVER
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (bankrupt): wallet=-25000.0 day=6 reputation=50 highScore=true
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.751 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.760 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> GAME_OVER
+00:12:44.760 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.764 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (quit): wallet=12345.0 day=2 reputation=70 highScore=true
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.770 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> GAME_OVER
+00:12:44.778 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.783 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (quit): wallet=50000.0 day=1 reputation=70 highScore=true
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

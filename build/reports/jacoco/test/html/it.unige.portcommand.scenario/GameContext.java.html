@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GameContext.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.scenario</a> &gt; <span class="el_source">GameContext.java</span></div><h1>GameContext.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.scenario;
+
+import java.util.Map;
+
+import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.bootstrap.JadeAgentSpawner;
+import it.unige.portcommand.ontology.ServiceContract;
+import it.unige.portcommand.persistence.AgentDirectory;
+import it.unige.portcommand.scenario.events.ScriptedEvent;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.RandomSource;
+import it.unige.portcommand.util.SimClock;
+
+/**
+ * Everything a {@link ScriptedEvent#apply(GameContext)} may touch (Command pattern â€”
+ * planning/23 &quot;each event is a Runnable against GameContext&quot;). Events run on the
+ * HarbourMaster's agent thread inside {@link ScriptedEventBehaviour} â€” never on the
+ * EDT; GUI effects go through {@link EventBus} only.
+ *
+ * &lt;p&gt;Deliberately carries the HarbourMaster's LIVE contract map rather than the agent
+ * itself: it is the only HM state the engine touches, and the narrower seam lets the
+ * queue mechanics be unit-tested against a plain map (no container).
+ *
+ * @param contracts     the HarbourMaster's live contract map (global + scenario-local +
+ *                      the daily stream's day-qualified clones â€” the engine registers into it)
+ * @param simClock      shared sim clock
+ * @param spawner       agent spawner for vessel-creation (same path as the Poisson spawner)
+ * @param marketHistory shared deal history (vessel spawn arg)
+ * @param randomSource  the seeded master RNG (walk-in belief/dimension sub-streams)
+ * @param eventBus      the GUI bus (notifications, weather overrides, tutorial steps)
+ * @param directory     live-agent registry (nullable in stub harnesses; production always
+ *                      threads it so spawned vessels register for the save snapshot)
+ */
+<span class="fc" id="L34">public record GameContext(</span>
+        Map&lt;String, ServiceContract&gt; contracts,
+        SimClock simClock,
+        JadeAgentSpawner spawner,
+        MarketHistoryArtifact marketHistory,
+        RandomSource randomSource,
+        EventBus eventBus,
+        AgentDirectory directory) {
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

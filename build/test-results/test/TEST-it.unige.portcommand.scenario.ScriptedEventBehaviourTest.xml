@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:58" hostname="MOJI" time="0.337">
+  <properties/>
+  <testcase name="scenarioModeSkipsDayOneDailiesAndStartsThemOnDayTwo()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.234"/>
+  <testcase name="nothingFiresWhileTheClockIsPaused()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.005"/>
+  <testcase name="restartMidScenarioDoesNotReplayFiredEvents()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.006"/>
+  <testcase name="aFiredDailySpawnWithATraceStaysFired()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.005"/>
+  <testcase name="startSimMillisIsMidnightPlusTheDeclaredTimeOfDay()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.001"/>
+  <testcase name="eventsFireInDeclaredOrderOnceTheirSimTimeIsReached()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.003"/>
+  <testcase name="aFiredDailyIdWithAVesselTraceIsNeverReMaterialised()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.006"/>
+  <testcase name="scenarioSpawnsAreNeverUnfiredEvenWithoutATrace()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.001"/>
+  <testcase name="scenarioEventsAreRelativeToScenarioStartNotMidnight()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.001"/>
+  <testcase name="sandboxMaterialisesDayOneDailiesAndRegistersDayQualifiedClones()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.031"/>
+  <testcase name="bootingOnALaterDayMaterialisesOnlyThatDayForward()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.004"/>
+  <testcase name="sandboxHasNoWaveAndAFullyFiredScenarioReloadsInactive()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.003"/>
+  <testcase name="aFiveDayTwoTutorialStepsAreNotAllFiredByTheFirstTick()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.004"/>
+  <testcase name="aFiredDailySpawnWithNoVesselTraceIsRecoveredOnReload()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.004"/>
+  <testcase name="scenarioWaveSuppressesUntilTheLastScriptedEventAndSurvivesReload()" classname="it.unige.portcommand.scenario.ScriptedEventBehaviourTest" time="0.004"/>
+  <system-out><![CDATA[00:12:58.324 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' armed: 1 pending / 0 already fired
+00:12:58.328 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' script complete — Poisson walk-in traffic resumes
+00:12:58.341 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' armed: 1 pending / 0 already fired
+00:12:58.341 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' script complete — Poisson walk-in traffic resumes
+00:12:58.346 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' armed: 3 pending / 0 already fired
+00:12:58.346 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' armed: 1 pending / 2 already fired
+00:12:58.346 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' script complete — Poisson walk-in traffic resumes
+00:12:58.360 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' armed: 3 pending / 0 already fired
+00:12:58.361 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' script complete — Poisson walk-in traffic resumes
+00:12:58.372 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' armed: 0 pending / 2 already fired
+00:12:58.374 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' armed: 2 pending / 0 already fired
+00:12:58.374 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' script complete — Poisson walk-in traffic resumes
+00:12:58.396 [Test worker] [] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted C001-D1 (cargo_vessel, contract CONTRACT-1-D1, eta sim 32400000)
+00:12:58.415 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' armed: 0 pending / 1 already fired
+00:12:58.420 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' armed: 5 pending / 0 already fired
+00:12:58.420 [Test worker] [] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 1 advanced
+00:12:58.420 [Test worker] [] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 2 advanced
+00:12:58.420 [Test worker] [] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 3 advanced
+00:12:58.420 [Test worker] [] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 4 advanced
+00:12:58.420 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' script complete — Poisson walk-in traffic resumes
+00:12:58.420 [Test worker] [] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 5 advanced
+00:12:58.420 [Test worker] [] WARN  i.u.p.s.ScriptedEventBehaviour - recovering lost daily spawn contract:CONTRACT-1:d1 — the save caught it pre-grant
+00:12:58.420 [Test worker] [] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted C001-D1 (cargo_vessel, contract CONTRACT-1-D1, eta sim 32400000)
+00:12:58.431 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' armed: 2 pending / 0 already fired
+00:12:58.431 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' armed: 1 pending / 1 already fired
+00:12:58.431 [Test worker] [] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'testsc' script complete — Poisson walk-in traffic resumes
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

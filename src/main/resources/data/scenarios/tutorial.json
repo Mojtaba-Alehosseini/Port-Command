@@ -1,0 +1,54 @@
+{
+  "key": "tutorial",
+  "displayName": "Tutorial — Calm Morning",
+  "description": "Calm day, two vessels, gentle pace. Learn the command surface and the Assistant.",
+  "targetDailyRevenue": 3500,
+  "randomSeed": 20260101,
+  "settingsOverride": { "difficulty": "EASY", "autopilotEnabled": false, "realSecondsPerGameDay": 1800 },
+  "initialState": {
+    "startDay": 1,
+    "startTimeOfDay": "08:00",
+    "wallet": 15000,
+    "reputation": 50,
+    "weatherOverride": { "windKn": 8, "visibility": "good", "swell": 0.3, "state": "sunny" },
+    "berths": [
+      { "berthId": 1, "occupied": false, "vessel": null },
+      { "berthId": 2, "occupied": false, "vessel": null },
+      { "berthId": 3, "occupied": false, "vessel": null },
+      { "berthId": 4, "occupied": false, "vessel": null }
+    ],
+    "tugs": [
+      { "tugId": 1, "status": "AVAILABLE", "fuel": 1.0 },
+      { "tugId": 2, "status": "AVAILABLE", "fuel": 1.0 },
+      { "tugId": 3, "status": "AVAILABLE", "fuel": 1.0 },
+      { "tugId": 4, "status": "AVAILABLE", "fuel": 1.0 }
+    ]
+  },
+  "contracts": [
+    {
+      "contract_id": "C-501",
+      "vessel_id": "C501",
+      "vessel_type": "cargo_vessel",
+      "berth_id": "berth_1",
+      "contracted_fee": 2000.0,
+      "contracted_hours": 6,
+      "expected_arrival_sim_millis": 300000
+    }
+  ],
+  "events": [
+    { "type": "TutorialStepAdvance", "simTimeSeconds": 0, "step": 1,
+      "text": "Welcome, Harbour Master! Your port is live. Watch the comm log — a contracted cargo vessel is inbound; the map fills in as it takes its berth." },
+    { "type": "TutorialStepAdvance", "simTimeSeconds": 200, "step": 2,
+      "text": "C501 arriving: the auto-flow requests a berth, Prolog checks compatibility, and tugs bid in a Contract Net. Follow it in the comm log." },
+    { "type": "SpawnVessel", "simTimeSeconds": 300, "vesselType": "cargo_vessel", "channel": "contracted",
+      "vesselId": null, "contractRef": "C-501", "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null },
+    { "type": "TutorialStepAdvance", "simTimeSeconds": 600, "step": 3,
+      "text": "A walk-in vessel will hail you soon. Open its chat tab when it does; press Hint and the Assistant recommends a counter-offer." },
+    { "type": "SpawnVessel", "simTimeSeconds": 900, "vesselType": "cargo_vessel", "channel": "walk_in",
+      "vesselId": "WALKIN-S1", "contractRef": null, "personality": "NEUTRAL", "minPrice": 1400, "targetPrice": 1900, "etaSimMillis": null },
+    { "type": "TutorialStepAdvance", "simTimeSeconds": 1100, "step": 4,
+      "text": "Negotiate: use the structured buttons or type your offer. The vessel accepts a fee at or below its budget — push, but not too far." },
+    { "type": "TutorialStepAdvance", "simTimeSeconds": 1500, "step": 5,
+      "text": "Well done — the port runs itself between arrivals. Watch the wallet against the daily target, and save any time from the Game menu." }
+  ]
+}

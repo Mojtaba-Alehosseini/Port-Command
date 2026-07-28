@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ScenarioLoader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.scenario</a> &gt; <span class="el_source">ScenarioLoader.java</span></div><h1>ScenarioLoader.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.scenario;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+import it.unige.portcommand.bootstrap.AgentRoster;
+import it.unige.portcommand.negotiation.Personality;
+import it.unige.portcommand.ontology.ServiceContract;
+import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.scenario.Scenario.BerthInit;
+import it.unige.portcommand.scenario.Scenario.TugInit;
+import it.unige.portcommand.scenario.events.BerthFloodEvent;
+import it.unige.portcommand.scenario.events.NotificationScriptedEvent;
+import it.unige.portcommand.scenario.events.ScriptedEvent;
+import it.unige.portcommand.scenario.events.SpawnVesselEvent;
+import it.unige.portcommand.scenario.events.TugRefuelCompleteEvent;
+import it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent;
+import it.unige.portcommand.scenario.events.WeatherChangeScriptedEvent;
+
+/**
+ * Reads and validates one scenario JSON (task 23). Parsing is strict Jackson (unknown
+ * fields FAIL â€” a scenario file is authored by hand and a typo must not silently
+ * vanish); the semantic invariants below are hand-coded per planning/23 Â§23.2, with
+ * {@code data/scenarios/_schema.json} as human documentation only.
+ *
+ * &lt;p&gt;One parses, {@code ScriptedEventBehaviour} executes â€” this class never touches
+ * the live world.
+ */
+<span class="fc" id="L38">public final class ScenarioLoader {</span>
+
+<span class="fc" id="L40">    private static final Pattern KEY = Pattern.compile(&quot;[a-z][a-z0-9_]*&quot;);</span>
+<span class="fc" id="L41">    private static final Pattern TIME_OF_DAY = Pattern.compile(&quot;([01]\\d|2[0-3]):[0-5]\\d&quot;);</span>
+<span class="fc" id="L42">    private static final Set&lt;String&gt; VISIBILITIES = Set.of(&quot;good&quot;, &quot;fair&quot;, &quot;poor&quot;);</span>
+<span class="fc" id="L43">    private static final Set&lt;String&gt; WEATHER_STATES = Set.of(&quot;sunny&quot;, &quot;cloudy&quot;, &quot;stormy&quot;);</span>
+<span class="fc" id="L44">    private static final Set&lt;String&gt; TUG_STATUSES = Set.of(&quot;AVAILABLE&quot;, &quot;REFUELING&quot;);</span>
+<span class="fc" id="L45">    private static final Set&lt;String&gt; SEVERITIES = Set.of(&quot;INFO&quot;, &quot;WARN&quot;, &quot;EMERGENCY&quot;);</span>
+    /** The four berths the port has ({@code _schema.json}'s berth_id enum). Task 26: BerthFlood. */
+<span class="fc" id="L47">    private static final Set&lt;String&gt; BERTH_IDS = Set.of(&quot;berth_1&quot;, &quot;berth_2&quot;, &quot;berth_3&quot;, &quot;berth_4&quot;);</span>
+<span class="fc" id="L48">    private static final Set&lt;String&gt; DIFFICULTIES = Set.of(&quot;EASY&quot;, &quot;NORMAL&quot;, &quot;HARD&quot;);</span>
+
+<span class="fc" id="L50">    private final ObjectMapper mapper = JsonMapper.builder().build();</span>
+
+    /** Loads and validates a scenario from a file (tests, ad-hoc keys). */
+    public Scenario load(Path file) throws IOException, ScenarioValidationException {
+<span class="nc" id="L54">        try (InputStream in = Files.newInputStream(file)) {</span>
+<span class="nc" id="L55">            return load(in, file.toString());</span>
+        }
+    }
+
+    /** Loads and validates a scenario from a stream ({@code ScenarioRegistry}'s classpath path). */
+    public Scenario load(InputStream in, String sourceLabel)
+            throws IOException, ScenarioValidationException {
+        Scenario scenario;
+        try {
+<span class="fc" id="L64">            scenario = mapper.readValue(in, Scenario.class);</span>
+<span class="fc" id="L65">        } catch (IOException e) {</span>
+<span class="fc" id="L66">            throw new ScenarioValidationException(</span>
+<span class="fc" id="L67">                    &quot;scenario &quot; + sourceLabel + &quot; failed to parse: &quot; + e.getMessage());</span>
+<span class="fc" id="L68">        }</span>
+<span class="fc" id="L69">        validate(scenario);</span>
+<span class="fc" id="L70">        return scenario;</span>
+    }
+
+    /** The shared mapper â€” the round-trip test serialises through the same modules. */
+    public ObjectMapper mapper() {
+<span class="fc" id="L75">        return mapper;</span>
+    }
+
+    private void validate(Scenario s) throws ScenarioValidationException {
+<span class="pc bpc" id="L79" title="2 of 4 branches missed.">        require(s.key() != null &amp;&amp; KEY.matcher(s.key()).matches(), &quot;key must match [a-z][a-z0-9_]*&quot;);</span>
+<span class="fc" id="L80">        require(notBlank(s.displayName()), &quot;displayName is required&quot;);</span>
+<span class="fc" id="L81">        require(notBlank(s.description()), &quot;description is required&quot;);</span>
+<span class="pc bpc" id="L82" title="1 of 2 branches missed.">        require(s.targetDailyRevenue() &gt; 0, &quot;targetDailyRevenue must be &gt; 0&quot;);</span>
+<span class="fc" id="L83">        validateSettingsOverride(s);</span>
+<span class="fc" id="L84">        validateInitialState(s);</span>
+<span class="fc" id="L85">        Set&lt;String&gt; contractIds = validateContracts(s);</span>
+<span class="fc" id="L86">        validateEvents(s, contractIds);</span>
+<span class="fc" id="L87">    }</span>
+
+    private void validateSettingsOverride(Scenario s) throws ScenarioValidationException {
+<span class="fc bfc" id="L90" title="All 2 branches covered.">        if (s.settingsOverride() == null) {</span>
+<span class="fc" id="L91">            return;</span>
+        }
+<span class="fc" id="L93">        String difficulty = s.settingsOverride().difficulty();</span>
+<span class="pc bpc" id="L94" title="2 of 4 branches missed.">        require(difficulty == null || DIFFICULTIES.contains(difficulty),</span>
+                &quot;settingsOverride.difficulty must be EASY/NORMAL/HARD, got &quot; + difficulty);
+<span class="fc" id="L96">        Long rate = s.settingsOverride().realSecondsPerGameDay();</span>
+<span class="pc bpc" id="L97" title="2 of 4 branches missed.">        require(rate == null || rate &gt; 0, &quot;settingsOverride.realSecondsPerGameDay must be &gt; 0&quot;);</span>
+<span class="fc" id="L98">    }</span>
+
+    private void validateInitialState(Scenario s) throws ScenarioValidationException {
+<span class="fc" id="L101">        Scenario.InitialState init = s.initialState();</span>
+<span class="pc bpc" id="L102" title="1 of 2 branches missed.">        require(init != null, &quot;initialState is required&quot;);</span>
+<span class="pc bpc" id="L103" title="1 of 2 branches missed.">        require(init.startDay() &gt;= 1, &quot;initialState.startDay must be &gt;= 1&quot;);</span>
+<span class="pc bpc" id="L104" title="2 of 4 branches missed.">        require(init.startTimeOfDay() != null &amp;&amp; TIME_OF_DAY.matcher(init.startTimeOfDay()).matches(),</span>
+<span class="fc" id="L105">                &quot;initialState.startTimeOfDay must be HH:MM, got &quot; + init.startTimeOfDay());</span>
+<span class="pc bpc" id="L106" title="1 of 2 branches missed.">        require(init.wallet() &gt;= 0, &quot;initialState.wallet must be &gt;= 0&quot;);</span>
+<span class="pc bpc" id="L107" title="2 of 4 branches missed.">        require(init.reputation() &gt;= 0 &amp;&amp; init.reputation() &lt;= 100,</span>
+                &quot;initialState.reputation must be in 0..100&quot;);
+<span class="fc" id="L109">        validateWeather(init.weatherOverride(), &quot;initialState.weatherOverride&quot;);</span>
+
+<span class="pc bpc" id="L111" title="2 of 4 branches missed.">        require(init.berths() != null &amp;&amp; init.berths().size() == 4, &quot;exactly 4 berths required&quot;);</span>
+<span class="fc" id="L112">        Set&lt;Integer&gt; berthIds = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">        for (BerthInit berth : init.berths()) {</span>
+<span class="pc bpc" id="L114" title="2 of 4 branches missed.">            require(berth.berthId() &gt;= 1 &amp;&amp; berth.berthId() &lt;= 4,</span>
+<span class="fc" id="L115">                    &quot;berthId must be in 1..4, got &quot; + berth.berthId());</span>
+<span class="fc" id="L116">            require(berthIds.add(berth.berthId()), &quot;duplicate berthId &quot; + berth.berthId());</span>
+<span class="fc bfc" id="L117" title="All 2 branches covered.">            if (berth.occupied()) {</span>
+<span class="fc" id="L118">                Scenario.DockedVessel v = berth.vessel();</span>
+<span class="pc bpc" id="L119" title="1 of 2 branches missed.">                require(v != null, &quot;occupied berth &quot; + berth.berthId() + &quot; needs a vessel block&quot;);</span>
+<span class="fc" id="L120">                require(notBlank(v.vesselId()), &quot;docked vessel at berth &quot; + berth.berthId() + &quot; needs a vesselId&quot;);</span>
+<span class="fc" id="L121">                require(VesselSpec.knownVesselTypes().contains(v.vesselType()),</span>
+<span class="fc" id="L122">                        &quot;unknown vessel type '&quot; + v.vesselType() + &quot;' at berth &quot; + berth.berthId());</span>
+<span class="pc bpc" id="L123" title="1 of 2 branches missed.">                require(v.dealPrice() &gt; 0, &quot;docked vessel &quot; + v.vesselId() + &quot; needs dealPrice &gt; 0&quot;);</span>
+<span class="pc bpc" id="L124" title="2 of 4 branches missed.">                require(v.dealHours() &gt;= 1 &amp;&amp; v.dealHours() &lt;= 24,</span>
+<span class="fc" id="L125">                        &quot;docked vessel &quot; + v.vesselId() + &quot; dealHours must be 1..24&quot;);</span>
+<span class="fc" id="L126">            } else {</span>
+<span class="pc bpc" id="L127" title="1 of 2 branches missed.">                require(berth.vessel() == null,</span>
+<span class="fc" id="L128">                        &quot;free berth &quot; + berth.berthId() + &quot; must not carry a vessel block&quot;);</span>
+            }
+<span class="fc" id="L130">        }</span>
+
+<span class="pc bpc" id="L132" title="2 of 4 branches missed.">        require(init.tugs() != null &amp;&amp; init.tugs().size() == 4, &quot;exactly 4 tugs required&quot;);</span>
+<span class="fc" id="L133">        Set&lt;Integer&gt; tugIds = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L134" title="All 2 branches covered.">        for (TugInit tug : init.tugs()) {</span>
+<span class="pc bpc" id="L135" title="2 of 4 branches missed.">            require(tug.tugId() &gt;= 1 &amp;&amp; tug.tugId() &lt;= 4, &quot;tugId must be in 1..4, got &quot; + tug.tugId());</span>
+<span class="fc" id="L136">            require(tugIds.add(tug.tugId()), &quot;duplicate tugId &quot; + tug.tugId());</span>
+<span class="fc" id="L137">            require(TUG_STATUSES.contains(tug.status()),</span>
+<span class="fc" id="L138">                    &quot;tug &quot; + tug.tugId() + &quot; status must be AVAILABLE|REFUELING, got &quot; + tug.status());</span>
+<span class="pc bpc" id="L139" title="2 of 4 branches missed.">            require(tug.fuel() &gt;= 0.0 &amp;&amp; tug.fuel() &lt;= 1.0, &quot;tug &quot; + tug.tugId() + &quot; fuel must be 0..1&quot;);</span>
+<span class="fc" id="L140">        }</span>
+<span class="fc" id="L141">    }</span>
+
+    private void validateWeather(Scenario.WeatherInit weather, String where)
+            throws ScenarioValidationException {
+<span class="pc bpc" id="L145" title="1 of 2 branches missed.">        require(weather != null, where + &quot; is required&quot;);</span>
+<span class="pc bpc" id="L146" title="1 of 2 branches missed.">        require(weather.windKn() &gt;= 0, where + &quot;.windKn must be &gt;= 0&quot;);</span>
+<span class="fc" id="L147">        require(VISIBILITIES.contains(weather.visibility()),</span>
+<span class="fc" id="L148">                where + &quot;.visibility must be good|fair|poor, got &quot; + weather.visibility());</span>
+<span class="pc bpc" id="L149" title="1 of 2 branches missed.">        require(weather.swell() &gt;= 0, where + &quot;.swell must be &gt;= 0&quot;);</span>
+<span class="fc" id="L150">        require(WEATHER_STATES.contains(weather.state()),</span>
+<span class="fc" id="L151">                where + &quot;.state must be sunny|cloudy|stormy, got &quot; + weather.state());</span>
+<span class="fc" id="L152">    }</span>
+
+    /** @return every contract id resolvable by a contracted spawn (scenario-local âˆª global). */
+    private Set&lt;String&gt; validateContracts(Scenario s) throws ScenarioValidationException {
+<span class="fc" id="L156">        Map&lt;String, ServiceContract&gt; global = AgentRoster.loadContracts();</span>
+<span class="fc" id="L157">        Set&lt;String&gt; ids = new HashSet&lt;&gt;(global.keySet());</span>
+<span class="fc bfc" id="L158" title="All 2 branches covered.">        for (ServiceContract contract : s.contracts()) {</span>
+<span class="fc bfc" id="L159" title="All 2 branches covered.">            require(!global.containsKey(contract.contractId()),</span>
+<span class="fc" id="L160">                    &quot;scenario contract &quot; + contract.contractId() + &quot; shadows a global contracts.json entry&quot;);</span>
+<span class="fc" id="L161">            require(ids.add(contract.contractId()), &quot;duplicate contract id &quot; + contract.contractId());</span>
+<span class="fc" id="L162">        }</span>
+<span class="fc" id="L163">        return ids;</span>
+    }
+
+    private void validateEvents(Scenario s, Set&lt;String&gt; contractIds) throws ScenarioValidationException {
+<span class="pc bpc" id="L167" title="1 of 2 branches missed.">        require(s.events() != null, &quot;events list is required (may be empty)&quot;);</span>
+<span class="fc" id="L168">        long previous = Long.MIN_VALUE;</span>
+<span class="fc" id="L169">        Set&lt;String&gt; walkInIds = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L170" title="All 2 branches covered.">        for (int i = 0; i &lt; s.events().size(); i++) {</span>
+<span class="fc" id="L171">            ScriptedEvent event = s.events().get(i);</span>
+<span class="fc" id="L172">            String at = &quot;events[&quot; + i + &quot;]&quot;;</span>
+<span class="pc bpc" id="L173" title="1 of 2 branches missed.">            require(event.simTimeSeconds() &gt;= 0, at + &quot;.simTimeSeconds must be &gt;= 0&quot;);</span>
+<span class="fc bfc" id="L174" title="All 2 branches covered.">            require(event.simTimeSeconds() &gt;= previous,</span>
+                    &quot;events must be sorted by simTimeSeconds (&quot; + at + &quot; is out of order)&quot;);
+<span class="fc" id="L176">            previous = event.simTimeSeconds();</span>
+<span class="fc bfc" id="L177" title="All 6 branches covered.">            switch (event) {</span>
+<span class="fc" id="L178">                case SpawnVesselEvent spawn -&gt; validateSpawn(spawn, at, contractIds, walkInIds, s);</span>
+<span class="fc" id="L179">                case WeatherChangeScriptedEvent weather -&gt; {</span>
+<span class="pc bpc" id="L180" title="1 of 2 branches missed.">                    require(weather.windKn() &gt;= 0, at + &quot;.windKn must be &gt;= 0&quot;);</span>
+<span class="fc" id="L181">                    require(VISIBILITIES.contains(weather.visibility()),</span>
+                            at + &quot;.visibility must be good|fair|poor&quot;);
+<span class="pc bpc" id="L183" title="1 of 2 branches missed.">                    require(weather.swell() &gt;= 0, at + &quot;.swell must be &gt;= 0&quot;);</span>
+<span class="fc" id="L184">                    require(WEATHER_STATES.contains(weather.state()), at + &quot;.state must be sunny|cloudy|stormy&quot;);</span>
+<span class="fc" id="L185">                }</span>
+<span class="fc" id="L186">                case TugRefuelCompleteEvent refuel -&gt;</span>
+<span class="pc bpc" id="L187" title="2 of 4 branches missed.">                        require(refuel.tugId() &gt;= 1 &amp;&amp; refuel.tugId() &lt;= 4, at + &quot;.tugId must be in 1..4&quot;);</span>
+<span class="fc" id="L188">                case TutorialStepAdvanceEvent step -&gt; {</span>
+<span class="pc bpc" id="L189" title="2 of 4 branches missed.">                    require(step.step() &gt;= 1 &amp;&amp; step.step() &lt;= TutorialStepAdvanceEvent.TOTAL_STEPS,</span>
+                            at + &quot;.step must be in 1..&quot; + TutorialStepAdvanceEvent.TOTAL_STEPS);
+<span class="fc" id="L191">                    require(notBlank(step.text()), at + &quot;.text is required&quot;);</span>
+<span class="fc" id="L192">                }</span>
+<span class="fc" id="L193">                case NotificationScriptedEvent notification -&gt; {</span>
+<span class="fc" id="L194">                    require(SEVERITIES.contains(notification.severity()),</span>
+                            at + &quot;.severity must be INFO|WARN|EMERGENCY&quot;);
+<span class="fc" id="L196">                    require(notBlank(notification.text()), at + &quot;.text is required&quot;);</span>
+<span class="fc" id="L197">                }</span>
+<span class="fc" id="L198">                case BerthFloodEvent flood -&gt;</span>
+                        // The null test comes FIRST: BERTH_IDS is a Set.of(...), whose contains(null)
+                        // throws NPE by contract rather than returning false. _schema.json does not
+                        // list berthId as required, so {&quot;type&quot;:&quot;BerthFlood&quot;,&quot;simTimeSeconds&quot;:780} is
+                        // schema-legal and must produce this message, not a stack trace. (The schema
+                        // is documentation only â€” this method is the sole gate.)
+<span class="pc bpc" id="L204" title="2 of 4 branches missed.">                        require(flood.berthId() != null &amp;&amp; BERTH_IDS.contains(flood.berthId()),</span>
+                                at + &quot;.berthId must be berth_1|berth_2|berth_3|berth_4, got &quot;
+<span class="fc" id="L206">                                        + flood.berthId());</span>
+            }
+        }
+<span class="fc" id="L209">    }</span>
+
+    private void validateSpawn(SpawnVesselEvent spawn, String at, Set&lt;String&gt; contractIds,
+                               Set&lt;String&gt; walkInIds, Scenario s) throws ScenarioValidationException {
+<span class="fc" id="L213">        require(VesselSpec.knownVesselTypes().contains(spawn.vesselType()),</span>
+<span class="fc" id="L214">                at + &quot;.vesselType must be one of the 5 canonical types, got &quot; + spawn.vesselType());</span>
+<span class="pc bpc" id="L215" title="1 of 2 branches missed.">        require(spawn.etaSimMillis() == null,</span>
+                at + &quot;.etaSimMillis is reserved for the programmatic daily stream&quot;);
+<span class="fc bfc" id="L217" title="All 2 branches covered.">        if (SpawnVesselEvent.CHANNEL_CONTRACTED.equals(spawn.channel())) {</span>
+<span class="pc bpc" id="L218" title="1 of 4 branches missed.">            require(spawn.contractRef() != null &amp;&amp; contractIds.contains(spawn.contractRef()),</span>
+<span class="fc" id="L219">                    at + &quot;.contractRef '&quot; + spawn.contractRef()</span>
+                            + &quot;' resolves to no scenario or contracts.json entry&quot;);
+<span class="pc bpc" id="L221" title="1 of 2 branches missed.">            require(spawn.vesselId() == null, at + &quot;: contracted spawns take the contract's vessel id&quot;);</span>
+<span class="pc bpc" id="L222" title="3 of 6 branches missed.">            require(spawn.personality() == null &amp;&amp; spawn.minPrice() == null &amp;&amp; spawn.targetPrice() == null,</span>
+                    at + &quot;: belief pins are walk-in-only&quot;);
+<span class="fc" id="L224">            ServiceContract contract = s.contracts().stream()</span>
+<span class="fc" id="L225">                    .filter(c -&gt; c.contractId().equals(spawn.contractRef()))</span>
+<span class="fc" id="L226">                    .findFirst()</span>
+<span class="fc" id="L227">                    .orElseGet(() -&gt; AgentRoster.loadContracts().get(spawn.contractRef()));</span>
+<span class="fc" id="L228">            require(contract.vesselType().equals(spawn.vesselType()),</span>
+<span class="fc" id="L229">                    at + &quot;.vesselType &quot; + spawn.vesselType() + &quot; contradicts contract &quot;</span>
+<span class="fc" id="L230">                            + spawn.contractRef() + &quot;'s &quot; + contract.vesselType());</span>
+<span class="pc bpc" id="L231" title="1 of 2 branches missed.">        } else if (SpawnVesselEvent.CHANNEL_WALK_IN.equals(spawn.channel())) {</span>
+<span class="fc" id="L232">            require(notBlank(spawn.vesselId()), at + &quot;: walk-in spawns need a vesselId&quot;);</span>
+<span class="fc" id="L233">            require(walkInIds.add(spawn.vesselId()), at + &quot;: duplicate walk-in vesselId &quot; + spawn.vesselId());</span>
+<span class="pc bpc" id="L234" title="1 of 2 branches missed.">            require(spawn.contractRef() == null, at + &quot;: walk-ins carry no contractRef&quot;);</span>
+<span class="fc bfc" id="L235" title="All 2 branches covered.">            if (spawn.personality() != null) {</span>
+                try {
+<span class="fc" id="L237">                    Personality.valueOf(spawn.personality());</span>
+<span class="nc" id="L238">                } catch (IllegalArgumentException e) {</span>
+<span class="nc" id="L239">                    throw new ScenarioValidationException(at + &quot;.personality unknown: &quot; + spawn.personality());</span>
+<span class="fc" id="L240">                }</span>
+            }
+<span class="pc bpc" id="L242" title="1 of 4 branches missed.">            require(spawn.minPrice() == null || spawn.minPrice() &gt; 0, at + &quot;.minPrice must be &gt; 0&quot;);</span>
+<span class="pc bpc" id="L243" title="1 of 4 branches missed.">            require(spawn.targetPrice() == null || spawn.targetPrice() &gt; 0, at + &quot;.targetPrice must be &gt; 0&quot;);</span>
+<span class="pc bpc" id="L244" title="1 of 4 branches missed.">            require(spawn.minPrice() == null || spawn.targetPrice() == null</span>
+<span class="pc bpc" id="L245" title="1 of 2 branches missed.">                            || spawn.minPrice() &lt; spawn.targetPrice(),</span>
+                    at + &quot;: minPrice must be &lt; targetPrice&quot;);
+        } else {
+<span class="nc" id="L248">            throw new ScenarioValidationException(at + &quot;.channel must be contracted|walk_in, got &quot;</span>
+<span class="nc" id="L249">                    + spawn.channel());</span>
+        }
+<span class="fc" id="L251">    }</span>
+
+    private static boolean notBlank(String s) {
+<span class="pc bpc" id="L254" title="2 of 4 branches missed.">        return s != null &amp;&amp; !s.isBlank();</span>
+    }
+
+    private static void require(boolean condition, String message) throws ScenarioValidationException {
+<span class="fc bfc" id="L258" title="All 2 branches covered.">        if (!condition) {</span>
+<span class="fc" id="L259">            throw new ScenarioValidationException(message);</span>
+        }
+<span class="fc" id="L261">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - SaveLoadSessionIT</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>SaveLoadSessionIT</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/it.unige.portcommand.persistence.html">it.unige.portcommand.persistence</a> &gt; SaveLoadSessionIT</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">2</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">13.618s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div id="tabs">
+<ul class="tabLinks">
+<li>
+<a href="#tab0">Tests</a>
+</li>
+<li>
+<a href="#tab1">Standard output</a>
+</li>
+<li>
+<a href="#tab2">Standard error</a>
+</li>
+</ul>
+<div id="tab0" class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">guiReady_publishesLiveHudRefreshAtFreshBoot()</td>
+<td class="success">3.051s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">saveGuard_verbatimBeliefs_exactlyOnceCharging_privacy_andLoadDeterminism()</td>
+<td class="success">10.567s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+<div id="tab1" class="tab">
+<h2>Standard output</h2>
+<span class="code">
+<pre>00:28:31.317 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:28:31.347 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:28:31.684 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+00:28:31.695 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:28:31.784 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+00:28:31.793 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:28:31.793 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:28:31.790 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:31.790 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:31.792 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:31.790 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:31.798 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (100 ms/tick, 300 real-s per game day)
+00:28:31.865 [vessel_walkin_t1] [vessel_walkin_t1] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_t1 arrived (walk-in, NEUTRAL) -&gt; opening proposal
+00:28:31.958 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-T1: opening offer forwarded (round 1, berth berth_4, price 1311.0)
+00:28:31.988 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; PAUSED
+00:28:31.994 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -&gt; RUNNING
+00:28:32.002 [eventbus-async] [] INFO  i.u.p.b.c.DispatchPlayerCommandBehaviour - PlayerCommand ACCEPT -&gt; vessel_walkin_t1 (ACCEPT-PROPOSAL)
+00:28:32.003 [vessel_walkin_t1] [vessel_walkin_t1] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_walkin_t1: ACCEPT at 1311.0 (14h) -&gt; closing deal
+00:28:32.008 [vessel_walkin_t1] [vessel_walkin_t1] INFO  i.u.p.b.n.DealClosedBehaviour - vessel_walkin_t1: deal closed at 1311.0 (14h) -&gt; CONFIRM + recorded + awaiting berth
+00:28:32.013 [vessel_walkin_t1] [vessel_walkin_t1] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_walkin_t1: berth GRANTED berth_4 (price 1311.0, 14h) -&gt; transit
+00:28:32.016 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-T1: berth GRANTED berth_4 (price 1311.0, 14h)
+00:28:32.050 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; PAUSED
+00:28:32.121 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - saved C:\Users\aleho\AppData\Local\Temp\junit1805871478727071534\savegame.json (schemaVersion 1, 4330 bytes)
+00:28:32.124 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -&gt; RUNNING
+00:28:32.183 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Users\aleho\AppData\Local\Temp\junit1805871478727071534\savegame.json (schemaVersion 1, day 1, wallet 51311.0)
+00:28:32.209 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Users\aleho\AppData\Local\Temp\junit1805871478727071534\savegame.json (schemaVersion 1, day 1, wallet 51311.0)
+00:28:32.210 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; LOADING
+00:28:34.261 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:28:34.286 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:28:34.286 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:28:34.286 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:28:34.292 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - restored 1 tracked vessel(s)
+00:28:34.292 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - weather_agent: restored weather 18 kn / good / sunny
+00:28:34.292 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - customs_agent: restored clearance sequence at 1
+00:28:34.305 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - terminal_container: restored 1 berth occupancy record(s)
+00:28:34.305 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - terminal_general: restored 3 berth occupancy record(s)
+00:28:34.306 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster respawned from save: 10 fixed agents + 1 restored vessel(s)
+00:28:34.308 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - tug_2 restored: status=IDLE fuel=1.0 job=-
+00:28:34.308 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - tug_1 restored: status=IDLE fuel=1.0 job=-
+00:28:34.309 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:34.309 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:34.309 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - tug_3 restored: status=IDLE fuel=1.0 job=-
+00:28:34.309 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:34.309 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:28:34.310 [Test worker] [] INFO  i.u.p.persistence.GameSession - loaded C:\Users\aleho\AppData\Local\Temp\junit1805871478727071534\savegame.json — day 1, wallet 51311.0, 1 restored vessel(s)
+00:28:34.310 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - tug_4 restored: status=IDLE fuel=1.0 job=-
+00:28:34.311 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:34.313 [vessel_walkin_t1] [vessel_walkin_t1] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_t1 restored: phase=TRANSIT deadline=177600 berth=berth_4 (14h at 1311.0)
+00:28:34.362 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Users\aleho\AppData\Local\Temp\junit1805871478727071534\savegame.json (schemaVersion 1, day 1, wallet 51311.0)
+00:28:34.362 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -&gt; LOADING
+00:28:37.290 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:28:37.305 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:28:37.306 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:28:37.306 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:28:37.306 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - restored 1 tracked vessel(s)
+00:28:37.313 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - weather_agent: restored weather 18 kn / good / sunny
+00:28:37.314 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - customs_agent: restored clearance sequence at 1
+00:28:37.316 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - terminal_container: restored 1 berth occupancy record(s)
+00:28:37.318 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster respawned from save: 10 fixed agents + 1 restored vessel(s)
+00:28:37.318 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:28:37.318 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - terminal_general: restored 3 berth occupancy record(s)
+00:28:37.319 [Test worker] [] INFO  i.u.p.persistence.GameSession - loaded C:\Users\aleho\AppData\Local\Temp\junit1805871478727071534\savegame.json — day 1, wallet 51311.0, 1 restored vessel(s)
+00:28:37.320 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - tug_1 restored: status=IDLE fuel=1.0 job=-
+00:28:37.320 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:37.320 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - tug_2 restored: status=IDLE fuel=1.0 job=-
+00:28:37.321 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:37.321 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - tug_3 restored: status=IDLE fuel=1.0 job=-
+00:28:37.321 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:37.322 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - tug_4 restored: status=IDLE fuel=1.0 job=-
+00:28:37.322 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:37.323 [vessel_walkin_t1] [vessel_walkin_t1] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_t1 restored: phase=TRANSIT deadline=177600 berth=berth_4 (14h at 1311.0)
+00:28:37.801 [vessel_walkin_t1] [vessel_walkin_t1] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_walkin_t1 reached berth berth_4 -&gt; docking
+00:28:40.316 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:28:40.370 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:28:40.370 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:28:40.370 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:28:40.384 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:40.384 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+00:28:40.384 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:40.385 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -&gt; LOADING
+00:28:40.385 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -&gt; RUNNING
+00:28:40.385 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (100 ms/tick, 300 real-s per game day)
+00:28:40.385 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:40.386 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:43.378 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+</pre>
+</span>
+</div>
+<div id="tab2" class="tab">
+<h2>Standard error</h2>
+<span class="code">
+<pre>Jul 28, 2026 12:28:30 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:28:31 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:28:31 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:28:31 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:28:31 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:28:31 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:28:31 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:28:31 AM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:28:31 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:28:31 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:28:34 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:28:34 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:28:34 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@639cb0c8[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:28:34 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:28:34 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:28:34 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:28:34 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:28:34 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:28:34 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:28:34 AM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:28:34 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:28:34 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:28:37 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:28:37 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:28:37 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:28:37 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:28:37 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:28:37 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:28:37 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:28:37 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:28:37 AM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:28:37 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:28:37 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:28:40 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:28:40 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:28:40 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@44e7c06b[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:28:40 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:28:40 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:28:40 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:28:40 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:28:40 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:28:40 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:28:40 AM jade.mtp.http.HTTPServer &lt;init&gt;
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:28:40 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:28:40 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:28:43 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+</pre>
+</span>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="http://www.gradle.org">Gradle 8.10.2</a> at Jul 28, 2026, 12:31:21 AM</p>
+</div>
+</div>
+</body>
+</html>

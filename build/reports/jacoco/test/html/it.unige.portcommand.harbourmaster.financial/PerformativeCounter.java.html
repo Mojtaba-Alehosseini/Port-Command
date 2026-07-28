@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PerformativeCounter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.harbourmaster.financial</a> &gt; <span class="el_source">PerformativeCounter.java</span></div><h1>PerformativeCounter.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.harbourmaster.financial;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import it.unige.portcommand.gui.events.CommLogEvent;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
+import jade.lang.acl.ACLMessage;
+
+/**
+ * Counts FIPA performatives seen today â€” the academic centrepiece of the end-of-day summary
+ * (&quot;every speech act in active use&quot;, rendered as a literal report).
+ *
+ * &lt;p&gt;Reads the RAW {@link CommLogEvent} stream, never {@code CommLogModel}'s 500-entry display
+ * view (INVARIANTS, task 18 â€” that view evicts). Counts &lt;strong&gt;all 10&lt;/strong&gt; canonical
+ * performatives independently and always reports all 10, including the zeroes: a calm tutorial
+ * day exercises 8 of them, and showing {@code CANCEL: 0} is the point â€” the missing two are a
+ * scenario fact (CANCEL in Storm, DISCONFIRM in Busy-Day), not an absence of instrumentation.
+ * &quot;All 10&quot; is a whole-project claim across the three scenarios (task 26), never a single day.
+ *
+ * &lt;p&gt;Scope caveat worth knowing at the oral: comm-log instrumentation today covers only the
+ * HarbourMaster's own send/receive path (INVARIANTS, task 17), so these are the performatives the
+ * HM saw â€” not every message on the platform. A tug's outbound send to another agent is invisible.
+ *
+ * &lt;h2&gt;Threading&lt;/h2&gt;
+ * Subscribes with {@link DeliveryMode#CALLER_THREAD}: {@code ASYNC}'s bounded queue drops the
+ * oldest event when full, and a dropped {@code CommLogEvent} is a silently wrong tally. The
+ * handler is an {@link AtomicInteger} increment on a {@link ConcurrentHashMap} â€” nanoseconds â€” so
+ * the cost of blocking the publishing agent thread is negligible and bounded.
+ *
+ * &lt;p&gt;The daily reset swaps in a fresh map under a &lt;strong&gt;write lock&lt;/strong&gt;, while increments
+ * hold the &lt;strong&gt;read lock&lt;/strong&gt; â€” which is what makes the midnight boundary exact under
+ * concurrent publishing (planning/20's flagged risk). A bare atomic swap is NOT enough and was
+ * measurably wrong: an incrementer reads the map reference, then increments, and a swap landing
+ * between those two steps sends the increment into the map that was just rendered and discarded.
+ * A concurrency test lost 17 of 4000 messages that way before the lock went in. The read lock is
+ * shared, so increments still run concurrently with each other; it only excludes the swap.
+ *
+ * &lt;p&gt;Task 24 should use {@code resetForNewDay()}'s RETURN as the summary's counts â€” one atomic
+ * operation. Calling {@link #snapshot()} and then {@code resetForNewDay()} leaves a window in
+ * which an arriving message is counted into neither day.
+ */
+public final class PerformativeCounter {
+
+    /**
+     * The 10 canonical FIPA performatives in {@code planning/20}'s enumeration order â€” which is
+     * also the EOD report's display order. Duplicated from {@code commlog.PerformativeColours}'s
+     * key set on purpose: that class imports {@code java.awt.Color}, and nothing under
+     * {@code harbourmaster/} may import AWT/Swing (INVARIANTS, task 17). The two lists are pinned
+     * in agreement by {@code PerformativeCounterTest}.
+     *
+     * &lt;p&gt;Note the DISPLAY names come from {@code ACLMessage.getPerformative(int)}, which returns
+     * the real FIPA spelling â€” {@code ACCEPT-PROPOSAL}, hyphenated. planning/20 and the demo
+     * transcript both write {@code ACCEPT_PROPOSAL}, but that is the Java CONSTANT's name, not the
+     * performative's; verified against the JADE jar rather than copied from the doc. Read the
+     * names from {@link #canonicalNames()} instead of hand-typing them.
+     */
+<span class="fc" id="L67">    private static final List&lt;Integer&gt; CANONICAL_ORDER = List.of(</span>
+<span class="fc" id="L68">            ACLMessage.REQUEST,</span>
+<span class="fc" id="L69">            ACLMessage.INFORM,</span>
+<span class="fc" id="L70">            ACLMessage.PROPOSE,</span>
+<span class="fc" id="L71">            ACLMessage.ACCEPT_PROPOSAL,</span>
+<span class="fc" id="L72">            ACLMessage.REJECT_PROPOSAL,</span>
+<span class="fc" id="L73">            ACLMessage.REFUSE,</span>
+<span class="fc" id="L74">            ACLMessage.CFP,</span>
+<span class="fc" id="L75">            ACLMessage.CANCEL,</span>
+<span class="fc" id="L76">            ACLMessage.CONFIRM,</span>
+<span class="fc" id="L77">            ACLMessage.DISCONFIRM);</span>
+
+<span class="fc" id="L79">    private final AtomicReference&lt;ConcurrentHashMap&lt;Integer, AtomicInteger&gt;&gt; counts =</span>
+            new AtomicReference&lt;&gt;(new ConcurrentHashMap&lt;&gt;());
+    /** Increments take {@code readLock} (shared); the daily swap takes {@code writeLock}. */
+<span class="fc" id="L82">    private final ReadWriteLock dayBoundary = new ReentrantReadWriteLock();</span>
+    private final Subscription&lt;CommLogEvent&gt; subscription;
+
+<span class="fc" id="L85">    public PerformativeCounter(EventBus eventBus) {</span>
+<span class="fc" id="L86">        this.subscription = eventBus.subscribe(CommLogEvent.class, this::onCommLog, DeliveryMode.CALLER_THREAD);</span>
+<span class="fc" id="L87">    }</span>
+
+    /** Public so a test can drive it directly, mirroring the task-10 subscribe-once pattern. */
+    public void onCommLog(CommLogEvent event) {
+<span class="fc" id="L91">        dayBoundary.readLock().lock();</span>
+        try {
+<span class="fc" id="L93">            counts.get().computeIfAbsent(event.performative(), k -&gt; new AtomicInteger()).incrementAndGet();</span>
+        } finally {
+<span class="fc" id="L95">            dayBoundary.readLock().unlock();</span>
+        }
+<span class="fc" id="L97">    }</span>
+
+    /** The 10 canonical performative display names, in report order â€” the single source. */
+    public static List&lt;String&gt; canonicalNames() {
+<span class="fc" id="L101">        return CANONICAL_ORDER.stream().map(ACLMessage::getPerformative).toList();</span>
+    }
+
+    /**
+     * Today's counts so far: all 10 canonical performatives, in canonical order, zeroes included.
+     * A non-canonical performative that was really sent (e.g. {@code QUERY_REF}, which the
+     * player's ASK command genuinely produces) is counted internally but deliberately NOT
+     * reported â€” the EOD table is the FIPA-10 claim, and widening it would muddy that.
+     */
+    public Map&lt;String, Integer&gt; snapshot() {
+<span class="fc" id="L111">        return render(counts.get());</span>
+    }
+
+    /**
+     * Atomically ends the day: swaps in fresh counters and returns the day's final counts in the
+     * same shape as {@link #snapshot()}. Prefer this over snapshot-then-reset (see class javadoc).
+     */
+    public Map&lt;String, Integer&gt; resetForNewDay() {
+<span class="fc" id="L119">        dayBoundary.writeLock().lock();</span>
+        try {
+<span class="fc" id="L121">            return render(counts.getAndSet(new ConcurrentHashMap&lt;&gt;()));</span>
+        } finally {
+<span class="fc" id="L123">            dayBoundary.writeLock().unlock();</span>
+        }
+    }
+
+    private static Map&lt;String, Integer&gt; render(Map&lt;Integer, AtomicInteger&gt; raw) {
+<span class="fc" id="L128">        Map&lt;String, Integer&gt; out = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L129" title="All 2 branches covered.">        for (int performative : CANONICAL_ORDER) {</span>
+<span class="fc" id="L130">            AtomicInteger counter = raw.get(performative);</span>
+<span class="fc bfc" id="L131" title="All 2 branches covered.">            out.put(ACLMessage.getPerformative(performative), counter == null ? 0 : counter.get());</span>
+<span class="fc" id="L132">        }</span>
+        // LinkedHashMap + unmodifiableMap, never Map.copyOf â€” INVARIANTS' determinism rule
+        // (Map.copyOf randomises iteration order per JVM launch, so the report's column order
+        // would change between runs).
+<span class="fc" id="L136">        return Collections.unmodifiableMap(out);</span>
+    }
+
+    /**
+     * Seeds today's counts from a save file (task 22 load), keyed by the canonical display
+     * names {@link #snapshot()} renders. Unknown names are ignored; non-canonical performatives
+     * counted-but-not-reported before the save (e.g. QUERY_REF) are not round-tripped â€” they
+     * never appear in the EOD table, so nothing observable changes (dated note, planning/22).
+     */
+    public void restore(Map&lt;String, Integer&gt; byCanonicalName) {
+<span class="fc" id="L146">        dayBoundary.writeLock().lock();</span>
+        try {
+<span class="fc" id="L148">            ConcurrentHashMap&lt;Integer, AtomicInteger&gt; fresh = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L149" title="All 2 branches covered.">            for (int performative : CANONICAL_ORDER) {</span>
+<span class="fc" id="L150">                Integer count = byCanonicalName.get(ACLMessage.getPerformative(performative));</span>
+<span class="fc bfc" id="L151" title="All 4 branches covered.">                if (count != null &amp;&amp; count &gt; 0) {</span>
+<span class="fc" id="L152">                    fresh.put(performative, new AtomicInteger(count));</span>
+                }
+<span class="fc" id="L154">            }</span>
+<span class="fc" id="L155">            counts.set(fresh);</span>
+        } finally {
+<span class="fc" id="L157">            dayBoundary.writeLock().unlock();</span>
+        }
+<span class="fc" id="L159">    }</span>
+
+    /** Stops counting. For symmetry with the GUI panels' lifecycle; production never cancels. */
+    public void close() {
+<span class="fc" id="L163">        subscription.cancel();</span>
+<span class="fc" id="L164">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

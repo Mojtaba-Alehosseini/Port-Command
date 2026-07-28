@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RetractIfFloodBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.coordination</a> &gt; <span class="el_source">RetractIfFloodBehaviour.java</span></div><h1>RetractIfFloodBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.coordination;
+
+import java.util.Map;
+import java.util.Optional;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import it.unige.portcommand.agents.TerminalState;
+import it.unige.portcommand.artifacts.BerthOccupancyUpdate;
+import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.bootstrap.ServiceLocator;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import jade.core.AID;
+import jade.core.Agent;
+import jade.core.behaviours.CyclicBehaviour;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Emergency override: on an INFORM whose content is {@code event=flood, berth_id=X}
+ * for a berth this terminal manages, clears the occupancy and DISCONFIRMs the
+ * prior CONFIRM to the HarbourMaster. The terminal expects no other inbound INFORM,
+ * so a non-flood INFORM is simply consumed and ignored.
+ */
+public final class RetractIfFloodBehaviour extends CyclicBehaviour {
+
+<span class="fc" id="L29">    private static final Logger log = LoggerFactory.getLogger(RetractIfFloodBehaviour.class);</span>
+<span class="fc" id="L30">    private static final MessageTemplate TEMPLATE = MessageTemplate.and(</span>
+<span class="fc" id="L31">            MessageTemplate.MatchPerformative(ACLMessage.INFORM),</span>
+<span class="fc" id="L32">            MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));</span>
+
+    private final TerminalState state;
+    private final PortStateArtifact portState;
+    private final ServiceLocator locator;
+
+    public RetractIfFloodBehaviour(Agent agent, TerminalState state, PortStateArtifact portState,
+                                   ServiceLocator locator) {
+<span class="fc" id="L40">        super(agent);</span>
+<span class="fc" id="L41">        this.state = state;</span>
+<span class="fc" id="L42">        this.portState = portState;</span>
+<span class="fc" id="L43">        this.locator = locator;</span>
+<span class="fc" id="L44">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L48">        ACLMessage msg = myAgent.receive(TEMPLATE);</span>
+<span class="fc bfc" id="L49" title="All 2 branches covered.">        if (msg == null) {</span>
+<span class="fc" id="L50">            block();</span>
+<span class="fc" id="L51">            return;</span>
+        }
+<span class="fc" id="L53">        JsonNode node = TerminalJson.readTreeOrNull(msg.getContent());</span>
+<span class="pc bpc" id="L54" title="2 of 4 branches missed.">        if (node == null || !&quot;flood&quot;.equals(textOrNull(node, &quot;event&quot;))) {</span>
+<span class="nc" id="L55">            return; // not a flood notice â€” ignore</span>
+        }
+<span class="fc" id="L57">        String berthId = textOrNull(node, &quot;berth_id&quot;);</span>
+<span class="pc bpc" id="L58" title="1 of 4 branches missed.">        if (berthId == null || !state.manages(berthId)) {</span>
+<span class="fc" id="L59">            return;</span>
+        }
+<span class="fc" id="L61">        log.info(&quot;flood INFORM for berth {} â€” retracting occupancy&quot;, berthId);</span>
+<span class="fc" id="L62">        state.releaseBerth(berthId)</span>
+<span class="fc" id="L63">                .ifPresent(freed -&gt; portState.update(new BerthOccupancyUpdate(berthId, freed)));</span>
+<span class="fc" id="L64">        disconfirmToHm(berthId);</span>
+<span class="fc" id="L65">    }</span>
+
+    private void disconfirmToHm(String berthId) {
+<span class="fc" id="L68">        Optional&lt;AID&gt; hm = locator.findUnique(&quot;harbour-master&quot;);</span>
+<span class="pc bpc" id="L69" title="1 of 2 branches missed.">        if (hm.isEmpty()) {</span>
+<span class="nc" id="L70">            log.warn(&quot;no harbour-master in DF; cannot DISCONFIRM flood retract for {}&quot;, berthId);</span>
+<span class="nc" id="L71">            return;</span>
+        }
+<span class="fc" id="L73">        ACLMessage disconfirm = MessageFactory.create(ACLMessage.DISCONFIRM);</span>
+<span class="fc" id="L74">        disconfirm.addReceiver(hm.get());</span>
+        // Task 26: lets AutoFlowDispatcherBehaviour match this unsolicited retraction by protocol
+        // instead of claiming every DISCONFIRM on the game ontology.
+<span class="fc" id="L77">        disconfirm.setProtocol(AutoFlowDispatcherBehaviour.FLOOD_RETRACT_PROTOCOL);</span>
+<span class="fc" id="L78">        disconfirm.setContent(TerminalJson.write(Map.of(&quot;notice&quot;, &quot;retracted&quot;, &quot;berth_id&quot;, berthId)));</span>
+<span class="fc" id="L79">        myAgent.send(disconfirm);</span>
+<span class="fc" id="L80">        log.info(&quot;DISCONFIRM retracted berth={} -&gt; harbour-master&quot;, berthId);</span>
+<span class="fc" id="L81">    }</span>
+
+    private static String textOrNull(JsonNode node, String field) {
+<span class="fc" id="L84">        JsonNode value = node.get(field);</span>
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">        return value == null ? null : value.asText();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

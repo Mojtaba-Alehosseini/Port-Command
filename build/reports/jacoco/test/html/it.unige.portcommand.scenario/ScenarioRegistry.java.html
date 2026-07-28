@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ScenarioRegistry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.scenario</a> &gt; <span class="el_source">ScenarioRegistry.java</span></div><h1>ScenarioRegistry.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.scenario;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * The 3 packaged scenarios (PROJECT_DEFINITION Â§7.2 â€” an explicitly fixed set, so the
+ * keys are enumerated rather than the classpath directory scanned, which is unreliable
+ * inside a jar). All are loaded and validated eagerly at construction: a malformed
+ * packaged scenario is a build error ({@code ScenarioLoaderTest}), never a runtime
+ * surprise in the NewGameDialog.
+ */
+public final class ScenarioRegistry {
+
+    /** Locked v1 keys, in NewGameDialog display order. No freeform, no 4th or 5th. */
+<span class="fc" id="L20">    public static final List&lt;String&gt; KEYS = List.of(&quot;tutorial&quot;, &quot;busy_day&quot;, &quot;storm&quot;);</span>
+
+<span class="fc" id="L22">    private final Map&lt;String, Scenario&gt; byKey = new LinkedHashMap&lt;&gt;();</span>
+
+<span class="fc" id="L24">    public ScenarioRegistry() {</span>
+<span class="fc" id="L25">        ScenarioLoader loader = new ScenarioLoader();</span>
+<span class="fc bfc" id="L26" title="All 2 branches covered.">        for (String key : KEYS) {</span>
+<span class="fc" id="L27">            String resource = &quot;/data/scenarios/&quot; + key + &quot;.json&quot;;</span>
+<span class="fc" id="L28">            try (InputStream in = ScenarioRegistry.class.getResourceAsStream(resource)) {</span>
+<span class="pc bpc" id="L29" title="1 of 2 branches missed.">                if (in == null) {</span>
+<span class="nc" id="L30">                    throw new IllegalStateException(resource + &quot; not found on classpath&quot;);</span>
+                }
+<span class="fc" id="L32">                Scenario scenario = loader.load(in, resource);</span>
+<span class="pc bpc" id="L33" title="1 of 2 branches missed.">                if (!key.equals(scenario.key())) {</span>
+<span class="nc" id="L34">                    throw new IllegalStateException(resource + &quot; declares key '&quot; + scenario.key()</span>
+                            + &quot;' â€” must equal its file stem '&quot; + key + &quot;'&quot;);
+                }
+<span class="fc" id="L37">                byKey.put(key, scenario);</span>
+<span class="nc" id="L38">            } catch (IOException | ScenarioValidationException e) {</span>
+<span class="nc" id="L39">                throw new IllegalStateException(&quot;packaged scenario &quot; + resource + &quot; is invalid&quot;, e);</span>
+<span class="fc" id="L40">            }</span>
+<span class="fc" id="L41">        }</span>
+<span class="fc" id="L42">    }</span>
+
+    public Optional&lt;Scenario&gt; findByKey(String key) {
+<span class="fc" id="L45">        return Optional.ofNullable(byKey.get(key));</span>
+    }
+
+    /** All 3, in display order. */
+    public List&lt;Scenario&gt; all() {
+<span class="fc" id="L50">        return List.copyOf(byKey.values());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

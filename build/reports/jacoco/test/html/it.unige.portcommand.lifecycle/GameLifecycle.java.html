@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GameLifecycle.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.lifecycle</a> &gt; <span class="el_source">GameLifecycle.java</span></div><h1>GameLifecycle.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.lifecycle;
+
+import it.unige.portcommand.lifecycle.events.GamePausedEvent;
+import it.unige.portcommand.lifecycle.events.GameResumedEvent;
+import it.unige.portcommand.lifecycle.events.QuitEvent;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.SimClock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The master game-loop orchestrator (task 24): owns the {@link GameMode} state
+ * machine and the {@link WallClockAdvancer}, and is the only mover of both.
+ *
+ * &lt;p&gt;&lt;b&gt;Not a singleton.&lt;/b&gt; planning/24 sketched a static
+ * {@code getInstance()}; that contradicts the repo-wide constructor-DI rule
+ * (ADR-02 â€” no static registries), so {@code Main} constructs one instance and
+ * threads it to the GUI shell, exactly like {@code EventBus}/{@code SimClock}
+ * (decision recorded in ADR-14). Likewise the sketched
+ * {@code GameLifecycleListener} registry is dropped: the {@link EventBus}
+ * already IS the observer mechanism, so transitions publish
+ * {@link GamePausedEvent}/{@link GameResumedEvent} (and {@code GameOverGuard}
+ * publishes {@code GameOverEvent}) instead of calling a second listener list.
+ *
+ * &lt;p&gt;&lt;b&gt;Pause propagation.&lt;/b&gt; {@code pause()} pauses the {@link SimClock};
+ * every agent-side periodic behaviour is either driven by elapsed sim time
+ * (movement, cargo, EOD detection â€” frozen time means nothing happens) or
+ * explicitly gates on {@code simClock().isPaused()} (Poisson spawner, weather).
+ * No agent holds a reference to this class â€” the clock's paused flag, already
+ * injected everywhere, is the single mechanical gate (ADR-14).
+ *
+ * &lt;p&gt;&lt;b&gt;Quit.&lt;/b&gt; {@link #quit()} only publishes {@link QuitEvent};
+ * {@code GameOverGuard} converts it to {@code GameOverEvent(&quot;quit&quot;)} and calls
+ * {@link #gameOver()} â€” the guard stays the single emitter of
+ * {@code GameOverEvent} AND the single caller of the GAME_OVER transition, so
+ * bankruptcy/day-cap/quit cannot double-fire against each other.
+ *
+ * &lt;p&gt;Thread-safety: all mutators are {@code synchronized}; {@link #mode()} is
+ * a volatile read. Mutators are called from the EDT (menu/Esc) and the JADE HM
+ * thread (guard) â€” both are quick, non-blocking calls.
+ */
+public final class GameLifecycle {
+
+<span class="fc" id="L44">    private static final Logger log = LoggerFactory.getLogger(GameLifecycle.class);</span>
+
+    private final SimClock simClock;
+    private final EventBus eventBus;
+    private final WallClockAdvancer advancer;
+<span class="fc" id="L49">    private volatile GameMode mode = GameMode.MENU;</span>
+
+    public GameLifecycle(SimClock simClock, EventBus eventBus) {
+<span class="fc" id="L52">        this(simClock, eventBus, new WallClockAdvancer(simClock));</span>
+<span class="fc" id="L53">    }</span>
+
+    /** Test seam: inject a short-period advancer (or a stopped one). */
+<span class="fc" id="L56">    GameLifecycle(SimClock simClock, EventBus eventBus, WallClockAdvancer advancer) {</span>
+<span class="fc" id="L57">        this.simClock = simClock;</span>
+<span class="fc" id="L58">        this.eventBus = eventBus;</span>
+<span class="fc" id="L59">        this.advancer = advancer;</span>
+<span class="fc" id="L60">    }</span>
+
+    /**
+     * MENU â†’ LOADING â†’ RUNNING and start of live time. Today {@code Main} calls this right
+     * after the agent roster spawns â€” there is no menu screen yet (tasks 21/23 own the real
+     * MENU/LOADING content; the LOADINGâ†’MENU failed-load edge becomes reachable with task 22).
+     */
+    public synchronized void startNewGame() {
+<span class="fc" id="L68">        transition(GameMode.LOADING);</span>
+<span class="fc" id="L69">        transition(GameMode.RUNNING);</span>
+<span class="fc" id="L70">        simClock.resume();</span>
+<span class="fc" id="L71">        advancer.start();</span>
+<span class="fc" id="L72">    }</span>
+
+    public synchronized void pause() {
+<span class="fc" id="L75">        transition(GameMode.PAUSED);</span>
+<span class="fc" id="L76">        simClock.pause();</span>
+<span class="fc" id="L77">        eventBus.publish(new GamePausedEvent());</span>
+<span class="fc" id="L78">    }</span>
+
+    public synchronized void resume() {
+<span class="fc" id="L81">        transition(GameMode.RUNNING);</span>
+<span class="fc" id="L82">        simClock.resume();</span>
+<span class="fc" id="L83">        eventBus.publish(new GameResumedEvent());</span>
+<span class="fc" id="L84">    }</span>
+
+    /** Publishes {@link QuitEvent}; the GAME_OVER transition itself is {@code GameOverGuard}'s. */
+    public synchronized void quit() {
+<span class="fc" id="L88">        eventBus.publish(new QuitEvent());</span>
+<span class="fc" id="L89">    }</span>
+
+    /**
+     * Enters LOADING for a save-file load (task 22): freezes the clock and holds the mode
+     * while the world is torn down and rebuilt. Legal from RUNNING, PAUSED and GAME_OVER
+     * (the load-after-game-over &quot;continue from the autosave&quot; path). The advancer keeps
+     * ticking the paused clock harmlessly â€” {@code SimClock.advance} is a no-op while paused.
+     */
+    public synchronized void beginLoading() {
+<span class="fc" id="L98">        transition(GameMode.LOADING);</span>
+<span class="fc" id="L99">        simClock.pause();</span>
+<span class="fc" id="L100">    }</span>
+
+    /** LOADING â†’ RUNNING once the rebuilt world is ready: clock resumes, advancer ensured live. */
+    public synchronized void completeLoading() {
+<span class="fc" id="L104">        transition(GameMode.RUNNING);</span>
+<span class="fc" id="L105">        simClock.resume();</span>
+<span class="fc" id="L106">        advancer.start(); // idempotent; also revives the post-game-over path (gameOver() stopped it)</span>
+<span class="fc" id="L107">        eventBus.publish(new GameResumedEvent());</span>
+<span class="fc" id="L108">    }</span>
+
+    /** LOADING â†’ MENU on a failed load: the old world is gone, nothing playable is up. */
+    public synchronized void failLoading() {
+<span class="fc" id="L112">        transition(GameMode.MENU);</span>
+<span class="fc" id="L113">        simClock.pause();</span>
+<span class="fc" id="L114">        advancer.stop();</span>
+<span class="fc" id="L115">    }</span>
+
+    /**
+     * {@link #pause()} if RUNNING, no-op otherwise; returns whether a pause happened. For
+     * callers reacting to events that may race a game-over (the end-of-day dialog): a plain
+     * {@code pause()} would throw from GAME_OVER.
+     */
+    public synchronized boolean pauseIfRunning() {
+<span class="fc bfc" id="L123" title="All 2 branches covered.">        if (mode != GameMode.RUNNING) {</span>
+<span class="fc" id="L124">            return false;</span>
+        }
+<span class="fc" id="L126">        pause();</span>
+<span class="fc" id="L127">        return true;</span>
+    }
+
+    /** {@link #resume()} if PAUSED, no-op otherwise (e.g. the run ended while paused). */
+    public synchronized void resumeIfPaused() {
+<span class="fc bfc" id="L132" title="All 2 branches covered.">        if (mode == GameMode.PAUSED) {</span>
+<span class="fc" id="L133">            resume();</span>
+        }
+<span class="fc" id="L135">    }</span>
+
+    /**
+     * RUNNING|PAUSED â†’ GAME_OVER: freezes the clock and stops the advancer. Called only by
+     * {@code GameOverGuard} (single game-over authority); publishes nothing itself â€” the
+     * guard's {@code GameOverEvent} is the signal, and it carries the final stats.
+     */
+    public synchronized void gameOver() {
+<span class="fc" id="L143">        transition(GameMode.GAME_OVER);</span>
+<span class="fc" id="L144">        simClock.pause();</span>
+<span class="fc" id="L145">        advancer.stop();</span>
+<span class="fc" id="L146">    }</span>
+
+    public GameMode mode() {
+<span class="fc" id="L149">        return mode;</span>
+    }
+
+    public boolean isRunning() {
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">        return mode == GameMode.RUNNING;</span>
+    }
+
+    /** The shared game clock â€” read-only convenience for the GUI shell (countdowns, day/time). */
+    public SimClock simClock() {
+<span class="nc" id="L158">        return simClock;</span>
+    }
+
+    private void transition(GameMode to) {
+<span class="fc" id="L162">        GameMode from = mode;</span>
+<span class="fc bfc" id="L163" title="All 2 branches covered.">        if (!GameMode.canTransition(from, to)) {</span>
+<span class="fc" id="L164">            throw new IllegalStateException(&quot;illegal game-mode transition &quot; + from + &quot; -&gt; &quot; + to);</span>
+        }
+<span class="fc" id="L166">        mode = to;</span>
+<span class="fc" id="L167">        log.info(&quot;game mode {} -&gt; {}&quot;, from, to);</span>
+<span class="fc" id="L168">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

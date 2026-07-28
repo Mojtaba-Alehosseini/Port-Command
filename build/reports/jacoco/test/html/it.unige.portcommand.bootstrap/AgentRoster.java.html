@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AgentRoster.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.bootstrap</a> &gt; <span class="el_source">AgentRoster.java</span></div><h1>AgentRoster.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.bootstrap;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import it.unige.portcommand.agents.AssistantAgent;
+import it.unige.portcommand.agents.CustomsAgent;
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.agents.HarbourMasterInitArgs;
+import it.unige.portcommand.agents.InitArgs.TerminalInitArgs;
+import it.unige.portcommand.agents.InitArgs.TugInitArgs;
+import it.unige.portcommand.agents.InitArgs.WeatherInitArgs;
+import it.unige.portcommand.agents.TerminalAgent;
+import it.unige.portcommand.agents.TransitionMatrix;
+import it.unige.portcommand.agents.TugAgent;
+import it.unige.portcommand.agents.WeatherAgent;
+import it.unige.portcommand.agents.WeatherSnapshot;
+import it.unige.portcommand.agents.ContractedVesselAgent;
+import it.unige.portcommand.agents.WalkInVesselAgent;
+import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
+import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.harbourmaster.TugBasePositions;
+import it.unige.portcommand.negotiation.NegotiationEngine;
+import it.unige.portcommand.negotiation.NoOpNegotiationEngine;
+import it.unige.portcommand.nlp.LLMBridge;
+import it.unige.portcommand.ontology.ServiceContract;
+import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.persistence.AgentDirectory;
+import it.unige.portcommand.persistence.GameState;
+import it.unige.portcommand.persistence.HarbourMasterRestoreState;
+import it.unige.portcommand.persistence.dto.TerminalStateDTO;
+import it.unige.portcommand.persistence.dto.TugStateDTO;
+import it.unige.portcommand.persistence.dto.VesselStateDTO;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.RandomSource;
+import it.unige.portcommand.util.SimClock;
+import jade.wrapper.AgentController;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The single place that constructs the fixed agent fleet (10 instances). Live
+ * shared services (port state, sim clock, master RNG, market history) are
+ * constructor-injected through the {@code Object[]} args channel â€” never statics.
+ * Weather gets {@code [WeatherInitArgs, RandomSource]}; Customs {@code [RandomSource]};
+ * Assistant {@code [MarketHistoryArtifact]}; terminals {@code [TerminalInitArgs,
+ * PortStateArtifact, SimClock]}. Vessel agents are spawned dynamically elsewhere.
+ *
+ * &lt;p&gt;(The growing parameter list is a known smell â€” a {@code GameServices} bundle is
+ * the planned cleanup once tasks 10/11/15 add their injected deps.)
+ */
+public final class AgentRoster {
+
+<span class="fc" id="L60">    private static final Logger log = LoggerFactory.getLogger(AgentRoster.class);</span>
+    /**
+     * The HarbourMaster's starting wallet/reputation. Public since task 24: {@code Main}
+     * seeds {@code GameOverGuard}'s pre-first-event fallback stats from the SAME constants
+     * that feed {@code HarbourMasterInitArgs}, so a quit-before-any-money game-over reports
+     * the true opening figures rather than a second, driftable copy.
+     */
+    public static final double STARTING_WALLET = 50_000.0;
+    public static final double STARTING_REPUTATION = 70.0;
+
+    private AgentRoster() {
+    }
+
+    public static void spawnSingletonsAndFleet(JadeAgentSpawner spawner, PortStateArtifact portState,
+                                               SimClock simClock, RandomSource randomSource,
+                                               MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
+                                               EventBus eventBus) {
+        // Pre-task-22 signature, kept for the existing ITs: no live-agent directory, and a
+        // fresh PolicyRegistryArtifact per boot (nothing persisted it before task 22).
+<span class="fc" id="L79">        spawnSingletonsAndFleet(spawner, portState, simClock, randomSource, marketHistory,</span>
+                llmBridge, eventBus, null, new PolicyRegistryArtifact());
+<span class="fc" id="L81">    }</span>
+
+    /**
+     * Task 22 signature: {@code directory} (nullable) rides the args channel so every agent
+     * self-registers for the save snapshot; {@code policyRegistry} is the SESSION-stable
+     * instance ({@code JadeBootstrap} owns it since task 22 â€” the save persists its triggers,
+     * so a per-boot instance would silently drop the player's policies on reload).
+     */
+    public static void spawnSingletonsAndFleet(JadeAgentSpawner spawner, PortStateArtifact portState,
+                                               SimClock simClock, RandomSource randomSource,
+                                               MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
+                                               EventBus eventBus, AgentDirectory directory,
+                                               PolicyRegistryArtifact policyRegistry) {
+        // Pre-task-23 signature: no scenario runtime â†’ the HM installs no scripted-event
+        // engine and no daily contracted stream (the stub-harness ITs' quiet world).
+<span class="fc" id="L96">        spawnSingletonsAndFleet(spawner, portState, simClock, randomSource, marketHistory,</span>
+                llmBridge, eventBus, directory, policyRegistry, null);
+<span class="fc" id="L98">    }</span>
+
+    /**
+     * Task 23 signature: {@code scenarioRuntime} (nullable) rides the args channel, found
+     * by type â€” with it the HarbourMaster installs {@code ScriptedEventBehaviour} (the
+     * scenario script when one is active, and the {@code ContractSchedule} daily
+     * contracted stream in sandbox play too). Every production boot passes one.
+     */
+    public static void spawnSingletonsAndFleet(JadeAgentSpawner spawner, PortStateArtifact portState,
+                                               SimClock simClock, RandomSource randomSource,
+                                               MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
+                                               EventBus eventBus, AgentDirectory directory,
+                                               PolicyRegistryArtifact policyRegistry,
+                                               it.unige.portcommand.scenario.ScenarioRuntime scenarioRuntime) {
+<span class="fc" id="L112">        spawner.spawn(&quot;harbour_master&quot;, HarbourMasterAgent.class, new Object[] {</span>
+                new HarbourMasterInitArgs(STARTING_WALLET, STARTING_REPUTATION),
+<span class="fc" id="L114">                simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory,</span>
+                null, directory, scenarioRuntime});
+<span class="fc" id="L116">        spawner.spawn(&quot;weather_agent&quot;, WeatherAgent.class,</span>
+<span class="fc" id="L117">                new Object[] {defaultWeatherInit(), randomSource, simClock, eventBus, directory});</span>
+<span class="fc" id="L118">        spawner.spawn(&quot;customs_agent&quot;, CustomsAgent.class, new Object[] {randomSource, directory});</span>
+<span class="fc" id="L119">        spawner.spawn(&quot;assistant_agent&quot;, AssistantAgent.class,</span>
+                new Object[] {marketHistory, policyRegistry, llmBridge, eventBus, directory});
+
+<span class="fc" id="L122">        spawner.spawn(&quot;terminal_container&quot;, TerminalAgent.class, new Object[] {</span>
+<span class="fc" id="L123">                new TerminalInitArgs(&quot;terminal_container&quot;, List.of(&quot;berth_2&quot;), 4), portState, simClock,</span>
+                directory});
+<span class="fc" id="L125">        spawner.spawn(&quot;terminal_general&quot;, TerminalAgent.class, new Object[] {</span>
+<span class="fc" id="L126">                new TerminalInitArgs(&quot;terminal_general&quot;, List.of(&quot;berth_1&quot;, &quot;berth_3&quot;, &quot;berth_4&quot;), 6),</span>
+                portState, simClock, directory});
+
+<span class="fc bfc" id="L129" title="All 2 branches covered.">        for (int i = 1; i &lt;= 4; i++) {</span>
+<span class="fc" id="L130">            String id = &quot;tug_&quot; + i;</span>
+            // args[1]=portState, args[2]=simClock injected (not the serializable init record) â€”
+            // same channel as the terminals, so the tug can publish position + drive sim-time motion.
+            // Base position from the canonical TugBasePositions table (task 18's map seeds idle
+            // dots from the same table â€” one source of truth, no duplicated coordinates).
+<span class="fc" id="L135">            spawner.spawn(id, TugAgent.class, new Object[] {</span>
+<span class="fc" id="L136">                    new TugInitArgs(id, TugBasePositions.position(id), 350.0, 2.0, 12.0, 1.0),</span>
+                    portState, simClock, directory});
+        }
+
+<span class="fc" id="L140">        log.info(&quot;Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)&quot;);</span>
+<span class="fc" id="L141">    }</span>
+
+    /**
+     * Task 22: rebuilds the fleet FROM A SAVE. Same 10 fixed agents, in the planning/22
+     * load order (HM first so the coordination hub exists before anything greets it;
+     * service agents next; restored vessels LAST), each with its persisted DTO appended to
+     * the standard args (found by type â€” the index-based required args are untouched).
+     * {@code reconciledTerminals} is the loader's occupancy list already filtered against
+     * the restored vessel set (no berth leaks to ghosts).
+     */
+    public static void respawnFromSave(JadeAgentSpawner spawner, PortStateArtifact portState,
+                                       SimClock simClock, RandomSource randomSource,
+                                       MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
+                                       EventBus eventBus, AgentDirectory directory,
+                                       PolicyRegistryArtifact policyRegistry, GameState state,
+                                       List&lt;TerminalStateDTO&gt; reconciledTerminals,
+                                       java.util.concurrent.CompletableFuture&lt;HarbourMasterAgent&gt; hmReady,
+                                       it.unige.portcommand.scenario.ScenarioRuntime scenarioRuntime) {
+        // The existing task-20 self-future seam at args[7] (adversarial review #3): agent
+        // spawning is async, and the loader must not declare the world live before the HM â€”
+        // the coordination anchor and the directory's first entry â€” finished its setup.
+        // Task 23: scenarioRuntime (found by type) re-arms the scripted-event engine with
+        // the save's firedEventIds, so a reloaded mid-scenario game never replays.
+<span class="fc" id="L164">        spawner.spawn(&quot;harbour_master&quot;, HarbourMasterAgent.class, new Object[] {</span>
+<span class="fc" id="L165">                new HarbourMasterInitArgs(state.wallet(), state.reputation()),</span>
+<span class="fc" id="L166">                simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory,</span>
+                hmReady, directory,
+<span class="fc" id="L168">                new HarbourMasterRestoreState(state.agents().harbourMaster(),</span>
+<span class="fc" id="L169">                        state.agents().activeVessels()),</span>
+                scenarioRuntime});
+<span class="fc" id="L171">        spawner.spawn(&quot;weather_agent&quot;, WeatherAgent.class, new Object[] {</span>
+<span class="fc" id="L172">                defaultWeatherInit(), randomSource, simClock, eventBus, directory,</span>
+<span class="fc" id="L173">                state.agents().weather().current()});</span>
+<span class="fc" id="L174">        spawner.spawn(&quot;customs_agent&quot;, CustomsAgent.class, new Object[] {</span>
+<span class="fc" id="L175">                randomSource, directory, state.agents().customs()});</span>
+<span class="fc" id="L176">        spawner.spawn(&quot;assistant_agent&quot;, AssistantAgent.class,</span>
+                new Object[] {marketHistory, policyRegistry, llmBridge, eventBus, directory});
+
+<span class="fc" id="L179">        spawner.spawn(&quot;terminal_container&quot;, TerminalAgent.class, new Object[] {</span>
+<span class="fc" id="L180">                new TerminalInitArgs(&quot;terminal_container&quot;, List.of(&quot;berth_2&quot;), 4), portState, simClock,</span>
+<span class="fc" id="L181">                directory, terminalDto(reconciledTerminals, &quot;terminal_container&quot;)});</span>
+<span class="fc" id="L182">        spawner.spawn(&quot;terminal_general&quot;, TerminalAgent.class, new Object[] {</span>
+<span class="fc" id="L183">                new TerminalInitArgs(&quot;terminal_general&quot;, List.of(&quot;berth_1&quot;, &quot;berth_3&quot;, &quot;berth_4&quot;), 6),</span>
+<span class="fc" id="L184">                portState, simClock, directory, terminalDto(reconciledTerminals, &quot;terminal_general&quot;)});</span>
+
+<span class="fc" id="L186">        Map&lt;String, TugStateDTO&gt; tugDtos = state.agents().tugs().stream()</span>
+<span class="fc" id="L187">                .collect(Collectors.toMap(TugStateDTO::tugId, t -&gt; t));</span>
+<span class="fc bfc" id="L188" title="All 2 branches covered.">        for (int i = 1; i &lt;= 4; i++) {</span>
+<span class="fc" id="L189">            String id = &quot;tug_&quot; + i;</span>
+<span class="fc" id="L190">            spawner.spawn(id, TugAgent.class, new Object[] {</span>
+<span class="fc" id="L191">                    new TugInitArgs(id, TugBasePositions.position(id), 350.0, 2.0, 12.0, 1.0),</span>
+<span class="fc" id="L192">                    portState, simClock, directory, tugDtos.get(id)});</span>
+        }
+
+<span class="fc bfc" id="L195" title="All 2 branches covered.">        for (VesselStateDTO dto : state.agents().activeVessels()) {</span>
+<span class="fc" id="L196">            VesselSpec spec = new VesselSpec(dto.id(), dto.vesselType(), dto.draft(), dto.length(),</span>
+<span class="fc" id="L197">                    dto.tonnage(), dto.cargoClass(), dto.etaArrivalSimMillis());</span>
+<span class="fc bfc" id="L198" title="All 2 branches covered.">            if (VesselStateDTO.CHANNEL_WALK_IN.equals(dto.channel())) {</span>
+                // A restored walk-in never negotiates again (open negotiations are not
+                // persisted) â€” the engine slot is filled with the no-op binding.
+<span class="fc" id="L201">                spawner.spawn(vesselLocalName(spec), WalkInVesselAgent.class, new Object[] {</span>
+                        spec, simClock, marketHistory, new NoOpNegotiationEngine(), randomSource,
+                        directory, dto});
+            } else {
+<span class="fc" id="L205">                spawner.spawn(vesselLocalName(spec), ContractedVesselAgent.class, new Object[] {</span>
+                        spec, simClock, marketHistory,
+<span class="pc bpc" id="L207" title="1 of 2 branches missed.">                        dto.contractRef() == null ? &quot;restored&quot; : dto.contractRef(), directory, dto});</span>
+            }
+<span class="fc" id="L209">        }</span>
+
+<span class="fc" id="L211">        log.info(&quot;Roster respawned from save: 10 fixed agents + {} restored vessel(s)&quot;,</span>
+<span class="fc" id="L212">                state.agents().activeVessels().size());</span>
+<span class="fc" id="L213">    }</span>
+
+    private static TerminalStateDTO terminalDto(List&lt;TerminalStateDTO&gt; terminals, String terminalId) {
+<span class="fc" id="L216">        return terminals.stream().filter(t -&gt; terminalId.equals(t.terminalId())).findFirst()</span>
+<span class="fc" id="L217">                .orElse(new TerminalStateDTO(terminalId, List.of()));</span>
+    }
+
+    /**
+     * Spawn a contracted (Channel A) vessel. Args: {@code [VesselSpec, SimClock,
+     * MarketHistoryArtifact, contractId]}.
+     */
+    public static AgentController spawnContractedVessel(JadeAgentSpawner spawner, VesselSpec spec,
+                                                        String contractId, SimClock simClock,
+                                                        MarketHistoryArtifact marketHistory) {
+<span class="fc" id="L227">        return spawnContractedVessel(spawner, spec, contractId, simClock, marketHistory, null);</span>
+    }
+
+    /** Task 22 overload: {@code directory} (nullable) appended so contracted vessels register
+     * for the save snapshot â€” without it a save cannot capture their flow position (task 23's
+     * live spawner must use this form). */
+    public static AgentController spawnContractedVessel(JadeAgentSpawner spawner, VesselSpec spec,
+                                                        String contractId, SimClock simClock,
+                                                        MarketHistoryArtifact marketHistory,
+                                                        AgentDirectory directory) {
+<span class="fc" id="L237">        return spawner.spawn(vesselLocalName(spec), ContractedVesselAgent.class,</span>
+                new Object[] {spec, simClock, marketHistory, contractId, directory});
+    }
+
+    /**
+     * Spawn a walk-in (Channel B) vessel. Args: {@code [VesselSpec, SimClock,
+     * MarketHistoryArtifact, NegotiationEngine, RandomSource]}. Production passes a
+     * {@code RealNegotiationEngine} (task 15, constructed per-vessel by
+     * {@code PoissonSpawnBehaviour}); tests pass a Mockito mock or their own engine instance.
+     */
+    public static AgentController spawnWalkIn(JadeAgentSpawner spawner, VesselSpec spec, SimClock simClock,
+                                              MarketHistoryArtifact marketHistory, RandomSource randomSource,
+                                              NegotiationEngine engine) {
+<span class="fc" id="L250">        return spawnWalkIn(spawner, spec, simClock, marketHistory, randomSource, engine, null);</span>
+    }
+
+    /** Task 22 overload: {@code directory} (nullable) appended so live-spawned walk-ins
+     * self-register and are captured by the save snapshot like every other agent. */
+    public static AgentController spawnWalkIn(JadeAgentSpawner spawner, VesselSpec spec, SimClock simClock,
+                                              MarketHistoryArtifact marketHistory, RandomSource randomSource,
+                                              NegotiationEngine engine, AgentDirectory directory) {
+<span class="fc" id="L258">        return spawnWalkIn(spawner, spec, simClock, marketHistory, randomSource, engine, directory, null);</span>
+    }
+
+    /** Task 23 overload: {@code overrides} (nullable) pins scenario-scripted hidden
+     * beliefs; null fields (or a null record) keep the normal template draws. Still
+     * in-JVM-only â€” the beliefs never surface (P-04). */
+    public static AgentController spawnWalkIn(JadeAgentSpawner spawner, VesselSpec spec, SimClock simClock,
+                                              MarketHistoryArtifact marketHistory, RandomSource randomSource,
+                                              NegotiationEngine engine, AgentDirectory directory,
+                                              it.unige.portcommand.negotiation.WalkInBeliefOverrides overrides) {
+<span class="fc" id="L268">        return spawner.spawn(vesselLocalName(spec), WalkInVesselAgent.class,</span>
+                new Object[] {spec, simClock, marketHistory, engine, randomSource, directory, overrides});
+    }
+
+    /** A JADE-legal local name ({@code ^[a-z][a-z0-9_]*$}) derived from the vessel id. Public
+     * since task 22: the HarbourMaster's tracking restore and the loader both rebuild AIDs
+     * from this SAME derivation â€” determinism of the name is what makes that legal. */
+    public static String vesselLocalName(VesselSpec spec) {
+<span class="fc" id="L276">        return &quot;vessel_&quot; + spec.vesselId().toLowerCase().replaceAll(&quot;[^a-z0-9_]&quot;, &quot;_&quot;);</span>
+    }
+
+    /** Calm starting weather + the default Markov matrix, no scripted overrides. */
+    private static WeatherInitArgs defaultWeatherInit() {
+<span class="fc" id="L281">        return new WeatherInitArgs(</span>
+                new WeatherSnapshot(18, &quot;good&quot;, 0.5, &quot;sunny&quot;, 0L),
+<span class="fc" id="L283">                TransitionMatrix.defaults(),</span>
+<span class="fc" id="L284">                List.of());</span>
+    }
+
+    /**
+     * Loads {@code data/contracts.json} once at startup (planning/11 Â§11.2 step 1),
+     * keyed by {@code contractId}. A test constructs its own small map directly
+     * instead of calling this (constructor-arg DI â€” no static registry). Missing
+     * resource is non-fatal (empty map, WARN logged). Public since task 23:
+     * {@code ScenarioLoader} validates contracted spawn refs against this same set,
+     * and these entries ARE the daily contracted stream's base schedule
+     * ({@code scenario.ContractSchedule}).
+     */
+    public static Map&lt;String, ServiceContract&gt; loadContracts() {
+<span class="fc" id="L297">        try (InputStream in = AgentRoster.class.getResourceAsStream(&quot;/data/contracts.json&quot;)) {</span>
+<span class="pc bpc" id="L298" title="1 of 2 branches missed.">            if (in == null) {</span>
+<span class="nc" id="L299">                log.warn(&quot;data/contracts.json not found on classpath; HarbourMaster boots with zero contracts&quot;);</span>
+<span class="nc" id="L300">                return Map.of();</span>
+            }
+<span class="fc" id="L302">            List&lt;ServiceContract&gt; contracts = new ObjectMapper()</span>
+<span class="fc" id="L303">                    .readValue(in, new TypeReference&lt;List&lt;ServiceContract&gt;&gt;() { });</span>
+<span class="fc" id="L304">            return contracts.stream()</span>
+<span class="fc" id="L305">                    .collect(Collectors.toMap(ServiceContract::contractId, c -&gt; c));</span>
+<span class="nc bnc" id="L306" title="All 2 branches missed.">        } catch (IOException e) {</span>
+<span class="nc" id="L307">            throw new IllegalStateException(&quot;failed to load data/contracts.json&quot;, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

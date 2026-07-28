@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AwaitBerthBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.auto_flow</a> &gt; <span class="el_source">AwaitBerthBehaviour.java</span></div><h1>AwaitBerthBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.auto_flow;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import it.unige.portcommand.agents.BaseVesselAgent;
+import it.unige.portcommand.core.TerminalJson;
+import jade.core.Agent;
+import jade.core.behaviours.CyclicBehaviour;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Waits for the HarbourMaster's berth decision on a given conversation id. On
+ * ACCEPT_PROPOSAL it stores the granted {berth, price, hours} and transitions to
+ * {@link TransitToBerthBehaviour}; on REFUSE it terminates (v1 â€” no retry).
+ */
+public final class AwaitBerthBehaviour extends CyclicBehaviour {
+
+<span class="fc" id="L20">    private static final Logger log = LoggerFactory.getLogger(AwaitBerthBehaviour.class);</span>
+
+    private final MessageTemplate template;
+
+    public AwaitBerthBehaviour(Agent agent, String conversationId) {
+<span class="fc" id="L25">        super(agent);</span>
+<span class="fc" id="L26">        this.template = MessageTemplate.and(</span>
+<span class="fc" id="L27">                MessageTemplate.MatchConversationId(conversationId),</span>
+<span class="fc" id="L28">                MessageTemplate.or(</span>
+<span class="fc" id="L29">                        MessageTemplate.MatchPerformative(ACLMessage.ACCEPT_PROPOSAL),</span>
+<span class="fc" id="L30">                        MessageTemplate.MatchPerformative(ACLMessage.REFUSE)));</span>
+<span class="fc" id="L31">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L35">        ACLMessage msg = myAgent.receive(template);</span>
+<span class="fc bfc" id="L36" title="All 2 branches covered.">        if (msg == null) {</span>
+<span class="fc" id="L37">            block();</span>
+<span class="fc" id="L38">            return;</span>
+        }
+<span class="fc" id="L40">        BaseVesselAgent vessel = (BaseVesselAgent) myAgent;</span>
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">        if (msg.getPerformative() == ACLMessage.REFUSE) {</span>
+<span class="nc" id="L42">            log.info(&quot;{}: berth REFUSED -&gt; terminating (v1, no retry)&quot;, myAgent.getLocalName());</span>
+<span class="nc" id="L43">            myAgent.doDelete();</span>
+<span class="nc" id="L44">            return;</span>
+        }
+<span class="fc" id="L46">        JsonNode grant = TerminalJson.readTreeOrNull(msg.getContent());</span>
+<span class="fc" id="L47">        String berthId = text(grant, &quot;berth_id&quot;);</span>
+<span class="fc" id="L48">        double price = num(grant, &quot;price&quot;);</span>
+<span class="fc" id="L49">        int hours = (int) num(grant, &quot;hours&quot;);</span>
+<span class="fc" id="L50">        vessel.setDeal(berthId, price, hours);</span>
+
+<span class="fc" id="L52">        log.info(&quot;{}: berth GRANTED {} (price {}, {}h) -&gt; transit&quot;, myAgent.getLocalName(), berthId, price, hours);</span>
+<span class="fc" id="L53">        myAgent.addBehaviour(new TransitToBerthBehaviour(myAgent, vessel.simClock()));</span>
+<span class="fc" id="L54">        myAgent.removeBehaviour(this); // MUST be last: removeBehaviour nulls myAgent</span>
+<span class="fc" id="L55">    }</span>
+
+    private static String text(JsonNode node, String field) {
+<span class="pc bpc" id="L58" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L59">            return null;</span>
+        }
+<span class="fc" id="L61">        JsonNode v = node.get(field);</span>
+<span class="pc bpc" id="L62" title="1 of 2 branches missed.">        return v == null ? null : v.asText();</span>
+    }
+
+    private static double num(JsonNode node, String field) {
+<span class="pc bpc" id="L66" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L67">            return 0.0;</span>
+        }
+<span class="fc" id="L69">        JsonNode v = node.get(field);</span>
+<span class="pc bpc" id="L70" title="1 of 2 branches missed.">        return v == null ? 0.0 : v.asDouble();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

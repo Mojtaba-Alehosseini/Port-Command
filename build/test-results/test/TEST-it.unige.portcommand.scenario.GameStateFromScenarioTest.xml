@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.scenario.GameStateFromScenarioTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:57" hostname="MOJI" time="0.269">
+  <properties/>
+  <testcase name="scenarioStateRoundTripsThroughTheRealSaveFile()" classname="it.unige.portcommand.scenario.GameStateFromScenarioTest" time="0.093"/>
+  <testcase name="tutorialOpensOnTheCanonicalStartState()" classname="it.unige.portcommand.scenario.GameStateFromScenarioTest" time="0.004"/>
+  <testcase name="everyPackagedScenarioBuildsAValidSaveShapedState()" classname="it.unige.portcommand.scenario.GameStateFromScenarioTest" time="0.005"/>
+  <testcase name="firedEventIdsIsAlwaysSerializedEvenWhenEmpty()" classname="it.unige.portcommand.scenario.GameStateFromScenarioTest" time="0.035"/>
+  <testcase name="stormDerivesDockedVesselsAndOccupanciesTogether()" classname="it.unige.portcommand.scenario.GameStateFromScenarioTest" time="0.003"/>
+  <testcase name="busyDayBootsTugOneRefuellingWithLowTank()" classname="it.unige.portcommand.scenario.GameStateFromScenarioTest" time="0.003"/>
+  <system-out><![CDATA[00:12:57.412 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - saved C:\Users\aleho\AppData\Local\Temp\junit8357159689352462902\scenario-boot.json (schemaVersion 1, 3852 bytes)
+00:12:57.436 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Users\aleho\AppData\Local\Temp\junit8357159689352462902\scenario-boot.json (schemaVersion 1, day 1, wallet 30000.0)
+00:12:57.550 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - saved C:\Users\aleho\AppData\Local\Temp\junit4227970366692267595\tutorial-boot.json (schemaVersion 1, 2545 bytes)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

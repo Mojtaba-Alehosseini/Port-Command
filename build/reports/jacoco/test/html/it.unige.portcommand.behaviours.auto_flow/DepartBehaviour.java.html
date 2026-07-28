@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DepartBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.auto_flow</a> &gt; <span class="el_source">DepartBehaviour.java</span></div><h1>DepartBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.auto_flow;
+
+import java.util.Map;
+
+import it.unige.portcommand.agents.BaseVesselAgent;
+import it.unige.portcommand.behaviours.SimTickerBehaviour;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.util.SimClock;
+import jade.core.Agent;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Animates the vessel out of the harbour over a short sim-interval, INFORMs the
+ * HarbourMaster of departure, then {@code doDelete()}s the agent. A test completes it
+ * by advancing the SimClock.
+ */
+public final class DepartBehaviour extends SimTickerBehaviour {
+
+<span class="fc" id="L23">    private static final Logger log = LoggerFactory.getLogger(DepartBehaviour.class);</span>
+    private static final long TICK_SIM_MILLIS = 1000L;
+    private static final long DEPART_SIM_MILLIS = 60_000L; // ~1 sim-minute to clear the harbour
+
+    private final long departedBySimMillis;
+<span class="fc" id="L28">    private boolean informed = false;</span>
+
+    public DepartBehaviour(Agent agent, SimClock simClock) {
+<span class="fc" id="L31">        this(agent, simClock, simClock.nowSimMillis() + DEPART_SIM_MILLIS);</span>
+<span class="fc" id="L32">    }</span>
+
+    /** Task 22 resume: finish the departure against the SAVED deadline. */
+    public static DepartBehaviour resuming(Agent agent, SimClock simClock, long departedBySimMillis) {
+<span class="nc" id="L36">        return new DepartBehaviour(agent, simClock, departedBySimMillis);</span>
+    }
+
+    private DepartBehaviour(Agent agent, SimClock simClock, long departedBySimMillis) {
+<span class="fc" id="L40">        super(agent, simClock, TICK_SIM_MILLIS);</span>
+<span class="fc" id="L41">        this.departedBySimMillis = departedBySimMillis;</span>
+<span class="fc" id="L42">        ((BaseVesselAgent) agent).reportPhase(BaseVesselAgent.FlowPhase.DEPARTING, departedBySimMillis);</span>
+<span class="fc" id="L43">    }</span>
+
+    @Override
+    protected void onSimTick() {
+<span class="fc" id="L47">        BaseVesselAgent vessel = (BaseVesselAgent) myAgent;</span>
+<span class="fc" id="L48">        Position p = vessel.position();</span>
+<span class="fc" id="L49">        vessel.setPosition(new Position(p.x() - 1.0, p.y(), p.headingDeg())); // cosmetic</span>
+<span class="fc bfc" id="L50" title="All 2 branches covered.">        if (simClock().nowSimMillis() &lt; departedBySimMillis) {</span>
+<span class="fc" id="L51">            return;</span>
+        }
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">        if (!informed) {</span>
+<span class="fc" id="L54">            vessel.serviceLocator().findUnique(&quot;harbour-master&quot;).ifPresent(hm -&gt; {</span>
+<span class="fc" id="L55">                ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);</span>
+<span class="fc" id="L56">                inform.addReceiver(hm);</span>
+<span class="fc" id="L57">                inform.setContent(TerminalJson.write(Map.of(</span>
+<span class="fc" id="L58">                        &quot;intent&quot;, &quot;departed&quot;, &quot;vessel_id&quot;, vessel.spec().vesselId())));</span>
+<span class="fc" id="L59">                myAgent.send(inform);</span>
+<span class="fc" id="L60">            });</span>
+<span class="fc" id="L61">            informed = true;</span>
+        }
+<span class="fc" id="L63">        log.info(&quot;{} departed -&gt; doDelete&quot;, myAgent.getLocalName());</span>
+<span class="fc" id="L64">        myAgent.doDelete();</span>
+<span class="fc" id="L65">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

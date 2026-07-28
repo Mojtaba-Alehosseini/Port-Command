@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HandleEmergencyBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.coordination</a> &gt; <span class="el_source">HandleEmergencyBehaviour.java</span></div><h1>HandleEmergencyBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.coordination;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.CustomsClearedEvent;
+import it.unige.portcommand.gui.events.NotificationEvent;
+import jade.core.Agent;
+import jade.core.behaviours.CyclicBehaviour;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Customs reply handler â€” resolves task-09's deferred note (&quot;HM customs-REQUEST
+ * keys + reply parse â€” task 11&quot;). Every reply to a customs pre-clearance REQUEST
+ * (sent by {@link AutoFlowDispatcherBehaviour}) lands here, correlated back to a
+ * vesselId via the conversationId {@code AutoFlowDispatcherBehaviour} recorded (the
+ * reply content itself carries no vessel_id). CONFIRM = cleared; INFORM
+ * {@code event=flagged} (always {@code priority=high}) = mark the vessel BLOCKED and
+ * notify the GUI; INFORM {@code event=routine_inspection} = non-blocking, logged
+ * only.
+ *
+ * &lt;p&gt;Matched by protocol tag ({@link #CUSTOMS_CLEARANCE_PROTOCOL}, set on the
+ * REQUEST by {@code AutoFlowDispatcherBehaviour} and preserved into the reply by
+ * {@code ACLMessage.createReply()}), not sender AID â€” see
+ * {@link HandleWeatherAlertBehaviour}'s javadoc for why AID-based matching had a
+ * real gap (adversarial review finding, task 11). Customs happened to be safe from
+ * that specific race (the AID is resolved before any reply can exist), but the
+ * protocol tag removes the dependency entirely and keeps both handlers consistent.
+ */
+public final class HandleEmergencyBehaviour extends CyclicBehaviour {
+
+<span class="fc" id="L35">    private static final Logger log = LoggerFactory.getLogger(HandleEmergencyBehaviour.class);</span>
+
+    /** Set on the customs pre-clearance REQUEST by {@code AutoFlowDispatcherBehaviour}. */
+    public static final String CUSTOMS_CLEARANCE_PROTOCOL = &quot;port-command-customs-clearance&quot;;
+<span class="fc" id="L39">    private static final MessageTemplate TEMPLATE = MessageTemplate.and(</span>
+<span class="fc" id="L40">            MessageTemplate.MatchProtocol(CUSTOMS_CLEARANCE_PROTOCOL),</span>
+<span class="fc" id="L41">            MessageTemplate.or(MessageTemplate.MatchPerformative(ACLMessage.CONFIRM),</span>
+<span class="fc" id="L42">                    MessageTemplate.MatchPerformative(ACLMessage.INFORM)));</span>
+
+    public HandleEmergencyBehaviour(Agent agent) {
+<span class="fc" id="L45">        super(agent);</span>
+<span class="fc" id="L46">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L50">        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;</span>
+<span class="fc" id="L51">        ACLMessage msg = hm.receiveLogged(TEMPLATE);</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">        if (msg == null) {</span>
+<span class="fc" id="L53">            block();</span>
+<span class="fc" id="L54">            return;</span>
+        }
+
+<span class="fc" id="L57">        String vesselId = hm.pendingCustomsChecks().remove(msg.getConversationId());</span>
+<span class="pc bpc" id="L58" title="1 of 2 branches missed.">        if (vesselId == null) {</span>
+<span class="nc" id="L59">            log.warn(&quot;customs reply on untracked conversation {} â€” ignoring&quot;, msg.getConversationId());</span>
+<span class="nc" id="L60">            return;</span>
+        }
+<span class="fc" id="L62">        JsonNode content = TerminalJson.readTreeOrNull(msg.getContent());</span>
+
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">        if (msg.getPerformative() == ACLMessage.CONFIRM) {</span>
+<span class="nc" id="L65">            log.info(&quot;{}: customs CLEARED ({})&quot;, vesselId, text(content, &quot;ref&quot;));</span>
+            // Task 20: the â‚¬100 customs_clearance trigger. Published here, AFTER the
+            // pendingCustomsChecks.remove(...) guard above consumed the conversation, so a
+            // duplicate CONFIRM cannot charge twice. That ordering matters: receiveLogged already
+            // published this message's raw CommLogEvent BEFORE the guard ran, so anything charging
+            // off the comm-log firehose instead would double-count. vesselId comes from the
+            // conversation map because the CONFIRM's own content carries none.
+<span class="nc" id="L72">            hm.eventBus().publish(new CustomsClearedEvent(</span>
+<span class="nc" id="L73">                    vesselId, text(content, &quot;ref&quot;), hm.simClock().nowSimMillis()));</span>
+<span class="nc" id="L74">            return;</span>
+        }
+<span class="fc" id="L76">        String event = text(content, &quot;event&quot;);</span>
+<span class="pc bpc" id="L77" title="1 of 2 branches missed.">        if (&quot;flagged&quot;.equals(event)) {</span>
+<span class="fc" id="L78">            hm.activeVessels().computeIfPresent(vesselId, (id, t) -&gt; t.withBlocked(true));</span>
+<span class="fc" id="L79">            hm.eventBus().publish(new NotificationEvent(</span>
+<span class="fc" id="L80">                    &quot;Customs flagged &quot; + vesselId + &quot; (&quot; + text(content, &quot;reason&quot;) + &quot;)&quot;,</span>
+<span class="fc" id="L81">                    NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis()));</span>
+<span class="fc" id="L82">            log.info(&quot;{}: customs FLAGGED ({}) -&gt; BLOCKED&quot;, vesselId, text(content, &quot;reason&quot;));</span>
+        } else {
+<span class="nc" id="L84">            log.info(&quot;{}: customs {} (non-blocking)&quot;, vesselId, event);</span>
+        }
+<span class="fc" id="L86">    }</span>
+
+    private static String text(JsonNode node, String field) {
+<span class="pc bpc" id="L89" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L90">            return null;</span>
+        }
+<span class="fc" id="L92">        JsonNode v = node.get(field);</span>
+<span class="pc bpc" id="L93" title="1 of 2 branches missed.">        return v == null ? null : v.asText();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

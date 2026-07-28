@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.DCGParserTest" tests="85" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:45" hostname="MOJI" time="0.313">
+  <properties/>
+  <testcase name="aQuoteInTheUtteranceCannotBreakTheGoalString()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.02"/>
+  <testcase name="negationBuildsAPolarityConstraint()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.01"/>
+  <testcase name="vocativeTellFormRoutesToTheAddressedType()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.034"/>
+  <testcase name="bareRejectCarriesNoReason()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[make it 2200] needs a context" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.078"/>
+  <testcase name="[200 more] needs a context" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[split the difference] needs a context" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[accept the tanker] needs a context" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.004"/>
+  <testcase name="anaphoraRefusesAnAmbiguousTheTankerWithTwoTankersActive()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="deltaDoesArithmeticOverTheReferenceOffer()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[I will give you $2000] -&gt; 2000 USD" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I will give you 2000$] -&gt; 2000 USD" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I will give you 2000 dollars] -&gt; 2000 USD" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="nullInputMissesRatherThanThrowing()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[Deal, thanks] still parses (filler tail)" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.004"/>
+  <testcase name="[Yes please] still parses (filler tail)" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.003"/>
+  <testcase name="[No deal, mate] still parses (filler tail)" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[Too low please] still parses (filler tail)" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[I will give you 2000 please] still parses (filler tail)" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[Too low] -&gt; reason price_too_low" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.006"/>
+  <testcase name="[Too cheap] -&gt; reason price_too_low" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[Too expensive] -&gt; reason price_too_high" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[Too high] -&gt; reason price_too_high" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="parsesTheAcceptanceCriterionUtterance()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[make it 2200 but leave by 19:30] refuses its residue" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[200 more but only if you drop] refuses its residue" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[accept the tanker but not the ferry] refuses its residue" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.004"/>
+  <testcase name="ellipsisCompletesABareFragmentFromTheStandingOffer()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="commandResolvesANamedTargetButStillMissesWithoutAQuantifier()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I will give you 2000 for 5 hours at berth 3] -&gt; move=propose" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I'll pay 1800 euros for berth 3] -&gt; move=propose" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[We offer 2200 for 6 hours] -&gt; move=propose" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[I'll only give you 1500] -&gt; move=counter" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.003"/>
+  <testcase name="[How about 1800?] -&gt; move=counter" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I can only do 1500 for 4 hours] -&gt; move=counter" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[Deal] -&gt; move=accept" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[Yes, agreed!] -&gt; move=accept" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[Sounds good] -&gt; move=accept" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[Too low] -&gt; move=reject" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[No deal] -&gt; move=reject" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[Not interested] -&gt; move=reject" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[What berths are free?] -&gt; move=ask" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[How many tugs do you have?] -&gt; move=ask" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[What's your best price?] -&gt; move=ask" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="aHostileVesselNameInTheContextCannotInjectAGoal()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="vocativeResolvesANameAcrossTheColonSeparator()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[I will give you 2000 for 5 hours] -&gt; duration 5" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I will give you 2000 for 5h] -&gt; duration 5" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[I will give you 2000 for 5hrs] -&gt; duration 5" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[I will give you 2000 for 5 h] -&gt; duration 5" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="clockTimeSurvivesAsADeadline()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="mixedNormalisationsParseEndToEnd()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I will give you €2000] -&gt; 2000 EUR" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I will give you 2000€] -&gt; 2000 EUR" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I will give you €2,000] -&gt; 2000 EUR" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[I will give you 2000 euros] -&gt; 2000 EUR" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I will give you 2000 eur] -&gt; 2000 EUR" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="commandBuildsAQuantifiedImperativeWithACondition()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="caseAndTrailingPunctuationAreIrrelevant()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I will give you 2000 at berth 9] fails rather than dropping the slot" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[I will give you 2000 at berth 0] fails rather than dropping the slot" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[I will give you 2000 for 99 hours] fails rather than dropping the slot" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I will give you 2000 for 0 hours] fails rather than dropping the slot" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[We offer 2200 by 25:99] fails rather than dropping the slot" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="anaphoraResolvesTheDefiniteDescriptionToTheUniqueVessel()" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[] does not parse" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[   ] does not parse" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[asdf qwer] does not parse" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[The weather is nice today] does not parse" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[I will give you] does not parse" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[2000] does not parse" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[make it 2200] does not parse" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[200 more] does not parse" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[split the difference] does not parse" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[ok but that's too low] must NOT parse to the opposite of what it says" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[Yes if you drop to 1500] must NOT parse to the opposite of what it says" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[No, I'll give you 1500] must NOT parse to the opposite of what it says" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[no thanks, I'll give you 1500 instead] must NOT parse to the opposite of what it says" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[Deal, but only for 3 hours] must NOT parse to the opposite of what it says" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[Deal for 99 hours] must NOT parse to the opposite of what it says" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <testcase name="[yes at berth 9] must NOT parse to the opposite of what it says" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[I accept, but at berth 2] must NOT parse to the opposite of what it says" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[no deal unless you pay 3000] must NOT parse to the opposite of what it says" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.002"/>
+  <testcase name="[Fine. I'll give you 2500 for 5 hours at berth 2] must NOT parse to the opposite of what it says" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.0"/>
+  <testcase name="[We offer 2200 by tomorrow] must NOT parse to the opposite of what it says" classname="it.unige.portcommand.nlp.DCGParserTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

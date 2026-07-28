@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - WordNetResolverTest</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>WordNetResolverTest</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/it.unige.portcommand.nlp.html">it.unige.portcommand.nlp</a> &gt; WordNetResolverTest</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">30</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">0.464s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div id="tabs">
+<ul class="tabLinks">
+<li>
+<a href="#tab0">Tests</a>
+</li>
+</ul>
+<div id="tab0" class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Method name</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">aNonContextSensitiveWordIgnoresTheContextEntirely()</td>
+<td class="success">aNonContextSensitiveWordIgnoresTheContextEntirely()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">blankInputIsReturnedUnchanged()</td>
+<td class="success">blankInputIsReturnedUnchanged()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">contextFreeDockKeepsTheTableDefault()</td>
+<td class="success">contextFreeDockKeepsTheTableDefault()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">contextThatOverlapsNoSenseKeepsTheTableDefault()</td>
+<td class="success">contextThatOverlapsNoSenseKeepsTheTableDefault()</td>
+<td class="success">0.010s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">cargo is a known WordNet noun and survives lookup</td>
+<td class="success">generalNounsFallThroughToTheDictionary(String)[1]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">ship is a known WordNet noun and survives lookup</td>
+<td class="success">generalNounsFallThroughToTheDictionary(String)[2]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">vessel is a known WordNet noun and survives lookup</td>
+<td class="success">generalNounsFallThroughToTheDictionary(String)[3]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">quay is a known WordNet noun and survives lookup</td>
+<td class="success">generalNounsFallThroughToTheDictionary(String)[4]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">wharf is a known WordNet noun and survives lookup</td>
+<td class="success">generalNounsFallThroughToTheDictionary(String)[5]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">harbor is a known WordNet noun and survives lookup</td>
+<td class="success">generalNounsFallThroughToTheDictionary(String)[6]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">freighter -&gt; cargo_vessel (handcrafted)</td>
+<td class="success">handcraftedMappingsWinAndAreCaseInsensitive(String, String)[1]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">merchantman -&gt; cargo_vessel (handcrafted)</td>
+<td class="success">handcraftedMappingsWinAndAreCaseInsensitive(String, String)[2]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">cargo ship -&gt; cargo_vessel (handcrafted)</td>
+<td class="success">handcraftedMappingsWinAndAreCaseInsensitive(String, String)[3]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">slip -&gt; berth (handcrafted)</td>
+<td class="success">handcraftedMappingsWinAndAreCaseInsensitive(String, String)[4]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">loading -&gt; berth (handcrafted)</td>
+<td class="success">handcraftedMappingsWinAndAreCaseInsensitive(String, String)[5]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">FREIGHTER -&gt; cargo_vessel (handcrafted)</td>
+<td class="success">handcraftedMappingsWinAndAreCaseInsensitive(String, String)[6]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">leskDisambiguatesDockToBerthInANegotiationContext()</td>
+<td class="success">leskDisambiguatesDockToBerthInANegotiationContext()</td>
+<td class="success">0.396s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">leskRefusesTheBerthMappingInACourtroomContext()</td>
+<td class="success">leskRefusesTheBerthMappingInACourtroomContext()</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">ships -&gt; ship (WordNet morphology)</td>
+<td class="success">pluralsFallThroughToWordNetAndResolveToTheirLemma(String, String)[1]</td>
+<td class="success">0.029s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">vessels -&gt; vessel (WordNet morphology)</td>
+<td class="success">pluralsFallThroughToWordNetAndResolveToTheirLemma(String, String)[2]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">berths -&gt; berth (WordNet morphology)</td>
+<td class="success">pluralsFallThroughToWordNetAndResolveToTheirLemma(String, String)[3]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">tankers -&gt; tanker (WordNet morphology)</td>
+<td class="success">pluralsFallThroughToWordNetAndResolveToTheirLemma(String, String)[4]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">ferries -&gt; ferry (WordNet morphology)</td>
+<td class="success">pluralsFallThroughToWordNetAndResolveToTheirLemma(String, String)[5]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">piers -&gt; pier (WordNet morphology)</td>
+<td class="success">pluralsFallThroughToWordNetAndResolveToTheirLemma(String, String)[6]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">tableIsConsultedBeforeTheDictionary()</td>
+<td class="success">tableIsConsultedBeforeTheDictionary()</td>
+<td class="success">0.002s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">theWordNetDictionaryActuallyLoaded()</td>
+<td class="success">theWordNetDictionaryActuallyLoaded()</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">withoutADictionaryTheTableStillResolves()</td>
+<td class="success">withoutADictionaryTheTableStillResolves()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">zzzznotaword is unknown to WordNet -&gt; returned verbatim</td>
+<td class="success">wordsUnknownToWordNetAreReturnedVerbatim(String)[1]</td>
+<td class="success">0.003s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">maersk is unknown to WordNet -&gt; returned verbatim</td>
+<td class="success">wordsUnknownToWordNetAreReturnedVerbatim(String)[2]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">carthago is unknown to WordNet -&gt; returned verbatim</td>
+<td class="success">wordsUnknownToWordNetAreReturnedVerbatim(String)[3]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="http://www.gradle.org">Gradle 8.10.2</a> at Jul 28, 2026, 12:31:21 AM</p>
+</div>
+</div>
+</body>
+</html>

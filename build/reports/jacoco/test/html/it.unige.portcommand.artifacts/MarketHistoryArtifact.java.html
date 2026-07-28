@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MarketHistoryArtifact.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.artifacts</a> &gt; <span class="el_source">MarketHistoryArtifact.java</span></div><h1>MarketHistoryArtifact.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.artifacts;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.function.Consumer;
+
+import it.unige.portcommand.ontology.Deal;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Thread-safe append-only store of negotiation outcomes. Written by walk-in vessel
+ * agents (task 07) on each closed/withdrawn deal; queried by the Assistant (task 10)
+ * for recent price statistics; persisted/restored by task 22. One instance, created
+ * by {@code JadeBootstrap} and constructor-injected into the walk-in vessels and the
+ * Assistant â€” never a static singleton.
+ *
+ * &lt;p&gt;&lt;b&gt;Query window.&lt;/b&gt; For a {@code d}-hour query the records are first filtered to
+ * the vessel type within the inclusive Â±20% duration band {@code [ceil(0.8d), floor(1.2d)]},
+ * then narrowed to the LARGER of {the 50 most recent} and {all within the last 7 game-days}.
+ * Those two sets are nested (the most-recent-50 and within-7-days both order by sim time),
+ * so the larger is their union. &quot;Now&quot; is the latest recorded sim time (the market is the
+ * deals; no clock is injected).
+ */
+<span class="fc" id="L26">public final class MarketHistoryArtifact {</span>
+
+<span class="fc" id="L28">    private static final Logger log = LoggerFactory.getLogger(MarketHistoryArtifact.class);</span>
+    private static final long SEVEN_DAYS_SIM_MILLIS = 7L * 86_400_000L;
+    private static final int MAX_RECENT = 50;
+    private static final int MIN_CONFIDENT = 10;
+
+<span class="fc" id="L33">    private final List&lt;DealRecord&gt; deals = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L34">    private final List&lt;Consumer&lt;DealRecord&gt;&gt; subscribers = new ArrayList&lt;&gt;();</span>
+
+    /** Appends a deal outcome and notifies subscribers. */
+    public synchronized void record(DealRecord deal) {
+<span class="fc" id="L38">        deals.add(deal);</span>
+<span class="fc bfc" id="L39" title="All 2 branches covered.">        for (Consumer&lt;DealRecord&gt; subscriber : subscribers) {</span>
+            try {
+<span class="fc" id="L41">                subscriber.accept(deal);</span>
+<span class="nc" id="L42">            } catch (RuntimeException e) {</span>
+<span class="nc" id="L43">                log.warn(&quot;MarketHistory subscriber threw on record&quot;, e);</span>
+<span class="fc" id="L44">            }</span>
+<span class="fc" id="L45">        }</span>
+<span class="fc" id="L46">    }</span>
+
+    public synchronized void subscribe(Consumer&lt;DealRecord&gt; subscriber) {
+<span class="fc" id="L49">        subscribers.add(subscriber);</span>
+<span class="fc" id="L50">    }</span>
+
+    /** The {@code n} most-recently recorded deals, in insertion order (task 22 persists last 200). */
+    public synchronized List&lt;DealRecord&gt; lastN(int n) {
+<span class="fc" id="L54">        int from = Math.max(0, deals.size() - n);</span>
+<span class="fc" id="L55">        return List.copyOf(deals.subList(from, deals.size()));</span>
+    }
+
+    /** Replaces the store from a persisted list (task 22 load). */
+    public synchronized void restore(List&lt;DealRecord&gt; records) {
+<span class="fc" id="L60">        deals.clear();</span>
+<span class="fc" id="L61">        deals.addAll(records);</span>
+<span class="fc" id="L62">    }</span>
+
+    /** Aggregate stats for {@code vesselType} at {@code durationHours} over the query window. */
+    public synchronized MarketStats queryStats(String vesselType, int durationHours) {
+<span class="fc" id="L66">        int lo = (int) Math.ceil(0.8 * durationHours);</span>
+<span class="fc" id="L67">        int hi = (int) Math.floor(1.2 * durationHours);</span>
+
+<span class="fc" id="L69">        List&lt;DealRecord&gt; banded = deals.stream()</span>
+<span class="pc bpc" id="L70" title="1 of 2 branches missed.">                .filter(d -&gt; d.vesselType().equals(vesselType)</span>
+<span class="fc bfc" id="L71" title="All 4 branches covered.">                        &amp;&amp; d.durationHours() &gt;= lo &amp;&amp; d.durationHours() &lt;= hi)</span>
+<span class="fc" id="L72">                .sorted(Comparator.comparingLong(DealRecord::simTime).reversed())</span>
+<span class="fc" id="L73">                .toList();</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">        if (banded.isEmpty()) {</span>
+<span class="fc" id="L75">            return MarketStats.empty();</span>
+        }
+
+<span class="fc" id="L78">        long now = deals.stream().mapToLong(DealRecord::simTime).max().orElse(0L);</span>
+<span class="fc" id="L79">        List&lt;DealRecord&gt; mostRecent50 = banded.stream().limit(MAX_RECENT).toList();</span>
+<span class="fc" id="L80">        List&lt;DealRecord&gt; within7Days = banded.stream()</span>
+<span class="fc bfc" id="L81" title="All 2 branches covered.">                .filter(d -&gt; d.simTime() &gt;= now - SEVEN_DAYS_SIM_MILLIS)</span>
+<span class="fc" id="L82">                .toList();</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">        List&lt;DealRecord&gt; window = within7Days.size() &gt;= mostRecent50.size() ? within7Days : mostRecent50;</span>
+
+<span class="fc" id="L85">        return statsOf(window);</span>
+    }
+
+    private static MarketStats statsOf(List&lt;DealRecord&gt; window) {
+<span class="fc" id="L89">        int n = window.size();</span>
+<span class="fc" id="L90">        double sum = 0.0;</span>
+<span class="fc" id="L91">        double min = Double.MAX_VALUE;</span>
+<span class="fc" id="L92">        double max = -Double.MAX_VALUE;</span>
+<span class="fc" id="L93">        int dealCount = 0;</span>
+<span class="fc bfc" id="L94" title="All 2 branches covered.">        for (DealRecord d : window) {</span>
+<span class="fc" id="L95">            sum += d.price();</span>
+<span class="fc" id="L96">            min = Math.min(min, d.price());</span>
+<span class="fc" id="L97">            max = Math.max(max, d.price());</span>
+<span class="fc bfc" id="L98" title="All 2 branches covered.">            if (d.outcome() == Deal.Outcome.DEAL) {</span>
+<span class="fc" id="L99">                dealCount++;</span>
+            }
+<span class="fc" id="L101">        }</span>
+<span class="fc" id="L102">        double mean = sum / n;</span>
+<span class="fc" id="L103">        double varianceSum = 0.0;</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">        for (DealRecord d : window) {</span>
+<span class="fc" id="L105">            double delta = d.price() - mean;</span>
+<span class="fc" id="L106">            varianceSum += delta * delta;</span>
+<span class="fc" id="L107">        }</span>
+<span class="fc" id="L108">        double stddev = Math.sqrt(varianceSum / n); // population stddev</span>
+<span class="fc" id="L109">        double dealRate = (double) dealCount / n;</span>
+<span class="fc bfc" id="L110" title="All 2 branches covered.">        return new MarketStats(mean, stddev, n, min, max, dealRate, n &lt; MIN_CONFIDENT);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="it.unige.portcommand.agents.BaseVesselAgentTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:41:20" hostname="MOJI" time="0.175">
+<testsuite name="it.unige.portcommand.agents.BaseVesselAgentTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:33" hostname="MOJI" time="0.611">
   <properties/>
-  <testcase name="arrivalDelayConvertsFutureEtaToWallMs()" classname="it.unige.portcommand.agents.BaseVesselAgentTest" time="0.173"/>
+  <testcase name="arrivalDelayConvertsFutureEtaToWallMs()" classname="it.unige.portcommand.agents.BaseVesselAgentTest" time="0.609"/>
   <testcase name="arrivalDelayIsZeroWhenEtaAlreadyDue()" classname="it.unige.portcommand.agents.BaseVesselAgentTest" time="0.0"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

@@ -34,4 +34,13 @@ public final class PolicyRegistryArtifact {
     public synchronized List<PolicyRule> all() {
         return List.copyOf(rules);
     }
+
+    /**
+     * Drops every registered rule (task 22 load): the loader re-parses the save file's
+     * persisted trigger strings through the live {@code nlp.PolicyParser} path, which
+     * re-registers each rule here with a freshly built predicate.
+     */
+    public synchronized void clear() {
+        rules.clear();
+    }
 }

@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BaseVesselAgent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">BaseVesselAgent.java</span></div><h1>BaseVesselAgent.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.behaviours.auto_flow.DepartBehaviour;
+import it.unige.portcommand.behaviours.auto_flow.DockAndServiceBehaviour;
+import it.unige.portcommand.behaviours.auto_flow.TransitToBerthBehaviour;
+import it.unige.portcommand.bootstrap.ServiceLocator;
+import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.persistence.dto.VesselStateDTO;
+import it.unige.portcommand.util.SimClock;
+import jade.core.behaviours.WakerBehaviour;
+
+/**
+ * Abstract base for the two vessel subtypes (Contracted, Walk-in). Registers DF
+ * {@code vessel}, parses the common init-args ({@link VesselSpec} at [0], a
+ * {@link SimClock} at [1], a {@link MarketHistoryArtifact} at [2]), and schedules a
+ * {@link WakerBehaviour} that fires {@link #onArrival()} at the vessel's sim-time ETA.
+ *
+ * &lt;p&gt;Holds the vessel's live, &lt;i&gt;non-hidden&lt;/i&gt; deal/position state (berth, price,
+ * hours, position) behind public accessors so the cross-package auto-flow behaviours
+ * can read/write it via {@code (BaseVesselAgent) myAgent}. Walk-in &lt;b&gt;hidden beliefs&lt;/b&gt;
+ * are NOT here â€” they live in a {@code WalkInState} the negotiation behaviours receive
+ * by constructor, never on the agent's public surface (CLAUDE.md / task-07 Â§29).
+ *
+ * &lt;p&gt;&lt;b&gt;Task 22 â€” flow position + restore.&lt;/b&gt; The three post-deal flow behaviours report
+ * their (phase, absolute sim deadline) here via {@link #reportPhase}, giving the save
+ * snapshot an honest answer to &quot;where in the flow is this vessel&quot; without reaching into
+ * behaviour privates. When the spawner appends a {@link VesselStateDTO} (found by type,
+ * never by index), setup takes the RESTORE path instead of the arrival waker: deal terms
+ * and position are adopted verbatim, the subtype hydrates its own beliefs in
+ * {@link #onRestore}, and the flow re-enters at the persisted phase with the persisted
+ * deadline â€” a docked vessel does not re-serve hours it already served.
+ */
+<span class="fc" id="L35">public abstract class BaseVesselAgent extends PortCommandAgent</span>
+        implements it.unige.portcommand.persistence.Mementoable {
+
+    /** The persistable post-deal flow positions ({@code VesselStateDTO.currentPhase}). */
+<span class="fc" id="L39">    public enum FlowPhase { TRANSIT, DOCKED, DEPARTING }</span>
+
+    protected VesselSpec spec;
+    private SimClock simClock;
+    private MarketHistoryArtifact marketHistory;
+
+<span class="fc" id="L45">    private Position position = new Position(0.0, 0.0, 0.0);</span>
+    protected String assignedBerth;
+    private double dealPrice;
+    private int dealHours;
+
+    /** Volatile: written on the agent thread at phase transitions, read by the save snapshot. */
+    private volatile FlowPhase flowPhase;
+    private volatile long phaseDeadlineSimMillis;
+
+    @Override
+    protected final void registerServices() {
+<span class="fc" id="L56">        registerDfService(&quot;vessel&quot;, getLocalName());</span>
+<span class="fc" id="L57">    }</span>
+
+    @Override
+    protected void onSetup() {
+<span class="fc" id="L61">        this.spec = initArg(VesselSpec.class);</span>
+<span class="fc" id="L62">        this.simClock = argAt(1, SimClock.class);</span>
+<span class="fc" id="L63">        this.marketHistory = argAt(2, MarketHistoryArtifact.class);</span>
+<span class="fc" id="L64">        VesselStateDTO restored = optionalArgOfType(VesselStateDTO.class);</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">        if (restored != null) {</span>
+<span class="fc" id="L66">            restoreFrom(restored);</span>
+<span class="fc" id="L67">            return;</span>
+        }
+<span class="fc" id="L69">        long delayWallMs = arrivalDelayWallMs(spec.etaArrivalSimMillis(), simClock.nowSimMillis(), simClock);</span>
+<span class="fc" id="L70">        addBehaviour(new WakerBehaviour(this, delayWallMs) {</span>
+            @Override
+            protected void onWake() {
+<span class="fc" id="L73">                onArrival();</span>
+<span class="fc" id="L74">            }</span>
+        });
+<span class="fc" id="L76">    }</span>
+
+    /**
+     * Rebuilds this vessel from a save (task 22): no arrival waker, no announcement, no
+     * negotiation â€” the deal already closed in the saved timeline. Adopts deal + position,
+     * lets the subtype hydrate its own beliefs, then re-enters the flow at the persisted
+     * phase with the persisted ABSOLUTE deadline (the resume-not-restart rule).
+     */
+    private void restoreFrom(VesselStateDTO dto) {
+<span class="fc" id="L85">        setDeal(dto.assignedBerth(), dto.dealPrice(), dto.dealHours());</span>
+<span class="fc" id="L86">        setPosition(new Position(dto.posX(), dto.posY(), dto.posHeading()));</span>
+<span class="fc" id="L87">        onRestore(dto);</span>
+<span class="fc" id="L88">        FlowPhase phase = FlowPhase.valueOf(dto.currentPhase());</span>
+<span class="pc bpc" id="L89" title="2 of 4 branches missed.">        switch (phase) {</span>
+<span class="fc" id="L90">            case TRANSIT -&gt; addBehaviour(TransitToBerthBehaviour.resuming(this, simClock,</span>
+<span class="fc" id="L91">                    dto.phaseDeadlineSimMillis()));</span>
+<span class="fc" id="L92">            case DOCKED -&gt; addBehaviour(DockAndServiceBehaviour.resuming(this, simClock,</span>
+<span class="fc" id="L93">                    dto.phaseDeadlineSimMillis()));</span>
+<span class="nc" id="L94">            case DEPARTING -&gt; addBehaviour(DepartBehaviour.resuming(this, simClock,</span>
+<span class="nc" id="L95">                    dto.phaseDeadlineSimMillis()));</span>
+        }
+<span class="fc" id="L97">        log.info(&quot;{} restored: phase={} deadline={} berth={} ({}h at {})&quot;, getLocalName(), phase,</span>
+<span class="fc" id="L98">                dto.phaseDeadlineSimMillis(), assignedBerth, dealHours, dealPrice);</span>
+<span class="fc" id="L99">    }</span>
+
+    /** Subtype hook: hydrate channel-specific beliefs from the persisted DTO (task 22). */
+    protected abstract void onRestore(VesselStateDTO dto);
+
+    /** The vessel-side half of the flat persisted record (task 22); HM tracking merged later. */
+    public abstract VesselStateDTO snapshotDto();
+
+    @Override
+    public final com.fasterxml.jackson.databind.JsonNode snapshot() {
+<span class="nc" id="L109">        return persistenceMapper().valueToTree(snapshotDto());</span>
+    }
+
+    @Override
+    public final void restore(com.fasterxml.jackson.databind.JsonNode node) {
+<span class="nc" id="L114">        onRestore(persistenceMapper().convertValue(node, VesselStateDTO.class));</span>
+<span class="nc" id="L115">    }</span>
+
+    /** Invoked when the vessel logically arrives; the subtype attaches its flow. */
+    protected abstract void onArrival();
+
+    /** Wall-ms until the sim-time ETA (0 if already due). Pure â€” unit-tested. */
+    static long arrivalDelayWallMs(long etaSimMillis, long nowSimMillis, SimClock simClock) {
+<span class="fc" id="L122">        long deltaSim = etaSimMillis - nowSimMillis;</span>
+<span class="fc bfc" id="L123" title="All 2 branches covered.">        if (deltaSim &lt;= 0) {</span>
+<span class="fc" id="L124">            return 0L;</span>
+        }
+<span class="fc" id="L126">        return simClock.simSecondsToWallMs(deltaSim / 1000L);</span>
+    }
+
+    /** Read a required injected dependency from {@code args[index]} (initArg only reads [0]). */
+    protected final &lt;T&gt; T argAt(int index, Class&lt;T&gt; type) {
+<span class="fc" id="L131">        Object[] a = getArguments();</span>
+<span class="pc bpc" id="L132" title="3 of 6 branches missed.">        if (a == null || a.length &lt;= index || a[index] == null) {</span>
+<span class="nc" id="L133">            throw new IllegalStateException(getClass().getSimpleName() + &quot; &quot; + getLocalName()</span>
+<span class="nc" id="L134">                    + &quot; requires &quot; + type.getSimpleName() + &quot; at args[&quot; + index + &quot;]&quot;);</span>
+        }
+<span class="fc" id="L136">        return type.cast(a[index]);</span>
+    }
+
+    // --- infra + non-hidden deal/position, read by the (cross-package) behaviours ---
+
+    public VesselSpec spec() {
+<span class="fc" id="L142">        return spec;</span>
+    }
+
+    public SimClock simClock() {
+<span class="fc" id="L146">        return simClock;</span>
+    }
+
+    public MarketHistoryArtifact marketHistory() {
+<span class="fc" id="L150">        return marketHistory;</span>
+    }
+
+    public ServiceLocator serviceLocator() {
+<span class="fc" id="L154">        return getServiceLocator();</span>
+    }
+
+    public Position position() {
+<span class="fc" id="L158">        return position;</span>
+    }
+
+    public String assignedBerth() {
+<span class="fc" id="L162">        return assignedBerth;</span>
+    }
+
+    public double dealPrice() {
+<span class="fc" id="L166">        return dealPrice;</span>
+    }
+
+    public int dealHours() {
+<span class="fc" id="L170">        return dealHours;</span>
+    }
+
+    public void setPosition(Position position) {
+<span class="fc" id="L174">        this.position = position;</span>
+<span class="fc" id="L175">    }</span>
+
+    public void setDeal(String berthId, double price, int hours) {
+<span class="fc" id="L178">        this.assignedBerth = berthId;</span>
+<span class="fc" id="L179">        this.dealPrice = price;</span>
+<span class="fc" id="L180">        this.dealHours = hours;</span>
+<span class="fc" id="L181">    }</span>
+
+    // --- task 22: flow position, reported by the auto-flow behaviours, read by the snapshot ---
+
+    /** Called by each flow behaviour's constructor â€” the single write point per transition. */
+    public void reportPhase(FlowPhase phase, long deadlineSimMillis) {
+<span class="fc" id="L187">        this.flowPhase = phase;</span>
+<span class="fc" id="L188">        this.phaseDeadlineSimMillis = deadlineSimMillis;</span>
+<span class="fc" id="L189">    }</span>
+
+    /** The current flow phase, or {@code null} before the berth grant reached this vessel. */
+    public FlowPhase flowPhase() {
+<span class="fc" id="L193">        return flowPhase;</span>
+    }
+
+    /** The absolute sim-millis instant the current phase completes at. */
+    public long phaseDeadlineSimMillis() {
+<span class="fc" id="L198">        return phaseDeadlineSimMillis;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -52,14 +52,29 @@ class PrologEngineTest {
         assertTrue(PrologEngine.getInstance().isInitialised(), "init() must mark the engine initialised");
     }
 
+    /**
+     * 6 -&gt; 7 files (2026-07-16, task 16): {@code dcg_negotiation.pl} joined the manifest.
+     * The grammar reads ontology facts, so it must load after {@code port_ontology.pl}; it
+     * is deliberately NOT a rule module (zero {@code % RULE Rn:} headers — the 30-rule
+     * kernel is unchanged, see {@link #ruleKernelIsExactlyThirtyRules()}).
+     */
     @Test
-    void manifestIsOntologyFirstThenFiveRuleModules() {
+    void manifestIsOntologyThenDcgThenFiveRuleModules() {
         List<String> manifest = PrologEngine.resourceManifest();
-        assertEquals(6, manifest.size(), "exactly 6 .pl files");
+        assertEquals(7, manifest.size(), "exactly 7 .pl files: ontology + DCG grammar + 5 rule modules");
         assertEquals("/prolog/port_ontology.pl", manifest.get(0), "ontology consulted FIRST");
-        List<String> rest = manifest.subList(1, manifest.size());
-        assertEquals(RULE_MODULES, rest, "the 5 rule modules, alphabetically, after the ontology");
-        assertTrue(rest.stream().noneMatch(r -> r.contains("smoke")), "smoke.pl must NOT be consulted");
+        assertEquals("/prolog/dcg_negotiation.pl", manifest.get(1),
+                "the DCG grammar loads after the ontology facts it reads");
+        List<String> rest = manifest.subList(2, manifest.size());
+        assertEquals(RULE_MODULES, rest, "the 5 rule modules, alphabetically, after the ontology + grammar");
+        assertTrue(manifest.stream().noneMatch(r -> r.contains("smoke")), "smoke.pl must NOT be consulted");
+    }
+
+    @Test
+    void initConsultsTheDcgGrammar() {
+        // parse_move/2 is the grammar's single documented entry point (dcg_negotiation.pl).
+        assertTrue(PrologEngine.getInstance().hasSolution("current_predicate(parse_move/2)"),
+                "dcg_negotiation.pl must be consulted at startup");
     }
 
     @Test
@@ -95,6 +110,25 @@ class PrologEngineTest {
             expected.add("R" + i);
         }
         assertEquals(expected, ruleIds, "rule ids must be exactly R1..R30");
+    }
+
+    /**
+     * The DCG grammar must never contribute to the 30-rule kernel count. It sits in the same
+     * resource dir and IS consulted at startup, so the only thing keeping the two apart is its
+     * comment style ({@code % DCG:} not {@code % RULE Rn:}) — codified here so a future edit
+     * that reaches for the familiar header shape fails the build instead of silently making the
+     * kernel look like 31+ rules.
+     */
+    @Test
+    void dcgGrammarContributesZeroRulesToTheKernel() throws Exception {
+        Path path = Path.of(PrologEngineTest.class.getResource("/prolog/dcg_negotiation.pl").toURI());
+        long headers = Files.readAllLines(path).stream()
+                .map(String::trim)
+                .filter(line -> RULE_HEADER.matcher(line).find())
+                .count();
+        assertEquals(0, headers,
+                "dcg_negotiation.pl must use '% DCG:' comments — a '% RULE Rn:' header here would "
+                        + "inflate the 30-rule kernel count");
     }
 
     @Test

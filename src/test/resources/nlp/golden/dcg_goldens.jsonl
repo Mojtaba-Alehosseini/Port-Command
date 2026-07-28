@@ -1,0 +1,158 @@
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 for 5 hours at berth 3","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 for 5 hours","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"},"duration":5}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"}}}
+{"block":"plain","ctx":"none","utterance":"I'll pay 1800 euros for berth 3","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":1800,"currency":"EUR"},"berth":"berth_3"}}
+{"block":"plain","ctx":"none","utterance":"I'll give you 2200 for 6 hours at berth 2","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2200,"currency":"EUR"},"duration":6,"berth":"berth_2"}}
+{"block":"plain","ctx":"none","utterance":"We will offer 3000 for 8 hours at berth 1","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":3000,"currency":"EUR"},"duration":8,"berth":"berth_1"}}
+{"block":"plain","ctx":"none","utterance":"We offer 2200 for 6 hours by 19:30","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2200,"currency":"EUR"},"duration":6,"deadline":"19:30"}}
+{"block":"plain","ctx":"none","utterance":"Give you 2000 USD for 5h","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"USD"},"duration":5}}
+{"block":"plain","ctx":"none","utterance":"I will pay 1500 dollars for 4 hrs at berth 4","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":1500,"currency":"USD"},"duration":4,"berth":"berth_4"}}
+{"block":"plain","ctx":"none","utterance":"Let me offer 1900 for 3 hours","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":1900,"currency":"EUR"},"duration":3}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 please","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"}}}
+{"block":"plain","ctx":"none","utterance":"Offer 2500 EUR for 12 hours at berth 2, thanks","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2500,"currency":"EUR"},"duration":12,"berth":"berth_2"}}
+{"block":"plain","ctx":"none","utterance":"I will give them 1700 for 2 hours in berth 3","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":1700,"currency":"EUR"},"duration":2,"berth":"berth_3"}}
+{"block":"plain","ctx":"none","utterance":"I'll only give you 1500","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1500,"currency":"EUR"}}}
+{"block":"plain","ctx":"none","utterance":"I can only do 1500","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1500,"currency":"EUR"}}}
+{"block":"plain","ctx":"none","utterance":"How about 1800?","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1800,"currency":"EUR"}}}
+{"block":"plain","ctx":"none","utterance":"How about 1800 for 5 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1800,"currency":"EUR"},"duration":5}}
+{"block":"plain","ctx":"none","utterance":"What about 1750 at berth 3","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1750,"currency":"EUR"},"berth":"berth_3"}}
+{"block":"plain","ctx":"none","utterance":"1900 instead","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1900,"currency":"EUR"}}}
+{"block":"plain","ctx":"none","utterance":"Only 1600 for 4 hours at berth 2","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1600,"currency":"EUR"},"duration":4,"berth":"berth_2"}}
+{"block":"plain","ctx":"none","utterance":"I can only do 2000 euros for 6 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2000,"currency":"EUR"},"duration":6}}
+{"block":"plain","ctx":"none","utterance":"How about 2100 USD","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2100,"currency":"USD"}}}
+{"block":"plain","ctx":"none","utterance":"I'll only pay 1400 for 3 hours at berth 4","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1400,"currency":"EUR"},"duration":3,"berth":"berth_4"}}
+{"block":"plain","ctx":"none","utterance":"Deal","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"DEAL!","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"Yes","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"Agreed","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"Accept","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"Ok","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"Fine","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"Sounds good","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"You got it","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"That works","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"Yes please","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"Deal, thanks","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"Too low","frame":"commerce_sell","elements":{"move":"reject","reason":"price_too_low"}}
+{"block":"plain","ctx":"none","utterance":"Too cheap","frame":"commerce_sell","elements":{"move":"reject","reason":"price_too_low"}}
+{"block":"plain","ctx":"none","utterance":"Too high","frame":"commerce_sell","elements":{"move":"reject","reason":"price_too_high"}}
+{"block":"plain","ctx":"none","utterance":"Too expensive","frame":"commerce_sell","elements":{"move":"reject","reason":"price_too_high"}}
+{"block":"plain","ctx":"none","utterance":"Too short","frame":"commerce_sell","elements":{"move":"reject","reason":"duration_too_short"}}
+{"block":"plain","ctx":"none","utterance":"Too long","frame":"commerce_sell","elements":{"move":"reject","reason":"duration_too_long"}}
+{"block":"plain","ctx":"none","utterance":"No deal","frame":"commerce_sell","elements":{"move":"reject"}}
+{"block":"plain","ctx":"none","utterance":"No","frame":"commerce_sell","elements":{"move":"reject"}}
+{"block":"plain","ctx":"none","utterance":"Not interested","frame":"commerce_sell","elements":{"move":"reject"}}
+{"block":"plain","ctx":"none","utterance":"Forget it","frame":"commerce_sell","elements":{"move":"reject"}}
+{"block":"plain","ctx":"none","utterance":"Pass","frame":"commerce_sell","elements":{"move":"reject"}}
+{"block":"plain","ctx":"none","utterance":"Refuse","frame":"commerce_sell","elements":{"move":"reject"}}
+{"block":"plain","ctx":"none","utterance":"No deal, mate","frame":"commerce_sell","elements":{"move":"reject"}}
+{"block":"plain","ctx":"none","utterance":"Too low please","frame":"commerce_sell","elements":{"move":"reject","reason":"price_too_low"}}
+{"block":"plain","ctx":"none","utterance":"What berths are free?","frame":"commerce_sell","elements":{"move":"ask","topic":"free_berths"}}
+{"block":"plain","ctx":"none","utterance":"Which berths are free","frame":"commerce_sell","elements":{"move":"ask","topic":"free_berths"}}
+{"block":"plain","ctx":"none","utterance":"What free berths do you have","frame":"commerce_sell","elements":{"move":"ask","topic":"free_berths"}}
+{"block":"plain","ctx":"none","utterance":"Are berths available?","frame":"commerce_sell","elements":{"move":"ask","topic":"free_berths"}}
+{"block":"plain","ctx":"none","utterance":"How many tugs do you have?","frame":"commerce_sell","elements":{"move":"ask","topic":"tug_availability"}}
+{"block":"plain","ctx":"none","utterance":"How many tugs are free","frame":"commerce_sell","elements":{"move":"ask","topic":"tug_availability"}}
+{"block":"plain","ctx":"none","utterance":"What tugs are available","frame":"commerce_sell","elements":{"move":"ask","topic":"tug_availability"}}
+{"block":"plain","ctx":"none","utterance":"What's your best price?","frame":"commerce_sell","elements":{"move":"ask","topic":"best_price"}}
+{"block":"plain","ctx":"none","utterance":"What is your best price","frame":"commerce_sell","elements":{"move":"ask","topic":"best_price"}}
+{"block":"plain","ctx":"none","utterance":"What's the weather?","frame":"commerce_sell","elements":{"move":"ask","topic":"weather"}}
+{"block":"plain","ctx":"none","utterance":"How's the wind","frame":"commerce_sell","elements":{"move":"ask","topic":"weather"}}
+{"block":"plain","ctx":"none","utterance":"What berth do I get","frame":"commerce_sell","elements":{"move":"ask","topic":"berth_assignment"}}
+{"block":"plain","ctx":"none","utterance":"Where is my berth?","frame":"commerce_sell","elements":{"move":"ask","topic":"berth_assignment"}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 at berth 1","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"},"berth":"berth_1"}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 at berth 4","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"},"berth":"berth_4"}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 for 1 hour","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"},"duration":1}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 for 24 hours","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"},"duration":24}}
+{"block":"plain","ctx":"none","utterance":"We offer 2200 by 00:00","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2200,"currency":"EUR"},"deadline":"00:00"}}
+{"block":"plain","ctx":"none","utterance":"We offer 2200 by 23:59","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2200,"currency":"EUR"},"deadline":"23:59"}}
+{"block":"plain","ctx":"none","utterance":"We offer 2200 by 9:30","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2200,"currency":"EUR"},"deadline":"9:30"}}
+{"block":"plain","ctx":"none","utterance":"I will give you €2,000","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"}}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000€","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"}}}
+{"block":"plain","ctx":"none","utterance":"I will give you $2000","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"USD"}}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 at berth2","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"},"berth":"berth_2"}}
+{"block":"plain","ctx":"none","utterance":"I'll pay €2,000 for 5hrs at berth 3 by 19:30","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"},"duration":5,"berth":"berth_3","deadline":"19:30"}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 at berth 9","frame":null,"note":"mention-guard: berth_9 does not exist; the slot must fail the parse, not be dropped"}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 at berth 0","frame":null,"note":"mention-guard: berths are 1..4"}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 for 99 hours","frame":null,"note":"mention-guard: durations are 1..24"}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 for 0 hours","frame":null,"note":"mention-guard: zero-hour duration"}
+{"block":"plain","ctx":"none","utterance":"We offer 2200 by 25:99","frame":null,"note":"mention-guard: not a clock time"}
+{"block":"plain","ctx":"none","utterance":"ok but that's too low","frame":null,"note":"inversion: a prefix parse would ACCEPT an offer the player just called too low"}
+{"block":"plain","ctx":"none","utterance":"Yes if you drop to 1500","frame":null,"note":"inversion: conditional read as an unconditional accept"}
+{"block":"plain","ctx":"none","utterance":"No, I'll give you 1500","frame":null,"note":"inversion: the 1500 counter-offer would vanish into the residue"}
+{"block":"plain","ctx":"none","utterance":"Deal, but only for 3 hours","frame":null,"note":"inversion: the 3-hour condition would vanish"}
+{"block":"plain","ctx":"none","utterance":"I accept, but at berth 2","frame":null,"note":"inversion: the berth constraint would vanish"}
+{"block":"plain","ctx":"none","utterance":"We offer 2200 by tomorrow","frame":null,"note":"inversion: an unparseable deadline must refuse, not silently drop"}
+{"block":"plain","ctx":"none","utterance":"asdf qwer","frame":null,"note":"gibberish -> Rasa fallback"}
+{"block":"plain","ctx":"none","utterance":"The weather is nice today","frame":null,"note":"declarative, not a negotiation move"}
+{"block":"plain","ctx":"none","utterance":"I will give you","frame":null,"note":"offer verb with no amount"}
+{"block":"ellipsis","ctx":"focus","utterance":"make it 2200","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2200,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"2200","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2200,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"make it 1800","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1800,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"1800","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1800,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"make it 6 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1500,"currency":"EUR"},"duration":6,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"same but 6 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1500,"currency":"EUR"},"duration":6,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"same but 2000","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2000,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"make it 2200 for 8 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2200,"currency":"EUR"},"duration":8,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"none","utterance":"make it 2200","frame":null,"note":"no standing offer to complete from -> clarification"}
+{"block":"ellipsis","ctx":"none","utterance":"2200","frame":null,"note":"bare fragment with no standing offer"}
+{"block":"ellipsis","ctx":"none","utterance":"same but 6 hours","frame":null,"note":"nothing to be the same as"}
+{"block":"ellipsis","ctx":"focus","utterance":"make it 2200 but leave by 19:30","frame":null,"note":"residue: the departure condition must refuse, not be silently dropped"}
+{"block":"ellipsis","ctx":"focus","utterance":"same but cheaper","frame":null,"note":"residue: 'cheaper' names no amount"}
+{"block":"delta","ctx":"focus","utterance":"200 more","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1700,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"200 less","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1300,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"500 more","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2000,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"10% more","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1650,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"10% less","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1350,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"split the difference","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1750,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"meet me in the middle","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1750,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"meet in the middle","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1750,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"none","utterance":"200 more","frame":null,"note":"no reference offer to add to"}
+{"block":"delta","ctx":"none","utterance":"split the difference","frame":null,"note":"no offers at all -> no midpoint"}
+{"block":"delta","ctx":"one_sided","utterance":"split the difference","frame":null,"note":"midpoint needs BOTH sides; only the vessel has bid"}
+{"block":"delta","ctx":"focus","utterance":"5000 less","frame":null,"note":"1500 - 5000 < 0: refuse rather than emit a negative price"}
+{"block":"delta","ctx":"focus","utterance":"200 more but only if you drop","frame":null,"note":"residue: the condition must refuse, not be dropped"}
+{"block":"delta","ctx":"focus","utterance":"10% less or nothing","frame":null,"note":"residue: the ultimatum must refuse"}
+{"block":"negation","ctx":"focus","utterance":"nothing below 2000","frame":"commerce_sell","elements":{"move":"constrain","polarity":"negative","bound":"below","money":{"amount":2000,"currency":"EUR"}}}
+{"block":"negation","ctx":"focus","utterance":"nothing above 3000","frame":"commerce_sell","elements":{"move":"constrain","polarity":"negative","bound":"above","money":{"amount":3000,"currency":"EUR"}}}
+{"block":"negation","ctx":"focus","utterance":"not for less than 6 hours","frame":"commerce_sell","elements":{"move":"constrain","polarity":"negative","bound":"below","duration":6}}
+{"block":"negation","ctx":"focus","utterance":"not for more than 8 hours","frame":"commerce_sell","elements":{"move":"constrain","polarity":"negative","bound":"above","duration":8}}
+{"block":"negation","ctx":"none","utterance":"nothing below 2000","frame":"commerce_sell","elements":{"move":"constrain","polarity":"negative","bound":"below","money":{"amount":2000,"currency":"EUR"}},"note":"ctx-free: a standalone constraint needs no standing offer"}
+{"block":"negation","ctx":"focus","utterance":"not nothing below 2000","frame":null,"note":"double negation is out of scope -> refuse"}
+{"block":"negation","ctx":"focus","utterance":"nothing not below 2000","frame":null,"note":"double negation, other order"}
+{"block":"negation","ctx":"focus","utterance":"nothing below","frame":null,"note":"no amount to bound"}
+{"block":"negation","ctx":"focus","utterance":"not for less than 6","frame":null,"note":"no time unit -> ambiguous between hours and euros"}
+{"block":"anaphora","ctx":"focus","utterance":"1800 for that berth","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1800,"currency":"EUR"},"berth":"berth_3"}}
+{"block":"anaphora","ctx":"focus","utterance":"1800 for the same berth","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1800,"currency":"EUR"},"berth":"berth_3"}}
+{"block":"anaphora","ctx":"focus","utterance":"deal the tanker","frame":"commerce_sell","elements":{"move":"accept","addressee":"T001"}}
+{"block":"anaphora","ctx":"focus","utterance":"accept the tanker","frame":"commerce_sell","elements":{"move":"accept","addressee":"T001"}}
+{"block":"anaphora","ctx":"focus","utterance":"no the tanker","frame":"commerce_sell","elements":{"move":"reject","addressee":"T001"}}
+{"block":"anaphora","ctx":"focus","utterance":"deal it","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"anaphora","ctx":"focus","utterance":"no it","frame":"commerce_sell","elements":{"move":"reject"}}
+{"block":"anaphora","ctx":"none","utterance":"1800 for that berth","frame":null,"note":"no berth was ever mentioned"}
+{"block":"anaphora","ctx":"none","utterance":"deal it","frame":null,"note":"no antecedent offer for 'it'"}
+{"block":"anaphora","ctx":"none","utterance":"accept the tanker","frame":null,"note":"empty roster -> no referent"}
+{"block":"anaphora","ctx":"two_tankers","utterance":"accept the tanker","frame":null,"note":"two tankers active -> ambiguous; refuse, never guess"}
+{"block":"anaphora","ctx":"focus","utterance":"accept the tanker but not the ferry","frame":null,"note":"residue: the exception clause must refuse"}
+{"block":"anaphora","ctx":"focus","utterance":"1800 for that berth or berth 2","frame":null,"note":"residue: the disjunction must refuse"}
+{"block":"vocative","ctx":"focus","utterance":"Genoa Star: deal","frame":"commerce_sell","elements":{"move":"accept","addressee":"C001"}}
+{"block":"vocative","ctx":"focus","utterance":"Genoa Star: no deal","frame":"commerce_sell","elements":{"move":"reject","addressee":"C001"}}
+{"block":"vocative","ctx":"focus","utterance":"tell the tanker no","frame":"commerce_sell","elements":{"move":"reject","addressee":"T001"}}
+{"block":"vocative","ctx":"focus","utterance":"Carthago: too low","frame":"commerce_sell","elements":{"move":"reject","reason":"price_too_low","addressee":"T001"}}
+{"block":"vocative","ctx":"focus","utterance":"Genoa Star: I will give you 2000 for 5 hours at berth 3","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"},"duration":5,"berth":"berth_3","addressee":"C001"}}
+{"block":"vocative","ctx":"focus","utterance":"zzz unknown: deal","frame":null,"note":"name not in the roster -> unresolvable addressee"}
+{"block":"vocative","ctx":"focus","utterance":"tell the ferry no","frame":null,"note":"no ferry is active"}
+{"block":"vocative","ctx":"focus","utterance":"Genoa Star: hold all tankers","frame":null,"note":"category error: a fleet command is not addressed to one vessel"}
+{"block":"vocative","ctx":"two_tankers","utterance":"tell the tanker no","frame":null,"note":"two tankers -> ambiguous addressee"}
+{"block":"vocative","ctx":"none","utterance":"Genoa Star: deal","frame":null,"note":"empty roster -> the name resolves to nothing"}
+{"block":"command","ctx":"focus","utterance":"hold all tankers","frame":"command","elements":{"action":"hold","quantifier":"all","patient":"tanker"}}
+{"block":"command","ctx":"focus","utterance":"hold all tankers until the wind drops","frame":"command","elements":{"action":"hold","quantifier":"all","patient":"tanker","condition":"until_wind_drop"}}
+{"block":"command","ctx":"focus","utterance":"send two tugs to the Carthago","frame":"command","elements":{"action":"send","quantifier":2,"patient":"tug","target":"T001"}}
+{"block":"command","ctx":"focus","utterance":"send 2 tugs","frame":"command","elements":{"action":"send","quantifier":2,"patient":"tug"}}
+{"block":"command","ctx":"focus","utterance":"hold any ferry","frame":"command","elements":{"action":"hold","quantifier":"any","patient":"ferry"}}
+{"block":"command","ctx":"focus","utterance":"dispatch three tugs","frame":"command","elements":{"action":"dispatch","quantifier":3,"patient":"tug"}}
+{"block":"command","ctx":"none","utterance":"hold all tankers","frame":"command","elements":{"action":"hold","quantifier":"all","patient":"tanker"},"note":"ctx-free: a fleet command needs no standing offer"}
+{"block":"command","ctx":"focus","utterance":"cancel the tug","frame":null,"note":"no quantifier -> falls through to Rasa (M1 routing seam)"}
+{"block":"command","ctx":"none","utterance":"cancel the tug","frame":null,"note":"the command block must not change M1 cancel routing"}
+{"block":"command","ctx":"focus","utterance":"hold tankers","frame":null,"note":"no quantifier"}
+{"block":"command","ctx":"focus","utterance":"send two tugs to the Ferrari","frame":null,"note":"unknown target name -> refuse"}

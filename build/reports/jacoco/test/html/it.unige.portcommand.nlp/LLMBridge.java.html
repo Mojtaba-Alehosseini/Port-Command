@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LLMBridge.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">LLMBridge.java</span></div><h1>LLMBridge.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
+import java.time.Duration;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * HTTP client to the Flask LLM sidecar (task 13, port 5006): {@code GET /health} and
+ * {@code POST /explain}.
+ *
+ * &lt;p&gt;&lt;b&gt;Timeout is config-driven (task 13b correction).&lt;/b&gt; A fixed 3&amp;nbsp;s timeout would
+ * mean fp16 CPU inference (~9&amp;nbsp;min/explanation, task 13's measurement) never completes,
+ * making the sidecar dead code in-game. {@link #resolveTimeoutMs()} reads {@code llm
+ * .timeout_ms} from {@code /data/defaults.json} on the classpath (task 15 owns that file â€”
+ * this class only reads it, never writes it) if present, else defaults to {@value
+ * #DEFAULT_TIMEOUT_MS}&amp;nbsp;ms â€” sized from task 13b's ONNX-INT4 measurement (~17&amp;nbsp;s/
+ * explanation, max ~19&amp;nbsp;s cold) with ~1.5&amp;times; margin, covering the 120-token worst
+ * case (~26&amp;nbsp;s).
+ *
+ * &lt;p&gt;{@link #explain} is fully async (never blocks the calling thread) and never retries â€”
+ * a retry after a ~20&amp;nbsp;s generation would double an already-long wait. On timeout the
+ * returned future completes exceptionally with {@link LLMTimeoutException}; {@code
+ * LLMBridge} has no access to the recommendation trace, so it cannot build the template-text
+ * fallback itself â€” see {@link LLMTimeoutException}'s Javadoc for who does.
+ */
+public final class LLMBridge {
+
+<span class="fc" id="L46">    private static final Logger log = LoggerFactory.getLogger(LLMBridge.class);</span>
+
+    private static final int DEFAULT_PORT = 5006;
+    static final long DEFAULT_TIMEOUT_MS = 30_000L;
+<span class="fc" id="L50">    private static final Duration HEALTH_TIMEOUT = Duration.ofSeconds(3);</span>
+    private static final long HEALTH_CACHE_MS = 5_000L;
+    private static final String DEFAULTS_JSON_RESOURCE = &quot;/data/defaults.json&quot;;
+
+    private final URI explainUri;
+    private final URI healthUri;
+    private final HttpClient client;
+    private final ObjectMapper json;
+    private final Duration timeout;
+
+    private volatile boolean cachedReady;
+<span class="fc" id="L61">    private volatile long cachedReadyAtMillis = -HEALTH_CACHE_MS;</span>
+
+    public LLMBridge(URI explainUri, URI healthUri, HttpClient client, ObjectMapper json) {
+<span class="fc" id="L64">        this(explainUri, healthUri, client, json, Duration.ofMillis(resolveTimeoutMs()));</span>
+<span class="fc" id="L65">    }</span>
+
+    /** Test/ops seam: pin an explicit timeout instead of the resolved config-driven one. */
+<span class="fc" id="L68">    public LLMBridge(URI explainUri, URI healthUri, HttpClient client, ObjectMapper json, Duration timeout) {</span>
+<span class="fc" id="L69">        this.explainUri = Objects.requireNonNull(explainUri, &quot;explainUri&quot;);</span>
+<span class="fc" id="L70">        this.healthUri = Objects.requireNonNull(healthUri, &quot;healthUri&quot;);</span>
+<span class="fc" id="L71">        this.client = Objects.requireNonNull(client, &quot;client&quot;);</span>
+<span class="fc" id="L72">        this.json = Objects.requireNonNull(json, &quot;json&quot;);</span>
+<span class="fc" id="L73">        this.timeout = Objects.requireNonNull(timeout, &quot;timeout&quot;);</span>
+<span class="fc" id="L74">    }</span>
+
+    /** Reads {@code -Dllm.port} (default 5006): {@code http://localhost:&lt;port&gt;/explain}. */
+    public static URI resolveExplainUri() {
+<span class="fc" id="L78">        return URI.create(&quot;http://localhost:&quot; + resolvePort() + &quot;/explain&quot;);</span>
+    }
+
+    /** Reads {@code -Dllm.port} (default 5006): {@code http://localhost:&lt;port&gt;/health}. */
+    public static URI resolveHealthUri() {
+<span class="fc" id="L83">        return URI.create(&quot;http://localhost:&quot; + resolvePort() + &quot;/health&quot;);</span>
+    }
+
+    private static int resolvePort() {
+<span class="fc" id="L87">        return Integer.getInteger(&quot;llm.port&quot;, DEFAULT_PORT);</span>
+    }
+
+    /**
+     * {@code -Dllm.timeout_ms} system property, else {@code llm.timeout_ms} from {@code
+     * /data/defaults.json} on the classpath, else {@value #DEFAULT_TIMEOUT_MS}. Never throws â€”
+     * an absent/malformed config file silently falls back to the code default (task 15 owns
+     * creating the file; its absence today is expected).
+     */
+    static long resolveTimeoutMs() {
+<span class="fc" id="L97">        Long override = Long.getLong(&quot;llm.timeout_ms&quot;);</span>
+<span class="fc bfc" id="L98" title="All 2 branches covered.">        if (override != null) {</span>
+<span class="fc" id="L99">            return override;</span>
+        }
+<span class="fc" id="L101">        Long fromFile = readTimeoutMsFromDefaultsJson();</span>
+<span class="pc bpc" id="L102" title="1 of 2 branches missed.">        return fromFile != null ? fromFile : DEFAULT_TIMEOUT_MS;</span>
+    }
+
+    private static Long readTimeoutMsFromDefaultsJson() {
+<span class="fc" id="L106">        try (InputStream in = LLMBridge.class.getResourceAsStream(DEFAULTS_JSON_RESOURCE)) {</span>
+<span class="pc bpc" id="L107" title="1 of 2 branches missed.">            if (in == null) {</span>
+<span class="nc" id="L108">                return null;</span>
+            }
+<span class="fc" id="L110">            return timeoutMsFromJson(new ObjectMapper().readTree(in));</span>
+<span class="nc bnc" id="L111" title="All 2 branches missed.">        } catch (IOException e) {</span>
+<span class="nc" id="L112">            log.debug(&quot;could not read {}: {}&quot;, DEFAULTS_JSON_RESOURCE, e.getMessage());</span>
+<span class="nc" id="L113">            return null;</span>
+        }
+    }
+
+    /** Pure extraction of the nested {@code {&quot;llm&quot;: {&quot;timeout_ms&quot;: N}}} shape; unit-testable
+     * without touching the classpath. {@code null} when the key is missing or not numeric. */
+    static Long timeoutMsFromJson(JsonNode root) {
+<span class="fc" id="L120">        JsonNode timeoutMs = root.path(&quot;llm&quot;).path(&quot;timeout_ms&quot;);</span>
+<span class="fc bfc" id="L121" title="All 2 branches covered.">        return timeoutMs.canConvertToLong() ? timeoutMs.asLong() : null;</span>
+    }
+
+    /**
+     * {@code true} once the sidecar has finished loading its model. Result is cached for
+     * 5&amp;nbsp;s (wall-clock) so a UI &quot;thinking...&quot; poll loop does not hammer the sidecar;
+     * blocks the calling thread for at most 3&amp;nbsp;s on a cache miss.
+     */
+    public boolean isReady() {
+<span class="fc" id="L130">        long now = System.currentTimeMillis();</span>
+<span class="fc bfc" id="L131" title="All 2 branches covered.">        if (now - cachedReadyAtMillis &lt; HEALTH_CACHE_MS) {</span>
+<span class="fc" id="L132">            return cachedReady;</span>
+        }
+<span class="fc" id="L134">        boolean ready = probeHealth();</span>
+<span class="fc" id="L135">        cachedReady = ready;</span>
+<span class="fc" id="L136">        cachedReadyAtMillis = System.currentTimeMillis();</span>
+<span class="fc" id="L137">        return ready;</span>
+    }
+
+    private boolean probeHealth() {
+<span class="fc" id="L141">        HttpRequest request = HttpRequest.newBuilder(healthUri).GET().timeout(HEALTH_TIMEOUT).build();</span>
+        try {
+<span class="fc" id="L143">            HttpResponse&lt;String&gt; response = client.send(request, HttpResponse.BodyHandlers.ofString());</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">            return response.statusCode() == 200;</span>
+<span class="fc" id="L145">        } catch (IOException e) {</span>
+<span class="fc" id="L146">            return false;</span>
+<span class="nc" id="L147">        } catch (InterruptedException e) {</span>
+<span class="nc" id="L148">            Thread.currentThread().interrupt();</span>
+<span class="nc" id="L149">            return false;</span>
+        }
+    }
+
+    /**
+     * Async explanation call â€” never blocks the calling thread (safe to call from a JADE
+     * agent thread or the Swing EDT). On timeout the returned future completes exceptionally
+     * with {@link LLMTimeoutException}; on any other HTTP/parse failure, with {@link
+     * NlpServiceException}.
+     */
+    public CompletableFuture&lt;LLMResponse&gt; explain(LLMRequest request) {
+<span class="fc" id="L160">        Objects.requireNonNull(request, &quot;request&quot;);</span>
+        HttpRequest httpRequest;
+        try {
+<span class="fc" id="L163">            httpRequest = HttpRequest.newBuilder(explainUri)</span>
+<span class="fc" id="L164">                    .header(&quot;Content-Type&quot;, &quot;application/json&quot;)</span>
+<span class="fc" id="L165">                    .timeout(timeout)</span>
+<span class="fc" id="L166">                    .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(toWire(request))))</span>
+<span class="fc" id="L167">                    .build();</span>
+<span class="nc" id="L168">        } catch (JsonProcessingException e) {</span>
+<span class="nc" id="L169">            return CompletableFuture.failedFuture(new NlpServiceException(&quot;failed to serialize llm request&quot;, e));</span>
+<span class="fc" id="L170">        }</span>
+
+<span class="fc" id="L172">        return client.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString())</span>
+<span class="fc" id="L173">                .thenApply(this::toResponse)</span>
+<span class="fc" id="L174">                .exceptionallyCompose(ex -&gt; CompletableFuture.failedFuture(mapFailure(ex)));</span>
+    }
+
+    private RuntimeException mapFailure(Throwable ex) {
+<span class="pc bpc" id="L178" title="2 of 4 branches missed.">        Throwable cause = (ex instanceof CompletionException &amp;&amp; ex.getCause() != null) ? ex.getCause() : ex;</span>
+<span class="fc bfc" id="L179" title="All 2 branches covered.">        if (cause instanceof HttpTimeoutException) {</span>
+<span class="fc" id="L180">            log.debug(&quot;llm explain timed out after {}&quot;, timeout);</span>
+<span class="fc" id="L181">            return new LLMTimeoutException(&quot;llm explain timed out after &quot; + timeout, cause);</span>
+        }
+<span class="pc bpc" id="L183" title="1 of 2 branches missed.">        if (cause instanceof RuntimeException re) {</span>
+<span class="fc" id="L184">            return re;</span>
+        }
+<span class="nc" id="L186">        return new NlpServiceException(&quot;llm explain failed: &quot; + cause.getMessage(), cause);</span>
+    }
+
+    private LLMResponse toResponse(HttpResponse&lt;String&gt; response) {
+<span class="fc" id="L190">        int status = response.statusCode();</span>
+<span class="fc bfc" id="L191" title="All 2 branches covered.">        if (status != 200) {</span>
+<span class="fc" id="L192">            throw new NlpServiceException(&quot;llm sidecar returned HTTP &quot; + status + &quot;: &quot; + response.body());</span>
+        }
+        try {
+<span class="fc" id="L195">            RawExplainResponse raw = json.readValue(response.body(), RawExplainResponse.class);</span>
+<span class="fc" id="L196">            return new LLMResponse(raw.text, Boolean.TRUE.equals(raw.validated));</span>
+<span class="fc" id="L197">        } catch (JsonProcessingException e) {</span>
+<span class="fc" id="L198">            throw new NlpServiceException(&quot;malformed llm response: &quot; + e.getMessage(), e);</span>
+        }
+    }
+
+    private static RawExplainRequest toWire(LLMRequest request) {
+<span class="fc" id="L203">        RawExplainRequest raw = new RawExplainRequest();</span>
+<span class="fc" id="L204">        raw.prompt = request.prompt();</span>
+<span class="fc" id="L205">        raw.system = request.system();</span>
+<span class="fc" id="L206">        raw.requiredNumbers = request.requiredNumbers();</span>
+<span class="fc" id="L207">        raw.requiredEntities = request.requiredEntities();</span>
+<span class="fc" id="L208">        raw.validate = request.validate();</span>
+<span class="fc" id="L209">        return raw;</span>
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private static final class RawExplainRequest {
+        @JsonProperty(&quot;prompt&quot;)
+        String prompt;
+        @JsonProperty(&quot;system&quot;)
+        String system;
+        @JsonProperty(&quot;required_numbers&quot;)
+        List&lt;String&gt; requiredNumbers;
+        @JsonProperty(&quot;required_entities&quot;)
+        List&lt;String&gt; requiredEntities;
+        @JsonProperty(&quot;validate&quot;)
+        boolean validate;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private static final class RawExplainResponse {
+        @JsonProperty(&quot;text&quot;)
+        String text;
+        @JsonProperty(&quot;validated&quot;)
+        Boolean validated;
+        @JsonProperty(&quot;gen_seconds&quot;)
+        double genSeconds;
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

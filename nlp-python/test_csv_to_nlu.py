@@ -4,8 +4,9 @@ Two layers:
   * unit — synthetic CSVs in tmp_path exercise split routing, the duplicate +
     train/holdout leakage guard (it must FAIL LOUDLY), unknown-intent/column
     rejection, and round-trip counts.
-  * corpus — the committed nlu_authoring.csv must validate, split 450/90 at
-    50/10 per intent, and annotate entities using ONLY the canonical vocab
+  * corpus — the committed nlu_authoring.csv must validate, split 484/96 at
+    50/10 per in-domain intent (out_of_scope is 34/6), and annotate entities
+    using ONLY the canonical vocab
     (ontology_vocab.yml values + the tug ids from AgentRoster). This is the
     guard against entity-name drift across the 8 entities.
 
@@ -113,6 +114,28 @@ def test_different_numbers_are_not_duplicates(tmp_path):
     assert nlu.count("\n    - ") == 1 and holdout.count("\n    - ") == 1
 
 
+def test_holdout_item_that_is_a_train_item_plus_one_filler_token_raises(tmp_path):
+    # Task 25: not LEAKAGE (the surfaces differ, the label is unambiguous), but it makes the
+    # held-out item free and inflates the reported F1 — the task-12 review's MINOR M1.
+    csv_path = write_csv(tmp_path / "n1.csv", [
+        ("accept_deal", "It's a deal", "It's a deal", "train"),
+        ("accept_deal", "It's a deal then", "It's a deal then", "test"),
+    ])
+    with pytest.raises(c2n.CorpusError, match="NEAR-DUPLICATES"):
+        c2n.generate(csv_path)
+
+
+def test_near_duplicate_guard_is_scoped_to_one_intent(tmp_path):
+    # A one-token-apart pair across DIFFERENT intents is not a free holdout item — it is a
+    # genuinely hard minimal pair, and rejecting it would forbid the most informative rows.
+    csv_path = write_csv(tmp_path / "n2.csv", [
+        ("accept_deal", "no problem", "no problem", "train"),
+        ("reject_deal", "problem", "problem", "test"),
+    ])
+    nlu, holdout = c2n.generate(csv_path)
+    assert nlu.count("\n    - ") == 1 and holdout.count("\n    - ") == 1
+
+
 def test_duplicate_within_split_raises(tmp_path):
     csv_path = write_csv(tmp_path / "d.csv", [
         ("accept_deal", "Deal", "Deal", "train"),
@@ -164,14 +187,26 @@ def test_committed_csv_validates():
     c2n.generate(CSV)  # must not raise (no dupes, no leakage, all intents valid)
 
 
-def test_corpus_counts_450_90(rows):
+def test_corpus_counts_484_96(rows):
+    """450/90 until 2026-07-27 (task 26): +34/+6 for the 10th intent, out_of_scope."""
     by_split = Counter(r["split"] for r in rows)
-    assert by_split == {"train": 450, "test": 90}
+    assert by_split == {"train": 484, "test": 96}
 
 
-def test_corpus_50_10_per_intent(rows):
+def test_corpus_50_10_per_in_domain_intent(rows):
+    """The nine port-move intents keep the 50/10 shape exactly.
+
+    out_of_scope is deliberately NOT 50/10. It is a routing label for "none of these", not a
+    move the player makes, and its 34/6 is what the wild-set re-measurement was run against
+    (false-bind 73.7% -> 36.8%). Pinning it here at its real size keeps the asymmetry a stated
+    decision rather than something a later edit could quietly regularise.
+    """
     per = Counter((r["intent"], r["split"]) for r in rows)
     for intent in c2n.INTENTS:
+        if intent == "out_of_scope":
+            assert per[(intent, "train")] == 34, intent
+            assert per[(intent, "test")] == 6, intent
+            continue
         assert per[(intent, "train")] == 50, intent
         assert per[(intent, "test")] == 10, intent
 

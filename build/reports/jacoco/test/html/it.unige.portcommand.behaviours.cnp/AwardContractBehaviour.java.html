@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AwardContractBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.cnp</a> &gt; <span class="el_source">AwardContractBehaviour.java</span></div><h1>AwardContractBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.cnp;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.Settings;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.TugJobAwardedEvent;
+import it.unige.portcommand.harbourmaster.CnpRequest;
+import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
+import it.unige.portcommand.harbourmaster.cnp.CnpRetryBehaviour;
+import it.unige.portcommand.prolog.PrologQueries;
+import it.unige.portcommand.prolog.TugBid;
+import jade.core.AID;
+import jade.core.Agent;
+import jade.core.behaviours.OneShotBehaviour;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Scores the collected bids and closes out the Contract Net. Zero bids (or every
+ * PROPOSE malformed) -&gt; INFORM the vessel to hold, then schedule task 15's
+ * {@link CnpRetryBehaviour} (bounded at {@link CnpRetryBehaviour#MAX_RETRIES}). One or more
+ * usable bids -&gt; {@link PrologQueries#selectBestBids} (RULE R13) picks the winner(s) â€” the
+ * Prolog-gated decision behind every tug ACCEPT_PROPOSAL this agent sends.
+ */
+public final class AwardContractBehaviour extends OneShotBehaviour {
+
+<span class="fc" id="L36">    private static final Logger log = LoggerFactory.getLogger(AwardContractBehaviour.class);</span>
+
+    private final CnpRequest req;
+    private final List&lt;ACLMessage&gt; proposals;
+
+    public AwardContractBehaviour(Agent agent, CnpRequest req, List&lt;ACLMessage&gt; proposals) {
+<span class="fc" id="L42">        super(agent);</span>
+<span class="fc" id="L43">        this.req = req;</span>
+<span class="fc" id="L44">        this.proposals = proposals;</span>
+<span class="fc" id="L45">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L49">        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;</span>
+<span class="fc" id="L50">        Map&lt;String, ACLMessage&gt; bidsByTugId = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L51">        List&lt;TugBid&gt; bids = new ArrayList&lt;&gt;(proposals.size());</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">        for (ACLMessage p : proposals) {</span>
+<span class="fc" id="L53">            JsonNode content = TerminalJson.readTreeOrNull(p.getContent());</span>
+<span class="pc bpc" id="L54" title="3 of 6 branches missed.">            if (content == null || !content.hasNonNull(&quot;cost&quot;) || !content.hasNonNull(&quot;eta_minutes&quot;)</span>
+<span class="pc bpc" id="L55" title="1 of 2 branches missed.">                    || !content.hasNonNull(&quot;fuel_state&quot;)) {</span>
+<span class="nc" id="L56">                continue; // malformed bid, silently excluded from scoring</span>
+            }
+<span class="fc" id="L58">            String tugId = p.getSender().getLocalName();</span>
+<span class="fc" id="L59">            bids.add(new TugBid(tugId, content.get(&quot;cost&quot;).asDouble(),</span>
+<span class="fc" id="L60">                    content.get(&quot;eta_minutes&quot;).asDouble(), content.get(&quot;fuel_state&quot;).asDouble()));</span>
+<span class="fc" id="L61">            bidsByTugId.put(tugId, p);</span>
+<span class="fc" id="L62">        }</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">        if (bids.isEmpty()) {</span>
+<span class="fc" id="L64">            holdVessel(hm, &quot;no_bids&quot;);</span>
+            // Terminal path (the retry, if scheduled, re-enters through the queue) â€” release
+            // the serialized-CNP queue (B2).
+<span class="fc" id="L67">            hm.cnpCoordinator().completed();</span>
+<span class="fc" id="L68">            return;</span>
+        }
+
+<span class="fc" id="L71">        Map&lt;String, Double&gt; costByTugId = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L72">        bids.forEach(b -&gt; costByTugId.put(b.tugId(), b.cost()));</span>
+
+<span class="fc" id="L74">        List&lt;String&gt; winners = PrologQueries.selectBestBids(bids, req.tugsRequired());</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        for (Map.Entry&lt;String, ACLMessage&gt; entry : bidsByTugId.entrySet()) {</span>
+<span class="fc" id="L76">            ACLMessage bid = entry.getValue();</span>
+<span class="fc" id="L77">            AID tugAid = bid.getSender();</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">            if (winners.contains(entry.getKey())) {</span>
+<span class="fc" id="L79">                ACLMessage accept = MessageFactory.reply(bid, ACLMessage.ACCEPT_PROPOSAL);</span>
+<span class="fc" id="L80">                accept.setContent(TerminalJson.write(</span>
+<span class="fc" id="L81">                        Map.of(&quot;vessel_id&quot;, req.vesselId(), &quot;berth_position&quot;, req.berthPosition())));</span>
+<span class="fc" id="L82">                hm.sendLogged(accept);</span>
+<span class="fc" id="L83">                log.info(&quot;CNP for {}: ACCEPT -&gt; {}&quot;, req.vesselId(), tugAid.getLocalName());</span>
+                // Task 20: the winning bid's cost dies here otherwise â€” the ACCEPT above carries
+                // only vessel_id + berth_position, and the later escort_complete INFORM carries no
+                // cost either. Publishing it is what lets the wallet pay the price Prolog actually
+                // chose, so a cheaper bid really does save the port money. Charge-point is AWARD
+                // (Moji, 2026-07-17); the ledger dedupes on (conversationId, tugId) because two
+                // co-winning tugs share this one cfpId. See TugJobAwardedEvent's javadoc.
+<span class="fc" id="L90">                hm.eventBus().publish(new TugJobAwardedEvent(</span>
+<span class="fc" id="L91">                        req.vesselId(), entry.getKey(), costByTugId.get(entry.getKey()),</span>
+<span class="fc" id="L92">                        bid.getConversationId(), hm.simClock().nowSimMillis()));</span>
+<span class="fc" id="L93">            } else {</span>
+<span class="fc" id="L94">                hm.sendLogged(MessageFactory.reply(bid, ACLMessage.REJECT_PROPOSAL));</span>
+<span class="fc" id="L95">                log.info(&quot;CNP for {}: REJECT -&gt; {}&quot;, req.vesselId(), tugAid.getLocalName());</span>
+            }
+<span class="fc" id="L97">        }</span>
+
+<span class="fc" id="L99">        hm.activeVessels().computeIfPresent(req.vesselId(),</span>
+<span class="fc" id="L100">                (id, tracking) -&gt; tracking.withTugs(winners).withStage(Stage.IN_TRANSIT));</span>
+<span class="fc" id="L101">        hm.cnpRetryAttempts().remove(req.vesselId());</span>
+        // Awards are on the wire (before any queued CFP, per-pair FIFO) â€” the winning tugs will
+        // set currentJob before they see the next session's CFP, which is what makes their
+        // busy-REFUSE guard effective. Release the serialized-CNP queue (B2).
+<span class="fc" id="L105">        hm.cnpCoordinator().completed();</span>
+<span class="fc" id="L106">    }</span>
+
+    private void holdVessel(HarbourMasterAgent hm, String reason) {
+<span class="fc" id="L109">        ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);</span>
+<span class="fc" id="L110">        inform.addReceiver(req.vesselAid());</span>
+<span class="fc" id="L111">        inform.setContent(TerminalJson.write(Map.of(&quot;event&quot;, &quot;tug_hold&quot;, &quot;reason&quot;, reason)));</span>
+<span class="fc" id="L112">        hm.sendLogged(inform);</span>
+<span class="fc" id="L113">        log.info(&quot;CNP for {} held: {}&quot;, req.vesselId(), reason);</span>
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">        if (&quot;no_bids&quot;.equals(reason)) {</span>
+<span class="fc" id="L115">            scheduleRetryIfWithinCap(hm);</span>
+        }
+<span class="fc" id="L117">    }</span>
+
+    /** Schedules {@link CnpRetryBehaviour}, bounded at {@link CnpRetryBehaviour#MAX_RETRIES}. */
+    private void scheduleRetryIfWithinCap(HarbourMasterAgent hm) {
+<span class="fc" id="L121">        int attempt = hm.cnpRetryAttempts()</span>
+<span class="fc" id="L122">                .computeIfAbsent(req.vesselId(), id -&gt; new AtomicInteger(0))</span>
+<span class="fc" id="L123">                .incrementAndGet();</span>
+<span class="pc bpc" id="L124" title="1 of 2 branches missed.">        if (attempt &gt; CnpRetryBehaviour.MAX_RETRIES) {</span>
+<span class="nc" id="L125">            log.warn(&quot;CNP for {}: giving up after {} retries&quot;, req.vesselId(), CnpRetryBehaviour.MAX_RETRIES);</span>
+<span class="nc" id="L126">            hm.cnpRetryAttempts().remove(req.vesselId());</span>
+<span class="nc" id="L127">            return;</span>
+        }
+        // Floored (audit A-03): unfloored this was 1 ms under --day-length 5, so all three retries
+        // collected zero bids as fast as the scheduler could run them and the cap was spent in
+        // milliseconds. See InitiateCNPBehaviour.MIN_CNP_WINDOW_WALL_MS.
+<span class="fc" id="L132">        long delayWallMs = InitiateCNPBehaviour.cnpWindowWallMs(</span>
+<span class="fc" id="L133">                hm.simClock(), Settings.load().cnpRetryAfterSimSeconds());</span>
+<span class="fc" id="L134">        myAgent.addBehaviour(new CnpRetryBehaviour(myAgent, hm.cnpCoordinator(), req, delayWallMs));</span>
+<span class="fc" id="L135">        log.info(&quot;CNP for {}: scheduling retry {}/{} in {} sim-s&quot;,</span>
+<span class="fc" id="L136">                req.vesselId(), attempt, CnpRetryBehaviour.MAX_RETRIES, Settings.load().cnpRetryAfterSimSeconds());</span>
+<span class="fc" id="L137">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

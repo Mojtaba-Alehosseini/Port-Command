@@ -1,0 +1,348 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TugAgent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">TugAgent.java</span></div><h1>TugAgent.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.behaviours.cnp.BidInCNPBehaviour;
+import it.unige.portcommand.behaviours.cnp.HandleAcceptRejectBehaviour;
+import it.unige.portcommand.behaviours.coordination.EscortToBerthBehaviour;
+import it.unige.portcommand.behaviours.coordination.HandleCancelBehaviour;
+import it.unige.portcommand.behaviours.coordination.RefuelIfLowBehaviour;
+import it.unige.portcommand.behaviours.coordination.ReturnToBaseBehaviour;
+import it.unige.portcommand.behaviours.coordination.TransitToVesselBehaviour;
+import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.persistence.dto.TugStateDTO;
+import it.unige.portcommand.util.SimClock;
+import jade.core.behaviours.Behaviour;
+
+/**
+ * Tug escort agent (four instances, {@code tug_1}..{@code tug_4}, DF service
+ * {@code tug-escort}). Participates in the HarbourMaster's Contract Net: bids on a
+ * {@code CFP}, and on {@code ACCEPT_PROPOSAL} transits to the vessel, escorts it to
+ * the assigned berth, returns to base, and refuels when low. Full state per the
+ * TugAgent section of {@code PROJECT_DEFINITION.md} + task 08.
+ *
+ * &lt;h2&gt;Threading&lt;/h2&gt;
+ * A JADE agent runs on a single thread; every behaviour of this tug (bidder,
+ * accept/reject handler, cancel handler, the movement tickers, the refuel waker)
+ * executes on that one thread. So {@link #fuelState}, {@link #position},
+ * {@link #status}, {@link #currentJob}, {@link #activeMovement} and
+ * {@link #pendingBids} are plain fields with no locking â€” mutated only from the
+ * agent's behaviour thread (task 08 concurrency constraint). The shared
+ * {@link PortStateArtifact} it publishes to is itself thread-safe for the GUI reader.
+ *
+ * &lt;h2&gt;Units&lt;/h2&gt;
+ * The map/{@link Position} are in pixels; all cost/ETA/fuel/movement math is in km via
+ * {@link TugMath} (the single conversion boundary). {@link #fuelState} is a 0..1
+ * fraction; â‚¬ is never computed here â€” {@code WalletLedger} (task 20) invoices fuel.
+ */
+<span class="fc" id="L40">public final class TugAgent extends PortCommandAgent implements it.unige.portcommand.persistence.Mementoable {</span>
+
+    /** A leg consumes this many fuel units per km (200 km empties a full tank). */
+    public static final double FUEL_DECAY_PER_KM = 0.005;
+    /** Bids are REFUSEd below this fuel fraction; also the refuel trigger threshold. */
+    public static final double LOW_FUEL_THRESHOLD = 0.20;
+
+    private String tugId;
+    private Position basePosition;
+    private double baseFare;
+    private double fuelCostPerKm;
+    private double topSpeedKnots;
+
+    private PortStateArtifact portState;
+    private SimClock simClock;
+
+    // --- live, mutable state: single WRITER (the agent thread), but volatile since task 22 â€”
+    // GameStateBuilder reads these fields from the HarbourMaster thread at snapshot time and
+    // needs the happens-before edge (adversarial review #2). Writes stay lock-free.
+    private volatile double fuelState;
+    private volatile Position position;
+<span class="fc" id="L61">    private volatile TugStatus status = TugStatus.IDLE;</span>
+    private volatile TugJob currentJob;
+    private Behaviour activeMovement;
+    /** Outstanding bids by CNP conversation-id â†’ the vessel pickup point we quoted. */
+<span class="fc" id="L65">    private final Map&lt;String, Position&gt; pendingBids = new HashMap&lt;&gt;();</span>
+    /** The pickup the EN_ROUTE_TO_VESSEL leg is heading to â€” persisted by task 22 so a
+     * loaded tug can resume the leg (the pickup otherwise lives only in the consumed bid). */
+    private volatile Position pickupTarget;
+
+    @Override
+    protected void registerServices() {
+<span class="fc" id="L72">        registerDfService(&quot;tug-escort&quot;, getLocalName());</span>
+<span class="fc" id="L73">    }</span>
+
+    @Override
+    protected void onSetup() {
+<span class="fc" id="L77">        InitArgs.TugInitArgs args = initArg(InitArgs.TugInitArgs.class);</span>
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">        if (args == null) {</span>
+<span class="nc" id="L79">            throw new IllegalStateException(</span>
+<span class="nc" id="L80">                    &quot;TugAgent &quot; + getLocalName() + &quot; requires TugInitArgs at args[0]&quot;);</span>
+        }
+<span class="fc" id="L82">        this.tugId = args.tugId();</span>
+<span class="fc" id="L83">        this.basePosition = args.basePosition();</span>
+<span class="fc" id="L84">        this.baseFare = args.baseFare();</span>
+<span class="fc" id="L85">        this.fuelCostPerKm = args.fuelCostPerKm();</span>
+<span class="fc" id="L86">        this.topSpeedKnots = args.topSpeedKnots();</span>
+<span class="fc" id="L87">        this.fuelState = args.initialFuel();</span>
+<span class="fc" id="L88">        this.position = args.basePosition();</span>
+
+<span class="fc" id="L90">        this.portState = argAt(1, PortStateArtifact.class);</span>
+<span class="fc" id="L91">        this.simClock = argAt(2, SimClock.class);</span>
+
+<span class="fc" id="L93">        addBehaviour(new BidInCNPBehaviour(this));</span>
+<span class="fc" id="L94">        addBehaviour(new HandleAcceptRejectBehaviour(this));</span>
+<span class="fc" id="L95">        addBehaviour(new HandleCancelBehaviour(this));</span>
+<span class="fc" id="L96">        addBehaviour(new RefuelIfLowBehaviour(this));</span>
+
+<span class="fc" id="L98">        TugStateDTO restored = optionalArgOfType(TugStateDTO.class);</span>
+<span class="fc bfc" id="L99" title="All 2 branches covered.">        if (restored != null) {</span>
+<span class="fc" id="L100">            restoreFrom(restored);</span>
+        }
+
+<span class="fc" id="L103">        pushState(); // register the tug's initial (or restored) snapshot with the artefact</span>
+<span class="fc" id="L104">        log.info(&quot;Tug {} ready: base={} fuel={} topSpeed={}kn status={}&quot;,</span>
+<span class="fc" id="L105">                tugId, basePosition, fuelState, topSpeedKnots, status);</span>
+<span class="fc" id="L106">    }</span>
+
+    /**
+     * Task 22 restore: adopt fuel/position/job and RESUME the movement leg the save caught
+     * this tug in. No re-bid, no re-award â€” the job (and its charge) happened in the saved
+     * timeline; the ledger never sees a second {@code TugJobAwardedEvent} for it, which is
+     * what keeps the mid-transit round-trip charged exactly once. REFUELING and BIDDING
+     * normalise to IDLE ({@code RefuelIfLowBehaviour} re-triggers off the persisted low
+     * tank; an un-awarded bid's Contract Net died with the save).
+     */
+    private void restoreFrom(TugStateDTO dto) {
+<span class="fc" id="L117">        this.fuelState = dto.fuelState();</span>
+<span class="fc bfc" id="L118" title="All 2 branches covered.">        this.position = dto.position() != null ? dto.position() : basePosition;</span>
+<span class="fc" id="L119">        this.pickupTarget = dto.pickupTarget();</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">        if (dto.job() != null) {</span>
+            // The client AID is always the HarbourMaster; rebuilt by local name inside the
+            // live container (AID.ISLOCALNAME is container-resolved â€” the task-20 unit-test
+            // caveat does not apply here).
+<span class="fc" id="L124">            this.currentJob = new TugJob(dto.job().vesselId(), dto.job().berthPosition(),</span>
+                    new jade.core.AID(&quot;harbour_master&quot;, jade.core.AID.ISLOCALNAME),
+<span class="fc" id="L126">                    dto.job().conversationId());</span>
+        }
+<span class="fc" id="L128">        TugStatus restoredStatus = TugStatus.valueOf(dto.status());</span>
+<span class="pc bpc" id="L129" title="2 of 4 branches missed.">        switch (restoredStatus) {</span>
+            case EN_ROUTE_TO_VESSEL -&gt; {
+<span class="pc bpc" id="L131" title="2 of 4 branches missed.">                if (currentJob != null &amp;&amp; pickupTarget != null) {</span>
+<span class="fc" id="L132">                    this.status = TugStatus.EN_ROUTE_TO_VESSEL;</span>
+<span class="fc" id="L133">                    TransitToVesselBehaviour leg = new TransitToVesselBehaviour(this, pickupTarget);</span>
+<span class="fc" id="L134">                    setActiveMovement(leg);</span>
+<span class="fc" id="L135">                    addBehaviour(leg);</span>
+<span class="fc" id="L136">                } else {</span>
+<span class="nc" id="L137">                    this.status = TugStatus.IDLE; // job/pickup incoherent â€” fail safe to idle</span>
+<span class="nc" id="L138">                    this.currentJob = null;</span>
+                }
+<span class="nc" id="L140">            }</span>
+            case ESCORTING -&gt; {
+<span class="nc bnc" id="L142" title="All 2 branches missed.">                if (currentJob != null) {</span>
+<span class="nc" id="L143">                    this.status = TugStatus.ESCORTING;</span>
+<span class="nc" id="L144">                    EscortToBerthBehaviour leg = new EscortToBerthBehaviour(this);</span>
+<span class="nc" id="L145">                    setActiveMovement(leg);</span>
+<span class="nc" id="L146">                    addBehaviour(leg);</span>
+<span class="nc" id="L147">                } else {</span>
+<span class="nc" id="L148">                    this.status = TugStatus.IDLE;</span>
+                }
+<span class="nc" id="L150">            }</span>
+            case RETURNING -&gt; {
+<span class="nc" id="L152">                this.status = TugStatus.RETURNING;</span>
+<span class="nc" id="L153">                this.currentJob = null;</span>
+<span class="nc" id="L154">                ReturnToBaseBehaviour leg = new ReturnToBaseBehaviour(this);</span>
+<span class="nc" id="L155">                setActiveMovement(leg);</span>
+<span class="nc" id="L156">                addBehaviour(leg);</span>
+<span class="nc" id="L157">            }</span>
+            default -&gt; {
+<span class="fc" id="L159">                this.status = TugStatus.IDLE;</span>
+<span class="fc" id="L160">                this.currentJob = null;</span>
+            }
+        }
+<span class="fc" id="L163">        log.info(&quot;{} restored: status={} fuel={} job={}&quot;, tugId, status, fuelState,</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">                currentJob == null ? &quot;-&quot; : currentJob.vesselId());</span>
+<span class="fc" id="L165">    }</span>
+
+    /** The persisted tug record (task 22). BIDDING normalises to IDLE â€” see {@link TugStateDTO}. */
+    public TugStateDTO snapshotDto() {
+<span class="pc bpc" id="L169" title="1 of 2 branches missed.">        TugStatus persistedStatus = status == TugStatus.BIDDING ? TugStatus.IDLE : status;</span>
+<span class="fc bfc" id="L170" title="All 2 branches covered.">        TugStateDTO.TugJobDTO job = currentJob == null ? null</span>
+<span class="fc" id="L171">                : new TugStateDTO.TugJobDTO(currentJob.vesselId(), currentJob.berthPosition(),</span>
+<span class="fc" id="L172">                        currentJob.conversationId());</span>
+<span class="fc" id="L173">        return new TugStateDTO(tugId, persistedStatus.name(), position, fuelState, job, pickupTarget);</span>
+    }
+
+    @Override
+    public com.fasterxml.jackson.databind.JsonNode snapshot() {
+<span class="nc" id="L178">        return persistenceMapper().valueToTree(snapshotDto());</span>
+    }
+
+    @Override
+    public void restore(com.fasterxml.jackson.databind.JsonNode node) {
+<span class="nc" id="L183">        restoreFrom(persistenceMapper().convertValue(node, TugStateDTO.class));</span>
+<span class="nc" id="L184">    }</span>
+
+    private &lt;T&gt; T argAt(int index, Class&lt;T&gt; type) {
+<span class="fc" id="L187">        Object[] a = getArguments();</span>
+<span class="pc bpc" id="L188" title="3 of 6 branches missed.">        if (a == null || a.length &lt;= index || a[index] == null) {</span>
+<span class="nc" id="L189">            throw new IllegalStateException(&quot;TugAgent &quot; + getLocalName() + &quot; requires &quot;</span>
+<span class="nc" id="L190">                    + type.getSimpleName() + &quot; at args[&quot; + index + &quot;]&quot;);</span>
+        }
+<span class="fc" id="L192">        return type.cast(a[index]);</span>
+    }
+
+    // ---------------------------------------------------------------------------
+    // Movement (agent-thread only): integrate velocity over elapsed SIM time, so a
+    // test/production driver advances motion purely by advancing the SimClock.
+    // ---------------------------------------------------------------------------
+
+    /**
+     * Moves the tug toward {@code target} by the distance coverable in
+     * {@code dtSimSeconds} at top speed (clamped so it never overshoots), consuming
+     * fuel for the actual km moved. Returns {@code true} once {@code target} is
+     * reached. Uses the SAME {@link TugMath} conversions as the bid ETA, so simulated
+     * arrival time matches the quoted {@code etaMinutes}.
+     */
+    public boolean advanceToward(Position target, double dtSimSeconds) {
+<span class="fc" id="L208">        double remainingKm = TugMath.distanceKm(position, target);</span>
+<span class="fc bfc" id="L209" title="All 2 branches covered.">        if (remainingKm &lt;= TugMath.ARRIVAL_EPS_KM) {</span>
+<span class="fc" id="L210">            return true;</span>
+        }
+<span class="fc" id="L212">        double stepKm = Math.min(TugMath.stepKm(topSpeedKnots, dtSimSeconds), remainingKm);</span>
+<span class="fc" id="L213">        this.position = TugMath.moveToward(position, target, stepKm * TugMath.PIXELS_PER_KM);</span>
+<span class="fc" id="L214">        consumeFuel(stepKm);</span>
+<span class="fc bfc" id="L215" title="All 2 branches covered.">        return TugMath.distanceKm(position, target) &lt;= TugMath.ARRIVAL_EPS_KM;</span>
+    }
+
+    /** Publishes the current {position, status} to the shared artefact (task 08: every tick/status change). */
+    public void pushState() {
+<span class="pc bpc" id="L220" title="1 of 2 branches missed.">        if (portState != null) {</span>
+<span class="fc" id="L221">            portState.updateTug(tugId, position, status);</span>
+        }
+<span class="fc" id="L223">    }</span>
+
+    /** {@code true} when the tug is within arrival tolerance of its home base. */
+    public boolean atBase() {
+<span class="pc bpc" id="L227" title="1 of 2 branches missed.">        return TugMath.distanceKm(position, basePosition) &lt;= TugMath.ARRIVAL_EPS_KM;</span>
+    }
+
+    // ---------------------------------------------------------------------------
+    // Fuel (agent-thread only). Pure fuel-unit math; no currency (task 08 constraint).
+    // ---------------------------------------------------------------------------
+
+    /** Consumes {@code km * FUEL_DECAY_PER_KM} fuel units, clamped at empty. */
+    public void consumeFuel(double km) {
+<span class="fc" id="L236">        this.fuelState = Math.max(0.0, fuelState - km * FUEL_DECAY_PER_KM);</span>
+<span class="fc" id="L237">    }</span>
+
+    /** Restores a full tank (refuel-cycle completion). */
+    public void refuelFull() {
+<span class="fc" id="L241">        this.fuelState = 1.0;</span>
+<span class="fc" id="L242">    }</span>
+
+    // ---------------------------------------------------------------------------
+    // Bid memory (CNP): remember the pickup we quoted per conversation, so an
+    // ACCEPT can be honoured without the vessel echoing its position back.
+    // ---------------------------------------------------------------------------
+
+    public void rememberBid(String conversationId, Position pickup) {
+<span class="fc" id="L250">        pendingBids.put(conversationId, pickup);</span>
+<span class="fc" id="L251">    }</span>
+
+    /** The pickup the current EN_ROUTE leg targets; set on job take, cleared at pickup arrival. */
+    public Position pickupTarget() {
+<span class="nc" id="L255">        return pickupTarget;</span>
+    }
+
+    public void setPickupTarget(Position pickup) {
+<span class="fc" id="L259">        this.pickupTarget = pickup;</span>
+<span class="fc" id="L260">    }</span>
+
+    /** Removes and returns the remembered pickup for a conversation, or {@code null} if we never bid / already consumed it. */
+    public Position takeBid(String conversationId) {
+<span class="fc" id="L264">        return pendingBids.remove(conversationId);</span>
+    }
+
+    public void forgetBid(String conversationId) {
+<span class="fc" id="L268">        pendingBids.remove(conversationId);</span>
+<span class="fc" id="L269">    }</span>
+
+    /** Drops all outstanding bids â€” called once a job is accepted (the tug can serve only one). */
+    public void clearPendingBids() {
+<span class="fc" id="L273">        pendingBids.clear();</span>
+<span class="fc" id="L274">    }</span>
+
+    // ---------------------------------------------------------------------------
+    // Status / job accessors (public: behaviours live in sibling packages).
+    // ---------------------------------------------------------------------------
+
+    /** Sets the lifecycle status and republishes to the artefact (single emit point for status changes). */
+    public void setStatus(TugStatus newStatus) {
+<span class="fc" id="L282">        this.status = newStatus;</span>
+<span class="fc" id="L283">        pushState();</span>
+<span class="fc" id="L284">    }</span>
+
+    public TugStatus status() {
+<span class="fc" id="L287">        return status;</span>
+    }
+
+    public TugJob currentJob() {
+<span class="fc" id="L291">        return currentJob;</span>
+    }
+
+    public void setCurrentJob(TugJob job) {
+<span class="fc" id="L295">        this.currentJob = job;</span>
+<span class="fc" id="L296">    }</span>
+
+    public void clearJob() {
+<span class="fc" id="L299">        this.currentJob = null;</span>
+<span class="fc" id="L300">    }</span>
+
+    public Behaviour activeMovement() {
+<span class="fc" id="L303">        return activeMovement;</span>
+    }
+
+    public void setActiveMovement(Behaviour behaviour) {
+<span class="fc" id="L307">        this.activeMovement = behaviour;</span>
+<span class="fc" id="L308">    }</span>
+
+    // --- immutable config + live reads ---
+
+    public SimClock simClock() {
+<span class="fc" id="L313">        return simClock;</span>
+    }
+
+    public PortStateArtifact portState() {
+<span class="nc" id="L317">        return portState;</span>
+    }
+
+    public String tugId() {
+<span class="fc" id="L321">        return tugId;</span>
+    }
+
+    public Position position() {
+<span class="fc" id="L325">        return position;</span>
+    }
+
+    public Position basePosition() {
+<span class="fc" id="L329">        return basePosition;</span>
+    }
+
+    public double topSpeedKnots() {
+<span class="fc" id="L333">        return topSpeedKnots;</span>
+    }
+
+    public double baseFare() {
+<span class="fc" id="L337">        return baseFare;</span>
+    }
+
+    public double fuelCostPerKm() {
+<span class="fc" id="L341">        return fuelCostPerKm;</span>
+    }
+
+    public double fuelState() {
+<span class="fc" id="L345">        return fuelState;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

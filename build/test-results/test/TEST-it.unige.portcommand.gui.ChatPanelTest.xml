@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.gui.ChatPanelTest" tests="27" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:36" hostname="MOJI" time="3.436">
+  <properties/>
+  <testcase name="hintButtonIsVisibleOnAnOpenTabUnderDefaultAutopilotOffSettings()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.339"/>
+  <testcase name="proposeOfferButtonPopulatesInputInsteadOfDispatching()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.027"/>
+  <testcase name="aFleetWideInstructionIsAnsweredTruthfullyAndDispatchesNothing()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.047"/>
+  <testcase name="aTypedHelpRequestReachesTheAssistantJustLikeTheButton()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.023"/>
+  <testcase name="aRoutedStatusQueryIsAnsweredLocallyNotDispatched()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.021"/>
+  <testcase name="routedWithNullAddresseeTargetsTheTypingTab()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.025"/>
+  <testcase name="hintButtonHidesOnceTheTabCloses()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.017"/>
+  <testcase name="eachDispatchingPerformativeMapsToItsPlayerCommandKind()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.047"/>
+  <testcase name="aNewDialogueIdOpensASecondTabWithoutDisturbingTheFirst()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.016"/>
+  <testcase name="everyRoutedDispatchEchoesItsInterpretation()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.022"/>
+  <testcase name="routedWithADifferentAddresseeTargetsThatVesselRegardlessOfTypingTab()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.024"/>
+  <testcase name="quickActionButtonsAreAlwaysVisibleOnAnOpenTab()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.006"/>
+  <testcase name="theTranscriptStaysPinnedToTheNewestMessage()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.08"/>
+  <testcase name="aProcessorThatFailsExceptionallyStillDegradesToAnErrorBubbleNotAStuckUi()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.014"/>
+  <testcase name="dcgFrameKeysAreTranslatedToTheVesselProtocolKeys()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.015"/>
+  <testcase name="aProposeWithHoursDispatchesBothDimensionsAndDropsTheFixedDurationNote()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.017"/>
+  <testcase name="aButtonClickEchoesAPlayerBubbleSoTheOutcomeHasAVisibleCause()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.011"/>
+  <testcase name="negotiationClosedGreysTheRightTabAndMakesInputReadOnly()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.014"/>
+  <testcase name="errorResultRendersASystemBubble()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.011"/>
+  <testcase name="acceptAndRejectButtonsDispatchDirectlyAndStatusAnswersLocally()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.024"/>
+  <testcase name="needsClarificationAppendsAVisibleSystemReply()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.01"/>
+  <testcase name="autopilotSettingTogglesHintButtonLiveAndUnsubscribesOnRemoveNotify()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.015"/>
+  <testcase name="requestHelpButtonFiresTheSameHintButtonEventAsTheHintButton()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.012"/>
+  <testcase name="dealClosedAndWithdrawalEventsAloneDoNotCloseATab()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.013"/>
+  <testcase name="informAndRequestNeverDispatchAndRenderASystemBubbleInstead()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.021"/>
+  <testcase name="theActionBarStaysVisibleAfterAClickAndHidesOnlyWhenTheTabCloses()" classname="it.unige.portcommand.gui.ChatPanelTest" time="0.015"/>
+  <testcase name="assistantChatEventRendersInTheRightTabOnly()" classname="it.unige.portcommand.gui.ChatPanelTest" time="2.532"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

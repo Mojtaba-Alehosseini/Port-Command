@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - DcgTokenizerTest</title>
+<link href="../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<h1>DcgTokenizerTest</h1>
+<div class="breadcrumbs">
+<a href="../index.html">all</a> &gt; 
+<a href="../packages/it.unige.portcommand.nlp.html">it.unige.portcommand.nlp</a> &gt; DcgTokenizerTest</div>
+<div id="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox" id="tests">
+<div class="counter">51</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="failures">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="ignored">
+<div class="counter">0</div>
+<p>ignored</p>
+</div>
+</td>
+<td>
+<div class="infoBox" id="duration">
+<div class="counter">0.020s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success" id="successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<div id="tabs">
+<ul class="tabLinks">
+<li>
+<a href="#tab0">Tests</a>
+</li>
+</ul>
+<div id="tab0" class="tab">
+<h2>Tests</h2>
+<table>
+<thead>
+<tr>
+<th>Test</th>
+<th>Method name</th>
+<th>Duration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tr>
+<td class="success">aCommaAfterANumberIsStillASeparator()</td>
+<td class="success">aCommaAfterANumberIsStillASeparator()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">aNumberBeforeAnHWordIsNotTreatedAsADuration()</td>
+<td class="success">aNumberBeforeAnHWordIsNotTreatedAsADuration()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">anApostropheCannotTerminateTheAtomEarly()</td>
+<td class="success">anApostropheCannotTerminateTheAtomEarly()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">anInjectedTermCannotEscapeTheAtomQuoting()</td>
+<td class="success">anInjectedTermCannotEscapeTheAtomQuoting()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">apostrophesAreEscapedInsideQuotedAtoms()</td>
+<td class="success">apostrophesAreEscapedInsideQuotedAtoms()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">backslashesAreEscapedInsideQuotedAtoms()</td>
+<td class="success">backslashesAreEscapedInsideQuotedAtoms()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">berthFusedNormalisationDoesNotSplitOtherWords()</td>
+<td class="success">berthFusedNormalisationDoesNotSplitOtherWords()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">clitalApostropheIsKeptSoTheGrammarSeesOneToken()</td>
+<td class="success">clitalApostropheIsKeptSoTheGrammarSeesOneToken()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">clockTimeStaysASingleToken()</td>
+<td class="success">clockTimeStaysASingleToken()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">clockTokenIsQuotedBecauseItIsNotAnAtom()</td>
+<td class="success">clockTokenIsQuotedBecauseItIsNotAnAtom()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">colonSplitsWhenItIsNotBetweenDigits()</td>
+<td class="success">colonSplitsWhenItIsNotBetweenDigits()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[€2000] normalises to 2000 eur</td>
+<td class="success">currencySymbolsNormaliseToEur(String)[1]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[€ 2000] normalises to 2000 eur</td>
+<td class="success">currencySymbolsNormaliseToEur(String)[2]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[2000€] normalises to 2000 eur</td>
+<td class="success">currencySymbolsNormaliseToEur(String)[3]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[2000 €] normalises to 2000 eur</td>
+<td class="success">currencySymbolsNormaliseToEur(String)[4]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[$2000] normalises to 2000 usd</td>
+<td class="success">currencySymbolsNormaliseToUsd(String)[1]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[$ 2000] normalises to 2000 usd</td>
+<td class="success">currencySymbolsNormaliseToUsd(String)[2]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[2000$] normalises to 2000 usd</td>
+<td class="success">currencySymbolsNormaliseToUsd(String)[3]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[2000 $] normalises to 2000 usd</td>
+<td class="success">currencySymbolsNormaliseToUsd(String)[4]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[euros] is passed through for the grammar to map</td>
+<td class="success">currencyWordFormsAreLeftForTheGrammar(String)[1]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[euro] is passed through for the grammar to map</td>
+<td class="success">currencyWordFormsAreLeftForTheGrammar(String)[2]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[eur] is passed through for the grammar to map</td>
+<td class="success">currencyWordFormsAreLeftForTheGrammar(String)[3]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[dollars] is passed through for the grammar to map</td>
+<td class="success">currencyWordFormsAreLeftForTheGrammar(String)[4]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[dollar] is passed through for the grammar to map</td>
+<td class="success">currencyWordFormsAreLeftForTheGrammar(String)[5]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[usd] is passed through for the grammar to map</td>
+<td class="success">currencyWordFormsAreLeftForTheGrammar(String)[6]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">decimalNumberIsEmittedBare()</td>
+<td class="success">decimalNumberIsEmittedBare()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">decimalPriceSurvivesAsOneNumber()</td>
+<td class="success">decimalPriceSurvivesAsOneNumber()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[5h] normalises to 5 h</td>
+<td class="success">durationFormsNormaliseToH(String)[1]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[5 h] normalises to 5 h</td>
+<td class="success">durationFormsNormaliseToH(String)[2]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[5hrs] normalises to 5 h</td>
+<td class="success">durationFormsNormaliseToH(String)[3]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[5 hrs] normalises to 5 h</td>
+<td class="success">durationFormsNormaliseToH(String)[4]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[5hr] normalises to 5 h</td>
+<td class="success">durationFormsNormaliseToH(String)[5]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[5hours] normalises to 5 h</td>
+<td class="success">durationFormsNormaliseToH(String)[6]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[5 hours] normalises to 5 h</td>
+<td class="success">durationFormsNormaliseToH(String)[7]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[5hour] normalises to 5 h</td>
+<td class="success">durationFormsNormaliseToH(String)[8]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[1] </td>
+<td class="success">emptyOrPunctuationOnlyInputYieldsNoTokens(String)[1]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[2]    </td>
+<td class="success">emptyOrPunctuationOnlyInputYieldsNoTokens(String)[2]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[3] !!!</td>
+<td class="success">emptyOrPunctuationOnlyInputYieldsNoTokens(String)[3]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[4] ...</td>
+<td class="success">emptyOrPunctuationOnlyInputYieldsNoTokens(String)[4]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">emptyTokenListMarshalsToTheEmptyPrologList()</td>
+<td class="success">emptyTokenListMarshalsToTheEmptyPrologList()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[berth2] normalises to berth 2</td>
+<td class="success">fusedBerthFormsNormaliseToBerthPlusNumber(String)[1]</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[berth_2] normalises to berth 2</td>
+<td class="success">fusedBerthFormsNormaliseToBerthPlusNumber(String)[2]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">[berth 2] normalises to berth 2</td>
+<td class="success">fusedBerthFormsNormaliseToBerthPlusNumber(String)[3]</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">mixedNormalisationsInOneUtterance()</td>
+<td class="success">mixedNormalisationsInOneUtterance()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">nullInputYieldsNoTokens()</td>
+<td class="success">nullInputYieldsNoTokens()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">numbersAreEmittedBareAndWordsAreQuoted()</td>
+<td class="success">numbersAreEmittedBareAndWordsAreQuoted()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">sentenceFinalDotDoesNotStickToTheWord()</td>
+<td class="success">sentenceFinalDotDoesNotStickToTheWord()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">strayPunctuationIsStripped()</td>
+<td class="success">strayPunctuationIsStripped()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">theFullAcceptanceUtteranceTokenisesForTheGrammar()</td>
+<td class="success">theFullAcceptanceUtteranceTokenisesForTheGrammar()</td>
+<td class="success">0.001s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">thousandsSeparatorIsRemovedRatherThanSplitting()</td>
+<td class="success">thousandsSeparatorIsRemovedRatherThanSplitting()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+<tr>
+<td class="success">typographicApostropheFoldsToAscii()</td>
+<td class="success">typographicApostropheFoldsToAscii()</td>
+<td class="success">0s</td>
+<td class="success">passed</td>
+</tr>
+</table>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="http://www.gradle.org">Gradle 8.10.2</a> at Jul 28, 2026, 12:12:59 AM</p>
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PortCommandAgent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">PortCommandAgent.java</span></div><h1>PortCommandAgent.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import it.unige.portcommand.bootstrap.ServiceLocator;
+import it.unige.portcommand.persistence.AgentDirectory;
+import jade.core.Agent;
+import jade.domain.DFService;
+import jade.domain.FIPAException;
+import jade.domain.FIPAService;
+import jade.domain.FIPAAgentManagement.DFAgentDescription;
+import jade.domain.FIPAAgentManagement.FIPAManagementVocabulary;
+import jade.domain.FIPAAgentManagement.ServiceDescription;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+
+/**
+ * Common base for every Port Command agent. Owns the Directory Facilitator
+ * register/deregister boilerplate and the per-agent MDC, exposing two template
+ * hooks ({@link #registerServices()}, {@link #onSetup()}) so concrete agents stay
+ * focused on their own concern. There is no {@code PlayerAgent} â€” the
+ * HarbourMaster doubles as the player's proxy (CLAUDE.md rule 2).
+ *
+ * &lt;p&gt;Not a JADE-BDI framework: JADE has no BDI primitives. The belief/plan model
+ * is conceptual; here it is plain fields plus {@code behaviours/} classes.
+ */
+<span class="fc" id="L28">public abstract class PortCommandAgent extends Agent {</span>
+
+<span class="fc" id="L30">    private static final ObjectMapper MAPPER = new ObjectMapper();</span>
+
+<span class="fc" id="L32">    protected final Logger log = LoggerFactory.getLogger(getClass());</span>
+    private ServiceLocator serviceLocator;
+    private AgentDirectory agentDirectory;
+
+    @Override
+    protected final void setup() {
+<span class="fc" id="L38">        MDC.put(&quot;agent&quot;, getLocalName());</span>
+        // DEBUG, not INFO (task 26): this fires for every agent, and at sandbox pacing a
+        // walk-in spawns roughly every 24 s. Agent lifecycle is developer information; the
+        // game-level &quot;a vessel arrived&quot; line below it is the operator information.
+<span class="fc" id="L42">        log.debug(&quot;Starting agent {}&quot;, getLocalName());</span>
+        // Per-agent locator, bound to this agent's thread. getContainerController()
+        // is a JADE instance handle (verified via javap), not a static registry â€”
+        // honours the constructor-arg/no-static-DI rule (ADR-02).
+<span class="fc" id="L46">        this.serviceLocator = new ServiceLocator(getContainerController(), this);</span>
+        // Task 22: if the spawner threaded an AgentDirectory through the args channel
+        // (position-independent â€” scanned by type), self-register so the save snapshot can
+        // reach this agent's beliefs (jade.wrapper deliberately hides the Agent object).
+<span class="fc" id="L50">        this.agentDirectory = optionalArgOfType(AgentDirectory.class);</span>
+<span class="fc bfc" id="L51" title="All 2 branches covered.">        if (agentDirectory != null) {</span>
+<span class="fc" id="L52">            agentDirectory.register(this);</span>
+        }
+<span class="fc" id="L54">        registerServices();</span>
+<span class="fc" id="L55">        onSetup();</span>
+<span class="fc" id="L56">    }</span>
+
+    @Override
+    protected final void takeDown() {
+<span class="fc bfc" id="L60" title="All 2 branches covered.">        if (agentDirectory != null) {</span>
+<span class="fc" id="L61">            agentDirectory.unregister(this);</span>
+        }
+        try {
+<span class="fc" id="L64">            DFService.deregister(this);</span>
+<span class="nc" id="L65">        } catch (FIPAException e) {</span>
+<span class="nc" id="L66">            log.warn(&quot;DF deregister failed for {}&quot;, getLocalName(), e);</span>
+<span class="fc" id="L67">        }</span>
+<span class="fc" id="L68">        onTakeDown();</span>
+<span class="fc" id="L69">        MDC.remove(&quot;agent&quot;);</span>
+<span class="fc" id="L70">    }</span>
+
+    /** Subclass registers its DF service(s) via {@link #registerDfService}. */
+    protected abstract void registerServices();
+
+    /** Subclass-specific init after DF registration (parse args, add behaviours). */
+    protected abstract void onSetup();
+
+    /** Optional teardown hook; default no-op. */
+    protected void onTakeDown() {
+<span class="fc" id="L80">    }</span>
+
+    /**
+     * Per-attempt bound on the DF register round trip â€” a healthy DF answers in
+     * milliseconds; the 2026-07-18 full-suite wedge sat 30+ s. Attempts Ã— timeout +
+     * spacings = 3Ã—2500 + 2Ã—1200 = 9.9 s, deliberately INSIDE GameSession's 10 s
+     * {@code awaitHarbourMasterReady} bound, so even the HarbourMaster's own
+     * registration either self-heals (a one-blip stall retries at ~3.7 s) or fails
+     * loudly through the session layer â€” never a silent hang.
+     */
+    private static final long DF_REGISTER_TIMEOUT_MS = 2_500L;
+    private static final int DF_REGISTER_ATTEMPTS = 3;
+    /** Mirrors the DF-registration-send retry invariant's spacing (INVARIANTS.md). */
+    private static final long DF_REGISTER_RETRY_SPACING_MS = 1_200L;
+
+    /**
+     * Registers one DF service for this agent â€” BOUNDED (2026-07-18): the stock
+     * {@code DFService.register} blocks with no timeout, and during a load's
+     * teardownâ†’rebuild a respawning agent could wedge forever in setup if the rebuilt
+     * platform's DF stalled under machine load (observed once in a full-suite run â€”
+     * BUILD_LOG &quot;Checkpoint-#6 fix round&quot;, flake log). This composes the SAME
+     * primitives {@code DFService.register} does internally
+     * ({@code createRequestMessage} + {@code doFipaRequestClient}), but through the
+     * TIMED {@code doFipaRequestClient} overload (null reply == timeout, JADE
+     * contract), retrying up to {@link #DF_REGISTER_ATTEMPTS} times.
+     *
+     * &lt;p&gt;A timed-out attempt may still have REACHED the DF (only the reply was late),
+     * so a retry can come back {@code already-registered} â€” that IS success, not a
+     * rejection, and is treated as such. Any other REFUSE/FAILURE stays fail-fast,
+     * exactly the pre-existing semantics. Exhausting every attempt throws â€” a loud,
+     * bounded failure (the session layer lands in MENU) instead of the hang.
+     *
+     * &lt;p&gt;The DF request rides JADE's own FIPA-Agent-Management envelope (built by
+     * {@code DFService.createRequestMessage}) â€” deliberately NOT
+     * {@code MessageFactory.create}: rule 5 governs the game's {@code port_command_v1}
+     * protocol messages, and the stock {@code DFService.register} has always built
+     * this infra message internally; stamping the app envelope onto it would break
+     * the DF's SL codec.
+     */
+    protected final void registerDfService(String serviceType, String serviceName) {
+<span class="fc" id="L120">        DFAgentDescription dfd = new DFAgentDescription();</span>
+<span class="fc" id="L121">        dfd.setName(getAID());</span>
+<span class="fc" id="L122">        ServiceDescription sd = new ServiceDescription();</span>
+<span class="fc" id="L123">        sd.setType(serviceType);</span>
+<span class="fc" id="L124">        sd.setName(serviceName);</span>
+<span class="fc" id="L125">        dfd.addServices(sd);</span>
+<span class="pc bpc" id="L126" title="1 of 2 branches missed.">        for (int attempt = 1; attempt &lt;= DF_REGISTER_ATTEMPTS; attempt++) {</span>
+            try {
+<span class="fc" id="L128">                ACLMessage request = DFService.createRequestMessage(this, getDefaultDF(),</span>
+                        FIPAManagementVocabulary.REGISTER, dfd, null);
+<span class="fc" id="L130">                ACLMessage reply = FIPAService.doFipaRequestClient(this, request, DF_REGISTER_TIMEOUT_MS);</span>
+<span class="pc bpc" id="L131" title="1 of 2 branches missed.">                if (reply != null) {</span>
+<span class="fc" id="L132">                    log.debug(&quot;DF registered: type='{}' name='{}'&quot;, serviceType, serviceName);</span>
+<span class="fc" id="L133">                    return;</span>
+                }
+<span class="nc" id="L135">                log.warn(&quot;DF register timed out ({} ms) for {} (service '{}', attempt {}/{})&quot;,</span>
+<span class="nc" id="L136">                        DF_REGISTER_TIMEOUT_MS, getLocalName(), serviceType, attempt, DF_REGISTER_ATTEMPTS);</span>
+<span class="nc" id="L137">            } catch (FIPAException e) {</span>
+<span class="nc bnc" id="L138" title="All 4 branches missed.">                if (attempt &gt; 1 &amp;&amp; String.valueOf(e.getMessage()).contains(&quot;already-registered&quot;)) {</span>
+                    // A previous timed-out attempt actually landed; the DF knows us. Success.
+<span class="nc" id="L140">                    log.debug(&quot;DF registered: type='{}' name='{}' (prior attempt had landed)&quot;,</span>
+                            serviceType, serviceName);
+<span class="nc" id="L142">                    return;</span>
+                }
+<span class="nc" id="L144">                throw new IllegalStateException(</span>
+<span class="nc" id="L145">                        &quot;DF registration failed for &quot; + getLocalName() + &quot; (service &quot; + serviceType + &quot;)&quot;, e);</span>
+<span class="nc" id="L146">            }</span>
+<span class="nc bnc" id="L147" title="All 2 branches missed.">            if (attempt &lt; DF_REGISTER_ATTEMPTS) {</span>
+<span class="nc" id="L148">                doWait(DF_REGISTER_RETRY_SPACING_MS);</span>
+            }
+        }
+<span class="nc" id="L151">        throw new IllegalStateException(&quot;DF registration timed out for &quot; + getLocalName()</span>
+                + &quot; (service &quot; + serviceType + &quot;) after &quot; + DF_REGISTER_ATTEMPTS + &quot; attempts of &quot;
+                + DF_REGISTER_TIMEOUT_MS + &quot; ms â€” the platform DF is not answering&quot;);
+    }
+
+    /** AID lookup helper for subclasses; never call {@code DFService.search} directly. */
+    protected final ServiceLocator getServiceLocator() {
+<span class="fc" id="L158">        return serviceLocator;</span>
+    }
+
+    /**
+     * Reads {@code getArguments()[0]} as {@code type}: a direct cast when the
+     * spawner passed a real record, else a Jackson conversion (future JSON args).
+     * Returns {@code null} when no args were supplied â€” stub agents tolerate this.
+     */
+    protected final &lt;T&gt; T initArg(Class&lt;T&gt; type) {
+<span class="fc" id="L167">        Object[] args = getArguments();</span>
+<span class="pc bpc" id="L168" title="3 of 6 branches missed.">        if (args == null || args.length == 0 || args[0] == null) {</span>
+<span class="nc" id="L169">            return null;</span>
+        }
+<span class="fc" id="L171">        Object first = args[0];</span>
+<span class="pc bpc" id="L172" title="1 of 2 branches missed.">        return type.isInstance(first) ? type.cast(first) : MAPPER.convertValue(first, type);</span>
+    }
+
+    /**
+     * The first spawn argument that IS an instance of {@code type}, or {@code null} â€” a
+     * position-independent read for OPTIONAL args (task 22's restore DTOs and the
+     * {@link AgentDirectory}), so appending them never disturbs the index-based required
+     * args or the tests that pass shorter arrays.
+     */
+    protected final &lt;T&gt; T optionalArgOfType(Class&lt;T&gt; type) {
+<span class="fc" id="L182">        Object[] args = getArguments();</span>
+<span class="pc bpc" id="L183" title="1 of 2 branches missed.">        if (args == null) {</span>
+<span class="nc" id="L184">            return null;</span>
+        }
+<span class="fc bfc" id="L186" title="All 2 branches covered.">        for (Object arg : args) {</span>
+<span class="fc bfc" id="L187" title="All 2 branches covered.">            if (type.isInstance(arg)) {</span>
+<span class="fc" id="L188">                return type.cast(arg);</span>
+            }
+        }
+<span class="fc" id="L191">        return null;</span>
+    }
+
+    /** Shared mapper for the agents' {@code Mementoable} JsonNode round-trips (task 22). */
+    protected static ObjectMapper persistenceMapper() {
+<span class="nc" id="L196">        return MAPPER;</span>
+    }
+
+    /** The session's live-agent registry, or {@code null} when not threaded through the args
+     * channel. The HarbourMaster forwards it to the walk-in spawner so dynamically spawned
+     * vessels register too (task 22). */
+    protected final AgentDirectory agentDirectory() {
+<span class="fc" id="L203">        return agentDirectory;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

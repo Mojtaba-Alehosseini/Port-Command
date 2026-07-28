@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RecommendOnDemandBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.assistant</a> &gt; <span class="el_source">RecommendOnDemandBehaviour.java</span></div><h1>RecommendOnDemandBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.assistant;
+
+import it.unige.portcommand.assistant.AssistantPromptBuilder;
+import it.unige.portcommand.assistant.AssistantPromptBuilder.PromptPayload;
+import it.unige.portcommand.assistant.HallucinationValidator;
+import it.unige.portcommand.assistant.Recommendation;
+import it.unige.portcommand.assistant.RecommendationAlgorithm;
+import it.unige.portcommand.assistant.RecommendationCache;
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
+import it.unige.portcommand.gui.events.AssistantChatEvent;
+import it.unige.portcommand.gui.events.HintButtonEvent;
+import it.unige.portcommand.nlp.LLMBridge;
+import it.unige.portcommand.nlp.LLMRequest;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
+import jade.core.Agent;
+import jade.core.behaviours.OneShotBehaviour;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The &quot;Hint&quot; button plan (planning/10 Â§10.6). A {@link OneShotBehaviour} that subscribes to the
+ * {@link EventBus} ONCE for {@link HintButtonEvent} (INVARIANTS.md's established
+ * subscribe-once/public-handler pattern); the real reactive work is {@link #onHintButton}, invoked
+ * by the bus whenever it dispatches â€” {@code onHintButton} is also callable directly by tests,
+ * which {@code AssistantAgentIT} does today to drive it deterministically on the calling thread
+ * rather than relying on the real bus's ASYNC delivery timing.
+ *
+ * &lt;p&gt;Never blocks the agent thread: the LLM call is a {@link java.util.concurrent.CompletableFuture}
+ * continuation, never {@code .get()}/{@code .join()}.
+ */
+public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
+
+<span class="fc" id="L35">    private static final Logger log = LoggerFactory.getLogger(RecommendOnDemandBehaviour.class);</span>
+
+    private final RecommendationAlgorithm algorithm;
+    private final LLMBridge llmBridge;
+    private final EventBus eventBus;
+    private final RecommendationCache cache;
+
+    public RecommendOnDemandBehaviour(Agent agent, RecommendationAlgorithm algorithm, LLMBridge llmBridge,
+                                      EventBus eventBus, RecommendationCache cache) {
+<span class="fc" id="L44">        super(agent);</span>
+<span class="fc" id="L45">        this.algorithm = algorithm;</span>
+<span class="fc" id="L46">        this.llmBridge = llmBridge;</span>
+<span class="fc" id="L47">        this.eventBus = eventBus;</span>
+<span class="fc" id="L48">        this.cache = cache;</span>
+<span class="fc" id="L49">    }</span>
+
+    /** Held so AssistantAgent cancels on takedown (task 22): the bus outlives the agent,
+     * and a respawn would otherwise leave this handler subscribed alongside the new one,
+     * double-firing every reaction. */
+    private volatile Subscription&lt;HintButtonEvent&gt; subscription;
+
+    @Override
+    public void action() {
+<span class="fc" id="L58">        subscription = eventBus.subscribe(HintButtonEvent.class, this::onHintButton, DeliveryMode.ASYNC);</span>
+<span class="fc" id="L59">        log.debug(&quot;subscribed to HintButtonEvent&quot;);</span>
+<span class="fc" id="L60">    }</span>
+
+    /** Cancels the bus subscription; safe if {@link #action()} never ran. */
+    public void cancelSubscription() {
+<span class="fc" id="L64">        Subscription&lt;HintButtonEvent&gt; s = subscription;</span>
+<span class="pc bpc" id="L65" title="1 of 2 branches missed.">        if (s != null) {</span>
+<span class="fc" id="L66">            s.cancel();</span>
+        }
+<span class="fc" id="L68">    }</span>
+
+    /** Run the algorithm, ask the LLM to polish it, validate, publish â€” falling back to the
+     * plain template on any LLM timeout/error or on a failed hallucination check. */
+    public void onHintButton(HintButtonEvent event) {
+<span class="fc" id="L73">        WalkInDialogueSnapshot snapshot = event.snapshot();</span>
+<span class="fc" id="L74">        Recommendation rec = algorithm.run(snapshot);</span>
+<span class="fc" id="L75">        cache.put(decisionId(event.dialogueId(), snapshot), rec);</span>
+
+<span class="fc" id="L77">        String template = AssistantPromptBuilder.template(rec);</span>
+<span class="fc" id="L78">        PromptPayload prompt = AssistantPromptBuilder.prompt(rec);</span>
+        // requiredFigures(), not allFigures(): the sidecar's own check 1 mirrors the Java one
+        // (task 13 parity), so both sides must narrow together â€” see Recommendation#requiredFigures.
+        // The sidecar's verdict is advisory anyway; HallucinationValidator below is what gates the
+        // fall back to the plain template.
+<span class="fc" id="L83">        LLMRequest request = new LLMRequest(prompt.user(), prompt.system(),</span>
+<span class="fc" id="L84">                rec.requiredFigures().stream().toList(), rec.namedEntities().stream().toList(), true);</span>
+
+<span class="fc" id="L86">        llmBridge.explain(request)</span>
+<span class="fc" id="L87">                .thenAccept(response -&gt; {</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">                    String text = HallucinationValidator.validate(response.text(), rec) ? response.text() : template;</span>
+<span class="fc" id="L89">                    eventBus.publish(new AssistantChatEvent(event.dialogueId(), text));</span>
+<span class="fc" id="L90">                })</span>
+<span class="fc" id="L91">                .exceptionally(ex -&gt; {</span>
+<span class="fc" id="L92">                    log.debug(&quot;{}: llm explain failed/timed out; falling back to template&quot;,</span>
+<span class="fc" id="L93">                            event.dialogueId(), ex);</span>
+<span class="fc" id="L94">                    eventBus.publish(new AssistantChatEvent(event.dialogueId(), template));</span>
+<span class="fc" id="L95">                    return null;</span>
+                });
+<span class="fc" id="L97">    }</span>
+
+    static String decisionId(String dialogueId, WalkInDialogueSnapshot snapshot) {
+<span class="fc" id="L100">        return dialogueId + &quot;-r&quot; + snapshot.roundsUsed();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

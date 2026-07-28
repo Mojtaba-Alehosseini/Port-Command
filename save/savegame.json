@@ -1,0 +1,381 @@
+{
+  "schemaVersion" : 1,
+  "savedAt" : "2026-07-18T16:32:55.012568Z",
+  "randomSeed" : -938663756395835182,
+  "settings" : {
+    "roundLimit" : 4,
+    "timeLimitSeconds" : 60,
+    "autopilotEnabled" : false,
+    "difficulty" : "NORMAL",
+    "realSecondsPerGameDay" : 300,
+    "maxGameDays" : 30,
+    "firstLaunch" : true,
+    "llmModel" : "microsoft/Phi-4-mini-instruct",
+    "withdrawalPenaltyEur" : 500.0,
+    "cnpReplyBySimSeconds" : 5,
+    "cnpRetryAfterSimSeconds" : 30,
+    "dailyTargetEur" : 5000.0,
+    "bankruptcyFloorEur" : -20000.0
+  },
+  "simClock" : {
+    "simMillis" : 37632000,
+    "realSecondsPerGameDay" : 900
+  },
+  "wallet" : 40141.71,
+  "reputation" : 62,
+  "consecutiveDeepDebtDays" : 0,
+  "lastDeepDebtDay" : 0,
+  "marketHistory" : [ {
+    "vessel_type" : "cargo_vessel",
+    "duration_hours" : 15,
+    "price" : 1564.0,
+    "sim_time" : 30384000,
+    "outcome" : "DEAL"
+  }, {
+    "vessel_type" : "ferry",
+    "duration_hours" : 18,
+    "price" : 1425.0,
+    "sim_time" : 30681600,
+    "outcome" : "PLAYER_REFUSED"
+  }, {
+    "vessel_type" : "tanker",
+    "duration_hours" : 12,
+    "price" : 5000.0,
+    "sim_time" : 31689600,
+    "outcome" : "DEAL"
+  } ],
+  "policyTriggers" : [ ],
+  "activeScenario" : "busy_day",
+  "firedEventIds" : [ "busy_day#0", "busy_day#1", "busy_day#2", "busy_day#3", "busy_day#4", "busy_day#5", "busy_day#6", "busy_day#7" ],
+  "agents" : {
+    "harbourMaster" : {
+      "dayIncome" : [ {
+        "amount" : 5200.0,
+        "source" : "berth_base",
+        "vesselId" : "C001",
+        "simTime" : 28857600
+      }, {
+        "amount" : 1800.0,
+        "source" : "berth_base",
+        "vesselId" : "F001",
+        "simTime" : 28896000
+      }, {
+        "amount" : 500.0,
+        "source" : "extra_tug_surcharge",
+        "vesselId" : "C001",
+        "simTime" : 28924800
+      }, {
+        "amount" : 3000.0,
+        "source" : "berth_base",
+        "vesselId" : "BD503",
+        "simTime" : 28924800
+      }, {
+        "amount" : 1564.0,
+        "source" : "berth_base",
+        "vesselId" : "WALKIN-B1",
+        "simTime" : 30384000
+      }, {
+        "amount" : 5000.0,
+        "source" : "berth_base",
+        "vesselId" : "WALKIN-B3",
+        "simTime" : 31689600
+      } ],
+      "dayExpense" : [ {
+        "amount" : 480.0,
+        "source" : "tug_job",
+        "vesselId" : "C001",
+        "simTime" : 28924800
+      }, {
+        "amount" : 480.38,
+        "source" : "tug_job",
+        "vesselId" : "C001",
+        "simTime" : 28924800
+      }, {
+        "amount" : 480.38,
+        "source" : "tug_job",
+        "vesselId" : "BD503",
+        "simTime" : 28924800
+      }, {
+        "amount" : 481.53,
+        "source" : "tug_job",
+        "vesselId" : "WALKIN-B1",
+        "simTime" : 30393600
+      } ],
+      "performativeCounts" : {
+        "REQUEST" : 6,
+        "INFORM" : 11,
+        "PROPOSE" : 9,
+        "ACCEPT-PROPOSAL" : 10,
+        "REJECT-PROPOSAL" : 2,
+        "REFUSE" : 42,
+        "CFP" : 11,
+        "CANCEL" : 0,
+        "CONFIRM" : 5,
+        "DISCONFIRM" : 0
+      },
+      "pendingCustomsChecks" : { },
+      "walkInSpawnCount" : 0
+    },
+    "weather" : {
+      "current" : {
+        "wind" : 21,
+        "visibility" : "fair",
+        "swell" : 1.5,
+        "state" : "cloudy",
+        "sim_time" : 32400000
+      }
+    },
+    "customs" : {
+      "nextClearanceRef" : 1
+    },
+    "tugs" : [ {
+      "tugId" : "tug_1",
+      "status" : "EN_ROUTE_TO_VESSEL",
+      "position" : {
+        "x" : 491.65444658332103,
+        "y" : 167.94683793589667,
+        "heading_deg" : 98.74616226255489
+      },
+      "fuelState" : 0.7765747199999875,
+      "job" : {
+        "vesselId" : "WALKIN-B1",
+        "berthPosition" : {
+          "x" : 400.0,
+          "y" : 150.0,
+          "heading_deg" : 0.0
+        },
+        "conversationId" : "cnp-ba2a1722-4065-4aae-a7ae-d3ed2b1d6d1d"
+      },
+      "pickupTarget" : {
+        "x" : 700.0,
+        "y" : 200.0,
+        "heading_deg" : 180.0
+      }
+    }, {
+      "tugId" : "tug_2",
+      "status" : "EN_ROUTE_TO_VESSEL",
+      "position" : {
+        "x" : 585.94119385089,
+        "y" : 191.22624568083705,
+        "heading_deg" : 94.39870535499585
+      },
+      "fuelState" : 0.731237759999985,
+      "job" : {
+        "vesselId" : "BD503",
+        "berthPosition" : {
+          "x" : 500.0,
+          "y" : 150.0,
+          "heading_deg" : 0.0
+        },
+        "conversationId" : "cnp-b0273b57-6ca7-4f1e-8ed9-bdfde0307c4e"
+      },
+      "pickupTarget" : {
+        "x" : 700.0,
+        "y" : 200.0,
+        "heading_deg" : 180.0
+      }
+    }, {
+      "tugId" : "tug_3",
+      "status" : "EN_ROUTE_TO_VESSEL",
+      "position" : {
+        "x" : 587.5244800000003,
+        "y" : 200.0,
+        "heading_deg" : 90.0
+      },
+      "fuelState" : 0.731237759999985,
+      "job" : {
+        "vesselId" : "C001",
+        "berthPosition" : {
+          "x" : 400.0,
+          "y" : 150.0,
+          "heading_deg" : 0.0
+        },
+        "conversationId" : "cnp-26f63ec7-be6a-413e-a425-3a082ede919d"
+      },
+      "pickupTarget" : {
+        "x" : 700.0,
+        "y" : 200.0,
+        "heading_deg" : 180.0
+      }
+    }, {
+      "tugId" : "tug_4",
+      "status" : "EN_ROUTE_TO_VESSEL",
+      "position" : {
+        "x" : 585.94119385089,
+        "y" : 208.77375431916295,
+        "heading_deg" : 85.60129464500415
+      },
+      "fuelState" : 0.731237759999985,
+      "job" : {
+        "vesselId" : "C001",
+        "berthPosition" : {
+          "x" : 400.0,
+          "y" : 150.0,
+          "heading_deg" : 0.0
+        },
+        "conversationId" : "cnp-26f63ec7-be6a-413e-a425-3a082ede919d"
+      },
+      "pickupTarget" : {
+        "x" : 700.0,
+        "y" : 200.0,
+        "heading_deg" : 180.0
+      }
+    } ],
+    "terminals" : [ {
+      "terminalId" : "terminal_container",
+      "occupancies" : [ {
+        "berth_id" : "berth_2",
+        "docked_at_sim" : 0,
+        "expected_free_at_sim" : 0,
+        "crane_id" : 0,
+        "status" : "FREE"
+      } ]
+    }, {
+      "terminalId" : "terminal_general",
+      "occupancies" : [ {
+        "berth_id" : "berth_1",
+        "vessel_id" : "C001",
+        "docked_at_sim" : 32400000,
+        "expected_free_at_sim" : 61200000,
+        "crane_id" : 1,
+        "status" : "DOCKED"
+      }, {
+        "berth_id" : "berth_3",
+        "docked_at_sim" : 0,
+        "expected_free_at_sim" : 0,
+        "crane_id" : 0,
+        "status" : "FREE"
+      }, {
+        "berth_id" : "berth_4",
+        "vessel_id" : "F001",
+        "docked_at_sim" : 54000000,
+        "expected_free_at_sim" : 68400000,
+        "crane_id" : 2,
+        "status" : "PROVISIONAL"
+      } ]
+    } ],
+    "activeVessels" : [ {
+      "id" : "BD503",
+      "vesselType" : "container_vessel",
+      "channel" : "contracted",
+      "draft" : 12.0,
+      "length" : 250.0,
+      "tonnage" : 60000,
+      "cargoClass" : "containerized_cargo",
+      "etaArrivalSimMillis" : 28924800,
+      "stage" : "IN_TRANSIT",
+      "currentPhase" : "DOCKED",
+      "phaseDeadlineSimMillis" : 47049600,
+      "assignedBerth" : "berth_2",
+      "dealPrice" : 3000.0,
+      "dealHours" : 5,
+      "assignedTugs" : [ "tug_2" ],
+      "blocked" : false,
+      "weatherHeld" : false,
+      "posX" : 110.0,
+      "posY" : 0.0,
+      "posHeading" : 0.0,
+      "contractRef" : "BD-503"
+    }, {
+      "id" : "C001",
+      "vesselType" : "cargo_vessel",
+      "channel" : "contracted",
+      "draft" : 9.0,
+      "length" : 150.0,
+      "tonnage" : 30000,
+      "cargoClass" : "general_cargo",
+      "etaArrivalSimMillis" : 28857600,
+      "stage" : "IN_TRANSIT",
+      "currentPhase" : "DOCKED",
+      "phaseDeadlineSimMillis" : 57782400,
+      "assignedBerth" : "berth_1",
+      "dealPrice" : 5200.0,
+      "dealHours" : 8,
+      "assignedTugs" : [ "tug_3", "tug_4" ],
+      "blocked" : false,
+      "weatherHeld" : false,
+      "posX" : 97.0,
+      "posY" : 0.0,
+      "posHeading" : 0.0,
+      "contractRef" : "CONTRACT-1"
+    }, {
+      "id" : "F001",
+      "vesselType" : "ferry",
+      "channel" : "contracted",
+      "draft" : 5.0,
+      "length" : 110.0,
+      "tonnage" : 9000,
+      "cargoClass" : "general_cargo",
+      "etaArrivalSimMillis" : 28896000,
+      "stage" : "IN_TRANSIT",
+      "currentPhase" : "DOCKED",
+      "phaseDeadlineSimMillis" : 43420800,
+      "assignedBerth" : "berth_4",
+      "dealPrice" : 1800.0,
+      "dealHours" : 4,
+      "assignedTugs" : [ ],
+      "blocked" : false,
+      "weatherHeld" : false,
+      "posX" : 112.0,
+      "posY" : 0.0,
+      "posHeading" : 0.0,
+      "contractRef" : "CONTRACT-2"
+    }, {
+      "id" : "WALKIN-B1",
+      "vesselType" : "cargo_vessel",
+      "channel" : "walk_in",
+      "draft" : 10.303832887681846,
+      "length" : 135.06102741389125,
+      "tonnage" : 35402,
+      "cargoClass" : "general_cargo",
+      "etaArrivalSimMillis" : 29107200,
+      "stage" : "IN_TRANSIT",
+      "currentPhase" : "DOCKED",
+      "phaseDeadlineSimMillis" : 84508800,
+      "assignedBerth" : "berth_1",
+      "dealPrice" : 1564.0,
+      "dealHours" : 15,
+      "assignedTugs" : [ "tug_1" ],
+      "blocked" : false,
+      "weatherHeld" : false,
+      "posX" : 105.0,
+      "posY" : 0.0,
+      "posHeading" : 0.0,
+      "personality" : "NEUTRAL",
+      "minAcceptablePrice" : 1415.7926320702236,
+      "targetPrice" : 2012.208032985825,
+      "maxWaitMinutes" : 457,
+      "minDurationHours" : 11,
+      "negotiationRound" : 1,
+      "negotiationStartedAtSimMillis" : 29107200
+    }, {
+      "id" : "WALKIN-B3",
+      "vesselType" : "tanker",
+      "channel" : "walk_in",
+      "draft" : 12.243008513830247,
+      "length" : 192.1275455911872,
+      "tonnage" : 54884,
+      "cargoClass" : "liquid_bulk",
+      "etaArrivalSimMillis" : 29702400,
+      "stage" : "AWAITING_TUG",
+      "currentPhase" : "DOCKED",
+      "phaseDeadlineSimMillis" : 75014400,
+      "assignedBerth" : "berth_1",
+      "dealPrice" : 5000.0,
+      "dealHours" : 12,
+      "assignedTugs" : [ ],
+      "blocked" : false,
+      "weatherHeld" : false,
+      "posX" : 107.0,
+      "posY" : 0.0,
+      "posHeading" : 0.0,
+      "personality" : "AGGRESSIVE",
+      "minAcceptablePrice" : 4664.680944073545,
+      "targetPrice" : 6667.291132544351,
+      "maxWaitMinutes" : 411,
+      "minDurationHours" : 10,
+      "negotiationRound" : 2,
+      "negotiationStartedAtSimMillis" : 29702400
+    } ]
+  }
+}

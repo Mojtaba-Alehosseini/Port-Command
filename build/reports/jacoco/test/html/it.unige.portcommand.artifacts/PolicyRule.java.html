@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PolicyRule.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.artifacts</a> &gt; <span class="el_source">PolicyRule.java</span></div><h1>PolicyRule.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.artifacts;
+
+import java.util.Objects;
+import java.util.function.Predicate;
+
+import it.unige.portcommand.assistant.RecommendationCandidate;
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
+
+/**
+ * A parsed player autopilot policy (e.g. &quot;auto accept if price &amp;gt; 2200 for tankers&quot;),
+ * produced by {@code nlp.PolicyParser} (planning/10 Â§10.5b) and consumed by
+ * {@code AutopilotExecuteBehaviour}'s policy-precedence-before-EV check (Â§10.7).
+ *
+ * @param trigger   the original player-typed text, kept for the HUD &quot;Policy registered: â€¦&quot; notice
+ * @param predicate observable-only condition over a {@link WalkInDialogueSnapshot} â€” the same
+ *                  privacy constraint as {@link it.unige.portcommand.assistant.RecommendationAlgorithm}
+ * @param action    what to do when {@code predicate} matches
+ */
+public record PolicyRule(String trigger, Predicate&lt;WalkInDialogueSnapshot&gt; predicate, PolicyAction action) {
+
+<span class="fc" id="L21">    public PolicyRule {</span>
+<span class="fc" id="L22">        Objects.requireNonNull(trigger, &quot;trigger&quot;);</span>
+<span class="fc" id="L23">        Objects.requireNonNull(predicate, &quot;predicate&quot;);</span>
+<span class="fc" id="L24">        Objects.requireNonNull(action, &quot;action&quot;);</span>
+<span class="fc" id="L25">    }</span>
+
+    /** The autopilot action a matched policy dictates; reuses {@link RecommendationCandidate}'s
+     * action vocabulary so the two never drift. */
+<span class="fc" id="L29">    public record PolicyAction(String kind, double counterPct) {</span>
+
+        public static PolicyAction accept() {
+<span class="fc" id="L32">            return new PolicyAction(RecommendationCandidate.ACCEPT, 0.0);</span>
+        }
+
+        public static PolicyAction rejectSilent() {
+<span class="fc" id="L36">            return new PolicyAction(RecommendationCandidate.REJECT_SILENT, 0.0);</span>
+        }
+
+        public static PolicyAction counter(double pct) {
+<span class="fc" id="L40">            return new PolicyAction(RecommendationCandidate.COUNTER, pct);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

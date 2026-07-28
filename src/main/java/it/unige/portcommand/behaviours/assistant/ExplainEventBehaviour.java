@@ -13,6 +13,7 @@ import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.nlp.LLMRequest;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
 import jade.core.Agent;
 import jade.core.behaviours.OneShotBehaviour;
 import org.slf4j.Logger;
@@ -40,10 +41,23 @@ public final class ExplainEventBehaviour extends OneShotBehaviour {
         this.eventBus = eventBus;
     }
 
+    /** Held so AssistantAgent cancels on takedown (task 22): the bus outlives the agent,
+     * and a respawn would otherwise leave this handler subscribed alongside the new one,
+     * double-firing every reaction. */
+    private volatile Subscription<ExplainRequestEvent> subscription;
+
     @Override
     public void action() {
-        eventBus.subscribe(ExplainRequestEvent.class, this::onExplainRequest, DeliveryMode.ASYNC);
+        subscription = eventBus.subscribe(ExplainRequestEvent.class, this::onExplainRequest, DeliveryMode.ASYNC);
         log.debug("subscribed to ExplainRequestEvent");
+    }
+
+    /** Cancels the bus subscription; safe if {@link #action()} never ran. */
+    public void cancelSubscription() {
+        Subscription<ExplainRequestEvent> s = subscription;
+        if (s != null) {
+            s.cancel();
+        }
     }
 
     public void onExplainRequest(ExplainRequestEvent event) {
@@ -57,8 +71,12 @@ public final class ExplainEventBehaviour extends OneShotBehaviour {
         Recommendation rec = cached.get();
         String template = AssistantPromptBuilder.template(rec);
         PromptPayload prompt = AssistantPromptBuilder.prompt(rec);
+        // requiredFigures(), not allFigures(): the sidecar's own check 1 mirrors the Java one
+        // (task 13 parity), so both sides must narrow together — see Recommendation#requiredFigures.
+        // The sidecar's verdict is advisory anyway; HallucinationValidator below is what gates the
+        // fall back to the plain template.
         LLMRequest request = new LLMRequest(prompt.user(), prompt.system(),
-                rec.allFigures().stream().toList(), rec.namedEntities().stream().toList(), true);
+                rec.requiredFigures().stream().toList(), rec.namedEntities().stream().toList(), true);
 
         llmBridge.explain(request)
                 .thenAccept(response -> {

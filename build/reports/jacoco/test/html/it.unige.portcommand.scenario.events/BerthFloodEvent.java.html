@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BerthFloodEvent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.scenario.events</a> &gt; <span class="el_source">BerthFloodEvent.java</span></div><h1>BerthFloodEvent.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.scenario.events;
+
+import java.util.List;
+import java.util.Map;
+
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.NotificationEvent;
+import it.unige.portcommand.scenario.GameContext;
+import jade.core.AID;
+import jade.core.behaviours.OneShotBehaviour;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Scripted berth flood â€” &lt;b&gt;the live DISCONFIRM trigger&lt;/b&gt; (task 26, 2026-07-27).
+ *
+ * &lt;p&gt;&lt;b&gt;Why this exists.&lt;/b&gt; PROJECT_DEFINITION Â§13 and planning/26 both state that DISCONFIRM is
+ * produced &quot;via the scripted Busy-Day terminal-flood&quot;, and
+ * {@code behaviours.coordination.RetractIfFloodBehaviour} has implemented the terminal half since
+ * task 06. But nothing in the shipped game ever sent the flood INFORM that behaviour waits for â€”
+ * only {@code TerminalAgentIT} did. So the &quot;all 10 performatives across the three scenarios&quot;
+ * acceptance criterion was, in the live game, unreachable: 9 of 10. This event is the missing
+ * half, and it is deliberately the smallest one â€” no new behaviour class (the catalogue stays at
+ * 51), no new agent, no gameplay rule. It sends the message the canon already says is sent.
+ *
+ * &lt;p&gt;&lt;b&gt;The exchange.&lt;/b&gt; The alert is relayed BY the HarbourMaster, because the harbour master is
+ * the port authority that would issue a berth-closure notice, and because the comm log's only
+ * instrumentation point is the HM's own {@code sendLogged}/{@code receiveLogged} pair (INVARIANTS,
+ * task 17). Relaying it there makes both halves of the exchange visible to the player and to the
+ * end-of-day performative tally:
+ *
+ * &lt;pre&gt;
+ *   harbour-master --INFORM {event:flood, berth_id}--&amp;gt; every terminal   (broadcast; the
+ *                                                                        non-owning terminal
+ *                                                                        consumes and ignores)
+ *   terminal_x     --DISCONFIRM {notice:retracted, berth_id}--&amp;gt; harbour-master
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;The berth is released terminal-side by {@code RetractIfFloodBehaviour}. The HarbourMaster
+ * logs the retraction and warns the player ({@code AutoFlowDispatcherBehaviour}); it does not
+ * re-plan the affected vessel â€” that is a gameplay change, filed in
+ * {@code docs/POST_DEMO_BACKLOG.md} rather than smuggled into a hardening task.
+ */
+<span class="fc" id="L47">public record BerthFloodEvent(long simTimeSeconds, String berthId) implements ScriptedEvent {</span>
+
+<span class="fc" id="L49">    private static final Logger log = LoggerFactory.getLogger(BerthFloodEvent.class);</span>
+
+    @Override
+    public void apply(GameContext ctx) {
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">        if (ctx.directory() == null) {</span>
+<span class="nc" id="L54">            log.warn(&quot;scripted berth flood: no agent directory â€” skipping {}&quot;, berthId);</span>
+<span class="nc" id="L55">            return;</span>
+        }
+<span class="fc" id="L57">        List&lt;HarbourMasterAgent&gt; hms = ctx.directory().byType(HarbourMasterAgent.class);</span>
+<span class="pc bpc" id="L58" title="1 of 2 branches missed.">        if (hms.isEmpty()) {</span>
+<span class="nc" id="L59">            log.warn(&quot;scripted berth flood: no HarbourMaster in the directory â€” skipping {}&quot;, berthId);</span>
+<span class="nc" id="L60">            return;</span>
+        }
+<span class="fc" id="L62">        HarbourMasterAgent hm = hms.get(0);</span>
+        // addBehaviour from another thread is the JADE-sanctioned way to run code on an agent's
+        // own thread (same pattern as TugRefuelCompleteEvent). The handler touches only the
+        // captured final reference, never myAgent â€” task 19's nulled-myAgent lesson.
+<span class="fc" id="L66">        hm.addBehaviour(new OneShotBehaviour(hm) {</span>
+            @Override
+            public void action() {
+<span class="fc" id="L69">                List&lt;AID&gt; terminals = hm.serviceLocator().findAll(&quot;terminal&quot;);</span>
+<span class="pc bpc" id="L70" title="1 of 2 branches missed.">                if (terminals.isEmpty()) {</span>
+<span class="nc" id="L71">                    log.warn(&quot;scripted berth flood: no terminal registered in DF â€” {} not retracted&quot;, berthId);</span>
+<span class="nc" id="L72">                    return;</span>
+                }
+<span class="fc" id="L74">                ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);</span>
+<span class="fc" id="L75">                terminals.forEach(inform::addReceiver);</span>
+<span class="fc" id="L76">                inform.setContent(TerminalJson.write(Map.of(&quot;event&quot;, &quot;flood&quot;, &quot;berth_id&quot;, berthId)));</span>
+<span class="fc" id="L77">                hm.sendLogged(inform);</span>
+<span class="fc" id="L78">                log.info(&quot;scripted berth flood: INFORM flood {} -&gt; {} terminal(s)&quot;, berthId, terminals.size());</span>
+<span class="fc" id="L79">            }</span>
+        });
+<span class="fc" id="L81">        ctx.eventBus().publish(new NotificationEvent(</span>
+<span class="fc" id="L82">                &quot;Flooding reported at &quot; + berthId.replace('_', ' ') + &quot; â€” the terminal is clearing it.&quot;,</span>
+<span class="fc" id="L83">                NotificationEvent.Severity.WARNING, ctx.simClock().nowSimMillis()));</span>
+<span class="fc" id="L84">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

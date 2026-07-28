@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WeatherEvolutionBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.coordination</a> &gt; <span class="el_source">WeatherEvolutionBehaviour.java</span></div><h1>WeatherEvolutionBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.coordination;
+
+import java.util.Comparator;
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicReference;
+
+import it.unige.portcommand.agents.InitArgs.WeatherInitArgs.ScriptedWeather;
+import it.unige.portcommand.agents.TransitionMatrix;
+import it.unige.portcommand.agents.WeatherSnapshot;
+import it.unige.portcommand.behaviours.SimTickerBehaviour;
+import it.unige.portcommand.util.SimClock;
+import jade.core.Agent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Evolves the weather every 60 sim-minutes: applies any due scripted override
+ * (scenario determinism), else takes a seeded Markov step and maps the new state to
+ * a wind/visibility/swell reading. Writes the shared {@link AtomicReference} that
+ * {@code PeriodicWeatherBroadcastBehaviour} reads. Deterministic for a given seed
+ * (the RNG is a {@code RandomSource.forStream(&quot;weather&quot;)} sub-stream).
+ *
+ * &lt;p&gt;&lt;b&gt;Task 19 cadence + persistence fix.&lt;/b&gt; The tick was 5 sim-minutes, which at the
+ * default 300-real-second game day compresses to ~1&amp;nbsp;s of wall time â€” weather
+ * changed every second and, because each step re-rolled a fresh uniform wind across the
+ * whole state band, the wind teleported (e.g. 30&amp;nbsp;â†’&amp;nbsp;54&amp;nbsp;â†’&amp;nbsp;31) and
+ * repeatedly flapped the 30/35/40/45&amp;nbsp;kn thresholds, flooding the HarbourMaster's
+ * comm log with alerts. Now: (1) the tick is 60 sim-minutes (~12&amp;nbsp;s wall at the
+ * default mapping) so weather changes at a human pace, and (2) the wind {@link #drift}s
+ * from its previous value toward the new state's band by a bounded step instead of
+ * teleporting, so a storm ramps up and subsides gradually and threshold crossings are
+ * occasional, not every tick. Paired with {@code TransitionMatrix.defaults()}'s
+ * rarer-shorter-storms recalibration; the wall-time-compression ROOT CAUSE (frozen
+ * {@code SimClock} until the task-24 advancer) stays task 24's.
+ */
+public final class WeatherEvolutionBehaviour extends SimTickerBehaviour {
+
+<span class="fc" id="L39">    private static final Logger log = LoggerFactory.getLogger(WeatherEvolutionBehaviour.class);</span>
+    private static final long TICK_SIM_MILLIS = 3_600_000L; // 60 sim-minutes (task-19 recalibration)
+    private static final long SIM_MILLIS_PER_MINUTE = 60_000L;
+    private static final int MAX_WIND_STEP_KN = 6; // per-tick wind drift cap (persistence)
+
+    private final AtomicReference&lt;WeatherSnapshot&gt; current;
+    private final TransitionMatrix matrix;
+    private final Random rng;
+    private final List&lt;ScriptedWeather&gt; overrides;
+<span class="fc" id="L48">    private int nextOverride = 0;</span>
+
+    public WeatherEvolutionBehaviour(Agent agent, SimClock simClock, AtomicReference&lt;WeatherSnapshot&gt; current,
+                                     TransitionMatrix matrix, Random rng, List&lt;ScriptedWeather&gt; overrides) {
+<span class="fc" id="L52">        super(agent, simClock, TICK_SIM_MILLIS);</span>
+<span class="fc" id="L53">        this.current = current;</span>
+<span class="fc" id="L54">        this.matrix = matrix;</span>
+<span class="fc" id="L55">        this.rng = rng;</span>
+<span class="fc" id="L56">        this.overrides = overrides.stream()</span>
+<span class="fc" id="L57">                .sorted(Comparator.comparingInt(ScriptedWeather::simMinute)).toList();</span>
+<span class="fc" id="L58">    }</span>
+
+    @Override
+    protected void onSimTick() {
+<span class="pc bpc" id="L62" title="1 of 2 branches missed.">        if (simClock().isPaused()) {</span>
+<span class="nc" id="L63">            return; // pause gate (task 24): weather does not evolve while the game is paused</span>
+        }
+<span class="fc" id="L65">        long now = simClock().nowSimMillis();</span>
+<span class="fc" id="L66">        int simMinute = (int) (now / SIM_MILLIS_PER_MINUTE);</span>
+
+<span class="pc bpc" id="L68" title="1 of 4 branches missed.">        if (nextOverride &lt; overrides.size() &amp;&amp; overrides.get(nextOverride).simMinute() &lt;= simMinute) {</span>
+<span class="fc" id="L69">            WeatherSnapshot s = overrides.get(nextOverride).snapshot();</span>
+<span class="fc" id="L70">            current.set(new WeatherSnapshot(s.wind(), s.visibility(), s.swell(), s.state(), now));</span>
+<span class="fc" id="L71">            nextOverride++;</span>
+<span class="fc" id="L72">            log.info(&quot;scripted weather applied at sim-min {}: wind={} state={}&quot;, simMinute, s.wind(), s.state());</span>
+<span class="fc" id="L73">            return;</span>
+        }
+
+<span class="fc" id="L76">        WeatherSnapshot w = current.get();</span>
+<span class="fc" id="L77">        String nextState = matrix.nextState(w.state(), rng.nextDouble());</span>
+<span class="fc" id="L78">        current.set(stateToSnapshot(nextState, now, w.wind()));</span>
+<span class="fc" id="L79">        log.debug(&quot;weather Markov step {} -&gt; {}&quot;, w.state(), nextState);</span>
+<span class="fc" id="L80">    }</span>
+
+    private WeatherSnapshot stateToSnapshot(String state, long simTime, int prevWind) {
+<span class="fc bfc" id="L83" title="All 3 branches covered.">        return switch (state) {</span>
+<span class="fc" id="L84">            case &quot;cloudy&quot; -&gt; new WeatherSnapshot(drift(prevWind, 15, 32), &quot;fair&quot;, 1.5, &quot;cloudy&quot;, simTime);</span>
+<span class="fc" id="L85">            case &quot;stormy&quot; -&gt; new WeatherSnapshot(drift(prevWind, 30, 55), &quot;poor&quot;, 3.5, &quot;stormy&quot;, simTime);</span>
+<span class="fc" id="L86">            default -&gt; new WeatherSnapshot(drift(prevWind, 5, 20), &quot;good&quot;, 0.5, &quot;sunny&quot;, simTime);</span>
+        };
+    }
+
+    /**
+     * Moves {@code prevWind} toward a random target inside {@code [lo,hi]} by at most
+     * {@link #MAX_WIND_STEP_KN} knots, then clamps into the band. WITHIN a band this gives the
+     * wind persistence that stops the threshold flapping (small step, no teleport). Across a
+     * DISJOINT band (a state transition, e.g. sunny[5,20]â†’stormy[30,55]) the final clamp overrides
+     * the step cap and snaps to the nearer band edge â€” a single legitimate crossing per state
+     * change, which is the intended &quot;weather just changed&quot; signal, not the intra-state flapping the
+     * cap targets (adversarial review L2, 2026-07-17).
+     */
+    private int drift(int prevWind, int lo, int hi) {
+<span class="fc" id="L100">        int target = lo + rng.nextInt(hi - lo + 1);</span>
+<span class="fc" id="L101">        int step = Math.max(-MAX_WIND_STEP_KN, Math.min(MAX_WIND_STEP_KN, target - prevWind));</span>
+<span class="fc" id="L102">        return Math.max(lo, Math.min(hi, prevWind + step));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

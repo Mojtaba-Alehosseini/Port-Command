@@ -1,0 +1,20 @@
+[
+  {
+    "contract_id": "CONTRACT-1",
+    "vessel_id": "C001",
+    "vessel_type": "cargo_vessel",
+    "berth_id": "berth_1",
+    "contracted_fee": 5200.0,
+    "contracted_hours": 8,
+    "expected_arrival_sim_millis": 32400000
+  },
+  {
+    "contract_id": "CONTRACT-2",
+    "vessel_id": "F001",
+    "vessel_type": "ferry",
+    "berth_id": "berth_4",
+    "contracted_fee": 1800.0,
+    "contracted_hours": 4,
+    "expected_arrival_sim_millis": 54000000
+  }
+]

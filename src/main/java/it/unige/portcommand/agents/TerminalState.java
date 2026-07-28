@@ -48,6 +48,21 @@ public final class TerminalState {
     }
 
     /**
+     * Adopts persisted occupancy for the berths this terminal manages (task 22 load).
+     * Entries for berths it does not own are ignored; managed berths absent from
+     * {@code persisted} stay FREE (the constructor's default). The loader has already
+     * reconciled the list against the restored vessel set, so no entry here can
+     * reference a vessel that no longer exists.
+     */
+    public synchronized void restoreOccupancies(List<BerthOccupancy> persisted) {
+        for (BerthOccupancy o : persisted) {
+            if (manages(o.berthId())) {
+                occupancy.put(o.berthId(), o);
+            }
+        }
+    }
+
+    /**
      * Provisionally books {@code berthId}: refuses {@code berth_busy} if occupied,
      * {@code no_crane} if every crane is in use, else assigns the lowest free crane
      * and returns a confirmation with the computed {@code expectedFreeAtSim}.

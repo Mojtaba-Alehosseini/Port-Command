@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DialogueCtxTerm.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">DialogueCtxTerm.java</span></div><h1>DialogueCtxTerm.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
+
+import it.unige.portcommand.prolog.PrologTerms;
+
+/**
+ * Renders a {@link DialogueCtx} as the Prolog term {@code dcg_negotiation.pl}'s {@code parse_move/3}
+ * expects: {@code ctx(standing(VesselOffer, PlayerOffer), Roster, LastMentioned)}. The inverse of the
+ * frame decoder â€” the context flows Java&amp;rarr;Prolog, the frame Prolog&amp;rarr;Java.
+ *
+ * &lt;p&gt;&lt;b&gt;Injection safety.&lt;/b&gt; Every atom that originates from data â€” a vessel id, type, berth, and
+ * especially the free-text vessel &lt;em&gt;name&lt;/em&gt; â€” is rendered through {@link PrologTerms#quoteAtom},
+ * the same escaper {@link DcgTokenizer#toPrologList} uses for tokens. A vessel maliciously named
+ * {@code x'), fail, ('} cannot terminate the {@code ctx(â€¦)} term early and inject a goal; it becomes
+ * an inert quoted atom. Numbers are emitted bare. {@code DialogueCtxTermTest} pins this.
+ *
+ * &lt;p&gt;&lt;b&gt;Name normalisation.&lt;/b&gt; The roster name is lower-cased so it matches the lower-cased tokens
+ * the tokeniser produces (&quot;Genoa Star&quot; &amp;rarr; {@code [genoa, star]}), which is what the grammar's
+ * {@code resolve_name/3} joins and compares against. Ids are NOT lower-cased â€” they must round-trip
+ * verbatim as the frame's {@code addressee}, which routes the outgoing ACL.
+ */
+public final class DialogueCtxTerm {
+
+    private static final String NONE = &quot;none&quot;;
+
+    private DialogueCtxTerm() {
+    }
+
+    /** @return {@code ctx(standing(VesselOffer, PlayerOffer), Roster, LastMentioned)} */
+    public static String toPrologTerm(DialogueCtx ctx) {
+<span class="fc" id="L34">        return &quot;ctx(&quot; + standing(ctx.standingOffer())</span>
+<span class="fc" id="L35">                + &quot;, &quot; + roster(ctx.roster())</span>
+<span class="fc" id="L36">                + &quot;, &quot; + atomOrNone(ctx.lastMentioned()) + &quot;)&quot;;</span>
+    }
+
+    private static String standing(DialogueCtx.StandingOffer s) {
+<span class="fc" id="L40">        return &quot;standing(&quot; + offer(s.vesselOffer()) + &quot;, &quot; + offer(s.playerOffer()) + &quot;)&quot;;</span>
+    }
+
+    private static String offer(DialogueCtx.OfferView o) {
+<span class="pc bpc" id="L44" title="1 of 4 branches missed.">        if (o == null || !o.isPresent()) {</span>
+<span class="fc" id="L45">            return NONE;</span>
+        }
+<span class="fc" id="L47">        return &quot;offer(&quot; + number(o.price()) + &quot;, &quot; + intOrNone(o.durationHours())</span>
+<span class="fc" id="L48">                + &quot;, &quot; + atomOrNone(o.berthId()) + &quot;)&quot;;</span>
+    }
+
+    private static String roster(List&lt;DialogueCtx.RosterEntry&gt; roster) {
+<span class="fc" id="L52">        return roster.stream().map(DialogueCtxTerm::dialogue).collect(Collectors.joining(&quot;, &quot;, &quot;[&quot;, &quot;]&quot;));</span>
+    }
+
+    private static String dialogue(DialogueCtx.RosterEntry e) {
+<span class="fc" id="L56">        return &quot;dialogue(&quot; + atomOrNone(e.id())</span>
+<span class="fc" id="L57">                + &quot;, &quot; + atomOrNone(e.vesselType())</span>
+<span class="fc" id="L58">                + &quot;, &quot; + nameAtom(e.vesselName())</span>
+<span class="fc" id="L59">                + &quot;, &quot; + atomOrNone(e.lastBerth())</span>
+<span class="fc" id="L60">                + &quot;, &quot; + intOrNone(e.lastDuration()) + &quot;)&quot;;</span>
+    }
+
+    private static String nameAtom(String name) {
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">        return name == null ? NONE : PrologTerms.quoteAtom(name.toLowerCase(Locale.ROOT));</span>
+    }
+
+    private static String atomOrNone(String atom) {
+<span class="fc bfc" id="L68" title="All 2 branches covered.">        return atom == null ? NONE : PrologTerms.quoteAtom(atom);</span>
+    }
+
+    /** Whole values emit as integers ({@code 2000}, not {@code 2000.0}) so they unify with the
+     * grammar's integer arithmetic and the tokeniser's bare integer prices. */
+    private static String number(Double d) {
+<span class="pc bpc" id="L74" title="1 of 2 branches missed.">        if (d == null) {</span>
+<span class="nc" id="L75">            return NONE;</span>
+        }
+<span class="pc bpc" id="L77" title="2 of 4 branches missed.">        return d == Math.floor(d) &amp;&amp; !d.isInfinite() ? Long.toString(d.longValue()) : d.toString();</span>
+    }
+
+    private static String intOrNone(Integer i) {
+<span class="fc bfc" id="L81" title="All 2 branches covered.">        return i == null ? NONE : i.toString();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

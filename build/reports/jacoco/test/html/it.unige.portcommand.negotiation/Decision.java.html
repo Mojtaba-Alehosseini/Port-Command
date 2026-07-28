@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Decision.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.negotiation</a> &gt; <span class="el_source">Decision.java</span></div><h1>Decision.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.negotiation;
+
+/**
+ * The outcome of {@link NegotiationEngine#evaluate} for one player offer. Exactly
+ * three types (per task 07 Â§88):
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@code ACCEPT} â€” take the player's terms; the behaviour replies ACCEPT_PROPOSAL.
+ *       {@code newHours} is the agreed duration (the player's proposed hours, engine-validated
+ *       at or above the hidden floor â€” task 19b).&lt;/li&gt;
+ *   &lt;li&gt;{@code COUNTER} â€” propose {@code newCounter} for {@code newHours}; the behaviour replies
+ *       with a &lt;b&gt;PROPOSE&lt;/b&gt; (a counter-offer IS a fresh proposal in FIPA terms, never a
+ *       REJECT_PROPOSAL). {@code newHours} echoes the player's hours when they are workable, or
+ *       pushes back to the vessel's floor when they are not (Â§7.3 duration bargaining).&lt;/li&gt;
+ *   &lt;li&gt;{@code WITHDRAW} â€” leave the negotiation (reason e.g. {@code over_priced}).&lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;{@code REFUSE_INCOMPATIBLE} is intentionally absent â€” physical incompatibility is
+ * decided by an explicit {@code PrologQueries.isCompatible} check &lt;i&gt;before&lt;/i&gt; the
+ * engine is consulted, so the engine never returns it.
+ */
+<span class="fc" id="L22">public record Decision(Type type, double newCounter, int newHours, String reason) {</span>
+
+<span class="fc" id="L24">    public enum Type {</span>
+<span class="fc" id="L25">        ACCEPT,</span>
+<span class="fc" id="L26">        COUNTER,</span>
+<span class="fc" id="L27">        WITHDRAW</span>
+    }
+
+    public static Decision accept(int agreedHours, String reason) {
+<span class="fc" id="L31">        return new Decision(Type.ACCEPT, 0.0, agreedHours, reason);</span>
+    }
+
+    public static Decision counter(double newCounter, int newHours, String reason) {
+<span class="fc" id="L35">        return new Decision(Type.COUNTER, newCounter, newHours, reason);</span>
+    }
+
+    public static Decision withdraw(String reason) {
+<span class="fc" id="L39">        return new Decision(Type.WITHDRAW, 0.0, 0, reason);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

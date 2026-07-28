@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.harbourmaster.LedgerTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:41" hostname="MOJI" time="0.091">
+  <properties/>
+  <testcase name="aClampedAdjustmentRecordsRequestedAndAppliedSeparately()" classname="it.unige.portcommand.harbourmaster.LedgerTest" time="0.006"/>
+  <testcase name="scoreIsClampedToZeroAndOneHundred()" classname="it.unige.portcommand.harbourmaster.LedgerTest" time="0.0"/>
+  <testcase name="startingScoreIsClamped()" classname="it.unige.portcommand.harbourmaster.LedgerTest" time="0.001"/>
+  <testcase name="everyMutationPublishesTheAbsolutePostBalance()" classname="it.unige.portcommand.harbourmaster.LedgerTest" time="0.001"/>
+  <testcase name="adjustMovesTheScoreAndPublishesTheAbsoluteValue()" classname="it.unige.portcommand.harbourmaster.LedgerTest" time="0.001"/>
+  <testcase name="walletRejectsANullEventBus()" classname="it.unige.portcommand.harbourmaster.LedgerTest" time="0.0"/>
+  <testcase name="concurrentAdjustmentsLoseNothing()" classname="it.unige.portcommand.harbourmaster.LedgerTest" time="0.047"/>
+  <testcase name="incomeAndExpenseMoveTheBalanceAndAppendToHistory()" classname="it.unige.portcommand.harbourmaster.LedgerTest" time="0.001"/>
+  <testcase name="theLastPublishedBalanceAlwaysMatchesTheFinalBalance()" classname="it.unige.portcommand.harbourmaster.LedgerTest" time="0.009"/>
+  <testcase name="historyIsASnapshotAndCannotBeMutatedByACaller()" classname="it.unige.portcommand.harbourmaster.LedgerTest" time="0.002"/>
+  <testcase name="concurrentIncomeAndExpenseLoseNothing()" classname="it.unige.portcommand.harbourmaster.LedgerTest" time="0.021"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

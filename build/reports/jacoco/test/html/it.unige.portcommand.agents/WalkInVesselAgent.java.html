@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WalkInVesselAgent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">WalkInVesselAgent.java</span></div><h1>WalkInVesselAgent.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+
+import it.unige.portcommand.behaviours.negotiation.EvaluateCounterOfferBehaviour;
+import it.unige.portcommand.behaviours.negotiation.OpeningProposalBehaviour;
+import it.unige.portcommand.behaviours.negotiation.TimeoutWithdrawalBehaviour;
+import it.unige.portcommand.negotiation.NegotiationEngine;
+import it.unige.portcommand.negotiation.Personality;
+import it.unige.portcommand.negotiation.VesselTemplate;
+import it.unige.portcommand.negotiation.VesselTemplates;
+import it.unige.portcommand.negotiation.WalkInState;
+import it.unige.portcommand.persistence.dto.VesselStateDTO;
+import it.unige.portcommand.util.RandomSource;
+
+/**
+ * Vessel arriving without a contract (Channel B); negotiates price/duration with the
+ * player (relayed by the HarbourMaster). On arrival it samples its hidden beliefs from
+ * {@code vessel_templates.json} via a per-vessel {@code RandomSource} sub-stream and
+ * fires the opening proposal + counter-offer evaluation + timeout behaviours.
+ *
+ * &lt;p&gt;The hidden beliefs live ONLY in the {@link WalkInState} held by {@code stateRef},
+ * which is handed to the negotiation behaviours by constructor â€” they are never on this
+ * agent's public surface and never serialised into an ACL message (task-07 Â§29). The
+ * {@code engine} (task 15's real binding; a Mockito mock in tests) is injected at args[3],
+ * the {@code RandomSource} at args[4].
+ */
+<span class="fc" id="L30">public final class WalkInVesselAgent extends BaseVesselAgent {</span>
+
+    private static final int MAX_ROUNDS = 4;
+
+    private NegotiationEngine engine;
+    private RandomSource randomSource;
+<span class="fc" id="L36">    private final AtomicReference&lt;WalkInState&gt; stateRef = new AtomicReference&lt;&gt;();</span>
+<span class="fc" id="L37">    private final AtomicBoolean concluded = new AtomicBoolean(false);</span>
+    private String conversationId;
+
+    @Override
+    protected void onSetup() {
+<span class="fc" id="L42">        this.engine = argAt(3, NegotiationEngine.class);</span>
+<span class="fc" id="L43">        this.randomSource = argAt(4, RandomSource.class);</span>
+<span class="fc" id="L44">        super.onSetup();</span>
+<span class="fc" id="L45">    }</span>
+
+    /**
+     * Task 22 restore: hidden beliefs are adopted VERBATIM from the save â€” never re-rolled
+     * from {@code vessel_templates.json} (planning/22 &quot;Notes&quot;: re-rolling would defeat the
+     * seed). Only post-deal walk-ins are ever persisted (open negotiations are dropped at
+     * save), so the dialogue is marked concluded and NO negotiation behaviour re-attaches:
+     * the beliefs are carried for determinism and the privacy round-trip, not for play.
+     */
+    @Override
+    protected void onRestore(VesselStateDTO dto) {
+<span class="fc" id="L56">        this.conversationId = &quot;nego-&quot; + spec.vesselId();</span>
+<span class="fc" id="L57">        this.concluded.set(true);</span>
+<span class="fc" id="L58">        stateRef.set(new WalkInState(</span>
+<span class="fc" id="L59">                spec.vesselType(),</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">                dto.minAcceptablePrice() == null ? 0.0 : dto.minAcceptablePrice(),</span>
+<span class="fc bfc" id="L61" title="All 2 branches covered.">                dto.targetPrice() == null ? 0.0 : dto.targetPrice(),</span>
+<span class="fc bfc" id="L62" title="All 2 branches covered.">                dto.personality() == null ? Personality.NEUTRAL : Personality.valueOf(dto.personality()),</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">                dto.maxWaitMinutes() == null ? 0 : dto.maxWaitMinutes(),</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">                dto.minDurationHours() == null ? 1 : dto.minDurationHours(),</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">                dto.negotiationRound() == null ? 1 : dto.negotiationRound(),</span>
+<span class="fc bfc" id="L66" title="All 2 branches covered.">                dto.negotiationStartedAtSimMillis() == null ? 0L : dto.negotiationStartedAtSimMillis(),</span>
+<span class="fc" id="L67">                0.0, 0.0, 0, dto.dealHours(), dto.dealHours()));</span>
+<span class="fc" id="L68">    }</span>
+
+    /**
+     * The flat persisted record, walk-in side (task 22): flow position + deal + position +
+     * the hidden beliefs, verbatim. HM-side tracking fields (stage, tugs, holds) are filled
+     * by {@code GameStateBuilder} from {@code VesselTracking} â€” this agent does not know them.
+     */
+    @Override
+    public VesselStateDTO snapshotDto() {
+<span class="fc" id="L77">        WalkInState s = stateRef.get();</span>
+<span class="fc" id="L78">        return new VesselStateDTO(</span>
+<span class="fc" id="L79">                spec.vesselId(), spec.vesselType(), VesselStateDTO.CHANNEL_WALK_IN,</span>
+<span class="fc" id="L80">                spec.draft(), spec.length(), spec.tonnage(), spec.cargoClass(),</span>
+<span class="fc" id="L81">                spec.etaArrivalSimMillis(),</span>
+<span class="pc bpc" id="L82" title="1 of 2 branches missed.">                null, flowPhase() == null ? null : flowPhase().name(), phaseDeadlineSimMillis(),</span>
+<span class="fc" id="L83">                assignedBerth(), dealPrice(), dealHours(),</span>
+                null, false, false,
+<span class="fc" id="L85">                position().x(), position().y(), position().headingDeg(),</span>
+                null,
+<span class="pc bpc" id="L87" title="1 of 2 branches missed.">                s == null ? null : s.personality().name(),</span>
+<span class="pc bpc" id="L88" title="1 of 2 branches missed.">                s == null ? null : s.minAcceptablePrice(),</span>
+<span class="pc bpc" id="L89" title="1 of 2 branches missed.">                s == null ? null : s.targetPrice(),</span>
+<span class="pc bpc" id="L90" title="1 of 2 branches missed.">                s == null ? null : s.maxWaitMinutes(),</span>
+<span class="pc bpc" id="L91" title="1 of 2 branches missed.">                s == null ? null : s.minDurationHours(),</span>
+<span class="pc bpc" id="L92" title="1 of 2 branches missed.">                s == null ? null : s.round(),</span>
+<span class="pc bpc" id="L93" title="1 of 2 branches missed.">                s == null ? null : s.negotiationStartedAtSimMillis());</span>
+    }
+
+    @Override
+    protected void onArrival() {
+<span class="fc" id="L98">        VesselTemplate template = VesselTemplates.forType(spec.vesselType());</span>
+<span class="fc" id="L99">        Random r = randomSource.forStream(&quot;vessel-&quot; + spec.vesselId());</span>
+<span class="fc" id="L100">        Personality personality = template.samplePersonality(r);</span>
+<span class="fc" id="L101">        double min = template.sampleMinAcceptablePrice(r);</span>
+<span class="fc" id="L102">        double target = template.sampleTargetPrice(r);</span>
+<span class="fc" id="L103">        int wait = template.sampleMaxWaitMinutes(r);</span>
+<span class="fc" id="L104">        int hours = 6 + r.nextInt(13); // 6..18 sim-hours of desired service</span>
+        // Task 23: scenario-pinned beliefs (optional args entry, found by type) REPLACE the
+        // sampled values after every draw has been taken, so the &quot;vessel-&quot;+id stream's
+        // sequence is identical with or without overrides (replay/pinned-seed discipline).
+        // Still hidden beliefs â€” the override rides the in-JVM args channel only (P-04).
+<span class="fc" id="L109">        it.unige.portcommand.negotiation.WalkInBeliefOverrides overrides =</span>
+<span class="fc" id="L110">                optionalArgOfType(it.unige.portcommand.negotiation.WalkInBeliefOverrides.class);</span>
+<span class="fc bfc" id="L111" title="All 2 branches covered.">        if (overrides != null) {</span>
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">            personality = overrides.personality() != null ? overrides.personality() : personality;</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">            min = overrides.minAcceptablePrice() != null ? overrides.minAcceptablePrice() : min;</span>
+<span class="fc bfc" id="L114" title="All 2 branches covered.">            target = overrides.targetPrice() != null ? overrides.targetPrice() : target;</span>
+        }
+        // Task 19b: the hidden cargo floor, from its own ISOLATED substream (same rationale as
+        // the opening roll below â€” the &quot;vessel-&quot;+id sequence is replay-pinned), clamped to the
+        // announced preferred stay so a vessel never opens below its own floor.
+<span class="fc" id="L119">        int floorDraw = template.sampleMinDurationHours(randomSource.forStream(&quot;duration-&quot; + spec.vesselId()));</span>
+<span class="fc" id="L120">        int minDurationHours = Math.min(floorDraw, hours);</span>
+<span class="fc" id="L121">        stateRef.set(WalkInState.initial(spec.vesselType(), min, target, personality, wait, hours,</span>
+                minDurationHours));
+<span class="fc" id="L123">        this.conversationId = &quot;nego-&quot; + spec.vesselId();</span>
+<span class="fc" id="L124">        log.info(&quot;{} arrived (walk-in, {}) -&gt; opening proposal&quot;, getLocalName(), personality);</span>
+
+        // Isolated substream (task 19 STEP 1): a fresh draw here must never shift the
+        // &quot;vessel-&quot;+id stream's own sequence, which other tests/replication already depend on.
+<span class="fc" id="L128">        double openingRoll = randomSource.forStream(&quot;opening-&quot; + spec.vesselId()).nextDouble();</span>
+<span class="fc" id="L129">        addBehaviour(new OpeningProposalBehaviour(this, stateRef, conversationId, concluded, openingRoll));</span>
+<span class="fc" id="L130">        addBehaviour(new EvaluateCounterOfferBehaviour(this, stateRef, engine, conversationId, concluded));</span>
+<span class="fc" id="L131">        addBehaviour(new TimeoutWithdrawalBehaviour(this, simClock(), stateRef, conversationId, concluded));</span>
+<span class="fc" id="L132">    }</span>
+
+    // --- hidden-belief accessors: package-private only; never public, never in ACL content ---
+
+    double minAcceptablePrice() {
+<span class="nc" id="L137">        WalkInState s = stateRef.get();</span>
+<span class="nc bnc" id="L138" title="All 2 branches missed.">        return s == null ? 0.0 : s.minAcceptablePrice();</span>
+    }
+
+    double targetPrice() {
+<span class="nc" id="L142">        WalkInState s = stateRef.get();</span>
+<span class="nc bnc" id="L143" title="All 2 branches missed.">        return s == null ? 0.0 : s.targetPrice();</span>
+    }
+
+    int maxWaitMinutes() {
+<span class="nc" id="L147">        WalkInState s = stateRef.get();</span>
+<span class="nc bnc" id="L148" title="All 2 branches missed.">        return s == null ? 0 : s.maxWaitMinutes();</span>
+    }
+
+    // TODO(2026-07-17, adversarial review L4): MAX_ROUNDS is hardcoded 4 while
+    // RealNegotiationEngine derives roundsRemaining from Settings.roundLimit() (valid 2..8).
+    // These disagree if roundLimit != 4. No correctness impact today â€” this accessor feeds only
+    // display/urgency, never control flow â€” but source the limit from Settings when task 20/21
+    // wire a live Settings control.
+    int roundsRemaining() {
+<span class="nc" id="L157">        WalkInState s = stateRef.get();</span>
+<span class="nc bnc" id="L158" title="All 2 branches missed.">        return s == null ? MAX_ROUNDS : Math.max(0, MAX_ROUNDS + 1 - s.round());</span>
+    }
+
+    String personality() {
+<span class="nc" id="L162">        WalkInState s = stateRef.get();</span>
+<span class="nc bnc" id="L163" title="All 2 branches missed.">        return s == null ? null : s.personality().name();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

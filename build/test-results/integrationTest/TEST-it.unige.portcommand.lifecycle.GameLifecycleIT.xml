@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.lifecycle.GameLifecycleIT" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:21:02" hostname="MOJI" time="4.661">
+  <properties/>
+  <testcase name="threeDaysRollBankruptcyEndsTheRunAndPauseFreezesEverything()" classname="it.unige.portcommand.lifecycle.GameLifecycleIT" time="4.661"/>
+  <system-out><![CDATA[00:21:03.877 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:21:03.912 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:21:04.733 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+00:21:04.744 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:21:04.967 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+00:21:04.977 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:21:04.978 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:21:04.983 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:21:04.980 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:21:05.000 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:21:05.000 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:21:05.004 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:21:05.414 [harbour_master] [harbour_master] INFO  i.u.p.l.DayRolloverCoordinator - day 1 settled: income=0.0 expense=5200.0 wallet=44800.0 reputation=70 messages=0
+00:21:05.415 [harbour_master] [harbour_master] INFO  i.u.p.b.c.EndOfDayDetectBehaviour - midnight crossed -> EndOfDayEvent(gameDay=1)
+00:21:05.625 [harbour_master] [harbour_master] INFO  i.u.p.l.DayRolloverCoordinator - day 2 settled: income=0.0 expense=5200.0 wallet=39600.0 reputation=70 messages=0
+00:21:05.625 [harbour_master] [harbour_master] INFO  i.u.p.b.c.EndOfDayDetectBehaviour - midnight crossed -> EndOfDayEvent(gameDay=2)
+00:21:05.834 [harbour_master] [harbour_master] INFO  i.u.p.l.DayRolloverCoordinator - day 3 settled: income=0.0 expense=5200.0 wallet=34400.0 reputation=70 messages=0
+00:21:05.834 [harbour_master] [harbour_master] INFO  i.u.p.b.c.EndOfDayDetectBehaviour - midnight crossed -> EndOfDayEvent(gameDay=3)
+00:21:05.839 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:21:06.458 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:21:06.463 [harbour_master] [harbour_master] INFO  i.u.p.l.DayRolloverCoordinator - day 4 settled: income=0.0 expense=85200.0 wallet=-50800.0 reputation=70 messages=0
+00:21:06.463 [harbour_master] [harbour_master] WARN  i.u.p.lifecycle.GameOverGuard - day 4 ended at -50800.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+00:21:06.463 [harbour_master] [harbour_master] INFO  i.u.p.b.c.EndOfDayDetectBehaviour - midnight crossed -> EndOfDayEvent(gameDay=4)
+00:21:06.680 [harbour_master] [harbour_master] INFO  i.u.p.l.DayRolloverCoordinator - day 5 settled: income=0.0 expense=5200.0 wallet=-56000.0 reputation=70 messages=0
+00:21:06.680 [harbour_master] [harbour_master] WARN  i.u.p.lifecycle.GameOverGuard - day 5 ended at -56000.0 — below the -20000.0 bankruptcy floor (2 consecutive of 3)
+00:21:06.680 [harbour_master] [harbour_master] INFO  i.u.p.b.c.EndOfDayDetectBehaviour - midnight crossed -> EndOfDayEvent(gameDay=5)
+00:21:06.891 [harbour_master] [harbour_master] INFO  i.u.p.l.DayRolloverCoordinator - day 6 settled: income=0.0 expense=5200.0 wallet=-61200.0 reputation=70 messages=0
+00:21:06.891 [harbour_master] [harbour_master] WARN  i.u.p.lifecycle.GameOverGuard - day 6 ended at -61200.0 — below the -20000.0 bankruptcy floor (3 consecutive of 3)
+00:21:06.892 [harbour_master] [harbour_master] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> GAME_OVER
+00:21:06.892 [harbour_master] [harbour_master] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:21:06.922 [harbour_master] [harbour_master] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (bankrupt): wallet=-61200.0 day=6 reputation=70 highScore=true
+00:21:06.922 [harbour_master] [harbour_master] INFO  i.u.p.b.c.EndOfDayDetectBehaviour - midnight crossed -> EndOfDayEvent(gameDay=6)
+00:21:07.131 [harbour_master] [harbour_master] INFO  i.u.p.l.DayRolloverCoordinator - day 7 settled: income=0.0 expense=5200.0 wallet=-66400.0 reputation=70 messages=0
+00:21:07.131 [harbour_master] [harbour_master] WARN  i.u.p.lifecycle.GameOverGuard - day 7 ended at -66400.0 — below the -20000.0 bankruptcy floor (4 consecutive of 3)
+00:21:07.132 [harbour_master] [harbour_master] INFO  i.u.p.b.c.EndOfDayDetectBehaviour - midnight crossed -> EndOfDayEvent(gameDay=7)
+00:21:07.587 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+]]></system-out>
+  <system-err><![CDATA[Jul 28, 2026 12:21:03 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:21:03 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:21:03 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:21:03 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:21:03 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:21:03 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:21:03 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:21:03 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:21:03 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:21:03 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:21:07 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+]]></system-err>
+</testsuite>

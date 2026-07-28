@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.regression.DemoUtteranceIT" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:22:07" hostname="MOJI" time="0.064">
+  <properties/>
+  <testcase name="theDemoScriptsBeat3UtteranceParsesWithAllThreeSlots()" classname="it.unige.portcommand.nlp.regression.DemoUtteranceIT" time="0.056"/>
+  <testcase name="theOriginalBeat3StringStillDoesNotParseWhichIsWhyTheScriptChanged()" classname="it.unige.portcommand.nlp.regression.DemoUtteranceIT" time="0.003"/>
+  <testcase name="theDemoChecklistsRow2UtteranceParsesAndCompletesFromContext()" classname="it.unige.portcommand.nlp.regression.DemoUtteranceIT" time="0.002"/>
+  <system-out><![CDATA[00:22:07.015 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ReputationRules.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.harbourmaster.financial</a> &gt; <span class="el_source">ReputationRules.java</span></div><h1>ReputationRules.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.harbourmaster.financial;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.Map;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import it.unige.portcommand.ontology.Deal;
+
+/**
+ * The canonical reputation delta per negotiation outcome (task 20), keyed by the single
+ * canonical {@link Deal.Outcome} taxonomy so the table is exhaustive by construction â€” a new
+ * outcome cannot be added without this class failing to load.
+ *
+ * &lt;h2&gt;Where these numbers come from (reconciliation, 2026-07-17)&lt;/h2&gt;
+ * {@code planning/20} cites &quot;Job 2 Â§2.2&quot; â€” &lt;strong&gt;job2 is not in this repository&lt;/strong&gt;
+ * (CLAUDE.md lists job1..job5 as historical rationale; only ADR-06/ADR-13 still quote them). So
+ * the table could not be copied from its cited source. It is instead pinned from the two things
+ * that ARE canonical and in-tree:
+ * &lt;ul&gt;
+ *   &lt;li&gt;the task-20 brief's stated values â€” deal closed +1, over-priced withdrawal âˆ’2, timeout âˆ’3;&lt;/li&gt;
+ *   &lt;li&gt;{@code docs/DEMO_SCRIPT_DRAFT.md}, which independently corroborates them: it shows
+ *       &quot;Reputation +1&quot; on a walk-in dock (:154), &quot;Reputation -2&quot; on an over-priced withdrawal
+ *       (:339), and a day summary of &quot;50 (start) â†’ 51 (end, +1 net)&quot; over 4 served + 1 withdrawn
+ *       (:362). That arithmetic only closes at +1 if &lt;strong&gt;contracted&lt;/strong&gt; vessels earn no
+ *       reputation and the three &lt;strong&gt;walk-in&lt;/strong&gt; deals earn +1 each: 3Ã—(+1) + (âˆ’2) = +1.
+ *       4Ã—(+1) + (âˆ’2) would be +2 and the demo would read 52.&lt;/li&gt;
+ * &lt;/ul&gt;
+ * That corroboration is why reputation is wired to {@code DealClosedEvent} (walk-in only) and NOT
+ * to {@code ContractedFeeEarnedEvent} â€” a pre-agreed contract is not a negotiation you can handle
+ * well or badly. {@code PLAYER_REFUSED} is &lt;strong&gt;0&lt;/strong&gt;: no source gives it a value, and the
+ * player deliberately declining a bad deal is a legitimate move, not a failure to punish. Both of
+ * those are task-20 decisions, not recovered canon â€” revisit if job2 ever resurfaces.
+ *
+ * &lt;p&gt;Stored in {@code defaults.json}'s {@code reputation} block per {@code planning/20}'s &quot;Hard
+ * constraints&quot; (&quot;referenced but stored in defaults.json&quot;), read here through this class's own
+ * loader rather than {@code core.Settings} â€” Settings is a flat record of scalars, this is a
+ * table. Same precedent as {@code LLMBridge} reading {@code llm.timeout_ms} independently.
+ */
+public final class ReputationRules {
+
+    /** JSON key per outcome, in {@code defaults.json}'s {@code reputation} block. */
+<span class="fc" id="L46">    private static final Map&lt;Deal.Outcome, String&gt; JSON_KEYS = Map.of(</span>
+            Deal.Outcome.DEAL, &quot;deal_closed&quot;,
+            Deal.Outcome.WITHDRAW_PRICE, &quot;withdraw_price&quot;,
+            Deal.Outcome.WITHDRAW_DURATION, &quot;withdraw_duration&quot;,
+            Deal.Outcome.TIMEOUT, &quot;timeout&quot;,
+            Deal.Outcome.PLAYER_REFUSED, &quot;player_refused&quot;);
+
+<span class="fc" id="L53">    private static final Map&lt;Deal.Outcome, Double&gt; DELTAS = readFromClasspath();</span>
+<span class="fc" id="L54">    private static final double DAILY_TARGET_BONUS = readReputationScalar(&quot;daily_target&quot;);</span>
+<span class="fc" id="L55">    private static final double TIMEOUT_UNENGAGED_DELTA = readReputationScalar(&quot;timeout_unengaged&quot;);</span>
+<span class="fc" id="L56">    private static final double TIMEOUT_UNENGAGED_DAILY_CAP =</span>
+<span class="fc" id="L57">            readReputationScalar(&quot;timeout_unengaged_daily_cap&quot;);</span>
+
+    private ReputationRules() {
+    }
+
+    /**
+     * The per-day floor on CUMULATIVE unengaged-timeout reputation loss (task 23,
+     * checkpoint-#6 balance call, 2026-07-18: 70 â†’ 9 over 8 mostly-idle days â€” passive
+     * walk-ins the player never touched were the dominant bleed). âˆ’5.0 canonical, a
+     * {@code reputation}-block scalar like {@link #timeoutUnengagedDelta()}. Applies ONLY
+     * to the unengaged split; engaged-timeout (âˆ’3) and every other outcome stay uncapped â€”
+     * abandoning a negotiation you started remains fully priced.
+     */
+    public static double timeoutUnengagedDailyCap() {
+<span class="fc" id="L71">        return TIMEOUT_UNENGAGED_DAILY_CAP;</span>
+    }
+
+    /**
+     * Day-scoped accumulator enforcing {@link #timeoutUnengagedDailyCap()}. Owned by
+     * {@code LedgerCoordinator} (one per HarbourMaster life), reset on
+     * {@code DayRolloverEvent}. Not persisted: a mid-day save/load restarts the day's
+     * budget â€” worst case one extra capful that day, the same order as the pre-cap
+     * behaviour and far inside the harm the cap exists to stop (documented limitation).
+     */
+<span class="fc" id="L81">    public static final class UnengagedTimeoutDailyCap {</span>
+
+        private double appliedToday;
+
+        /**
+         * Clamps {@code delta} (negative) so today's cumulative unengaged loss never
+         * exceeds the cap; returns the portion to apply (0.0 once the budget is spent).
+         */
+        public double clamp(double delta) {
+<span class="fc" id="L90">            double budget = timeoutUnengagedDailyCap() - appliedToday; // e.g. -5 - (-4) = -1</span>
+<span class="fc" id="L91">            double applied = Math.max(delta, Math.min(budget, 0.0));</span>
+<span class="fc" id="L92">            appliedToday += applied;</span>
+<span class="fc" id="L93">            return applied;</span>
+        }
+
+        /** New day, fresh budget (the rollover hook). */
+        public void resetForNewDay() {
+<span class="fc" id="L98">            appliedToday = 0.0;</span>
+<span class="fc" id="L99">        }</span>
+    }
+
+    /**
+     * The reputation bonus for closing a day at or above {@code Settings.dailyTargetEur} net
+     * (task 24, session brief 2026-07-17 â€” &quot;+2 on hit, the table's row&quot;). Lives in the same
+     * {@code defaults.json} {@code reputation} block as the outcome deltas but NOT in
+     * {@link #table()}: hitting a daily target is not a {@link Deal.Outcome}, and folding it in
+     * would break the table's exhaustive-by-outcome contract. Sole consumer:
+     * {@code DayRolloverCoordinator}'s EOD sequence.
+     */
+    public static double dailyTargetBonus() {
+<span class="fc" id="L111">        return DAILY_TARGET_BONUS;</span>
+    }
+
+    /**
+     * The reputation delta for a walk-in that left without a deal, split by ENGAGEMENT for the
+     * {@code TIMEOUT} outcome only (task 24, visual checkpoint #5 â€” Moji's balance call). A
+     * walk-in the player never even countered (a never-engaged timeout) costs the gentler
+     * {@link #timeoutUnengagedDelta()} (âˆ’1); one the player negotiated and then abandoned costs
+     * the full {@code deltaFor(TIMEOUT)} (âˆ’3). Every other outcome ignores {@code playerEngaged}
+     * and returns its canonical table value: {@code WITHDRAW_PRICE}/{@code WITHDRAW_DURATION}
+     * necessarily engaged (the engine only ever evaluates a player counter), {@code PLAYER_REFUSED}
+     * is 0 either way. This is the ONLY reputation path that reads engagement â€” the â‚¬5,200/day
+     * pressure was making an untouched day bleed ~âˆ’24 reputation, so a passive walk-in the player
+     * had no chance to reach is now a lighter touch than one they engaged and dropped.
+     */
+    public static double withdrawalDelta(Deal.Outcome outcome, boolean playerEngaged) {
+<span class="fc bfc" id="L127" title="All 4 branches covered.">        if (outcome == Deal.Outcome.TIMEOUT &amp;&amp; !playerEngaged) {</span>
+<span class="fc" id="L128">            return TIMEOUT_UNENGAGED_DELTA;</span>
+        }
+<span class="fc" id="L130">        return deltaFor(outcome);</span>
+    }
+
+    /** The never-engaged timeout penalty (âˆ’1), a {@code reputation}-block scalar like the bonus,
+     * NOT a {@link Deal.Outcome} row (there is one TIMEOUT outcome; engagement is a modifier). */
+    public static double timeoutUnengagedDelta() {
+<span class="fc" id="L136">        return TIMEOUT_UNENGAGED_DELTA;</span>
+    }
+
+    /**
+     * The reputation delta for {@code outcome} â€” positive rewards, negative penalises. Total by
+     * construction: every {@link Deal.Outcome} has an entry or the class fails to initialise.
+     */
+    public static double deltaFor(Deal.Outcome outcome) {
+<span class="fc" id="L144">        Double delta = DELTAS.get(outcome);</span>
+<span class="pc bpc" id="L145" title="1 of 2 branches missed.">        if (delta == null) {</span>
+<span class="nc" id="L146">            throw new IllegalStateException(&quot;no reputation delta for outcome &quot; + outcome);</span>
+        }
+<span class="fc" id="L148">        return delta;</span>
+    }
+
+    /** The whole canonical table, for the table-driven tests and the EOD/debug surfaces. */
+    public static Map&lt;Deal.Outcome, Double&gt; table() {
+<span class="fc" id="L153">        return DELTAS;</span>
+    }
+
+    /** The hard-coded canonical values â€” also exactly what ships in {@code defaults.json}. */
+    public static Map&lt;Deal.Outcome, Double&gt; defaults() {
+<span class="fc" id="L158">        Map&lt;Deal.Outcome, Double&gt; table = new EnumMap&lt;&gt;(Deal.Outcome.class);</span>
+<span class="fc" id="L159">        table.put(Deal.Outcome.DEAL, 1.0);</span>
+<span class="fc" id="L160">        table.put(Deal.Outcome.WITHDRAW_PRICE, -2.0);</span>
+        // Task 19b: same shape of failure as a price withdrawal â€” a vessel left unserved over
+        // terms that never met â€” so it carries the same penalty. No canonical source names it
+        // (the outcome is new with Â§7.3's duration leg); mirroring withdraw_price is the
+        // conservative reading, and the demo-script arithmetic above is untouched.
+<span class="fc" id="L165">        table.put(Deal.Outcome.WITHDRAW_DURATION, -2.0);</span>
+<span class="fc" id="L166">        table.put(Deal.Outcome.TIMEOUT, -3.0);</span>
+<span class="fc" id="L167">        table.put(Deal.Outcome.PLAYER_REFUSED, 0.0);</span>
+<span class="fc" id="L168">        return Collections.unmodifiableMap(table);</span>
+    }
+
+    /** Reads one numeric scalar from the {@code reputation} block (the non-{@link Deal.Outcome}
+     * keys task 24 added: {@code daily_target}, {@code timeout_unengaged}). */
+    private static double readReputationScalar(String key) {
+<span class="fc" id="L174">        try (InputStream in = ReputationRules.class.getResourceAsStream(&quot;/data/defaults.json&quot;)) {</span>
+<span class="pc bpc" id="L175" title="1 of 2 branches missed.">            if (in == null) {</span>
+<span class="nc" id="L176">                throw new IllegalStateException(&quot;defaults.json not found on classpath (/data/)&quot;);</span>
+            }
+<span class="fc" id="L178">            JsonNode block = new ObjectMapper().readTree(in).get(&quot;reputation&quot;);</span>
+<span class="pc bpc" id="L179" title="1 of 2 branches missed.">            JsonNode value = block == null ? null : block.get(key);</span>
+<span class="pc bpc" id="L180" title="2 of 4 branches missed.">            if (value == null || !value.isNumber()) {</span>
+<span class="nc" id="L181">                throw new IllegalStateException(</span>
+                        &quot;defaults.json reputation block is missing a numeric \&quot;&quot; + key + &quot;\&quot; (task 24)&quot;);
+            }
+<span class="fc" id="L184">            return value.doubleValue();</span>
+<span class="nc" id="L185">        } catch (IOException e) {</span>
+<span class="nc" id="L186">            throw new IllegalStateException(&quot;failed to load defaults.json&quot;, e);</span>
+        }
+    }
+
+    private static Map&lt;Deal.Outcome, Double&gt; readFromClasspath() {
+<span class="fc" id="L191">        try (InputStream in = ReputationRules.class.getResourceAsStream(&quot;/data/defaults.json&quot;)) {</span>
+<span class="pc bpc" id="L192" title="1 of 2 branches missed.">            if (in == null) {</span>
+<span class="nc" id="L193">                throw new IllegalStateException(&quot;defaults.json not found on classpath (/data/)&quot;);</span>
+            }
+<span class="fc" id="L195">            JsonNode block = new ObjectMapper().readTree(in).get(&quot;reputation&quot;);</span>
+<span class="pc bpc" id="L196" title="1 of 2 branches missed.">            if (block == null) {</span>
+<span class="nc" id="L197">                throw new IllegalStateException(</span>
+                        &quot;defaults.json has no \&quot;reputation\&quot; block â€” task 20 requires the canonical delta table&quot;);
+            }
+<span class="fc" id="L200">            Map&lt;Deal.Outcome, Double&gt; table = new EnumMap&lt;&gt;(Deal.Outcome.class);</span>
+<span class="fc bfc" id="L201" title="All 2 branches covered.">            for (Deal.Outcome outcome : Deal.Outcome.values()) {</span>
+<span class="fc" id="L202">                JsonNode value = block.get(JSON_KEYS.get(outcome));</span>
+<span class="pc bpc" id="L203" title="2 of 4 branches missed.">                if (value == null || !value.isNumber()) {</span>
+<span class="nc" id="L204">                    throw new IllegalStateException(</span>
+                            &quot;defaults.json reputation block is missing a numeric \&quot;&quot;
+<span class="nc" id="L206">                                    + JSON_KEYS.get(outcome) + &quot;\&quot; (outcome &quot; + outcome + &quot;)&quot;);</span>
+                }
+<span class="fc" id="L208">                table.put(outcome, value.doubleValue());</span>
+            }
+<span class="fc" id="L210">            return Collections.unmodifiableMap(table);</span>
+<span class="nc" id="L211">        } catch (IOException e) {</span>
+<span class="nc" id="L212">            throw new IllegalStateException(&quot;failed to load defaults.json&quot;, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

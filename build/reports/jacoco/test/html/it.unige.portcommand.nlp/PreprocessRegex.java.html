@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PreprocessRegex.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">PreprocessRegex.java</span></div><h1>PreprocessRegex.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.time.LocalTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Regex pre-pass over raw chat text (PROJECT_DEFINITION.md Â§6.1: &quot;Tokenisation + regex
+ * pre-pass (vessel names, prices, time)&quot;). A fast, best-effort extraction of six informal-
+ * negotiation fields â€” never the source of truth. The DCG (task 16) and Rasa's DIET NER
+ * (holdout F1 0.97, task 12) own the authoritative extraction; a miss here just means these
+ * fields stay {@link Optional#empty()} and the downstream stages fall back as normal.
+ */
+<span class="fc" id="L17">public final class PreprocessRegex {</span>
+
+<span class="fc" id="L19">    private static final Pattern DURATION =</span>
+<span class="fc" id="L20">            Pattern.compile(&quot;\\b(\\d{1,2})\\s?(?:h|hrs?|hours?)\\b&quot;, Pattern.CASE_INSENSITIVE);</span>
+
+<span class="fc" id="L22">    private static final Pattern PRICE_SYMBOL_PREFIX = Pattern.compile(&quot;[â‚¬$]\\s?(\\d[\\d,]*(?:\\.\\d+)?)&quot;);</span>
+<span class="fc" id="L23">    private static final Pattern PRICE_SYMBOL_SUFFIX = Pattern.compile(&quot;(\\d[\\d,]*(?:\\.\\d+)?)\\s?[â‚¬$]&quot;);</span>
+<span class="fc" id="L24">    private static final Pattern PRICE_K_SUFFIX =</span>
+<span class="fc" id="L25">            Pattern.compile(&quot;\\b(\\d[\\d,]*(?:\\.\\d+)?)\\s?k\\b&quot;, Pattern.CASE_INSENSITIVE);</span>
+<span class="fc" id="L26">    private static final Pattern PRICE_WORD_SUFFIX =</span>
+<span class="fc" id="L27">            Pattern.compile(&quot;\\b(\\d[\\d,]*(?:\\.\\d+)?)\\s?(?:euros?|eur|dollars?)\\b&quot;, Pattern.CASE_INSENSITIVE);</span>
+    // Bare fallback: needs &gt;= 3 digits, so it never collides with a 1-2 digit duration/berth number.
+<span class="fc" id="L29">    private static final Pattern PRICE_BARE = Pattern.compile(&quot;\\b(\\d[\\d,]{2,}(?:\\.\\d+)?)\\b&quot;);</span>
+<span class="fc" id="L30">    private static final Pattern PRICE_BARE_FOLLOWED_BY_HOUR_UNIT =</span>
+<span class="fc" id="L31">            Pattern.compile(&quot;^\\s?(?:h|hrs?|hours?)\\b&quot;, Pattern.CASE_INSENSITIVE);</span>
+
+<span class="fc" id="L33">    private static final Pattern BERTH_DIGIT =</span>
+<span class="fc" id="L34">            Pattern.compile(&quot;\\b(?:berth|dock|quay|pier|slip)\\s*#?\\s*(\\d)\\b&quot;, Pattern.CASE_INSENSITIVE);</span>
+<span class="fc" id="L35">    private static final Pattern BERTH_WORD = Pattern.compile(</span>
+            &quot;\\b(?:berth|dock|quay|pier|slip)\\s+(one|two|three|four)\\b&quot;, Pattern.CASE_INSENSITIVE);
+<span class="fc" id="L37">    private static final Map&lt;String, String&gt; WORD_NUMBERS =</span>
+<span class="fc" id="L38">            Map.of(&quot;one&quot;, &quot;1&quot;, &quot;two&quot;, &quot;2&quot;, &quot;three&quot;, &quot;3&quot;, &quot;four&quot;, &quot;4&quot;);</span>
+
+    // Both require a disambiguator (colon-minutes or am/pm) â€” a bare &quot;by 5&quot; is too easily a
+    // false positive (&quot;reduce by 5 berths&quot;) to treat as a time, mirroring TIME_COLON/TIME_BARE_AMPM.
+<span class="fc" id="L42">    private static final Pattern DEADLINE_COLON = Pattern.compile(</span>
+            &quot;\\b(?:by|before|until)\\s+([01]?\\d|2[0-3]):([0-5]\\d)\\s?(am|pm)?\\b&quot;, Pattern.CASE_INSENSITIVE);
+<span class="fc" id="L44">    private static final Pattern DEADLINE_BARE_AMPM = Pattern.compile(</span>
+            &quot;\\b(?:by|before|until)\\s+(\\d{1,2})\\s?(am|pm)\\b&quot;, Pattern.CASE_INSENSITIVE);
+<span class="fc" id="L46">    private static final Pattern TIME_COLON =</span>
+<span class="fc" id="L47">            Pattern.compile(&quot;\\b([01]?\\d|2[0-3]):([0-5]\\d)\\s?(am|pm)?\\b&quot;, Pattern.CASE_INSENSITIVE);</span>
+<span class="fc" id="L48">    private static final Pattern TIME_BARE_AMPM =</span>
+<span class="fc" id="L49">            Pattern.compile(&quot;\\b(\\d{1,2})\\s?(am|pm)\\b&quot;, Pattern.CASE_INSENSITIVE);</span>
+
+<span class="fc" id="L51">    private static final Pattern VOCATIVE_NAME =</span>
+<span class="fc" id="L52">            Pattern.compile(&quot;^\\s*([A-Z][a-zA-Z]+(?:\\s[A-Z][a-zA-Z]+)*)\\s*:&quot;);</span>
+<span class="fc" id="L53">    private static final Pattern THE_NAME =</span>
+<span class="fc" id="L54">            Pattern.compile(&quot;\\bthe\\s+([A-Z][a-zA-Z]+(?:\\s[A-Z][a-zA-Z]+)*)\\b&quot;);</span>
+
+    public Extracted extract(String text) {
+<span class="fc bfc" id="L57" title="All 4 branches covered.">        if (text == null || text.isBlank()) {</span>
+<span class="fc" id="L58">            return Extracted.NONE;</span>
+        }
+<span class="fc" id="L60">        Optional&lt;Integer&gt; duration = extractDuration(text);</span>
+<span class="fc" id="L61">        Optional&lt;Double&gt; price = extractPrice(text);</span>
+<span class="fc" id="L62">        Optional&lt;String&gt; berthId = extractBerth(text);</span>
+<span class="fc" id="L63">        Optional&lt;LocalTime&gt; deadline = extractDeadline(text);</span>
+<span class="fc" id="L64">        Optional&lt;LocalTime&gt; time = extractTime(text);</span>
+<span class="fc" id="L65">        Optional&lt;String&gt; vesselName = extractVesselName(text);</span>
+<span class="fc" id="L66">        return new Extracted(price, duration, time, deadline, berthId, vesselName);</span>
+    }
+
+    private static Optional&lt;Integer&gt; extractDuration(String text) {
+<span class="fc" id="L70">        Matcher m = DURATION.matcher(text);</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">        return m.find() ? Optional.of(Integer.parseInt(m.group(1))) : Optional.empty();</span>
+    }
+
+    private static Optional&lt;Double&gt; extractPrice(String text) {
+        // k-suffix and word-suffix are tried FIRST: for &quot;$2k&quot;, the symbol pattern below would
+        // otherwise grab just &quot;2&quot; (stopping before the &quot;k&quot;) and drop the x1000 multiplier.
+<span class="fc" id="L77">        Matcher k = PRICE_K_SUFFIX.matcher(text);</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">        if (k.find()) {</span>
+<span class="fc" id="L79">            return Optional.of(parseNumber(k.group(1)) * 1000.0);</span>
+        }
+<span class="fc" id="L81">        Matcher word = PRICE_WORD_SUFFIX.matcher(text);</span>
+<span class="fc bfc" id="L82" title="All 2 branches covered.">        if (word.find()) {</span>
+<span class="fc" id="L83">            return Optional.of(parseNumber(word.group(1)));</span>
+        }
+<span class="fc bfc" id="L85" title="All 2 branches covered.">        for (Pattern symbolForm : List.of(PRICE_SYMBOL_PREFIX, PRICE_SYMBOL_SUFFIX)) {</span>
+<span class="fc" id="L86">            Matcher m = symbolForm.matcher(text);</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">            if (m.find()) {</span>
+<span class="fc" id="L88">                return Optional.of(parseNumber(m.group(1)));</span>
+            }
+<span class="fc" id="L90">        }</span>
+<span class="fc" id="L91">        Matcher bare = PRICE_BARE.matcher(text);</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">        while (bare.find()) {</span>
+<span class="fc" id="L93">            String rest = text.substring(bare.end());</span>
+<span class="pc bpc" id="L94" title="1 of 2 branches missed.">            if (!PRICE_BARE_FOLLOWED_BY_HOUR_UNIT.matcher(rest).lookingAt()) {</span>
+<span class="fc" id="L95">                return Optional.of(parseNumber(bare.group(1)));</span>
+            }
+<span class="nc" id="L97">        }</span>
+<span class="fc" id="L98">        return Optional.empty();</span>
+    }
+
+    private static double parseNumber(String raw) {
+<span class="fc" id="L102">        return Double.parseDouble(raw.replace(&quot;,&quot;, &quot;&quot;));</span>
+    }
+
+    private static Optional&lt;String&gt; extractBerth(String text) {
+<span class="fc" id="L106">        Matcher digit = BERTH_DIGIT.matcher(text);</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">        if (digit.find()) {</span>
+<span class="fc" id="L108">            return Optional.of(&quot;berth_&quot; + digit.group(1));</span>
+        }
+<span class="fc" id="L110">        Matcher word = BERTH_WORD.matcher(text);</span>
+<span class="fc bfc" id="L111" title="All 2 branches covered.">        if (word.find()) {</span>
+<span class="fc" id="L112">            return Optional.of(&quot;berth_&quot; + WORD_NUMBERS.get(word.group(1).toLowerCase()));</span>
+        }
+<span class="fc" id="L114">        return Optional.empty();</span>
+    }
+
+    private static Optional&lt;LocalTime&gt; extractDeadline(String text) {
+<span class="fc" id="L118">        Matcher colon = DEADLINE_COLON.matcher(text);</span>
+<span class="fc bfc" id="L119" title="All 2 branches covered.">        if (colon.find()) {</span>
+<span class="fc" id="L120">            return Optional.of(toLocalTime(colon.group(1), colon.group(2), colon.group(3)));</span>
+        }
+<span class="fc" id="L122">        Matcher bareAmPm = DEADLINE_BARE_AMPM.matcher(text);</span>
+<span class="fc bfc" id="L123" title="All 2 branches covered.">        if (bareAmPm.find()) {</span>
+<span class="fc" id="L124">            return Optional.of(toLocalTime(bareAmPm.group(1), null, bareAmPm.group(2)));</span>
+        }
+<span class="fc" id="L126">        return Optional.empty();</span>
+    }
+
+    private static Optional&lt;LocalTime&gt; extractTime(String text) {
+<span class="fc" id="L130">        Optional&lt;LocalTime&gt; viaColon = firstNonDeadlineMatch(TIME_COLON, text, true);</span>
+<span class="fc bfc" id="L131" title="All 2 branches covered.">        return viaColon.isPresent() ? viaColon : firstNonDeadlineMatch(TIME_BARE_AMPM, text, false);</span>
+    }
+
+    /** Skips a match whose preceding clause is {@code by}/{@code before}/{@code until} â€” that
+     * occurrence belongs to {@link #extractDeadline}, not the plain &quot;time&quot; field. */
+    private static Optional&lt;LocalTime&gt; firstNonDeadlineMatch(Pattern pattern, String text, boolean hasMinuteGroup) {
+<span class="fc" id="L137">        Matcher m = pattern.matcher(text);</span>
+<span class="fc bfc" id="L138" title="All 2 branches covered.">        while (m.find()) {</span>
+<span class="fc" id="L139">            int clauseStart = Math.max(0, m.start() - 8);</span>
+<span class="fc" id="L140">            String before = text.substring(clauseStart, m.start()).toLowerCase();</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">            if (before.matches(&quot;(?s).*\\b(by|before|until)\\s*$&quot;)) {</span>
+<span class="fc" id="L142">                continue;</span>
+            }
+<span class="fc" id="L144">            String hour = m.group(1);</span>
+<span class="pc bpc" id="L145" title="1 of 2 branches missed.">            String minute = hasMinuteGroup ? m.group(2) : null;</span>
+<span class="pc bpc" id="L146" title="1 of 2 branches missed.">            String ampm = hasMinuteGroup ? m.group(3) : m.group(2);</span>
+<span class="fc" id="L147">            return Optional.of(toLocalTime(hour, minute, ampm));</span>
+        }
+<span class="fc" id="L149">        return Optional.empty();</span>
+    }
+
+    private static LocalTime toLocalTime(String hourStr, String minuteStr, String ampm) {
+<span class="fc" id="L153">        int hour = Integer.parseInt(hourStr);</span>
+<span class="fc bfc" id="L154" title="All 2 branches covered.">        int minute = minuteStr != null ? Integer.parseInt(minuteStr) : 0;</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">        if (ampm != null) {</span>
+<span class="pc bpc" id="L156" title="1 of 2 branches missed.">            hour = hour % 12 + (ampm.equalsIgnoreCase(&quot;pm&quot;) ? 12 : 0);</span>
+        }
+<span class="fc" id="L158">        return LocalTime.of(hour % 24, minute);</span>
+    }
+
+    private static Optional&lt;String&gt; extractVesselName(String text) {
+<span class="fc" id="L162">        Matcher vocative = VOCATIVE_NAME.matcher(text);</span>
+<span class="fc bfc" id="L163" title="All 2 branches covered.">        if (vocative.find()) {</span>
+<span class="fc" id="L164">            return Optional.of(vocative.group(1));</span>
+        }
+<span class="fc" id="L166">        Matcher theName = THE_NAME.matcher(text);</span>
+<span class="fc bfc" id="L167" title="All 2 branches covered.">        if (theName.find()) {</span>
+<span class="fc" id="L168">            return Optional.of(theName.group(1));</span>
+        }
+<span class="fc" id="L170">        return Optional.empty();</span>
+    }
+
+    /** The six pre-pass fields (planning/14 Â§14.3); a miss is {@link Optional#empty()}, never null. */
+<span class="fc" id="L174">    public record Extracted(</span>
+            Optional&lt;Double&gt; price,
+            Optional&lt;Integer&gt; duration,
+            Optional&lt;LocalTime&gt; time,
+            Optional&lt;LocalTime&gt; deadline,
+            Optional&lt;String&gt; berthId,
+            Optional&lt;String&gt; vesselName) {
+
+<span class="fc" id="L182">        static final Extracted NONE = new Extracted(</span>
+<span class="fc" id="L183">                Optional.empty(), Optional.empty(), Optional.empty(),</span>
+<span class="fc" id="L184">                Optional.empty(), Optional.empty(), Optional.empty());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

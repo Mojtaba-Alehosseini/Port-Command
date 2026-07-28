@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.harbourmaster.financial.PerformativeCounterRestoreTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:44" hostname="MOJI" time="0.011">
+  <properties/>
+  <testcase name="countingContinuesOnTopOfTheRestoredTally()" classname="it.unige.portcommand.harbourmaster.financial.PerformativeCounterRestoreTest" time="0.007"/>
+  <testcase name="restoreSeedsCanonicalCountsAndIgnoresUnknownNames()" classname="it.unige.portcommand.harbourmaster.financial.PerformativeCounterRestoreTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

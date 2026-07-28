@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.lifecycle.GameOverGuardRestoreTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:44" hostname="MOJI" time="0.036">
+  <properties/>
+  <testcase name="aRestoredTwoDayStreakEndsTheRunOnTheThirdAdjacentDeepDebtDay()" classname="it.unige.portcommand.lifecycle.GameOverGuardRestoreTest" time="0.027"/>
+  <testcase name="aRestoredStreakResetsWhenTheNextDayRecovers()" classname="it.unige.portcommand.lifecycle.GameOverGuardRestoreTest" time="0.008"/>
+  <system-out><![CDATA[00:12:44.650 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.650 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.650 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.666 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 7 ended at -25000.0 — below the -20000.0 bankruptcy floor (3 consecutive of 3)
+00:12:44.666 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> GAME_OVER
+00:12:44.666 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.666 [Test worker] [] INFO  i.u.p.lifecycle.GameOverGuard - GAME OVER (bankrupt): wallet=-25000.0 day=7 reputation=30 highScore=true
+00:12:44.674 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.678 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.679 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.681 [Test worker] [] WARN  i.u.p.lifecycle.GameOverGuard - day 8 ended at -25000.0 — below the -20000.0 bankruptcy floor (1 consecutive of 3)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

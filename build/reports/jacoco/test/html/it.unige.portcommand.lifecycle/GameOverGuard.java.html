@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GameOverGuard.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.lifecycle</a> &gt; <span class="el_source">GameOverGuard.java</span></div><h1>GameOverGuard.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.lifecycle;
+
+import java.time.LocalDate;
+import java.util.List;
+
+import it.unige.portcommand.core.Settings;
+import it.unige.portcommand.gui.events.EndOfDayCompletedEvent;
+import it.unige.portcommand.gui.events.ReputationChangedEvent;
+import it.unige.portcommand.gui.events.WalletChangedEvent;
+import it.unige.portcommand.harbourmaster.financial.EndOfDaySummary;
+import it.unige.portcommand.harbourmaster.financial.Leaderboard;
+import it.unige.portcommand.lifecycle.events.DayRolloverEvent;
+import it.unige.portcommand.lifecycle.events.GameOverEvent;
+import it.unige.portcommand.lifecycle.events.QuitEvent;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The single game-over authority (task 24): watches the bus for the three
+ * ending conditions and, on the FIRST one, moves {@link GameLifecycle} to
+ * GAME_OVER, records the run on the {@link Leaderboard}, and publishes the one
+ * {@link GameOverEvent} of the run.
+ *
+ * &lt;p&gt;&lt;b&gt;Triggers&lt;/b&gt; (ADR-14):
+ * &lt;ul&gt;
+ *   &lt;li&gt;&lt;b&gt;bankrupt&lt;/b&gt; â€” the settled wallet is below
+ *       {@code Settings.bankruptcyFloorEur} (âˆ’â‚¬20,000 canonical) at end-of-day
+ *       for {@value #CONSECUTIVE_BANKRUPT_DAYS} CONSECUTIVE days (session brief
+ *       2026-07-17; supersedes planning/24's any-negative-EOD rule). A single
+ *       recovered day resets the streak. Mid-day debt of any depth never ends
+ *       the game â€” the HUD just shows the negative balance.&lt;/li&gt;
+ *   &lt;li&gt;&lt;b&gt;day_cap&lt;/b&gt; â€” the day counter advances past
+ *       {@code Settings.maxGameDays} (default 30, the demo soft cap).&lt;/li&gt;
+ *   &lt;li&gt;&lt;b&gt;quit&lt;/b&gt; â€” {@link QuitEvent} from the menu (via
+ *       {@code GameLifecycle.quit()}), already player-confirmed by the GUI.&lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;Constructed by {@code Main} (not the HarbourMaster): every input arrives
+ * on the bus â€” the settled summaries carry the EOD figures, and the ledgers
+ * publish ABSOLUTE wallet/reputation on every mutation, which this guard
+ * tracks so a quit mid-day reports true current stats. All subscriptions are
+ * CALLER_THREAD: the EOD-path events arrive on the HarbourMaster thread inside
+ * the coordinator's publish (so a game-over lands before the next behaviour
+ * step), quit arrives on the EDT, and the wallet/reputation handlers are plain
+ * field writes â€” safely prompt inside the ledgers' write lock (INVARIANTS
+ * &quot;ledgers publish INSIDE their write lock&quot;).
+ */
+public final class GameOverGuard {
+
+    static final int CONSECUTIVE_BANKRUPT_DAYS = 3;
+
+<span class="fc" id="L55">    private static final Logger log = LoggerFactory.getLogger(GameOverGuard.class);</span>
+
+    private final EventBus eventBus;
+    private final GameLifecycle lifecycle;
+    private final Leaderboard leaderboard;
+    private final List&lt;Subscription&lt;?&gt;&gt; subscriptions;
+
+    private volatile double lastKnownWallet;
+    private volatile double lastKnownReputation;
+<span class="fc" id="L64">    private volatile int lastKnownDay = 1;</span>
+    private int consecutiveDeepDebtDays;
+    /** The last deep-debt day NUMBER â€” &quot;consecutive&quot; means adjacent game days, not merely
+     * successive events (adversarial review n1: a skipped day restarts the streak). */
+    private int lastDeepDebtDay;
+    private boolean gameOverFired;
+
+    /**
+     * @param startingWallet     fallback stats for a quit before the first money event â€”
+     * @param startingReputation seeded from {@code AgentRoster}'s canonical starting figures
+     */
+    public GameOverGuard(EventBus eventBus, GameLifecycle lifecycle, Leaderboard leaderboard,
+<span class="fc" id="L76">                         double startingWallet, double startingReputation) {</span>
+<span class="fc" id="L77">        this.eventBus = eventBus;</span>
+<span class="fc" id="L78">        this.lifecycle = lifecycle;</span>
+<span class="fc" id="L79">        this.leaderboard = leaderboard;</span>
+<span class="fc" id="L80">        this.lastKnownWallet = startingWallet;</span>
+<span class="fc" id="L81">        this.lastKnownReputation = startingReputation;</span>
+<span class="fc" id="L82">        this.subscriptions = List.of(</span>
+<span class="fc" id="L83">                eventBus.subscribe(EndOfDayCompletedEvent.class, this::onEndOfDayCompleted,</span>
+                        DeliveryMode.CALLER_THREAD),
+<span class="fc" id="L85">                eventBus.subscribe(DayRolloverEvent.class, this::onDayRollover, DeliveryMode.CALLER_THREAD),</span>
+<span class="fc" id="L86">                eventBus.subscribe(QuitEvent.class, this::onQuit, DeliveryMode.CALLER_THREAD),</span>
+<span class="fc" id="L87">                eventBus.subscribe(WalletChangedEvent.class, e -&gt; lastKnownWallet = e.balance(),</span>
+                        DeliveryMode.CALLER_THREAD),
+<span class="fc" id="L89">                eventBus.subscribe(ReputationChangedEvent.class, e -&gt; lastKnownReputation = e.score(),</span>
+                        DeliveryMode.CALLER_THREAD));
+<span class="fc" id="L91">    }</span>
+
+    /**
+     * Seeds the bankruptcy streak and day counter from a save file (task 22 load): a run
+     * saved two deep-debt days into the three-day streak must not get a fresh streak for
+     * free on reload. Called once, right after construction, before any event flows.
+     */
+    public void restoreProgress(int currentDay, int consecutiveDeepDebtDays, int lastDeepDebtDay) {
+<span class="fc" id="L99">        this.lastKnownDay = currentDay;</span>
+<span class="fc" id="L100">        this.consecutiveDeepDebtDays = consecutiveDeepDebtDays;</span>
+<span class="fc" id="L101">        this.lastDeepDebtDay = lastDeepDebtDay;</span>
+<span class="fc" id="L102">    }</span>
+
+    /** Public so tests drive the handlers directly (task-10 precedent). */
+    public void onEndOfDayCompleted(EndOfDayCompletedEvent event) {
+<span class="fc" id="L106">        EndOfDaySummary summary = event.summary();</span>
+<span class="fc bfc" id="L107" title="All 2 branches covered.">        if (summary.endingWallet() &lt; Settings.load().bankruptcyFloorEur()) {</span>
+            // Adjacent day numbers extend the streak; a gap (or a replayed day) restarts it.
+<span class="fc" id="L109">            consecutiveDeepDebtDays =</span>
+<span class="fc bfc" id="L110" title="All 2 branches covered.">                    summary.gameDay() == lastDeepDebtDay + 1 ? consecutiveDeepDebtDays + 1 : 1;</span>
+<span class="fc" id="L111">            lastDeepDebtDay = summary.gameDay();</span>
+<span class="fc" id="L112">            log.warn(&quot;day {} ended at {} â€” below the {} bankruptcy floor ({} consecutive of {})&quot;,</span>
+<span class="fc" id="L113">                    summary.gameDay(), summary.endingWallet(), Settings.load().bankruptcyFloorEur(),</span>
+<span class="fc" id="L114">                    consecutiveDeepDebtDays, CONSECUTIVE_BANKRUPT_DAYS);</span>
+<span class="fc bfc" id="L115" title="All 2 branches covered.">            if (consecutiveDeepDebtDays &gt;= CONSECUTIVE_BANKRUPT_DAYS) {</span>
+<span class="fc" id="L116">                fire(GameOverEvent.REASON_BANKRUPT, summary.endingWallet(), summary.gameDay(),</span>
+<span class="fc" id="L117">                        summary.endingReputation());</span>
+            }
+        } else {
+<span class="fc" id="L120">            consecutiveDeepDebtDays = 0;</span>
+        }
+<span class="fc" id="L122">    }</span>
+
+    public void onDayRollover(DayRolloverEvent event) {
+<span class="fc" id="L125">        lastKnownDay = event.newDay();</span>
+<span class="fc bfc" id="L126" title="All 2 branches covered.">        if (event.newDay() &gt; Settings.load().maxGameDays()) {</span>
+<span class="fc" id="L127">            EndOfDaySummary summary = event.summary();</span>
+<span class="fc" id="L128">            fire(GameOverEvent.REASON_DAY_CAP, summary.endingWallet(), summary.gameDay(),</span>
+<span class="fc" id="L129">                    summary.endingReputation());</span>
+        }
+<span class="fc" id="L131">    }</span>
+
+    public void onQuit(QuitEvent event) {
+<span class="fc" id="L134">        fire(GameOverEvent.REASON_QUIT, lastKnownWallet, lastKnownDay,</span>
+<span class="fc" id="L135">                (int) Math.round(lastKnownReputation));</span>
+<span class="fc" id="L136">    }</span>
+
+    private synchronized void fire(String reason, double finalWallet, int finalDay, int finalReputation) {
+<span class="fc bfc" id="L139" title="All 2 branches covered.">        if (gameOverFired) {</span>
+<span class="fc" id="L140">            return; // one GameOverEvent per run â€” later triggers lose</span>
+        }
+<span class="fc" id="L142">        gameOverFired = true;</span>
+        try {
+<span class="fc" id="L144">            lifecycle.gameOver();</span>
+<span class="nc" id="L145">        } catch (IllegalStateException e) {</span>
+            // Defensive: a quit routed here while still MENU/LOADING. The run is over either
+            // way; keep the event flowing so the GUI can react.
+<span class="nc" id="L148">            log.warn(&quot;game-over transition refused ({}) â€” continuing with the event&quot;, e.getMessage());</span>
+<span class="fc" id="L149">        }</span>
+        // Wall-clock LocalDate is deliberate: recorded_on is a real-world audit field
+        // (task 20's Leaderboard schema), not game logic.
+<span class="fc" id="L152">        boolean highScore = leaderboard.recordIfHighScore(finalWallet, finalDay, finalReputation,</span>
+<span class="fc" id="L153">                LocalDate.now());</span>
+<span class="fc" id="L154">        log.info(&quot;GAME OVER ({}): wallet={} day={} reputation={} highScore={}&quot;,</span>
+<span class="fc" id="L155">                reason, finalWallet, finalDay, finalReputation, highScore);</span>
+<span class="fc" id="L156">        eventBus.publish(new GameOverEvent(reason, finalWallet, finalDay, finalReputation));</span>
+<span class="fc" id="L157">    }</span>
+
+    /** The live streak length â€” read by task 22's snapshot (on the HM thread, like the writes). */
+    public int consecutiveDeepDebtDays() {
+<span class="fc" id="L161">        return consecutiveDeepDebtDays;</span>
+    }
+
+    /** The last deep-debt day number â€” read by task 22's snapshot alongside the streak. */
+    public int lastDeepDebtDay() {
+<span class="fc" id="L166">        return lastDeepDebtDay;</span>
+    }
+
+    /** Test seam + symmetry with the other bus subscribers. */
+    public void close() {
+<span class="fc" id="L171">        subscriptions.forEach(Subscription::cancel);</span>
+<span class="fc" id="L172">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -16,12 +16,19 @@ public record VesselTemplate(
         @JsonProperty("min_acceptable_price_range") double[] minAcceptablePriceRange,
         @JsonProperty("target_price_range") double[] targetPriceRange,
         @JsonProperty("max_wait_minutes_range") int[] maxWaitMinutesRange,
+        @JsonProperty("min_duration_range") int[] minDurationRange,
         @JsonProperty("draft_range") double[] draftRange,
         @JsonProperty("length_range") double[] lengthRange,
         @JsonProperty("tonnage_range") int[] tonnageRange) {
 
     public double sampleMinAcceptablePrice(Random r) {
         return uniform(minAcceptablePriceRange, r);
+    }
+
+    /** Task 19b: the hidden cargo-handling floor (hours) — the spawner clamps the draw to the
+     * vessel's announced preferred stay so the pair is always coherent. */
+    public int sampleMinDurationHours(Random r) {
+        return (int) Math.round(uniform(minDurationRange[0], minDurationRange[1], r));
     }
 
     public double sampleTargetPrice(Random r) {
@@ -34,6 +41,19 @@ public record VesselTemplate(
 
     public Personality samplePersonality(Random r) {
         return Personality.fromDistribution(personalityDistribution, r.nextDouble());
+    }
+
+    /** Physical dims for a spawned {@code VesselSpec} (the Poisson spawner, task 11). */
+    public double sampleDraft(Random r) {
+        return uniform(draftRange, r);
+    }
+
+    public double sampleLength(Random r) {
+        return uniform(lengthRange, r);
+    }
+
+    public int sampleTonnage(Random r) {
+        return (int) Math.round(uniform(tonnageRange[0], tonnageRange[1], r));
     }
 
     private static double uniform(double[] range, Random r) {

@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DialogueCtx.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">DialogueCtx.java</span></div><h1>DialogueCtx.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.util.List;
+import java.util.Objects;
+
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
+import it.unige.portcommand.ontology.Offer;
+
+/**
+ * The v1.1 context-carrying grammar's dialogue state (PROJECT_DEFINITION.md Â§6.2,
+ * {@code negotiation_move(Frame, DialogueCtx)}). Widened for 16-M2 from M1's single-offer stub so
+ * the six phenomenon blocks can resolve against real context:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;&lt;b&gt;ellipsis / delta&lt;/b&gt; complete or transform a bare fragment against {@link #standingOffer}
+ *       â€” which now carries BOTH sides' last offers, because &quot;split the difference&quot; needs the
+ *       midpoint of the vessel's ask and the player's bid;&lt;/li&gt;
+ *   &lt;li&gt;&lt;b&gt;anaphora / vocative&lt;/b&gt; resolve &quot;the tanker&quot; / &quot;Genoa Star&quot; against {@link #roster}, a
+ *       type-tagged, recency-ordered list of the active dialogues;&lt;/li&gt;
+ *   &lt;li&gt;&quot;that berth&quot; / &quot;same berth as before&quot; resolve against {@link #lastMentioned}.&lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;&lt;b&gt;P-04 (privacy).&lt;/b&gt; {@link #from} maps ONLY {@link WalkInDialogueSnapshot}'s observable
+ * fields â€” vessel id/type/name, the berth and duration under discussion, and the two last offers.
+ * It never reads a walk-in's hidden beliefs (min-acceptable/target price, max-wait, personality);
+ * the snapshot type does not even expose them ({@code WalkInDialogueSnapshotPrivacyTest}), and
+ * {@code DialogueCtxPrivacyTest} greps this file to keep it that way.
+ *
+ * @param activeNegotiationId the conversation id of the focused dialogue (Java-side ACL routing),
+ *                            or {@code null} if no negotiation is active
+ * @param standingOffer       both sides' last offers in the focused dialogue (never {@code null};
+ *                            {@link StandingOffer#NONE} when nothing is on the table)
+ * @param roster              every active dialogue, most-recent first (never {@code null})
+ * @param lastMentioned       the most-recently-named berth (anaphora &quot;that berth&quot;), or {@code null}
+ */
+public record DialogueCtx(String activeNegotiationId, StandingOffer standingOffer,
+                          List&lt;RosterEntry&gt; roster, String lastMentioned) {
+
+<span class="fc" id="L39">    public DialogueCtx {</span>
+<span class="pc bpc" id="L40" title="1 of 2 branches missed.">        standingOffer = standingOffer == null ? StandingOffer.NONE : standingOffer;</span>
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">        roster = roster == null ? List.of() : List.copyOf(roster);</span>
+<span class="fc" id="L42">    }</span>
+
+    /** The empty context: no active dialogue, nothing on the table, no roster, nothing mentioned. */
+<span class="fc" id="L45">    public static final DialogueCtx NONE = new DialogueCtx(null, StandingOffer.NONE, List.of(), null);</span>
+
+    /**
+     * Backward-compatible 3-arg form (pre-M2 callers, e.g. cancel-routing tests): the single legacy
+     * {@link Offer} is the offer on the table, mapped to the player's side of a {@link StandingOffer}.
+     * Kept so M1 construction sites compile and pass unchanged through the widening.
+     */
+    public DialogueCtx(String activeNegotiationId, Offer legacyStandingOffer, String lastMentioned) {
+<span class="fc" id="L53">        this(activeNegotiationId,</span>
+<span class="fc bfc" id="L54" title="All 2 branches covered.">                legacyStandingOffer == null ? StandingOffer.NONE : StandingOffer.ofPlayer(legacyStandingOffer),</span>
+<span class="fc" id="L55">                List.of(), lastMentioned);</span>
+<span class="fc" id="L56">    }</span>
+
+    /**
+     * Builds a context from the active walk-in dialogues (most-recent first) and the id of the one
+     * this chat turn targets. The focused dialogue supplies the standing offer and last-mentioned
+     * berth; every dialogue becomes a roster entry. P-04: reads observable snapshot fields ONLY.
+     *
+     * @param dialoguesRecentFirst active dialogues ordered most-recent first (recency = roster order)
+     * @param focusId              the vessel id of the focused dialogue, or {@code null}
+     */
+    public static DialogueCtx from(List&lt;WalkInDialogueSnapshot&gt; dialoguesRecentFirst, String focusId) {
+<span class="fc" id="L67">        Objects.requireNonNull(dialoguesRecentFirst, &quot;dialoguesRecentFirst&quot;);</span>
+<span class="fc" id="L68">        List&lt;RosterEntry&gt; roster = dialoguesRecentFirst.stream()</span>
+<span class="fc" id="L69">                .map(s -&gt; new RosterEntry(s.vesselId(), s.vesselType(), s.vesselName(), s.berthId(), s.durationHours()))</span>
+<span class="fc" id="L70">                .toList();</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">        WalkInDialogueSnapshot focus = focusId == null ? null</span>
+<span class="fc" id="L72">                : dialoguesRecentFirst.stream().filter(s -&gt; focusId.equals(s.vesselId())).findFirst().orElse(null);</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">        StandingOffer standing = focus == null ? StandingOffer.NONE : StandingOffer.from(focus);</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">        String lastMentioned = focus == null ? null : focus.berthId();</span>
+<span class="fc" id="L75">        return new DialogueCtx(focusId, standing, roster, lastMentioned);</span>
+    }
+
+    /** @return true iff either side has a live offer on the table (cancel-routing predicate). */
+    public boolean hasStandingOffer() {
+<span class="fc" id="L80">        return standingOffer.hasAnyOffer();</span>
+    }
+
+    /** One side's last offer over price (&amp;euro;/hour), duration, and berth. A {@code null} price
+     * means &quot;no offer yet&quot; â€” the sentinel the standing-offer resolution predicates fail on. */
+<span class="fc" id="L85">    public record OfferView(Double price, Integer durationHours, String berthId) {</span>
+
+        /** No offer on this side. */
+<span class="fc" id="L88">        public static final OfferView NONE = new OfferView(null, null, null);</span>
+
+        static OfferView of(Offer o) {
+<span class="fc" id="L91">            return new OfferView(o.price(), o.durationHours(), o.berthId());</span>
+        }
+
+        /** @return true iff this side has actually made a priced offer. */
+        public boolean isPresent() {
+<span class="fc bfc" id="L96" title="All 2 branches covered.">            return price != null;</span>
+        }
+    }
+
+    /** Both sides' last offers in a dialogue: the vessel's ask and the player's bid. The midpoint
+     * of the two is what &quot;split the difference&quot; needs, which is why M2 carries both. */
+    public record StandingOffer(OfferView vesselOffer, OfferView playerOffer) {
+
+<span class="fc" id="L104">        public static final StandingOffer NONE = new StandingOffer(OfferView.NONE, OfferView.NONE);</span>
+
+<span class="fc" id="L106">        public StandingOffer {</span>
+<span class="pc bpc" id="L107" title="1 of 2 branches missed.">            vesselOffer = vesselOffer == null ? OfferView.NONE : vesselOffer;</span>
+<span class="pc bpc" id="L108" title="1 of 2 branches missed.">            playerOffer = playerOffer == null ? OfferView.NONE : playerOffer;</span>
+<span class="fc" id="L109">        }</span>
+
+        /** From a snapshot: both offers share the berth/duration under discussion and differ only in
+         * price; a 0.0 price is the snapshot's &quot;no offer yet&quot; sentinel and maps to {@link OfferView#NONE}. */
+        static StandingOffer from(WalkInDialogueSnapshot s) {
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">            OfferView vessel = s.lastVesselOffer() &gt; 0</span>
+<span class="pc" id="L115">                    ? new OfferView(s.lastVesselOffer(), s.durationHours(), s.berthId()) : OfferView.NONE;</span>
+<span class="fc bfc" id="L116" title="All 2 branches covered.">            OfferView player = s.lastPlayerOffer() &gt; 0</span>
+<span class="fc" id="L117">                    ? new OfferView(s.lastPlayerOffer(), s.durationHours(), s.berthId()) : OfferView.NONE;</span>
+<span class="fc" id="L118">            return new StandingOffer(vessel, player);</span>
+        }
+
+        static StandingOffer ofPlayer(Offer o) {
+<span class="fc" id="L122">            return new StandingOffer(OfferView.NONE, OfferView.of(o));</span>
+        }
+
+        public boolean hasAnyOffer() {
+<span class="fc bfc" id="L126" title="All 4 branches covered.">            return vesselOffer.isPresent() || playerOffer.isPresent();</span>
+        }
+    }
+
+    /** A type-tagged, named entry for one active dialogue â€” the unit the anaphora and vocative
+     * blocks match &quot;the tanker&quot; / &quot;Genoa Star&quot; against. All fields are observable (P-04). */
+<span class="fc" id="L132">    public record RosterEntry(String id, String vesselType, String vesselName, String lastBerth,</span>
+                              Integer lastDuration) {
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

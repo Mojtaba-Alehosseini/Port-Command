@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RealCnpCoordinator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.harbourmaster</a> &gt; <span class="el_source">RealCnpCoordinator.java</span></div><h1>RealCnpCoordinator.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.harbourmaster;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
+
+import it.unige.portcommand.behaviours.cnp.InitiateCNPBehaviour;
+import it.unige.portcommand.bootstrap.ServiceLocator;
+import it.unige.portcommand.util.SimClock;
+import jade.core.Agent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Real (not hardcoded) tug Contract Net: DF-discovers tugs and runs a non-blocking
+ * CFP/collect/award cycle scored by Prolog {@code best_n_bids}. Renamed from
+ * {@code StubCnpCoordinator} (task 15) â€” this class was already the real cycle as of task 11/
+ * ADR-08; only the name was stale. Zero-bid retry is now bounded via task 15's
+ * {@code CnpRetryBehaviour}, scheduled from {@code AwardContractBehaviour.holdVessel}; the CFP
+ * reply-by window is Settings-driven ({@code InitiateCNPBehaviour}). Post-ACCEPT-failure handling
+ * (a winning tug REFUSEs) is not implemented â€” the documented, accepted exit ramp.
+ *
+ * &lt;h2&gt;One Contract Net at a time (task 24, visual-checkpoint-#5 B2)&lt;/h2&gt;
+ * Concurrent CNPs used to race: several same-instant {@code initiate()} calls (the weather-clear
+ * re-dispatch fires one per held vessel) put all CFPs on the wire before ANY award, every tug bid
+ * on every session (the busy-REFUSE guard only checks an already-SET {@code currentJob}), and the
+ * same best-scoring tugs won every contract simultaneously â€” observed triple-booking of tug_3 and
+ * tug_4. {@code initiate()} therefore now QUEUES: one CNP is in flight at a time, and the next
+ * CFP goes out only after the previous session reaches a terminal state ({@link #completed()} â€”
+ * awards sent, zero-bid hold, or no tugs in DF). JADE's per-sender/receiver FIFO delivery then
+ * guarantees a tug processes its ACCEPT (setting {@code currentJob}) before it ever sees the next
+ * CFP, which is what makes the tug-side busy-REFUSE guard actually effective. The ledger's
+ * exactly-once keys ({@code (conversationId, tugId)}) are untouched â€” serialization changes
+ * WHEN a CFP goes out, never how its money is counted.
+ *
+ * &lt;p&gt;Methods are {@code synchronized}: production calls both from the HarbourMaster scheduler
+ * thread, but integration tests drive {@code initiate()} from the test thread (the documented
+ * self-ref seam), so thread confinement is not assumed. A CNP whose award behaviour dies before
+ * calling {@link #completed()} would stall the queue â€” acceptable: every terminal path in
+ * {@code InitiateCNPBehaviour}/{@code AwardContractBehaviour} calls it, and an award path dying
+ * mid-action is already a stuck vessel today.
+ */
+public final class RealCnpCoordinator implements CnpCoordinator {
+
+<span class="fc" id="L44">    private static final Logger log = LoggerFactory.getLogger(RealCnpCoordinator.class);</span>
+
+    private final Agent agent;
+    private final ServiceLocator serviceLocator;
+    private final SimClock simClock;
+<span class="fc" id="L49">    private final Deque&lt;CnpRequest&gt; pending = new ArrayDeque&lt;&gt;();</span>
+    private boolean inFlight;
+
+<span class="fc" id="L52">    public RealCnpCoordinator(Agent agent, ServiceLocator serviceLocator, SimClock simClock) {</span>
+<span class="fc" id="L53">        this.agent = agent;</span>
+<span class="fc" id="L54">        this.serviceLocator = serviceLocator;</span>
+<span class="fc" id="L55">        this.simClock = simClock;</span>
+<span class="fc" id="L56">    }</span>
+
+    @Override
+    public synchronized void initiate(CnpRequest req) {
+<span class="fc bfc" id="L60" title="All 2 branches covered.">        if (inFlight) {</span>
+<span class="fc" id="L61">            pending.add(req);</span>
+<span class="fc" id="L62">            log.info(&quot;CNP for {} queued behind the in-flight session ({} waiting)&quot;,</span>
+<span class="fc" id="L63">                    req.vesselId(), pending.size());</span>
+<span class="fc" id="L64">            return;</span>
+        }
+<span class="fc" id="L66">        inFlight = true;</span>
+        // Must run on the agent thread (task-15's own documented common mistake) â€”
+        // addBehaviour is safe to call from any thread and wakes the scheduler.
+<span class="fc" id="L69">        agent.addBehaviour(new InitiateCNPBehaviour(agent, req, serviceLocator, simClock));</span>
+<span class="fc" id="L70">    }</span>
+
+    @Override
+    public synchronized void completed() {
+<span class="fc" id="L74">        CnpRequest next = pending.poll();</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        if (next == null) {</span>
+<span class="fc" id="L76">            inFlight = false;</span>
+<span class="fc" id="L77">            return;</span>
+        }
+<span class="fc" id="L79">        log.info(&quot;CNP session closed -&gt; launching queued CNP for {} ({} still waiting)&quot;,</span>
+<span class="fc" id="L80">                next.vesselId(), pending.size());</span>
+<span class="fc" id="L81">        agent.addBehaviour(new InitiateCNPBehaviour(agent, next, serviceLocator, simClock));</span>
+<span class="fc" id="L82">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

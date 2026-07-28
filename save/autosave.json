@@ -1,0 +1,198 @@
+{
+  "schemaVersion" : 1,
+  "savedAt" : "2026-07-27T15:32:20.676687200Z",
+  "randomSeed" : 6806190907578100401,
+  "settings" : {
+    "roundLimit" : 4,
+    "timeLimitSeconds" : 60,
+    "autopilotEnabled" : false,
+    "difficulty" : "NORMAL",
+    "realSecondsPerGameDay" : 300,
+    "maxGameDays" : 30,
+    "firstLaunch" : true,
+    "llmModel" : "microsoft/Phi-4-mini-instruct",
+    "withdrawalPenaltyEur" : 500.0,
+    "cnpReplyBySimSeconds" : 5,
+    "cnpRetryAfterSimSeconds" : 30,
+    "dailyTargetEur" : 5000.0,
+    "bankruptcyFloorEur" : -20000.0
+  },
+  "simClock" : {
+    "simMillis" : 86400000,
+    "realSecondsPerGameDay" : 300
+  },
+  "wallet" : 51339.62,
+  "reputation" : 65,
+  "consecutiveDeepDebtDays" : 0,
+  "lastDeepDebtDay" : 0,
+  "marketHistory" : [ {
+    "vessel_type" : "container_vessel",
+    "duration_hours" : 7,
+    "price" : 2206.0,
+    "sim_time" : 15004800,
+    "outcome" : "TIMEOUT"
+  }, {
+    "vessel_type" : "container_vessel",
+    "duration_hours" : 15,
+    "price" : 2140.0,
+    "sim_time" : 21484800,
+    "outcome" : "TIMEOUT"
+  }, {
+    "vessel_type" : "tanker",
+    "duration_hours" : 11,
+    "price" : 4868.0,
+    "sim_time" : 27360000,
+    "outcome" : "TIMEOUT"
+  }, {
+    "vessel_type" : "cruise_ship",
+    "duration_hours" : 15,
+    "price" : 4355.0,
+    "sim_time" : 35424000,
+    "outcome" : "TIMEOUT"
+  }, {
+    "vessel_type" : "tanker",
+    "duration_hours" : 15,
+    "price" : 4999.0,
+    "sim_time" : 38275200,
+    "outcome" : "TIMEOUT"
+  }, {
+    "vessel_type" : "ferry",
+    "duration_hours" : 9,
+    "price" : 1569.0,
+    "sim_time" : 45878400,
+    "outcome" : "TIMEOUT"
+  }, {
+    "vessel_type" : "cruise_ship",
+    "duration_hours" : 15,
+    "price" : 3628.0,
+    "sim_time" : 54633600,
+    "outcome" : "TIMEOUT"
+  }, {
+    "vessel_type" : "ferry",
+    "duration_hours" : 10,
+    "price" : 1491.0,
+    "sim_time" : 58464000,
+    "outcome" : "TIMEOUT"
+  }, {
+    "vessel_type" : "cruise_ship",
+    "duration_hours" : 11,
+    "price" : 4086.0,
+    "sim_time" : 62899200,
+    "outcome" : "TIMEOUT"
+  }, {
+    "vessel_type" : "ferry",
+    "duration_hours" : 8,
+    "price" : 1299.0,
+    "sim_time" : 69350400,
+    "outcome" : "TIMEOUT"
+  }, {
+    "vessel_type" : "cruise_ship",
+    "duration_hours" : 7,
+    "price" : 3985.0,
+    "sim_time" : 83203200,
+    "outcome" : "TIMEOUT"
+  } ],
+  "policyTriggers" : [ ],
+  "firedEventIds" : [ "contract:CONTRACT-1:d1", "contract:CONTRACT-2:d1" ],
+  "agents" : {
+    "harbourMaster" : {
+      "dayIncome" : [ ],
+      "dayExpense" : [ ],
+      "performativeCounts" : {
+        "REQUEST" : 0,
+        "INFORM" : 0,
+        "PROPOSE" : 0,
+        "ACCEPT-PROPOSAL" : 0,
+        "REJECT-PROPOSAL" : 0,
+        "REFUSE" : 0,
+        "CFP" : 0,
+        "CANCEL" : 0,
+        "CONFIRM" : 0,
+        "DISCONFIRM" : 0
+      },
+      "pendingCustomsChecks" : { },
+      "walkInSpawnCount" : 14
+    },
+    "weather" : {
+      "current" : {
+        "wind" : 30,
+        "visibility" : "poor",
+        "swell" : 3.5,
+        "state" : "stormy",
+        "sim_time" : 86371200
+      }
+    },
+    "customs" : {
+      "nextClearanceRef" : 1
+    },
+    "tugs" : [ {
+      "tugId" : "tug_1",
+      "status" : "IDLE",
+      "position" : {
+        "x" : 50.0,
+        "y" : 100.0,
+        "heading_deg" : 0.0
+      },
+      "fuelState" : 1.0
+    }, {
+      "tugId" : "tug_2",
+      "status" : "IDLE",
+      "position" : {
+        "x" : 50.0,
+        "y" : 150.0,
+        "heading_deg" : 0.0
+      },
+      "fuelState" : 1.0
+    }, {
+      "tugId" : "tug_3",
+      "status" : "IDLE",
+      "position" : {
+        "x" : 50.0,
+        "y" : 200.0,
+        "heading_deg" : 261.8698976458434
+      },
+      "fuelState" : 0.34615424144588197
+    }, {
+      "tugId" : "tug_4",
+      "status" : "IDLE",
+      "position" : {
+        "x" : 50.0,
+        "y" : 250.0,
+        "heading_deg" : 254.05460409907732
+      },
+      "fuelState" : 0.3399680692503771
+    } ],
+    "terminals" : [ {
+      "terminalId" : "terminal_container",
+      "occupancies" : [ {
+        "berth_id" : "berth_2",
+        "docked_at_sim" : 0,
+        "expected_free_at_sim" : 0,
+        "crane_id" : 0,
+        "status" : "FREE"
+      } ]
+    }, {
+      "terminalId" : "terminal_general",
+      "occupancies" : [ {
+        "berth_id" : "berth_1",
+        "docked_at_sim" : 0,
+        "expected_free_at_sim" : 0,
+        "crane_id" : 0,
+        "status" : "FREE"
+      }, {
+        "berth_id" : "berth_3",
+        "docked_at_sim" : 0,
+        "expected_free_at_sim" : 0,
+        "crane_id" : 0,
+        "status" : "FREE"
+      }, {
+        "berth_id" : "berth_4",
+        "docked_at_sim" : 0,
+        "expected_free_at_sim" : 0,
+        "crane_id" : 0,
+        "status" : "FREE"
+      } ]
+    } ],
+    "activeVessels" : [ ]
+  }
+}

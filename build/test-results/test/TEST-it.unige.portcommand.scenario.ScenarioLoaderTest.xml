@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.scenario.ScenarioLoaderTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:57" hostname="MOJI" time="0.445">
+  <properties/>
+  <testcase name="aDanglingContractRefIsRejected()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.008"/>
+  <testcase name="globalContractsCarryVesselTypeAndTimeOfDayEta()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.002"/>
+  <testcase name="tutorialMatchesTheCanonicalStartState()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.002"/>
+  <testcase name="stormMatchesItsSpec()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.002"/>
+  <testcase name="everySpawnableContractIsCompatibleWithItsBerthUnderPinnedDims()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.004"/>
+  <testcase name="scenarioLocalContractsResolveForTheirSpawnEvents()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.002"/>
+  <testcase name="malformedFixtureWithEventsOutOfOrderIsRejected()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.019"/>
+  <testcase name="busyDayMatchesItsSpec()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.001"/>
+  <testcase name="anUnknownJsonFieldIsRejectedNotSilentlyIgnored()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.019"/>
+  <testcase name="exactlyThreeScenariosLoadAndValidate()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.001"/>
+  <testcase name="scenarioPacingOverridesAreThePinnedValues()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.001"/>
+  <testcase name="everyPackagedScenarioRoundTripsThroughItsOwnMapper()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.046"/>
+  <testcase name="aScenarioContractShadowingAGlobalOneIsRejected()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.006"/>
+  <testcase name="nullSeedMeansGenerateAndZeroIsAValidPin()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.012"/>
+  <testcase name="dailyContractClonesAreDayQualifiedEverywhereTheEngineNeedsThem()" classname="it.unige.portcommand.scenario.ScenarioLoaderTest" time="0.016"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.lifecycle.WallClockAdvancerTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:44" hostname="MOJI" time="0.135">
+  <properties/>
+  <testcase name="rejectsANonPositivePeriod()" classname="it.unige.portcommand.lifecycle.WallClockAdvancerTest" time="0.0"/>
+  <testcase name="stopFreezesTheClock()" classname="it.unige.portcommand.lifecycle.WallClockAdvancerTest" time="0.065"/>
+  <testcase name="pausedClockMakesTicksHarmless()" classname="it.unige.portcommand.lifecycle.WallClockAdvancerTest" time="0.055"/>
+  <testcase name="startAndStopAreIdempotent()" classname="it.unige.portcommand.lifecycle.WallClockAdvancerTest" time="0.001"/>
+  <testcase name="advancesTheClockWhileRunning()" classname="it.unige.portcommand.lifecycle.WallClockAdvancerTest" time="0.012"/>
+  <system-out><![CDATA[00:12:44.784 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (5 ms/tick, 300 real-s per game day)
+00:12:44.800 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.853 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (5 ms/tick, 300 real-s per game day)
+00:12:44.907 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.907 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (1000 ms/tick, 300 real-s per game day)
+00:12:44.907 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.907 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (5 ms/tick, 300 real-s per game day)
+00:12:44.922 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

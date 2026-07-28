@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AnnounceArrivalBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.auto_flow</a> &gt; <span class="el_source">AnnounceArrivalBehaviour.java</span></div><h1>AnnounceArrivalBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.auto_flow;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+
+import it.unige.portcommand.agents.BaseVesselAgent;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import jade.core.AID;
+import jade.core.Agent;
+import jade.core.behaviours.OneShotBehaviour;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Contracted vessel's arrival announcement: a REQUEST to the HarbourMaster asking for
+ * its berth, carrying the contract id and the full {@link it.unige.portcommand.ontology.VesselSpec}.
+ * Then it attaches {@link AwaitBerthBehaviour} on the same conversation id.
+ */
+public final class AnnounceArrivalBehaviour extends OneShotBehaviour {
+
+<span class="fc" id="L24">    private static final Logger log = LoggerFactory.getLogger(AnnounceArrivalBehaviour.class);</span>
+
+    private final String contractId;
+    private final String conversationId;
+
+    public AnnounceArrivalBehaviour(Agent agent, String contractId) {
+<span class="fc" id="L30">        super(agent);</span>
+<span class="fc" id="L31">        this.contractId = contractId;</span>
+<span class="fc" id="L32">        this.conversationId = &quot;berth-&quot; + agent.getLocalName();</span>
+<span class="fc" id="L33">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L37">        BaseVesselAgent vessel = (BaseVesselAgent) myAgent;</span>
+<span class="fc" id="L38">        Optional&lt;AID&gt; harbourMaster = vessel.serviceLocator().findUnique(&quot;harbour-master&quot;);</span>
+<span class="pc bpc" id="L39" title="1 of 2 branches missed.">        if (harbourMaster.isEmpty()) {</span>
+<span class="nc" id="L40">            log.warn(&quot;{}: no harbour-master in DF; cannot announce arrival&quot;, myAgent.getLocalName());</span>
+<span class="nc" id="L41">            return;</span>
+        }
+<span class="fc" id="L43">        Map&lt;String, Object&gt; content = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L44">        content.put(&quot;intent&quot;, &quot;request_berth&quot;);</span>
+<span class="pc bpc" id="L45" title="1 of 2 branches missed.">        content.put(&quot;contract&quot;, contractId == null ? &quot;&quot; : contractId);</span>
+<span class="fc" id="L46">        content.put(&quot;vessel_spec&quot;, vessel.spec());</span>
+
+<span class="fc" id="L48">        ACLMessage request = MessageFactory.create(ACLMessage.REQUEST);</span>
+<span class="fc" id="L49">        request.addReceiver(harbourMaster.get());</span>
+<span class="fc" id="L50">        request.setConversationId(conversationId);</span>
+<span class="fc" id="L51">        request.setContent(TerminalJson.write(content));</span>
+<span class="fc" id="L52">        myAgent.send(request);</span>
+
+<span class="fc" id="L54">        myAgent.addBehaviour(new AwaitBerthBehaviour(myAgent, conversationId));</span>
+<span class="fc" id="L55">        log.info(&quot;{} announced arrival (contract {}) -&gt; harbour-master&quot;, myAgent.getLocalName(), contractId);</span>
+<span class="fc" id="L56">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

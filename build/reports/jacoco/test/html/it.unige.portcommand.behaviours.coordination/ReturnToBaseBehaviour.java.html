@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ReturnToBaseBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.coordination</a> &gt; <span class="el_source">ReturnToBaseBehaviour.java</span></div><h1>ReturnToBaseBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.coordination;
+
+import it.unige.portcommand.agents.TugAgent;
+import it.unige.portcommand.agents.TugStatus;
+import it.unige.portcommand.behaviours.SimTickerBehaviour;
+import it.unige.portcommand.ontology.Position;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Final leg: returns the tug to its home base after an escort, or after a
+ * {@code CANCEL}. On arrival it goes {@code IDLE} and clears {@code currentJob};
+ * {@link RefuelIfLowBehaviour} (still running) then tops the tank up if it is low.
+ *
+ * &lt;p&gt;Arrival hand-off ends the movement chain â€” no follow-on behaviour to add â€” so
+ * it just resets state and calls {@code removeBehaviour(this)} LAST (nulls
+ * {@code myAgent}; INVARIANTS.md).
+ */
+public final class ReturnToBaseBehaviour extends SimTickerBehaviour {
+
+<span class="fc" id="L21">    private static final Logger log = LoggerFactory.getLogger(ReturnToBaseBehaviour.class);</span>
+    private static final long TICK_SIM_MILLIS = 1000L;
+
+    private final TugAgent tug;
+    private final Position base;
+    private long lastSimMillis;
+
+    public ReturnToBaseBehaviour(TugAgent tug) {
+<span class="fc" id="L29">        super(tug, tug.simClock(), TICK_SIM_MILLIS);</span>
+<span class="fc" id="L30">        this.tug = tug;</span>
+<span class="fc" id="L31">        this.base = tug.basePosition();</span>
+<span class="fc" id="L32">        this.lastSimMillis = tug.simClock().nowSimMillis();</span>
+<span class="fc" id="L33">    }</span>
+
+    @Override
+    protected void onSimTick() {
+<span class="fc" id="L37">        long now = simClock().nowSimMillis();</span>
+<span class="fc" id="L38">        double dtSimSeconds = (now - lastSimMillis) / 1000.0;</span>
+<span class="fc" id="L39">        lastSimMillis = now;</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">        if (dtSimSeconds &lt;= 0.0) {</span>
+<span class="fc" id="L41">            return;</span>
+        }
+<span class="fc" id="L43">        boolean arrived = tug.advanceToward(base, dtSimSeconds);</span>
+<span class="fc" id="L44">        tug.pushState();</span>
+<span class="fc bfc" id="L45" title="All 2 branches covered.">        if (arrived) {</span>
+<span class="fc" id="L46">            log.info(&quot;{} back at base -&gt; idle&quot;, tug.tugId());</span>
+<span class="fc" id="L47">            tug.setStatus(TugStatus.IDLE);</span>
+<span class="fc" id="L48">            tug.clearJob();</span>
+<span class="fc" id="L49">            tug.setActiveMovement(null);</span>
+<span class="fc" id="L50">            tug.removeBehaviour(this); // LAST: nulls myAgent</span>
+        }
+<span class="fc" id="L52">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.negotiation.PersonalityStreamDecorrelationTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:44" hostname="MOJI" time="0.001">
+  <properties/>
+  <testcase name="sequentialWalkInIds_drawAllThreePersonalities_withoutRegimeLock()" classname="it.unige.portcommand.negotiation.PersonalityStreamDecorrelationTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

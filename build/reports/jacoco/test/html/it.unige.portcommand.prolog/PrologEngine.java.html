@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PrologEngine.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.prolog</a> &gt; <span class="el_source">PrologEngine.java</span></div><h1>PrologEngine.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.prolog;
+
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
+
+import org.jpl7.Query;
+import org.jpl7.Term;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Process-wide gateway to the embedded SWI-Prolog engine via JPL.
+ *
+ * &lt;p&gt;&lt;b&gt;Thread-safety.&lt;/b&gt; JPL is not thread-safe; every goal is serialised
+ * through a single {@link ReentrantLock}. The lock is reentrant so a caller may
+ * bracket several goals as one critical section via {@link #inLock(Supplier)}
+ * (used by {@link PrologQueries} to make assertâ†’queryâ†’retract atomic) without
+ * self-deadlock.
+ *
+ * &lt;p&gt;&lt;b&gt;Module context.&lt;/b&gt; All goals run in JPL's default {@code user} module,
+ * which is where {@code consult/1} loads the ontology and rule files (none carry
+ * a {@code :- module} directive). Transient facts asserted by {@link PrologQueries}
+ * are explicitly {@code user:}-qualified so the rules â€” also in {@code user} â€”
+ * resolve them. A module mismatch here makes rules silently see no facts.
+ *
+ * &lt;p&gt;&lt;b&gt;Caching.&lt;/b&gt; Only &lt;i&gt;pure&lt;/i&gt; goals â€” those that read the static ontology
+ * fact base and assert no transient state â€” may use {@link #hasSolutionCached}/
+ * {@link #oneSolutionCached}. Goals that assert ephemeral per-vessel facts, or
+ * read the dynamic {@code blacklisted_combo/2} / {@code vessel_priority_override/2},
+ * must use the uncached methods, since a cached answer would reflect a stale
+ * fact base.
+ */
+public final class PrologEngine {
+
+<span class="fc" id="L45">    private static final Logger log = LoggerFactory.getLogger(PrologEngine.class);</span>
+
+    /**
+     * The exact seven files consulted at startup, in load order: the ontology
+     * facts FIRST, then the DCG grammar, then the five rule modules alphabetically.
+     * Resolved by name (not a directory scan): the test classpath overlays a second
+     * {@code /prolog} dir holding {@code smoke.pl} + the PLUnit suites, so a wildcard
+     * scan is ambiguous. A fixed manifest also pins the 5-module / 30-rule invariant.
+     *
+     * &lt;p&gt;&lt;b&gt;6 &amp;rarr; 7 (2026-07-16, task 16.)&lt;/b&gt; {@code dcg_negotiation.pl} â€” the
+     * negotiation-move grammar â€” joins the manifest. It is NOT a rule module: it
+     * defines no {@code % RULE Rn:} clause and does not touch the 30-rule kernel
+     * (see {@link #RULE_MODULE_COUNT}). It sorts before the {@code rules_*} entries
+     * only because {@code d} &amp;lt; {@code r}; the grammar has no load-order dependency
+     * on the rule modules, but it does read ontology facts, so it must follow
+     * {@code port_ontology.pl}.
+     */
+<span class="fc" id="L62">    private static final List&lt;String&gt; RESOURCE_MANIFEST = List.of(</span>
+            &quot;/prolog/port_ontology.pl&quot;,
+            &quot;/prolog/dcg_negotiation.pl&quot;,
+            &quot;/prolog/rules_compatibility.pl&quot;,
+            &quot;/prolog/rules_customs.pl&quot;,
+            &quot;/prolog/rules_escort.pl&quot;,
+            &quot;/prolog/rules_priority.pl&quot;,
+            &quot;/prolog/rules_weather.pl&quot;);
+
+    /**
+     * The five rule modules of the 30-rule kernel. A literal, not
+     * {@code RESOURCE_MANIFEST.size() - 1}: the manifest now also carries the
+     * ontology and the DCG grammar, neither of which is a rule module.
+     */
+    private static final int RULE_MODULE_COUNT = 5;
+
+    private static final class Holder {
+<span class="fc" id="L79">        private static final PrologEngine INSTANCE = new PrologEngine();</span>
+    }
+
+<span class="fc" id="L82">    private final ReentrantLock lock = new ReentrantLock();</span>
+    private volatile boolean initialised;
+
+    // Pure-query caches (goal string -&gt; result). Never holds a goal that touches
+    // transient/dynamic facts. Concurrent maps; a benign double-compute on a race
+    // is harmless because pure goals are deterministic.
+<span class="fc" id="L88">    private final Map&lt;String, Boolean&gt; hasSolutionCache = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L89">    private final Map&lt;String, Optional&lt;Map&lt;String, Term&gt;&gt;&gt; oneSolutionCache = new ConcurrentHashMap&lt;&gt;();</span>
+
+    // Counts goals actually dispatched to JPL (cache hits excluded). Lets tests
+    // observe that a pure query's second call is served from cache.
+<span class="fc" id="L93">    private final AtomicLong queryCount = new AtomicLong();</span>
+
+<span class="fc" id="L95">    private PrologEngine() {</span>
+<span class="fc" id="L96">    }</span>
+
+    public static PrologEngine getInstance() {
+<span class="fc" id="L99">        return Holder.INSTANCE;</span>
+    }
+
+    /** The seven resources consulted by {@link #init()}, in load order. */
+    public static List&lt;String&gt; resourceManifest() {
+<span class="fc" id="L104">        return RESOURCE_MANIFEST;</span>
+    }
+
+    /**
+     * Idempotently consults the ontology, the DCG grammar, and the five rule
+     * modules. The first call loads all seven files (ontology first); later calls
+     * are no-ops.
+     *
+     * @throws PrologException if any consult fails
+     */
+    public void init() {
+<span class="fc" id="L115">        lock.lock();</span>
+        try {
+<span class="fc bfc" id="L117" title="All 2 branches covered.">            if (initialised) {</span>
+<span class="fc" id="L118">                return;</span>
+            }
+<span class="fc bfc" id="L120" title="All 2 branches covered.">            for (String resource : RESOURCE_MANIFEST) {</span>
+<span class="fc" id="L121">                String path = resolveResource(resource);</span>
+<span class="fc" id="L122">                boolean ok = Query.hasSolution(&quot;consult('&quot; + path + &quot;')&quot;);</span>
+<span class="pc bpc" id="L123" title="1 of 2 branches missed.">                if (!ok) {</span>
+<span class="nc" id="L124">                    throw new PrologException(&quot;consult failed for &quot; + resource + &quot; (&quot; + path + &quot;)&quot;);</span>
+                }
+<span class="fc" id="L126">                log.debug(&quot;consulted {}&quot;, resource);</span>
+<span class="fc" id="L127">            }</span>
+<span class="fc" id="L128">            initialised = true;</span>
+<span class="fc" id="L129">            log.info(&quot;Prolog engine initialised: {} rule modules, {} ontology facts, 30 rules (R1â€“R30), &quot;</span>
+                            + &quot;DCG negotiation grammar loaded&quot;,
+<span class="fc" id="L131">                    RULE_MODULE_COUNT, ontologyFactCount());</span>
+        } finally {
+<span class="fc" id="L133">            lock.unlock();</span>
+        }
+<span class="fc" id="L135">    }</span>
+
+    public boolean isInitialised() {
+<span class="fc" id="L138">        return initialised;</span>
+    }
+
+    /** Goals dispatched to JPL so far (excludes cache hits); for cache assertions. */
+    public long queryCount() {
+<span class="fc" id="L143">        return queryCount.get();</span>
+    }
+
+    // --- Uncached goal execution -------------------------------------------
+
+    /** Runs {@code goal} for a yes/no answer. */
+    public boolean hasSolution(String goal) {
+<span class="fc" id="L150">        lock.lock();</span>
+        try {
+<span class="fc" id="L152">            queryCount.incrementAndGet();</span>
+<span class="fc" id="L153">            log.trace(&quot;hasSolution: {}&quot;, goal);</span>
+<span class="fc" id="L154">            return Query.hasSolution(goal);</span>
+        } finally {
+<span class="fc" id="L156">            lock.unlock();</span>
+        }
+    }
+
+    /** Runs {@code goal} for its first solution (variable bindings), if any. */
+    public Optional&lt;Map&lt;String, Term&gt;&gt; oneSolution(String goal) {
+<span class="fc" id="L162">        lock.lock();</span>
+        try {
+<span class="fc" id="L164">            queryCount.incrementAndGet();</span>
+<span class="fc" id="L165">            log.trace(&quot;oneSolution: {}&quot;, goal);</span>
+<span class="fc" id="L166">            return Optional.ofNullable(Query.oneSolution(goal));</span>
+        } finally {
+<span class="fc" id="L168">            lock.unlock();</span>
+        }
+    }
+
+    /** Runs {@code goal} for all solutions. */
+    public List&lt;Map&lt;String, Term&gt;&gt; allSolutions(String goal) {
+<span class="nc" id="L174">        lock.lock();</span>
+        try {
+<span class="nc" id="L176">            queryCount.incrementAndGet();</span>
+<span class="nc" id="L177">            log.trace(&quot;allSolutions: {}&quot;, goal);</span>
+<span class="nc" id="L178">            return List.of(Query.allSolutions(goal));</span>
+        } finally {
+<span class="nc" id="L180">            lock.unlock();</span>
+        }
+    }
+
+    // --- Cached goal execution (pure goals ONLY) ---------------------------
+
+    /**
+     * Cached yes/no for a PURE goal. The caller asserts the goal touches only the
+     * static fact base; the engine does not verify this.
+     */
+    public boolean hasSolutionCached(String goal) {
+<span class="fc" id="L191">        Boolean cached = hasSolutionCache.get(goal);</span>
+<span class="fc bfc" id="L192" title="All 2 branches covered.">        if (cached != null) {</span>
+<span class="fc" id="L193">            log.trace(&quot;hasSolution (cache hit): {}&quot;, goal);</span>
+<span class="fc" id="L194">            return cached;</span>
+        }
+<span class="fc" id="L196">        boolean result = hasSolution(goal);</span>
+<span class="fc" id="L197">        hasSolutionCache.put(goal, result);</span>
+<span class="fc" id="L198">        return result;</span>
+    }
+
+    /**
+     * Cached first-solution for a PURE goal. The caller asserts purity.
+     */
+    public Optional&lt;Map&lt;String, Term&gt;&gt; oneSolutionCached(String goal) {
+<span class="fc" id="L205">        Optional&lt;Map&lt;String, Term&gt;&gt; cached = oneSolutionCache.get(goal);</span>
+<span class="fc bfc" id="L206" title="All 2 branches covered.">        if (cached != null) {</span>
+<span class="fc" id="L207">            log.trace(&quot;oneSolution (cache hit): {}&quot;, goal);</span>
+<span class="fc" id="L208">            return cached;</span>
+        }
+<span class="fc" id="L210">        Optional&lt;Map&lt;String, Term&gt;&gt; result = oneSolution(goal);</span>
+<span class="fc" id="L211">        oneSolutionCache.put(goal, result);</span>
+<span class="fc" id="L212">        return result;</span>
+    }
+
+    public void clearCache() {
+<span class="fc" id="L216">        hasSolutionCache.clear();</span>
+<span class="fc" id="L217">        oneSolutionCache.clear();</span>
+<span class="fc" id="L218">    }</span>
+
+    // --- Atomic critical section + transient fact helpers ------------------
+
+    /**
+     * Runs {@code body} holding the engine lock, so a sequence of goals (e.g.
+     * assert â†’ query â†’ retract) executes as one atomic critical section.
+     */
+    public &lt;T&gt; T inLock(Supplier&lt;T&gt; body) {
+<span class="fc" id="L227">        lock.lock();</span>
+        try {
+<span class="fc" id="L229">            return body.get();</span>
+        } finally {
+<span class="fc" id="L231">            lock.unlock();</span>
+        }
+    }
+
+    /**
+     * Asserts a transient clause into {@code user:} (where the rules resolve it).
+     * For per-query vessel state only; the caller must retract it afterwards.
+     */
+    public void assertFact(String fact) {
+<span class="fc" id="L240">        lock.lock();</span>
+        try {
+<span class="fc" id="L242">            log.trace(&quot;assertz user:{}&quot;, fact);</span>
+<span class="pc bpc" id="L243" title="1 of 2 branches missed.">            if (!Query.hasSolution(&quot;assertz(user:&quot; + fact + &quot;)&quot;)) {</span>
+<span class="nc" id="L244">                throw new PrologException(&quot;assertz failed: user:&quot; + fact);</span>
+            }
+        } finally {
+<span class="fc" id="L247">            lock.unlock();</span>
+        }
+<span class="fc" id="L249">    }</span>
+
+    /** Retracts every {@code user:} clause matching {@code pattern} (never fails). */
+    public void retractAllMatching(String pattern) {
+<span class="fc" id="L253">        lock.lock();</span>
+        try {
+<span class="fc" id="L255">            log.trace(&quot;retractall user:{}&quot;, pattern);</span>
+<span class="fc" id="L256">            Query.hasSolution(&quot;retractall(user:&quot; + pattern + &quot;)&quot;);</span>
+        } finally {
+<span class="fc" id="L258">            lock.unlock();</span>
+        }
+<span class="fc" id="L260">    }</span>
+
+    // --- Internals ---------------------------------------------------------
+
+    private long ontologyFactCount() {
+<span class="fc" id="L265">        return countClauses(&quot;default(_, _, _)&quot;) + countClauses(&quot;instance_of(_, _)&quot;);</span>
+    }
+
+    private long countClauses(String pattern) {
+<span class="fc" id="L269">        Map&lt;String, Term&gt; sol = Query.oneSolution(&quot;aggregate_all(count, (&quot; + pattern + &quot;), N)&quot;);</span>
+<span class="pc bpc" id="L270" title="1 of 2 branches missed.">        return sol == null ? 0L : sol.get(&quot;N&quot;).longValue();</span>
+    }
+
+    /**
+     * Resolves a classpath {@code /prolog/*.pl} resource to an absolute,
+     * forward-slash path safe as a {@code consult/1} atom on Windows.
+     */
+    private static String resolveResource(String resource) {
+<span class="fc" id="L278">        URL url = PrologEngine.class.getResource(resource);</span>
+<span class="pc bpc" id="L279" title="1 of 2 branches missed.">        if (url == null) {</span>
+<span class="nc" id="L280">            throw new PrologException(&quot;resource not on classpath: &quot; + resource);</span>
+        }
+        try {
+<span class="fc" id="L283">            Path path = Paths.get(url.toURI());</span>
+<span class="pc bpc" id="L284" title="1 of 2 branches missed.">            if (!Files.exists(path)) {</span>
+<span class="nc" id="L285">                throw new PrologException(&quot;resource missing on disk: &quot; + path);</span>
+            }
+<span class="fc" id="L287">            return path.toString().replace('\\', '/');</span>
+<span class="nc" id="L288">        } catch (URISyntaxException e) {</span>
+<span class="nc" id="L289">            throw new PrologException(&quot;bad URI for &quot; + resource + &quot;: &quot; + url, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

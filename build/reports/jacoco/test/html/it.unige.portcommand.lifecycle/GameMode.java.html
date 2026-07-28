@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GameMode.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.lifecycle</a> &gt; <span class="el_source">GameMode.java</span></div><h1>GameMode.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.lifecycle;
+
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * The master game state (task 24). One instance-wide mode, owned by
+ * {@link GameLifecycle}; everything else observes it through the lifecycle
+ * events on the bus, never by polling this enum from another thread.
+ *
+ * &lt;p&gt;Legal transitions (planning/24 Â§24.1, incl. the May-audit LOADINGâ†’MENU
+ * edge for a failed/corrupt load â€” reachable once task 22 exists):
+ *
+ * &lt;pre&gt;
+ * MENU      â†’ LOADING
+ * LOADING   â†’ RUNNING | MENU
+ * RUNNING   â†’ PAUSED | GAME_OVER | LOADING
+ * PAUSED    â†’ RUNNING | GAME_OVER | LOADING
+ * GAME_OVER â†’ MENU | LOADING
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;The three {@code â†’ LOADING} edges from live/ended states were added by task 22
+ * (2026-07-17): Game â†’ Load replaces the running world, and loading the autosave after
+ * a game-over is the natural &quot;continue from where the run ended&quot; move.
+ */
+<span class="fc" id="L26">public enum GameMode {</span>
+<span class="fc" id="L27">    MENU,</span>
+<span class="fc" id="L28">    LOADING,</span>
+<span class="fc" id="L29">    RUNNING,</span>
+<span class="fc" id="L30">    PAUSED,</span>
+<span class="fc" id="L31">    GAME_OVER;</span>
+
+<span class="fc" id="L33">    private static final Map&lt;GameMode, Set&lt;GameMode&gt;&gt; LEGAL = Map.of(</span>
+<span class="fc" id="L34">            MENU, Set.of(LOADING),</span>
+<span class="fc" id="L35">            LOADING, Set.of(RUNNING, MENU),</span>
+<span class="fc" id="L36">            RUNNING, Set.of(PAUSED, GAME_OVER, LOADING),</span>
+<span class="fc" id="L37">            PAUSED, Set.of(RUNNING, GAME_OVER, LOADING),</span>
+<span class="fc" id="L38">            GAME_OVER, Set.of(MENU, LOADING));</span>
+
+    /** Whether {@code from â†’ to} is a legal mode transition. */
+    public static boolean canTransition(GameMode from, GameMode to) {
+<span class="fc" id="L42">        return LEGAL.get(from).contains(to);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

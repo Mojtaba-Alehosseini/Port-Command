@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>OntologyValidator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">OntologyValidator.java</span></div><h1>OntologyValidator.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Predicate;
+
+import it.unige.portcommand.prolog.PrologQueries;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Gate between a DCG-parsed {@link Frame} and an outgoing ACL message (planning/16 Step 16.7):
+ * a structured frame must name only entities that actually exist in the port ontology before it
+ * becomes a binding message. On failure {@link NLPPipeline} routes to
+ * {@link PipelineResult.NeedsClarification} rather than dispatching a malformed ACL.
+ *
+ * &lt;p&gt;Reads the ontology facts already consulted by {@code PrologEngine.init()} through the
+ * {@link PrologQueries} facade â€” it does NOT open a second copy of the OWL file, and it never
+ * touches raw JPL (INVARIANTS.md &quot;Prolog&quot;).
+ *
+ * &lt;p&gt;&lt;b&gt;Scope note.&lt;/b&gt; The grammar's own bounds already reject an out-of-range berth/duration at
+ * parse time (a named-but-invalid slot fails the parse instead of being silently dropped â€” see
+ * {@code dcg_negotiation.pl}'s mention-guards). This validator is the second, semantic line:
+ * it answers &quot;does {@code berth_3} exist in THIS ontology&quot;, which the grammar cannot know, and
+ * it keeps guarding the frame surface even as 16-M2 adds rules. Belt and braces, deliberately.
+ */
+public final class OntologyValidator implements Predicate&lt;Frame&gt; {
+
+<span class="fc" id="L29">    private static final Logger log = LoggerFactory.getLogger(OntologyValidator.class);</span>
+
+    /** PROJECT_DEFINITION.md Â§6.2 / the ontology's own bound: an offer runs 1..24 hours. */
+    static final long MIN_DURATION_HOURS = 1;
+    static final long MAX_DURATION_HOURS = 24;
+
+    private final WordNetResolver wordNet;
+
+    /** Uses the shipped WordNet resolver (its dictionary loads lazily, on the first vessel-class
+     * element that is not already an ontology term â€” so the common paths pay nothing). */
+    public OntologyValidator() {
+<span class="fc" id="L40">        this(new WordNetResolver());</span>
+<span class="fc" id="L41">    }</span>
+
+<span class="fc" id="L43">    public OntologyValidator(WordNetResolver wordNet) {</span>
+<span class="fc" id="L44">        this.wordNet = Objects.requireNonNull(wordNet, &quot;wordNet&quot;);</span>
+<span class="fc" id="L45">    }</span>
+
+    @Override
+    public boolean test(Frame frame) {
+<span class="fc" id="L49">        return validate(frame);</span>
+    }
+
+    /** @return true iff every ontology-bound element of {@code frame} names a real entity. */
+    public boolean validate(Frame frame) {
+<span class="fc bfc" id="L54" title="All 2 branches covered.">        if (frame == null) {</span>
+<span class="fc" id="L55">            return false;</span>
+        }
+<span class="fc bfc" id="L57" title="All 2 branches covered.">        return validBerth(frame)</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">                &amp;&amp; validVesselClass(frame)</span>
+<span class="fc bfc" id="L59" title="All 2 branches covered.">                &amp;&amp; validMoney(frame)</span>
+<span class="fc bfc" id="L60" title="All 2 branches covered.">                &amp;&amp; validDuration(frame);</span>
+    }
+
+    private static boolean validBerth(Frame frame) {
+<span class="fc" id="L64">        Object berth = frame.element(&quot;berth&quot;);</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">        if (berth == null) {</span>
+<span class="fc" id="L66">            return true; // absent is fine â€” the HarbourMaster picks a compatible berth (R8)</span>
+        }
+<span class="fc" id="L68">        boolean exists = PrologQueries.berthExists(String.valueOf(berth));</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">        if (!exists) {</span>
+<span class="fc" id="L70">            log.debug(&quot;frame rejected: no such berth in the ontology: {}&quot;, berth);</span>
+        }
+<span class="fc" id="L72">        return exists;</span>
+    }
+
+    /**
+     * planning/16 Step 16.7: &quot;any vessel-class element resolves to one of the five vessel_type
+     * classes (AFTER WordNet/Lesk normalisation)&quot;. So the player's word is normalised first â€”
+     * &quot;freighter&quot; is not an ontology class, but {@code cargo_vessel} is â€” and only then is the
+     * ontology asked. Skipping the normalisation would reject perfectly good English.
+     *
+     * &lt;p&gt;The ontology is tried FIRST as a short-circuit: a class the grammar already produced in
+     * canonical form ({@code tanker}) needs no lexical work, which is what keeps the WordNet
+     * dictionary from loading on the common path.
+     */
+    private boolean validVesselClass(Frame frame) {
+<span class="fc" id="L86">        Object vesselClass = frame.element(&quot;vessel_class&quot;);</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">        if (vesselClass == null) {</span>
+<span class="fc" id="L88">            return true;</span>
+        }
+<span class="fc" id="L90">        String raw = String.valueOf(vesselClass);</span>
+<span class="fc bfc" id="L91" title="All 2 branches covered.">        if (PrologQueries.vesselTypeExists(raw)) {</span>
+<span class="fc" id="L92">            return true;</span>
+        }
+<span class="fc" id="L94">        String resolved = wordNet.resolveToOntology(raw, &quot;noun&quot;);</span>
+<span class="fc" id="L95">        boolean exists = PrologQueries.vesselTypeExists(resolved);</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">        if (!exists) {</span>
+<span class="fc" id="L97">            log.debug(&quot;frame rejected: '{}' (WordNet -&gt; '{}') is not one of the five vessel types&quot;,</span>
+                    raw, resolved);
+        }
+<span class="fc" id="L100">        return exists;</span>
+    }
+
+    /** {@code money} decodes to {@code {amount=N, currency=EUR}} (see {@link Frame#fromProlog}). */
+    private static boolean validMoney(Frame frame) {
+<span class="fc" id="L105">        Object money = frame.element(&quot;money&quot;);</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">        if (money == null) {</span>
+<span class="fc" id="L107">            return true;</span>
+        }
+<span class="fc bfc" id="L109" title="All 2 branches covered.">        if (!(money instanceof Map&lt;?, ?&gt; map)) {</span>
+<span class="fc" id="L110">            log.debug(&quot;frame rejected: money element is not a decoded price: {}&quot;, money);</span>
+<span class="fc" id="L111">            return false;</span>
+        }
+<span class="fc" id="L113">        Object amount = map.get(&quot;amount&quot;);</span>
+<span class="fc bfc" id="L114" title="All 2 branches covered.">        if (!(amount instanceof Number number)) {</span>
+<span class="fc" id="L115">            log.debug(&quot;frame rejected: money.amount is not a number: {}&quot;, amount);</span>
+<span class="fc" id="L116">            return false;</span>
+        }
+<span class="fc bfc" id="L118" title="All 2 branches covered.">        boolean nonNegative = number.doubleValue() &gt;= 0;</span>
+<span class="fc bfc" id="L119" title="All 2 branches covered.">        if (!nonNegative) {</span>
+<span class="fc" id="L120">            log.debug(&quot;frame rejected: negative money amount: {}&quot;, amount);</span>
+        }
+<span class="fc" id="L122">        return nonNegative;</span>
+    }
+
+    private static boolean validDuration(Frame frame) {
+<span class="fc" id="L126">        Object duration = frame.element(&quot;duration&quot;);</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">        if (duration == null) {</span>
+<span class="fc" id="L128">            return true;</span>
+        }
+<span class="fc bfc" id="L130" title="All 2 branches covered.">        if (!(duration instanceof Number number)) {</span>
+<span class="fc" id="L131">            log.debug(&quot;frame rejected: duration is not a number: {}&quot;, duration);</span>
+<span class="fc" id="L132">            return false;</span>
+        }
+        // Integral hours only: a fractional duration is a grammar bug, not a roundable value.
+<span class="fc" id="L135">        double hours = number.doubleValue();</span>
+<span class="fc bfc" id="L136" title="All 6 branches covered.">        boolean valid = hours == Math.floor(hours)</span>
+                &amp;&amp; hours &gt;= MIN_DURATION_HOURS
+                &amp;&amp; hours &lt;= MAX_DURATION_HOURS;
+<span class="fc bfc" id="L139" title="All 2 branches covered.">        if (!valid) {</span>
+<span class="fc" id="L140">            log.debug(&quot;frame rejected: duration outside 1..24 whole hours: {}&quot;, duration);</span>
+        }
+<span class="fc" id="L142">        return valid;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

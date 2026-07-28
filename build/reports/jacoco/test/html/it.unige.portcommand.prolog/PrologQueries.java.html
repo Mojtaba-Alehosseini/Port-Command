@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PrologQueries.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.prolog</a> &gt; <span class="el_source">PrologQueries.java</span></div><h1>PrologQueries.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.prolog;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.jpl7.Term;
+
+import static it.unige.portcommand.prolog.PrologTerms.quoteAtom;
+
+/**
+ * Typed Java surface over the Prolog rule kernel â€” one method per binding
+ * decision an agent needs. Each method builds a goal string, runs it through the
+ * {@link PrologEngine} singleton, and decodes the result to a Java type.
+ *
+ * &lt;p&gt;&lt;b&gt;Transient-fact pattern.&lt;/b&gt; Queries about a specific vessel assert that
+ * vessel's facts under a unique id, run the rule, then retract â€” all inside one
+ * {@link PrologEngine#inLock} critical section so the assertâ†’queryâ†’retract triple
+ * is atomic and the fact base is left clean (the cleanup runs in a {@code finally}).
+ * Facts are asserted {@code user:}-qualified by the engine, matching where the
+ * rules live. Such queries are NEVER cached (they depend on asserted state).
+ *
+ * &lt;p&gt;&lt;b&gt;Caching.&lt;/b&gt; Only the genuinely pure lookups â€” {@link #priorityRank} and
+ * {@link #inspectionProbability} (static fact base, no asserts) â€” go through the
+ * engine cache. {@link #clearanceOk} is uncached because it reads the dynamic
+ * blacklist.
+ */
+public final class PrologQueries {
+
+    private PrologQueries() {
+    }
+
+    private static PrologEngine engine() {
+<span class="fc" id="L35">        return PrologEngine.getInstance();</span>
+    }
+
+    /** A fresh, collision-free temp-vessel atom (valid unquoted: lowercase hex). */
+    private static String tempVesselId() {
+<span class="fc" id="L40">        return &quot;tmp_v_&quot; + UUID.randomUUID().toString().replace(&quot;-&quot;, &quot;&quot;);</span>
+    }
+
+    // --- Compatibility (R1â€“R8) ---------------------------------------------
+
+    /**
+     * True iff {@code vesselType} can berth at {@code berthId}. Asserts the
+     * vessel's length/draft/tonnage and type, runs {@code compatible/2}, retracts.
+     * Beam is read from the ontology's per-type {@code default(VType, has_beam, _)}
+     * fact (not a parameter), so the deciding dimension here is draft vs. length.
+     */
+    public static boolean isCompatible(String berthId, String vesselType,
+                                       double draft, double length, int tonnage) {
+<span class="fc" id="L53">        PrologEngine e = engine();</span>
+<span class="fc" id="L54">        String v = tempVesselId();</span>
+<span class="fc" id="L55">        return e.inLock(() -&gt; {</span>
+            try {
+<span class="fc" id="L57">                assertVessel(e, v, vesselType, draft, length, tonnage);</span>
+<span class="fc" id="L58">                return e.hasSolution(&quot;compatible(&quot; + quoteAtom(berthId) + &quot;, &quot; + v + &quot;)&quot;);</span>
+            } finally {
+<span class="fc" id="L60">                retractVessel(e, v);</span>
+            }
+        });
+    }
+
+    /** Every berth compatible with {@code vesselType} (RULE R8). */
+    public static List&lt;String&gt; findCompatibleBerths(String vesselType,
+                                                    double draft, double length, int tonnage) {
+<span class="fc" id="L68">        PrologEngine e = engine();</span>
+<span class="fc" id="L69">        String v = tempVesselId();</span>
+<span class="fc" id="L70">        return e.inLock(() -&gt; {</span>
+            try {
+<span class="fc" id="L72">                assertVessel(e, v, vesselType, draft, length, tonnage);</span>
+<span class="fc" id="L73">                Optional&lt;Map&lt;String, Term&gt;&gt; sol =</span>
+<span class="fc" id="L74">                        e.oneSolution(&quot;find_compatible_berths(&quot; + v + &quot;, Berths)&quot;);</span>
+<span class="fc" id="L75">                return sol.map(m -&gt; PrologTerms.toStringList(m.get(&quot;Berths&quot;))).orElse(List.of());</span>
+            } finally {
+<span class="fc" id="L77">                retractVessel(e, v);</span>
+            }
+        });
+    }
+
+    // --- Escort (R9â€“R14) ---------------------------------------------------
+
+    /** Tugs required for {@code vesselType} at {@code tonnage} (RULE R11). */
+    public static int tugsRequired(String vesselType, int tonnage, double length) {
+<span class="fc" id="L86">        PrologEngine e = engine();</span>
+<span class="fc" id="L87">        String v = tempVesselId();</span>
+<span class="fc" id="L88">        return e.inLock(() -&gt; {</span>
+            try {
+<span class="fc" id="L90">                e.assertFact(&quot;default(&quot; + v + &quot;, has_tonnage, &quot; + tonnage + &quot;)&quot;);</span>
+<span class="fc" id="L91">                e.assertFact(&quot;default(&quot; + v + &quot;, has_length, &quot; + length + &quot;)&quot;);</span>
+<span class="fc" id="L92">                e.assertFact(&quot;instance_of(&quot; + v + &quot;, &quot; + quoteAtom(vesselType) + &quot;)&quot;);</span>
+<span class="fc" id="L93">                return e.oneSolution(&quot;tugs_required(&quot; + v + &quot;, N)&quot;)</span>
+<span class="fc" id="L94">                        .map(m -&gt; PrologTerms.toInt(m.get(&quot;N&quot;)))</span>
+<span class="pc" id="L95">                        .orElseThrow(() -&gt; new PrologException(</span>
+                                &quot;tugs_required produced no solution for &quot; + vesselType));
+            } finally {
+<span class="fc" id="L98">                retractVessel(e, v);</span>
+            }
+        });
+    }
+
+    /** Top-{@code n} tug ids by score, descending (RULE R13). */
+    public static List&lt;String&gt; selectBestBids(List&lt;TugBid&gt; bids, int n) {
+<span class="fc" id="L105">        PrologEngine e = engine();</span>
+<span class="fc" id="L106">        String list = PrologTerms.bidsToPrologList(bids);</span>
+<span class="fc" id="L107">        return e.oneSolution(&quot;best_n_bids(&quot; + list + &quot;, &quot; + n + &quot;, Winners)&quot;)</span>
+<span class="fc" id="L108">                .map(m -&gt; PrologTerms.toStringList(m.get(&quot;Winners&quot;)))</span>
+<span class="fc" id="L109">                .orElse(List.of());</span>
+    }
+
+    // --- Weather (R15â€“R20) -------------------------------------------------
+
+    /** True iff operating is safe for {@code vesselType} at the given wind/visibility (RULE R20). */
+    public static boolean operationSafe(String vesselType, double windKnots, String visibility) {
+<span class="fc" id="L116">        PrologEngine e = engine();</span>
+<span class="fc" id="L117">        String v = tempVesselId();</span>
+<span class="fc" id="L118">        return e.inLock(() -&gt; {</span>
+            try {
+<span class="fc" id="L120">                e.assertFact(&quot;instance_of(&quot; + v + &quot;, &quot; + quoteAtom(vesselType) + &quot;)&quot;);</span>
+<span class="fc" id="L121">                return e.hasSolution(</span>
+<span class="fc" id="L122">                        &quot;operation_safe(&quot; + v + &quot;, &quot; + windKnots + &quot;, &quot; + quoteAtom(visibility) + &quot;)&quot;);</span>
+            } finally {
+<span class="fc" id="L124">                e.retractAllMatching(&quot;instance_of(&quot; + v + &quot;, _)&quot;);</span>
+            }
+        });
+    }
+
+    /**
+     * True iff {@code swellMetres} is within the operating limit (RULE R17). Takes no
+     * vessel context â€” pure lookup against the static {@code max_swell/1} fact, so
+     * (unlike {@link #operationSafe}) it is cached.
+     */
+    public static boolean swellWithinLimit(double swellMetres) {
+<span class="fc" id="L135">        return engine().hasSolutionCached(&quot;swell_within_limit(&quot; + swellMetres + &quot;)&quot;);</span>
+    }
+
+    /**
+     * True iff {@code state} (the weather Markov state atom, e.g. {@code stormy}) is
+     * unsafe regardless of the numeric wind/visibility/swell readings (RULE R19). Pure
+     * lookup against a static fact â†’ cached.
+     */
+    public static boolean weatherStateUnsafe(String state) {
+<span class="fc" id="L144">        return engine().hasSolutionCached(&quot;weather_state_unsafe(&quot; + quoteAtom(state) + &quot;)&quot;);</span>
+    }
+
+    /**
+     * True iff {@code visibility} ({@code good|fair|poor}) is adequate for operations
+     * (RULE R16). Pure lookup against the static {@code visibility_adequate/1} facts â†’
+     * cached. Added by task 24 (adversarial review M1): {@code WeatherAlertPolicy} needs
+     * the visibility dimension of {@code operation_safe} as a standalone transition
+     * check, through the same rule the HarbourMaster's hold gate evaluates.
+     */
+    public static boolean visibilityOk(String visibility) {
+<span class="fc" id="L155">        return engine().hasSolutionCached(&quot;visibility_ok(&quot; + quoteAtom(visibility) + &quot;)&quot;);</span>
+    }
+
+    // --- Customs (R21â€“R24) -------------------------------------------------
+
+    /**
+     * True iff {@code vesselType}/{@code cargoClass} are both valid and the pair
+     * is not blacklisted (RULE R21). Uncached â€” reads the dynamic blacklist.
+     */
+    public static boolean clearanceOk(String vesselType, String cargoClass) {
+<span class="fc" id="L165">        return engine().hasSolution(</span>
+<span class="fc" id="L166">                &quot;clearance_ok(&quot; + quoteAtom(vesselType) + &quot;, &quot; + quoteAtom(cargoClass) + &quot;)&quot;);</span>
+    }
+
+    /**
+     * True iff {@code cargoClass} is a hazmat cargo. Goal {@code is_hazmat(&lt;cargoClass&gt;)};
+     * the predicate is owned by the ontology converter (port_ontology.pl), reading static
+     * {@code subclass_of/2} edges â€” pure, so cached.
+     */
+    public static boolean isHazmat(String cargoClass) {
+<span class="fc" id="L175">        return engine().hasSolutionCached(&quot;is_hazmat(&quot; + quoteAtom(cargoClass) + &quot;)&quot;);</span>
+    }
+
+    /** Inspection probability for the pair: 0.8 hazmat, 0.2 otherwise (RULE R23). Pure â†’ cached. */
+    public static double inspectionProbability(String vesselType, String cargoClass) {
+<span class="fc" id="L180">        return engine().oneSolutionCached(</span>
+<span class="fc" id="L181">                        &quot;inspection_probability(&quot; + quoteAtom(vesselType) + &quot;, &quot;</span>
+<span class="fc" id="L182">                                + quoteAtom(cargoClass) + &quot;, P)&quot;)</span>
+<span class="fc" id="L183">                .map(m -&gt; PrologTerms.toDouble(m.get(&quot;P&quot;)))</span>
+<span class="pc" id="L184">                .orElseThrow(() -&gt; new PrologException(</span>
+                        &quot;inspection_probability undefined for &quot; + vesselType + &quot;/&quot; + cargoClass));
+    }
+
+    // --- Ontology existence checks (task 16, for nlp.OntologyValidator) -----
+
+    /**
+     * True iff {@code berthId} names a berth instance in the ontology ({@code berth_1}..
+     * {@code berth_4}). Narrowed to berth subclasses so a vessel type can never answer it.
+     *
+     * &lt;p&gt;&lt;b&gt;Deliberately NOT cached&lt;/b&gt;, unlike the other read-only lookups here. {@code
+     * instance_of/2} is declared {@code dynamic} and is the very predicate {@link #isCompatible}
+     * / {@link #tugsRequired} / {@link #operationSafe} assert transient per-vessel facts under â€”
+     * so this goal reads a dynamic predicate, which INVARIANTS.md forbids caching. It happens to
+     * be safe today only because temp vessels live in a disjoint {@code tmp_v_&lt;uuid&gt;} namespace
+     * and the grammar only ever emits {@code berth_1}..{@code berth_4}; that is a coincidence of
+     * two unrelated conventions, not a guarantee, and it would break silently the day either
+     * changes. This runs once per typed chat line, so the cache would buy nothing measurable.
+     */
+    public static boolean berthExists(String berthId) {
+<span class="fc" id="L204">        return engine().hasSolution(</span>
+<span class="fc" id="L205">                &quot;( instance_of(&quot; + quoteAtom(berthId) + &quot;, C), subclass_of(C, berth) )&quot;);</span>
+    }
+
+    /**
+     * True iff {@code vesselType} is one of the five ontology vessel types. {@code vessel_type/1}
+     * is a static generated fact (never dynamic, never asserted at runtime), so this one IS a
+     * genuinely pure goal â†’ cached, same as {@link #isHazmat}.
+     */
+    public static boolean vesselTypeExists(String vesselType) {
+<span class="fc" id="L214">        return engine().hasSolutionCached(&quot;vessel_type(&quot; + quoteAtom(vesselType) + &quot;)&quot;);</span>
+    }
+
+    // --- Priority (R25â€“R30) ------------------------------------------------
+
+    /** Rank of a priority class atom: 1 (emergency) â€¦ 6 (maintenance) (RULE R25). Pure â†’ cached. */
+    public static int priorityRank(String vesselClassAtom) {
+<span class="fc" id="L221">        return engine().oneSolutionCached(&quot;priority_rank(&quot; + quoteAtom(vesselClassAtom) + &quot;, N)&quot;)</span>
+<span class="fc" id="L222">                .map(m -&gt; PrologTerms.toInt(m.get(&quot;N&quot;)))</span>
+<span class="fc" id="L223">                .orElseThrow(() -&gt; new PrologException(</span>
+                        &quot;priority_rank undefined for class &quot; + vesselClassAtom));
+    }
+
+    // --- Shared transient-fact helpers -------------------------------------
+
+    private static void assertVessel(PrologEngine e, String v, String vesselType,
+                                     double draft, double length, int tonnage) {
+<span class="fc" id="L231">        e.assertFact(&quot;default(&quot; + v + &quot;, has_draft, &quot; + draft + &quot;)&quot;);</span>
+<span class="fc" id="L232">        e.assertFact(&quot;default(&quot; + v + &quot;, has_length, &quot; + length + &quot;)&quot;);</span>
+<span class="fc" id="L233">        e.assertFact(&quot;default(&quot; + v + &quot;, has_tonnage, &quot; + tonnage + &quot;)&quot;);</span>
+<span class="fc" id="L234">        e.assertFact(&quot;instance_of(&quot; + v + &quot;, &quot; + quoteAtom(vesselType) + &quot;)&quot;);</span>
+<span class="fc" id="L235">    }</span>
+
+    private static void retractVessel(PrologEngine e, String v) {
+<span class="fc" id="L238">        e.retractAllMatching(&quot;default(&quot; + v + &quot;, _, _)&quot;);</span>
+<span class="fc" id="L239">        e.retractAllMatching(&quot;instance_of(&quot; + v + &quot;, _)&quot;);</span>
+<span class="fc" id="L240">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

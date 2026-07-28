@@ -1,58 +1,292 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="it.unige.portcommand.agents.WalkInVesselAgentIT" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-07-14T22:43:15" hostname="MOJI" time="3.588">
+<testsuite name="it.unige.portcommand.agents.WalkInVesselAgentIT" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:18:31" hostname="MOJI" time="22.1">
   <properties/>
-  <testcase name="walkInNegotiatesCounterThenAcceptWithoutLeakingBeliefs()" classname="it.unige.portcommand.agents.WalkInVesselAgentIT" time="3.588"/>
-  <system-out><![CDATA[00:43:16.459 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
-00:43:16.459 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent bootstrap_probe spawned (class=BootstrapProbeAgent)
-00:43:16.480 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
-00:43:16.707 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30)
-00:43:16.707 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
-00:43:17.990 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent fake_hm spawned (class=CounterOfferHarbourMaster)
-00:43:18.033 [Test worker] [] INFO  i.u.p.bootstrap.JadeAgentSpawner - Agent vessel_w001 spawned (class=WalkInVesselAgent)
-00:43:18.033 [vessel_w001] [vessel_w001] INFO  i.u.p.agents.WalkInVesselAgent - Starting agent vessel_w001
-00:43:18.033 [vessel_w001] [vessel_w001] INFO  i.u.p.agents.WalkInVesselAgent - DF registered: type='vessel' name='vessel_w001'
-00:43:18.033 [vessel_w001] [vessel_w001] INFO  i.u.p.agents.WalkInVesselAgent - vessel_w001 arrived (walk-in, NEUTRAL) -> opening proposal
-00:43:18.095 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.OpeningProposalBehaviour - vessel_w001 opened at 2270.6639933301 (13h) -> harbour-master
-00:43:18.129 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w001: COUNTER at 6000.0 (round 2)
-00:43:18.136 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w001: ACCEPT at 5500.0 (10h) -> closing deal
-00:43:18.147 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.DealClosedBehaviour - vessel_w001: deal closed at 5500.0 (10h) -> CONFIRM + recorded + awaiting berth
-00:43:19.416 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+  <testcase name="walkInWithRealEngine_withdrawsOverPricedWhenPlayerDemandsAboveItsBudget()" classname="it.unige.portcommand.agents.WalkInVesselAgentIT" time="3.962"/>
+  <testcase name="walkInWithRealEngine_withdrawsAsDurationFailureWhenPlayerNeverGrantsTheFloor()" classname="it.unige.portcommand.agents.WalkInVesselAgentIT" time="3.028"/>
+  <testcase name="walkInLeavesWithPlayerRefusedWhenThePlayerRejects()" classname="it.unige.portcommand.agents.WalkInVesselAgentIT" time="3.029"/>
+  <testcase name="walkInWithRealEngine_eventuallyAcceptsAnInBandCounterOffer()" classname="it.unige.portcommand.agents.WalkInVesselAgentIT" time="3.023"/>
+  <testcase name="walkInNegotiatesCounterThenAcceptWithoutLeakingBeliefs()" classname="it.unige.portcommand.agents.WalkInVesselAgentIT" time="3.015"/>
+  <testcase name="walkInClosesAtItsStandingHoursWhenThePlayerNamesNoDuration()" classname="it.unige.portcommand.agents.WalkInVesselAgentIT" time="3.018"/>
+  <testcase name="walkInRefusesAPricelessCounterInsteadOfClosingAtZero()" classname="it.unige.portcommand.agents.WalkInVesselAgentIT" time="3.019"/>
+  <system-out><![CDATA[00:18:32.106 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:18:32.143 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:18:32.652 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+00:18:32.667 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:18:32.889 [vessel_w011] [vessel_w011] INFO  i.u.p.agents.WalkInVesselAgent - vessel_w011 arrived (walk-in, AGGRESSIVE) -> opening proposal
+00:18:32.972 [vessel_w011] [vessel_w011] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w011: COUNTER at 1555.0 for 10h (round 2, conceding_toward_ceiling)
+00:18:32.975 [vessel_w011] [vessel_w011] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w011: COUNTER at 1611.0 for 10h (round 3, conceding_toward_ceiling)
+00:18:32.977 [vessel_w011] [vessel_w011] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w011: COUNTER at 1662.0 for 10h (round 4, conceding_toward_ceiling)
+00:18:34.986 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:18:35.022 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:18:35.024 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:18:35.024 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:18:35.024 [vessel_w012] [vessel_w012] INFO  i.u.p.agents.WalkInVesselAgent - vessel_w012 arrived (walk-in, NEUTRAL) -> opening proposal
+00:18:35.037 [vessel_w012] [vessel_w012] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w012: COUNTER at 1824.0 for 7h (round 2, too_short)
+00:18:35.039 [vessel_w012] [vessel_w012] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w012: COUNTER at 1824.0 for 7h (round 3, too_short)
+00:18:35.040 [vessel_w012] [vessel_w012] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w012: COUNTER at 1824.0 for 7h (round 4, too_short)
+00:18:38.015 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:18:38.037 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:18:38.037 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:18:38.037 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:18:39.552 [vessel_w020] [vessel_w020] INFO  i.u.p.agents.WalkInVesselAgent - vessel_w020 arrived (walk-in, NEUTRAL) -> opening proposal
+00:18:39.568 [vessel_w020] [vessel_w020] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w020: player refused/withdrew -> leaving
+00:18:41.044 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:18:41.079 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:18:41.079 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:18:41.088 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:18:41.091 [vessel_w010] [vessel_w010] INFO  i.u.p.agents.WalkInVesselAgent - vessel_w010 arrived (walk-in, NEUTRAL) -> opening proposal
+00:18:41.099 [vessel_w010] [vessel_w010] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w010: ACCEPT at 1913.407025467423 (12h) -> closing deal
+00:18:41.115 [vessel_w010] [vessel_w010] INFO  i.u.p.b.n.DealClosedBehaviour - vessel_w010: deal closed at 1913.407025467423 (12h) -> CONFIRM + recorded + awaiting berth
+00:18:44.069 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:18:44.096 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:18:44.096 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:18:44.101 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:18:44.116 [vessel_w001] [vessel_w001] INFO  i.u.p.agents.WalkInVesselAgent - vessel_w001 arrived (walk-in, NEUTRAL) -> opening proposal
+00:18:44.139 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w001: COUNTER at 6000.0 for 10h (round 2, test-counter)
+00:18:44.142 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w001: ACCEPT at 5500.0 (10h) -> closing deal
+00:18:44.143 [vessel_w001] [vessel_w001] INFO  i.u.p.b.n.DealClosedBehaviour - vessel_w001: deal closed at 5500.0 (10h) -> CONFIRM + recorded + awaiting berth
+00:18:47.085 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:18:47.117 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:18:47.117 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:18:47.117 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:18:47.132 [vessel_w002] [vessel_w002] INFO  i.u.p.agents.WalkInVesselAgent - vessel_w002 arrived (walk-in, NEUTRAL) -> opening proposal
+00:18:47.137 [vessel_w002] [vessel_w002] INFO  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w002: ACCEPT at 5500.0 (14h) -> closing deal
+00:18:47.138 [vessel_w002] [vessel_w002] INFO  i.u.p.b.n.DealClosedBehaviour - vessel_w002: deal closed at 5500.0 (14h) -> CONFIRM + recorded + awaiting berth
+00:18:50.104 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:18:50.132 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:18:50.134 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:18:50.139 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:18:50.139 [vessel_w003] [vessel_w003] INFO  i.u.p.agents.WalkInVesselAgent - vessel_w003 arrived (walk-in, NEUTRAL) -> opening proposal
+00:18:50.148 [vessel_w003] [vessel_w003] WARN  i.u.p.b.n.EvaluateCounterOfferBehaviour - vessel_w003: REFUSE counter (absent/non-positive price in {"hours":8,"berth_id":"berth_1"})
+00:18:53.124 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
 ]]></system-out>
-  <system-err><![CDATA[Jul 15, 2026 12:43:16 AM jade.core.Runtime beginContainer
+  <system-err><![CDATA[Jul 28, 2026 12:18:31 AM jade.core.Runtime beginContainer
 INFO: ----------------------------------
     This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
     downloaded in Open Source, under LGPL restrictions,
     at http://jade.tilab.com/
 ----------------------------------------
-Jul 15, 2026 12:43:16 AM jade.imtp.leap.LEAPIMTPManager initialize
+Jul 28, 2026 12:18:31 AM jade.imtp.leap.LEAPIMTPManager initialize
 INFO: Listening for intra-platform commands on address:
-- jicp://10.205.181.230:18099
+- jicp://10.158.73.230:18099
 
-Jul 15, 2026 12:43:16 AM jade.core.BaseService init
+Jul 28, 2026 12:18:31 AM jade.core.BaseService init
 INFO: Service jade.core.management.AgentManagement initialized
-Jul 15, 2026 12:43:16 AM jade.core.BaseService init
+Jul 28, 2026 12:18:31 AM jade.core.BaseService init
 INFO: Service jade.core.messaging.Messaging initialized
-Jul 15, 2026 12:43:16 AM jade.core.BaseService init
+Jul 28, 2026 12:18:31 AM jade.core.BaseService init
 INFO: Service jade.core.resource.ResourceManagement initialized
-Jul 15, 2026 12:43:16 AM jade.core.BaseService init
+Jul 28, 2026 12:18:31 AM jade.core.BaseService init
 INFO: Service jade.core.mobility.AgentMobility initialized
-Jul 15, 2026 12:43:16 AM jade.core.BaseService init
+Jul 28, 2026 12:18:31 AM jade.core.BaseService init
 INFO: Service jade.core.event.Notification initialized
-Jul 15, 2026 12:43:16 AM jade.mtp.http.HTTPServer <init>
+Jul 28, 2026 12:18:32 AM jade.mtp.http.HTTPServer <init>
 INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
-Jul 15, 2026 12:43:16 AM jade.core.messaging.MessagingService boot
+Jul 28, 2026 12:18:32 AM jade.core.messaging.MessagingService boot
 INFO: MTP addresses:
 http://Moji:7778/acc
-Jul 15, 2026 12:43:16 AM jade.core.AgentContainerImpl joinPlatform
+Jul 28, 2026 12:18:32 AM jade.core.AgentContainerImpl joinPlatform
 INFO: --------------------------------------
-Agent container Main-Container@10.205.181.230 is ready.
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:18:34 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:18:35 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:18:35 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@ea0c99c[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:18:35 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:18:35 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:18:35 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:18:35 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:18:35 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:18:35 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:18:35 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:18:35 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:18:35 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:18:38 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:18:38 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:18:38 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:18:38 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:18:38 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:18:38 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:18:38 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:18:38 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:18:38 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:18:38 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:18:38 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
 --------------------------------------------
 Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
 WARNING: A Java agent has been loaded dynamically (C:\Users\aleho\.gradle\caches\modules-2\files-2.1\net.bytebuddy\byte-buddy-agent\1.15.4\58e850dde88f3cf20f41f659440bef33f6c4fe02\byte-buddy-agent-1.15.4.jar)
 WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
 WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
 WARNING: Dynamic loading of agents will be disallowed by default in a future release
-Jul 15, 2026 12:43:19 AM jade.core.messaging.MessageManager shutdown
+Jul 28, 2026 12:18:41 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:18:41 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:18:41 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@5b395ee[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:18:41 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:18:41 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:18:41 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:18:41 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:18:41 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:18:41 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:18:41 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:18:41 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:18:41 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:18:44 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:18:44 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:18:44 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:18:44 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:18:44 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:18:44 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:18:44 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:18:44 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:18:44 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:18:44 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:18:44 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:18:47 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:18:47 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:18:47 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@5c3ad125[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:18:47 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:18:47 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:18:47 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:18:47 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:18:47 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:18:47 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:18:47 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:18:47 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:18:47 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:18:50 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:18:50 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:18:50 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:18:50 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:18:50 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:18:50 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:18:50 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:18:50 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:18:50 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:18:50 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:18:50 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:18:53 AM jade.core.messaging.MessageManager shutdown
 INFO: MessageManager shutting down ...
 ]]></system-err>
 </testsuite>

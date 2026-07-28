@@ -64,6 +64,16 @@ public final class PolicyParser {
         return rule;
     }
 
+    /**
+     * Parse WITHOUT publishing (task 22): the save/load restore re-parses persisted trigger
+     * strings and registers the rules directly into the registry — routing them through
+     * {@code PolicyParsedEvent} would race the freshly respawned Assistant's ASYNC
+     * subscribe-once (rule lost if the parse wins, doubled if both paths land).
+     */
+    public Optional<PolicyRule> parseQuietly(String text) {
+        return tryParse(text);
+    }
+
     private Optional<PolicyRule> tryParse(String text) {
         if (text == null) {
             return Optional.empty();

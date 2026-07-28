@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Main.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand</a> &gt; <span class="el_source">Main.java</span></div><h1>Main.java</h1><pre class="source lang-java linenums">package it.unige.portcommand;
+
+import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
+
+import javax.swing.SwingUtilities;
+
+import it.unige.portcommand.bootstrap.BootstrapConfig;
+import it.unige.portcommand.bootstrap.JadeBootstrap;
+import it.unige.portcommand.gui.MainWindow;
+import it.unige.portcommand.harbourmaster.financial.Leaderboard;
+import it.unige.portcommand.persistence.GameSession;
+import it.unige.portcommand.persistence.SaveLoadManager;
+import it.unige.portcommand.smoke.SmokeRunner;
+
+/**
+ * Application entry point. Builds the {@link GameSession} (which owns the JADE boot, the
+ * fleet, the game lifecycle and â€” task 22 â€” save/load), starts a fresh run or loads a
+ * save, and blocks; the shutdown hook tears JADE down cleanly on Ctrl+C.
+ *
+ * &lt;p&gt;Flags: {@code --gui} opens the Swing shell (task 17); {@code --day-length
+ * &lt;seconds&gt;} overrides how many real seconds one game day lasts (task 24 â€” maps to the
+ * {@code simclock.real.seconds.per.day} system property that
+ * {@link BootstrapConfig#fromSystemProperties()} reads; default 300; when passed it also
+ * beats any scenario pacing override); {@code --load &lt;path&gt;} (task 22) boots FROM a save
+ * file instead of starting fresh; {@code --scenario &lt;key&gt;} (task 23) boots one of the 3
+ * scripted scenarios ({@code tutorial | busy_day | storm}) â€” mutually exclusive with
+ * {@code --load}; {@code --smoke} (task 26) runs {@link SmokeRunner#runAll()} headlessly and
+ * exits with its failure count instead of starting a session at all.
+ */
+public final class Main {
+
+    private Main() {
+    }
+
+    public static void main(String[] args) throws Exception {
+<span class="nc" id="L38">        List&lt;String&gt; argList = Arrays.asList(args);</span>
+        // Task 26: --smoke owns the whole process â€” it boots and tears down three worlds of its
+        // own, so it must run BEFORE any of the normal session wiring below.
+<span class="nc bnc" id="L41" title="All 2 branches missed.">        if (argList.contains(&quot;--smoke&quot;)) {</span>
+<span class="nc bnc" id="L42" title="All 2 branches missed.">            System.exit(SmokeRunner.runAll() == 0 ? 0 : 1);</span>
+        }
+<span class="nc" id="L44">        boolean guiRequested = argList.contains(&quot;--gui&quot;);</span>
+<span class="nc" id="L45">        applyDayLengthOverride(argList);</span>
+<span class="nc" id="L46">        Path loadPath = loadPathArg(argList);</span>
+<span class="nc" id="L47">        String scenarioKey = scenarioArg(argList);</span>
+<span class="nc bnc" id="L48" title="All 4 branches missed.">        if (loadPath != null &amp;&amp; scenarioKey != null) {</span>
+<span class="nc" id="L49">            throw new IllegalArgumentException(&quot;--load and --scenario are mutually exclusive&quot;);</span>
+        }
+
+<span class="nc" id="L52">        BootstrapConfig cfg = BootstrapConfig.fromSystemProperties();</span>
+<span class="nc" id="L53">        JadeBootstrap boot = new JadeBootstrap();</span>
+<span class="nc" id="L54">        Runtime.getRuntime().addShutdownHook(new Thread(boot::shutdown, &quot;JadeShutdownHook&quot;));</span>
+
+        // Task 24 wiring, now session-owned: one shared Leaderboard instance backs the
+        // guard's game-over upsert and the GUI dialogs (two instances would read/write the
+        // same scores.json with diverging in-memory views).
+<span class="nc" id="L59">        Leaderboard leaderboard = new Leaderboard();</span>
+<span class="nc" id="L60">        GameSession session = new GameSession(boot, cfg, new SaveLoadManager(), leaderboard);</span>
+<span class="nc bnc" id="L61" title="All 2 branches missed.">        if (loadPath != null) {</span>
+<span class="nc" id="L62">            session.loadGame(loadPath); // SchemaVersion/CorruptSave surface on the console</span>
+<span class="nc bnc" id="L63" title="All 2 branches missed.">        } else if (scenarioKey != null) {</span>
+<span class="nc" id="L64">            session.startScenario(scenarioKey); // task 23 â€” headless-testable scenario boot</span>
+        } else {
+            // Sandbox boot (in-game New Gameâ€¦ opens the scenario dialog; task 23).
+<span class="nc" id="L67">            session.startNewGame();</span>
+        }
+
+<span class="nc bnc" id="L70" title="All 2 branches missed.">        if (guiRequested) {</span>
+<span class="nc" id="L71">            SwingUtilities.invokeLater(() -&gt; new MainWindow(boot.getEventBus(), boot.getPortStateArtifact(),</span>
+<span class="nc" id="L72">                    boot.getNlpPipeline()::processChatInput, session.lifecycle(), leaderboard,</span>
+<span class="nc" id="L73">                    session, boot::shutdown)</span>
+<span class="nc" id="L74">                    .setVisible(true));</span>
+        }
+
+        // Block forever; the shutdown hook handles teardown on Ctrl+C / SIGTERM. The GUI's
+        // window-close handler (MainWindow) calls System.exit directly, since this join()
+        // would otherwise never return control to let the JVM exit naturally.
+<span class="nc" id="L80">        Thread.currentThread().join();</span>
+<span class="nc" id="L81">    }</span>
+
+    /**
+     * {@code --day-length &lt;seconds&gt;} â†’ the {@code simclock.real.seconds.per.day} system
+     * property, BEFORE {@link BootstrapConfig#fromSystemProperties()} reads it. Values
+     * below the Settings range (180â€“600) are allowed on purpose: integration runs use
+     * e.g. 5 s/day to reach midnight quickly (planning/24 Â§24.8).
+     */
+    private static void applyDayLengthOverride(List&lt;String&gt; argList) {
+<span class="nc" id="L90">        int at = argList.indexOf(&quot;--day-length&quot;);</span>
+<span class="nc bnc" id="L91" title="All 2 branches missed.">        if (at &lt; 0) {</span>
+<span class="nc" id="L92">            return;</span>
+        }
+<span class="nc bnc" id="L94" title="All 2 branches missed.">        if (at + 1 &gt;= argList.size()) {</span>
+<span class="nc" id="L95">            throw new IllegalArgumentException(&quot;--day-length requires a value (real seconds per game day)&quot;);</span>
+        }
+<span class="nc" id="L97">        long seconds = Long.parseLong(argList.get(at + 1));</span>
+<span class="nc bnc" id="L98" title="All 2 branches missed.">        if (seconds &lt;= 0) {</span>
+<span class="nc" id="L99">            throw new IllegalArgumentException(&quot;--day-length must be &gt; 0, got &quot; + seconds);</span>
+        }
+<span class="nc" id="L101">        System.setProperty(&quot;simclock.real.seconds.per.day&quot;, String.valueOf(seconds));</span>
+        // Task 23: mark the override EXPLICIT â€” scenario pacing defers to a player-stated
+        // day length (GameSession.resolveDayLength), but must not treat the ambient
+        // default as one.
+<span class="nc" id="L105">        System.setProperty(&quot;simclock.day.length.explicit&quot;, &quot;true&quot;);</span>
+<span class="nc" id="L106">    }</span>
+
+    /** {@code --load &lt;path&gt;} â†’ the save file to boot from, or null for a fresh game (task 22). */
+    private static Path loadPathArg(List&lt;String&gt; argList) {
+<span class="nc" id="L110">        int at = argList.indexOf(&quot;--load&quot;);</span>
+<span class="nc bnc" id="L111" title="All 2 branches missed.">        if (at &lt; 0) {</span>
+<span class="nc" id="L112">            return null;</span>
+        }
+<span class="nc bnc" id="L114" title="All 2 branches missed.">        if (at + 1 &gt;= argList.size()) {</span>
+<span class="nc" id="L115">            throw new IllegalArgumentException(&quot;--load requires a path (e.g. save/autosave.json)&quot;);</span>
+        }
+<span class="nc" id="L117">        return Path.of(argList.get(at + 1));</span>
+    }
+
+    /** {@code --scenario &lt;key&gt;} â†’ the scripted scenario to boot (task 23), or null. */
+    private static String scenarioArg(List&lt;String&gt; argList) {
+<span class="nc" id="L122">        int at = argList.indexOf(&quot;--scenario&quot;);</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">        if (at &lt; 0) {</span>
+<span class="nc" id="L124">            return null;</span>
+        }
+<span class="nc bnc" id="L126" title="All 2 branches missed.">        if (at + 1 &gt;= argList.size()) {</span>
+<span class="nc" id="L127">            throw new IllegalArgumentException(</span>
+                    &quot;--scenario requires a key: tutorial | busy_day | storm&quot;);
+        }
+<span class="nc" id="L130">        return argList.get(at + 1);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

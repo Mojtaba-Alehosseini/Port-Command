@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Leaderboard.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.harbourmaster.financial</a> &gt; <span class="el_source">Leaderboard.java</span></div><h1>Leaderboard.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.harbourmaster.financial;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The top-5 finished runs, persisted to {@code save/scores.json} (task 20 owns this class;
+ * task 22 adds only a serialization round-trip test â€” CANONICAL_FINDINGS fix 5).
+ *
+ * &lt;p&gt;Deliberately a SEPARATE file from {@code save/savegame.json} (planning/22 &quot;Hard constraints&quot;):
+ * the leaderboard survives across runs and saves, so folding it into a save slot would lose it on
+ * a fresh game.
+ *
+ * &lt;p&gt;Ranked by {@code finalWallet} descending, ties broken by the earlier {@code finalDay} (a
+ * player who reached the same money in fewer days played better) and then by {@code recordedOn}.
+ * That is &lt;em&gt;near&lt;/em&gt;-total, not total: three runs identical in wallet, day AND date still
+ * compare equal. Round-trip stability holds anyway because {@code List.sort} is guaranteed stable,
+ * so equal entries keep their insertion order through a save/load â€” but do not weaken the
+ * tie-breakers on the assumption that the comparator alone carries it, or two equal scores will
+ * swap places between runs and make task 22's round-trip test flake.
+ *
+ * &lt;h2&gt;Threading / IO&lt;/h2&gt;
+ * Mutation is {@code synchronized}: {@link #recordIfHighScore} read-modify-writes both the
+ * in-memory list and the file. A write failure is logged, never thrown â€” losing a leaderboard row
+ * must not take down a game that is otherwise fine (the run itself is already over). A corrupt or
+ * absent file loads as an empty board, same rationale.
+ */
+public final class Leaderboard {
+
+<span class="fc" id="L41">    private static final Logger log = LoggerFactory.getLogger(Leaderboard.class);</span>
+
+    /** planning/20 &quot;Hard constraints&quot;: top 5, in {@code save/scores.json}. */
+    public static final int MAX_ENTRIES = 5;
+<span class="fc" id="L45">    private static final Path DEFAULT_PATH = Path.of(&quot;save&quot;, &quot;scores.json&quot;);</span>
+
+<span class="fc" id="L47">    private static final Comparator&lt;ScoreRecord&gt; RANKING = Comparator</span>
+<span class="fc" id="L48">            .comparingDouble(ScoreRecord::finalWallet).reversed()</span>
+<span class="fc" id="L49">            .thenComparingInt(ScoreRecord::finalDay)</span>
+<span class="fc" id="L50">            .thenComparing(ScoreRecord::recordedOn);</span>
+
+<span class="fc" id="L52">    private final ObjectMapper mapper = new ObjectMapper();</span>
+    private final Path file;
+    private final List&lt;ScoreRecord&gt; entries;
+
+    /** Production: {@code save/scores.json} relative to the working directory. */
+    public Leaderboard() {
+<span class="nc" id="L58">        this(DEFAULT_PATH);</span>
+<span class="nc" id="L59">    }</span>
+
+    /** Test seam: an explicit path (a {@code @TempDir}), so tests never touch the real board. */
+<span class="fc" id="L62">    public Leaderboard(Path file) {</span>
+<span class="fc" id="L63">        this.file = Objects.requireNonNull(file, &quot;file&quot;);</span>
+<span class="fc" id="L64">        this.entries = load();</span>
+<span class="fc" id="L65">    }</span>
+
+    /**
+     * Offers a finished run to the board. Appends, re-ranks, truncates to {@link #MAX_ENTRIES},
+     * and persists â€” so a run that does not make the cut is simply dropped.
+     *
+     * @return {@code true} if the run made the top 5
+     */
+    public synchronized boolean recordIfHighScore(double finalWallet, int finalDay, double finalReputation,
+                                                   LocalDate date) {
+<span class="fc" id="L75">        ScoreRecord candidate = new ScoreRecord(finalWallet, finalDay, finalReputation,</span>
+<span class="fc" id="L76">                Objects.requireNonNull(date, &quot;date&quot;).toString());</span>
+<span class="fc" id="L77">        List&lt;ScoreRecord&gt; merged = new ArrayList&lt;&gt;(entries);</span>
+<span class="fc" id="L78">        merged.add(candidate);</span>
+<span class="fc" id="L79">        merged.sort(RANKING);</span>
+        // Identity, not indexOf: ScoreRecord is a record, so indexOf uses VALUE equality and would
+        // find the first EQUAL entry rather than this candidate â€” reporting &quot;you made the board&quot;
+        // for a run that was actually truncated away (e.g. a 6th identical score, or one tying the
+        // worst entry exactly). Found by the task-20 adversarial review, which reproduced both.
+<span class="fc bfc" id="L84" title="All 2 branches covered.">        boolean made = indexOfIdentity(merged, candidate) &lt; MAX_ENTRIES;</span>
+<span class="fc bfc" id="L85" title="All 2 branches covered.">        if (merged.size() &gt; MAX_ENTRIES) {</span>
+<span class="fc" id="L86">            merged.subList(MAX_ENTRIES, merged.size()).clear();</span>
+        }
+<span class="fc" id="L88">        entries.clear();</span>
+<span class="fc" id="L89">        entries.addAll(merged);</span>
+<span class="fc" id="L90">        persist();</span>
+<span class="fc" id="L91">        return made;</span>
+    }
+
+    /** The board, best first. Snapshot. */
+    public synchronized List&lt;ScoreRecord&gt; top5() {
+<span class="fc" id="L96">        return List.copyOf(entries);</span>
+    }
+
+    /** Position of the exact object {@code target}, by reference â€” never by {@code equals}. */
+    private static int indexOfIdentity(List&lt;ScoreRecord&gt; list, ScoreRecord target) {
+<span class="pc bpc" id="L101" title="1 of 2 branches missed.">        for (int i = 0; i &lt; list.size(); i++) {</span>
+<span class="fc bfc" id="L102" title="All 2 branches covered.">            if (list.get(i) == target) {</span>
+<span class="fc" id="L103">                return i;</span>
+            }
+        }
+<span class="nc" id="L106">        return Integer.MAX_VALUE;</span>
+    }
+
+    private List&lt;ScoreRecord&gt; load() {
+<span class="fc bfc" id="L110" title="All 2 branches covered.">        if (!Files.exists(file)) {</span>
+<span class="fc" id="L111">            return new ArrayList&lt;&gt;();</span>
+        }
+        try {
+<span class="fc" id="L114">            List&lt;ScoreRecord&gt; read = mapper.readValue(Files.readAllBytes(file),</span>
+<span class="fc" id="L115">                    new TypeReference&lt;List&lt;ScoreRecord&gt;&gt;() { });</span>
+<span class="fc" id="L116">            List&lt;ScoreRecord&gt; sorted = new ArrayList&lt;&gt;(read);</span>
+<span class="fc" id="L117">            sorted.sort(RANKING);</span>
+<span class="fc bfc" id="L118" title="All 2 branches covered.">            if (sorted.size() &gt; MAX_ENTRIES) {</span>
+<span class="fc" id="L119">                sorted.subList(MAX_ENTRIES, sorted.size()).clear();</span>
+            }
+<span class="fc" id="L121">            return sorted;</span>
+<span class="fc" id="L122">        } catch (IOException | RuntimeException e) {</span>
+<span class="fc" id="L123">            log.warn(&quot;could not read leaderboard {} ({}) â€” starting from an empty board&quot;,</span>
+<span class="fc" id="L124">                    file, e.toString());</span>
+<span class="fc" id="L125">            return new ArrayList&lt;&gt;();</span>
+        }
+    }
+
+    private void persist() {
+        try {
+<span class="fc" id="L131">            Path parent = file.getParent();</span>
+<span class="pc bpc" id="L132" title="1 of 2 branches missed.">            if (parent != null) {</span>
+<span class="fc" id="L133">                Files.createDirectories(parent);</span>
+            }
+<span class="fc" id="L135">            mapper.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), entries);</span>
+<span class="nc" id="L136">        } catch (IOException e) {</span>
+<span class="nc" id="L137">            log.warn(&quot;could not write leaderboard {} â€” the run's score is lost, game continues&quot;, file, e);</span>
+<span class="fc" id="L138">        }</span>
+<span class="fc" id="L139">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

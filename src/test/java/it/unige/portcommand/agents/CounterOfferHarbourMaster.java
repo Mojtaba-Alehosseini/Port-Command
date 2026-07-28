@@ -1,5 +1,6 @@
 package it.unige.portcommand.agents;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 
@@ -22,6 +23,11 @@ import jade.lang.acl.ACLMessage;
  * enqueued, not countered.
  *
  * <p>args: {@code [BlockingQueue<ACLMessage> inbox, Double counterPrice, Integer counterHours, String berthId]}.
+ * A {@code null} counterHours OMITS the {@code hours} key entirely — the exact wire shape of a
+ * duration-less player counter (task 19b's absent-duration regression: the pre-19 bug turned this
+ * absence into a literal 0). A {@code null} counterPrice likewise omits {@code price} — the
+ * malformed shape the vessel's price guard must REFUSE (post-19b hardening), since a defaulted
+ * 0.0 would close a €0 deal under buyer semantics.
  */
 public final class CounterOfferHarbourMaster extends Agent {
 
@@ -29,8 +35,8 @@ public final class CounterOfferHarbourMaster extends Agent {
     @SuppressWarnings("unchecked")
     protected void setup() {
         BlockingQueue<ACLMessage> inbox = (BlockingQueue<ACLMessage>) getArguments()[0];
-        double counterPrice = (Double) getArguments()[1];
-        int counterHours = (Integer) getArguments()[2];
+        Double counterPrice = (Double) getArguments()[1];
+        Integer counterHours = (Integer) getArguments()[2];
         String berthId = (String) getArguments()[3];
         registerHarbourMaster();
         addBehaviour(new CyclicBehaviour(this) {
@@ -44,8 +50,15 @@ public final class CounterOfferHarbourMaster extends Agent {
                 inbox.add(msg);
                 if (msg.getPerformative() == ACLMessage.PROPOSE) {
                     ACLMessage counter = MessageFactory.reply(msg, ACLMessage.PROPOSE);
-                    counter.setContent(TerminalJson.write(Map.of(
-                            "price", counterPrice, "hours", counterHours, "berth_id", berthId)));
+                    Map<String, Object> content = new LinkedHashMap<>();
+                    if (counterPrice != null) {
+                        content.put("price", counterPrice);
+                    }
+                    if (counterHours != null) {
+                        content.put("hours", counterHours);
+                    }
+                    content.put("berth_id", berthId);
+                    counter.setContent(TerminalJson.write(content));
                     myAgent.send(counter);
                 }
             }

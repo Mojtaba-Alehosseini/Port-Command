@@ -1,16 +1,11 @@
 @echo off
-REM Port Command Genova launcher.
-REM Starts the Flask LLM sidecar (task 13) in the BACKGROUND (a new window) — its
-REM model loads while the game boots; /health returns 503 until ready, so the game
-REM never blocks on it. Then runs the game. Rasa is started separately via
-REM nlp-python\start_rasa.bat.
+REM Superseded by the repo-root ..\start.bat (task 26, 2026-07-27).
+REM
+REM This script used to start the LLM sidecar and the game, but NOT Rasa — a launch through it
+REM left the NLU cascade without its middle stage, so every sentence the DCG could not parse
+REM fell to a clarification. Rather than leave a partial launcher next to a complete one, it
+REM delegates to the root one, which boots Rasa (:5005, .venv-rasa) then the sidecar (:5006,
+REM .venv, ONNX-INT4) then the game, and stops all three on Ctrl-C.
 setlocal
-cd /d "%~dp0"
-set "LLM=%~dp0..\nlp-python\start_llm.bat"
-if exist "%LLM%" (
-  echo Starting LLM sidecar -^> http://127.0.0.1:5006 (loads model in background)...
-  start "port-command-llm-sidecar" /d "%~dp0..\nlp-python" cmd /c start_llm.bat
-) else (
-  echo note: LLM sidecar launcher not found - explanations fall back to template text.
-)
-call gradlew.bat run
+call "%~dp0..\start.bat" %*
+exit /b %ERRORLEVEL%

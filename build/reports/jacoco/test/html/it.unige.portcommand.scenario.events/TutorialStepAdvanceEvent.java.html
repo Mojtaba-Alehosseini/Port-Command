@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TutorialStepAdvanceEvent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.scenario.events</a> &gt; <span class="el_source">TutorialStepAdvanceEvent.java</span></div><h1>TutorialStepAdvanceEvent.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.scenario.events;
+
+import it.unige.portcommand.gui.events.NotificationEvent;
+import it.unige.portcommand.scenario.GameContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Advances the tutorial to {@code step}, publishing {@link TutorialStepAdvancedEvent}
+ * on the bus for the {@code TutorialOverlay} to consume.
+ *
+ * &lt;p&gt;&lt;b&gt;Reconciliation (2026-07-18):&lt;/b&gt; {@code TutorialOverlay} is task-21-owned and
+ * does not exist yet, so alongside the bus event this ALSO publishes the canonical
+ * {@code gui.events.NotificationEvent} as a placeholder banner (&quot;Tutorial N/5 â€” â€¦&quot; on
+ * the notification strip), making the tutorial followable today. Task 21's real
+ * overlay replaces the placeholder rendering, not this event.
+ */
+<span class="fc" id="L18">public record TutorialStepAdvanceEvent(long simTimeSeconds, int step, String text)</span>
+        implements ScriptedEvent {
+
+<span class="fc" id="L21">    private static final Logger log = LoggerFactory.getLogger(TutorialStepAdvanceEvent.class);</span>
+
+    /** The tutorial's step count (Â§3.15: 5 steps). */
+    public static final int TOTAL_STEPS = 5;
+
+    @Override
+    public void apply(GameContext ctx) {
+<span class="fc" id="L28">        ctx.eventBus().publish(new TutorialStepAdvancedEvent(step, text));</span>
+<span class="fc" id="L29">        ctx.eventBus().publish(new NotificationEvent(</span>
+                &quot;Tutorial &quot; + step + &quot;/&quot; + TOTAL_STEPS + &quot; â€” &quot; + text,
+<span class="fc" id="L31">                NotificationEvent.Severity.INFO, ctx.simClock().nowSimMillis()));</span>
+<span class="fc" id="L32">        log.info(&quot;tutorial step {} advanced&quot;, step);</span>
+<span class="fc" id="L33">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

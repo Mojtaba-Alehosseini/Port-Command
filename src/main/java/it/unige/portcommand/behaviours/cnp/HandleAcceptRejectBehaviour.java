@@ -80,6 +80,7 @@ public final class HandleAcceptRejectBehaviour extends CyclicBehaviour {
 
         tug.setCurrentJob(new TugJob(vesselId, berth, msg.getSender(), conversationId));
         tug.clearPendingBids(); // now busy — any other outstanding bids are moot
+        tug.setPickupTarget(pickup); // task 22: persisted so a save mid-leg can resume it
         tug.setStatus(TugStatus.EN_ROUTE_TO_VESSEL);
         TransitToVesselBehaviour transit = new TransitToVesselBehaviour(tug, pickup);
         tug.setActiveMovement(transit);

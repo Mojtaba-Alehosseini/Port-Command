@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RealNegotiationEngine.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.negotiation</a> &gt; <span class="el_source">RealNegotiationEngine.java</span></div><h1>RealNegotiationEngine.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.negotiation;
+
+import java.util.Map;
+import java.util.Random;
+
+/**
+ * The real {@link NegotiationEngine}: a pure function of {@code (playerPrice, playerHours, state)}
+ * plus one injected {@link Random} draw for the personality roll. Round bookkeeping (incrementing
+ * {@link WalkInState#round()}) stays in {@code behaviours.negotiation} (task 07) â€” this class
+ * never mutates {@code state}; it only reads {@link WalkInState#round()} to derive
+ * {@code roundsRemaining} for itself.
+ *
+ * &lt;p&gt;&lt;b&gt;Task 19 rewrite â€” the vessel is the BUYER.&lt;/b&gt; The canonical economy
+ * (PROJECT_DEFINITION Â§7.5: berth fees are port INCOME; {@code Frame}'s commerce_sell
+ * contract: &quot;the player SELLS berth/escort services and RECEIVES the money&quot;) makes the
+ * walk-in the buyer of berth time and the player the seller quoting a fee. The original
+ * task-15 implementation had the comparisons seller-side-inverted â€” it ACCEPTED any
+ * demand {@code &gt;= targetPrice} (so demanding an absurd fee closed instantly at that fee)
+ * and countered UP past its own opening ask (ask â‚¬5744, player bids â‚¬6000, vessel &quot;counters&quot;
+ * â‚¬6120) â€” indefensible for a payer, but unobservable until the first human actually
+ * negotiated (task 19's play-test). Per CLAUDE.md's authority order PROJECT_DEFINITION
+ * beats planning/15's Â§15.2/Â§15.3 formulas, so the branch table is coherent buyer mechanics.
+ *
+ * &lt;p&gt;&lt;b&gt;Task 19b â€” the duration dimension (Â§7.3: price AND duration).&lt;/b&gt; The player's proposed
+ * hours are evaluated against the hidden cargo floor {@link WalkInState#minDurationHours()}:
+ * &lt;ul&gt;
+ *   &lt;li&gt;&lt;b&gt;{@code playerHours &gt;= floor}: honored.&lt;/b&gt; The spec's acceptance line (&quot;a proposed
+ *       duration â‰¥ the vessel's floor is honored in the closed deal&quot;) sets no upper bound â€” a
+ *       berth reservation is a right, not an occupation duty, so extra granted hours cost the
+ *       buyer nothing and are never objected to. Every counter/accept echoes the player's
+ *       workable hours, so the standing hours follow the player's last stated preference.&lt;/li&gt;
+ *   &lt;li&gt;&lt;b&gt;{@code playerHours &lt; floor}: countered AT the floor, never below, never silently
+ *       re-priced into a deal.&lt;/b&gt; The hours term of the counter IS the &quot;we need at least Nh&quot;
+ *       reply. When the price dimension is already agreed (demand at/below the standing offer,
+ *       or the settle roll passes), the counter carries the player's own price back â€”
+ *       price-agreed, hours-blocked â€” with reason {@link #REASON_TOO_SHORT}.&lt;/li&gt;
+ * &lt;/ul&gt;
+ * The deal closes only when BOTH dimensions are agreed. The price branch table is unchanged
+ * from task 19:
+ * &lt;ol&gt;
+ *   &lt;li&gt;{@code playerPrice &lt;= lastOwnOffer} AND hours workable -&amp;gt; ACCEPT (at the demand; a
+ *       seller undercutting the standing offer just gets taken up on it).&lt;/li&gt;
+ *   &lt;li&gt;Rounds exhausted ({@code roundsRemaining &lt;= 0}, the last possible call â€” counters no
+ *       longer exist) -&amp;gt; ACCEPT if the demand is within budget ({@code &lt;= targetPrice}) AND
+ *       the hours are workable; WITHDRAW({@value #REASON_TOO_SHORT}) if only the hours block
+ *       (the player insisted on a physically impossible stay to the very end); else
+ *       WITHDRAW({@value #REASON_OVER_PRICED}).&lt;/li&gt;
+ *   &lt;li&gt;Affordable ({@code playerPrice &lt;= targetPrice}): a seeded roll against
+ *       {@code ACCEPT_THRESHOLD[personality]} decides settle-now vs. hold out, with a forced
+ *       settle at {@code roundsRemaining == 1}. Settling ACCEPTs when the hours are workable,
+ *       and otherwise counters price-agreed-at-the-demand with the hours pushed to the floor.
+ *       Holding out CONCEDES UPWARD from its standing offer toward the demand by
+ *       {@link Personality#concessionRate()} â€” monotone, whole euros, never past the demand.
+ *       This contested-affordable branch consumes the roll exactly once regardless of the
+ *       hours leg; the price-already-agreed pushback (demand at/below the standing offer,
+ *       hours too short) draws NO roll â€” there is no price decision left to gamble on, and
+ *       under workable hours that state accepts without a draw too. Net effect: for every
+ *       (price, state) the draw count equals task 19's, so seeded sequences are identical
+ *       wherever hours are workable.&lt;/li&gt;
+ *   &lt;li&gt;Beyond budget ({@code playerPrice &gt; targetPrice}): concede toward the CEILING only
+ *       ({@code targetPrice} is a hard walk-away line â€” no demand above it is ever accepted),
+ *       hoping the player comes down before the rounds run out.&lt;/li&gt;
+ * &lt;/ol&gt;
+ * Counter reasons name the blocking dimension(s): the price reason alone when the hours are
+ * workable; {@code too_short} alone when ONLY the hours block; {@code &lt;priceReason&gt;+too_short}
+ * when both dimensions move. {@code WithdrawalBehaviour.outcomeFor} maps the two terminal
+ * reasons to {@code WITHDRAW_PRICE} / {@code WITHDRAW_DURATION}.
+ *
+ * &lt;p&gt;{@code minAcceptablePrice} is no longer read by the engine (it was the inverted
+ * design's floor); it stays in {@link WalkInState} as sampled data â€” the Â§7.5 band is
+ * canonical (INVARIANTS: templates = Â§7.5 = task-20 IncomeRules) and task 20's income
+ * calibration consumes it.
+ *
+ * &lt;p&gt;{@code roundsRemaining} is derived as {@code roundLimit + 1 - state.round()}, mirroring
+ * {@code WalkInVesselAgent}'s own (private) formula. Because {@code WalkInState.round()} is
+ * already incremented by {@code recordPlayerCounter} BEFORE {@code evaluate} is ever called,
+ * this engine only ever observes {@code roundsRemaining} in {@code {roundLimit-1, ..., 0}}.
+ */
+public final class RealNegotiationEngine implements NegotiationEngine {
+
+    /** Terminal reason: the player priced the vessel out (maps to {@code WITHDRAW_PRICE}). */
+    public static final String REASON_OVER_PRICED = &quot;over_priced&quot;;
+
+    /** The hours dimension's reason â€” as a counter: &quot;we need at least Nh&quot; (the hours term is
+     * the floor); as a terminal withdraw at rounds-exhausted: the player never granted the
+     * physically required stay (maps to {@code WITHDRAW_DURATION}). */
+    public static final String REASON_TOO_SHORT = &quot;too_short&quot;;
+
+<span class="fc" id="L89">    private static final Map&lt;Personality, Double&gt; ACCEPT_THRESHOLD = Map.of(</span>
+<span class="fc" id="L90">            Personality.AGGRESSIVE, 0.30,</span>
+<span class="fc" id="L91">            Personality.NEUTRAL, 0.55,</span>
+<span class="fc" id="L92">            Personality.DESPERATE, 0.80);</span>
+
+    private final int roundLimit;
+    private final Random roll;
+
+<span class="fc" id="L97">    public RealNegotiationEngine(int roundLimit, Random roll) {</span>
+<span class="fc" id="L98">        this.roundLimit = roundLimit;</span>
+<span class="fc" id="L99">        this.roll = roll;</span>
+<span class="fc" id="L100">    }</span>
+
+    @Override
+    public Decision evaluate(double playerPrice, int playerHours, WalkInState state) {
+<span class="fc" id="L104">        double own = state.lastOwnOffer();</span>
+<span class="fc" id="L105">        double ceiling = state.targetPrice();</span>
+<span class="fc" id="L106">        int floor = state.minDurationHours();</span>
+<span class="fc" id="L107">        int roundsRemaining = Math.max(0, roundLimit + 1 - state.round());</span>
+<span class="fc bfc" id="L108" title="All 2 branches covered.">        boolean hoursOk = playerHours &gt;= floor;</span>
+        // The hours term every counter carries: echo workable hours; push a too-short
+        // proposal back up to the floor (never below) â€” the &quot;we need at least Nh&quot; reply.
+<span class="fc bfc" id="L111" title="All 2 branches covered.">        int hoursTerm = hoursOk ? playerHours : floor;</span>
+
+        // 1. The demand is within what we already offered, for a workable stay: take it.
+<span class="fc bfc" id="L114" title="All 4 branches covered.">        if (playerPrice &lt;= own &amp;&amp; hoursOk) {</span>
+<span class="fc" id="L115">            return Decision.accept(playerHours, &quot;at_or_below_our_offer&quot;);</span>
+        }
+        // 2. Last call â€” counters no longer exist: settle if BOTH terms work, else leave,
+        //    naming the dimension that killed it (an affordable price with an impossible
+        //    stay is a duration failure, not a price one).
+<span class="fc bfc" id="L120" title="All 2 branches covered.">        if (roundsRemaining &lt;= 0) {</span>
+<span class="fc bfc" id="L121" title="All 2 branches covered.">            if (playerPrice &lt;= ceiling) {</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">                return hoursOk</span>
+<span class="fc" id="L123">                        ? Decision.accept(playerHours, &quot;rounds_exhausted_affordable&quot;)</span>
+<span class="fc" id="L124">                        : Decision.withdraw(REASON_TOO_SHORT);</span>
+            }
+<span class="fc" id="L126">            return Decision.withdraw(REASON_OVER_PRICED);</span>
+        }
+        // 3. Price already agreed (demand at/below the standing offer) but the stay is too
+        //    short: hand the player's own price back with the hours at the floor. No roll â€”
+        //    there is no price decision left to gamble on.
+<span class="fc bfc" id="L131" title="All 2 branches covered.">        if (playerPrice &lt;= own) {</span>
+<span class="fc" id="L132">            return Decision.counter(Math.floor(playerPrice), hoursTerm, REASON_TOO_SHORT);</span>
+        }
+        // 4. Affordable: roll to settle now (forced on the last open round), else concede
+        //    upward. The roll is consumed on every affordable evaluation â€” hours branch
+        //    included â€” so seeded sequences don't fork on the duration dimension.
+<span class="fc bfc" id="L137" title="All 2 branches covered.">        if (playerPrice &lt;= ceiling) {</span>
+<span class="fc" id="L138">            double drawn = roll.nextDouble();</span>
+<span class="fc bfc" id="L139" title="All 4 branches covered.">            if (drawn &lt; ACCEPT_THRESHOLD.get(state.personality()) || roundsRemaining == 1) {</span>
+<span class="fc bfc" id="L140" title="All 2 branches covered.">                return hoursOk</span>
+<span class="fc" id="L141">                        ? Decision.accept(playerHours, &quot;in_band_roll_or_last_round&quot;)</span>
+<span class="fc" id="L142">                        : Decision.counter(Math.floor(playerPrice), hoursTerm, REASON_TOO_SHORT);</span>
+            }
+<span class="fc" id="L144">            double conceded = concede(own, playerPrice, state.personality());</span>
+            // Checkpoint-#5 minor 2 (WALKIN-14): a concession step that REACHES the demand is
+            // agreement, not a counter â€” &quot;I'll pay 5583&quot; in reply to &quot;give me 5583&quot; read as a
+            // haggle over nothing. Only when the hours also work (otherwise the counter below
+            // still carries the meaningful floor pushback). The roll above stays consumed
+            // either way, so task-19's seeded round sequences are unchanged.
+<span class="fc bfc" id="L150" title="All 4 branches covered.">            if (hoursOk &amp;&amp; conceded &gt;= Math.floor(playerPrice)) {</span>
+<span class="fc" id="L151">                return Decision.accept(playerHours, &quot;concession_reached_demand&quot;);</span>
+            }
+<span class="fc" id="L153">            return Decision.counter(conceded, hoursTerm,</span>
+<span class="fc bfc" id="L154" title="All 2 branches covered.">                    hoursOk ? &quot;conceding_toward_demand&quot; : &quot;conceding_toward_demand+&quot; + REASON_TOO_SHORT);</span>
+        }
+        // 5. Beyond our budget: creep toward the ceiling and hope the player comes down.
+<span class="fc" id="L157">        return Decision.counter(concede(own, ceiling, state.personality()), hoursTerm,</span>
+<span class="fc bfc" id="L158" title="All 2 branches covered.">                hoursOk ? &quot;conceding_toward_ceiling&quot; : &quot;conceding_toward_ceiling+&quot; + REASON_TOO_SHORT);</span>
+    }
+
+    /**
+     * Buyer concession: move UP from the vessel's standing offer toward {@code toward} by the
+     * personality's concession rate â€” at least â‚¬1 (guaranteed visible progress), whole euros
+     * (task 19 STEP 1: the player never sees cents), never past {@code toward} (a buyer
+     * approaches the demand/ceiling from below; it does not overshoot).
+     *
+     * &lt;p&gt;The cap is {@code floor(toward)}, not {@code toward}: when the step would overshoot, a
+     * bare {@code min(toward, â€¦)} would return {@code toward} verbatim, which is fractional both
+     * when the player types cents (branch 4, {@code toward = playerPrice}) and always in branch 5
+     * ({@code toward = targetPrice}, an unrounded uniform sample â€” flooring it also keeps the hidden
+     * ceiling off the wire). Flooring keeps the result whole and still {@code &lt;= toward} (adversarial
+     * review M1, 2026-07-17). Branch 3's price-agreed counter floors for the same no-cents reason.
+     */
+    private static double concede(double own, double toward, Personality personality) {
+<span class="fc" id="L175">        double step = Math.max(1.0, Math.round(personality.concessionRate() * (toward - own)));</span>
+<span class="fc" id="L176">        return Math.min(Math.floor(toward), own + step);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

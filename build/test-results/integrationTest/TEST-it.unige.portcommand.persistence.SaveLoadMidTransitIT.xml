@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.persistence.SaveLoadMidTransitIT" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:28:15" hostname="MOJI" time="12.397">
+  <properties/>
+  <testcase name="saveWithTugEnRoute_load_vesselCompletesDocking_chargedExactlyOnce()" classname="it.unige.portcommand.persistence.SaveLoadMidTransitIT" time="12.397"/>
+  <system-out><![CDATA[00:28:17.095 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:28:17.124 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:28:17.452 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+00:28:17.460 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:28:17.534 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)
+00:28:17.538 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:17.538 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:17.538 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:17.541 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:17.544 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:28:17.545 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:28:17.548 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (100 ms/tick, 300 real-s per game day)
+00:28:17.562 [vessel_c001] [vessel_c001] INFO  i.u.p.agents.ContractedVesselAgent - vessel_c001 arrived (contracted, CONTRACT-1) -> announce arrival
+00:28:17.616 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_c001 announced arrival (contract CONTRACT-1) -> harbour-master
+00:28:17.650 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_c001: berth GRANTED berth_1 (price 5200.0, 8h) -> transit
+00:28:17.677 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:28:17.677 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:28:17.677 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - C001: ACCEPT berth berth_1 (contract CONTRACT-1), tugsRequired=2
+00:28:17.685 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:28:17.691 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> harbour_master
+00:28:17.698 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP C001 (2 tug(s) required) -> 4 tug(s) on CNP cnp-47ef565d-6219-4ca5-9d16-517112a85971
+00:28:17.701 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:28:17.701 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=481.53 eta=177.55min fuel=1.0 -> harbour_master
+00:28:17.701 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 PROPOSE cost=480.0 eta=175.49min fuel=1.0 -> harbour_master
+00:28:17.702 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:28:17.705 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal CONFIRM ({"crane_assigned":1,"berth_id":"berth_1"}) <- terminal_general
+00:28:17.756 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for C001 closed with 4 bid(s)
+00:28:17.761 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001: ACCEPT -> tug_3
+00:28:17.764 [tug_3] [tug_3] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_3 ACCEPTED escort of C001 on CNP cnp-47ef565d-6219-4ca5-9d16-517112a85971 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:28:17.764 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001: REJECT -> tug_1
+00:28:17.765 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001: REJECT -> tug_2
+00:28:17.765 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001: ACCEPT -> tug_4
+00:28:17.766 [tug_4] [tug_4] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_4 ACCEPTED escort of C001 on CNP cnp-47ef565d-6219-4ca5-9d16-517112a85971 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:28:17.771 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:28:17.773 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_c001 reached berth berth_1 -> docking
+00:28:17.859 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - saved C:\Users\aleho\AppData\Local\Temp\junit15483662455676268038\savegame.json (schemaVersion 1, 5231 bytes)
+00:28:17.861 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:28:17.928 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Users\aleho\AppData\Local\Temp\junit15483662455676268038\savegame.json (schemaVersion 1, day 1, wallet 54739.62)
+00:28:17.954 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Users\aleho\AppData\Local\Temp\junit15483662455676268038\savegame.json (schemaVersion 1, day 1, wallet 54739.62)
+00:28:17.956 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> LOADING
+00:28:20.011 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:28:20.043 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:28:20.043 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:28:20.043 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18099
+00:28:20.051 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - restored 1 tracked vessel(s)
+00:28:20.051 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - weather_agent: restored weather 18 kn / good / sunny
+00:28:20.051 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - customs_agent: restored clearance sequence at 1
+00:28:20.060 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - terminal_container: restored 1 berth occupancy record(s)
+00:28:20.061 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - terminal_general: restored 3 berth occupancy record(s)
+00:28:20.063 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster respawned from save: 10 fixed agents + 1 restored vessel(s)
+00:28:20.065 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - tug_1 restored: status=IDLE fuel=1.0 job=-
+00:28:20.065 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:20.065 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - tug_2 restored: status=IDLE fuel=1.0 job=-
+00:28:20.066 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:28:20.066 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:28:20.066 [Test worker] [] INFO  i.u.p.persistence.GameSession - loaded C:\Users\aleho\AppData\Local\Temp\junit15483662455676268038\savegame.json — day 1, wallet 54739.62, 1 restored vessel(s)
+00:28:20.067 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - tug_3 restored: status=EN_ROUTE_TO_VESSEL fuel=0.9822208 job=C001
+00:28:20.067 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=0.9822208 topSpeed=12.0kn status=EN_ROUTE_TO_VESSEL
+00:28:20.068 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - tug_4 restored: status=EN_ROUTE_TO_VESSEL fuel=0.9822208 job=C001
+00:28:20.068 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=0.9822208 topSpeed=12.0kn status=EN_ROUTE_TO_VESSEL
+00:28:20.069 [vessel_c001] [vessel_c001] INFO  i.u.p.agents.ContractedVesselAgent - vessel_c001 restored: phase=DOCKED deadline=29433600 berth=berth_1 (8h at 5200.0)
+00:28:24.784 [tug_4] [tug_4] INFO  i.u.p.b.c.TransitToVesselBehaviour - tug_4 reached vessel pickup Position[x=700.0, y=200.0, headingDeg=180.0] -> escorting to berth
+00:28:24.786 [tug_3] [tug_3] INFO  i.u.p.b.c.TransitToVesselBehaviour - tug_3 reached vessel pickup Position[x=700.0, y=200.0, headingDeg=180.0] -> escorting to berth
+00:28:27.320 [tug_4] [tug_4] INFO  i.u.p.b.c.EscortToBerthBehaviour - tug_4 delivered vessel to berth Position[x=400.0, y=150.0, headingDeg=0.0] -> returning to base
+00:28:27.322 [tug_3] [tug_3] INFO  i.u.p.b.c.EscortToBerthBehaviour - tug_3 delivered vessel to berth Position[x=400.0, y=150.0, headingDeg=0.0] -> returning to base
+00:28:27.387 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:28:27.407 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - saved C:\Users\aleho\AppData\Local\Temp\junit15483662455676268038\savegame.json (schemaVersion 1, 5046 bytes)
+00:28:27.407 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> RUNNING
+00:28:27.432 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Users\aleho\AppData\Local\Temp\junit15483662455676268038\savegame.json (schemaVersion 1, day 1, wallet 54739.62)
+00:28:27.434 [tug_3] [tug_3] INFO  i.u.p.b.c.ReturnToBaseBehaviour - tug_3 back at base -> idle
+00:28:27.436 [tug_4] [tug_4] INFO  i.u.p.b.c.ReturnToBaseBehaviour - tug_4 back at base -> idle
+00:28:27.439 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted C001-D1 (cargo_vessel, contract CONTRACT-1-D1, eta sim 32400000)
+00:28:27.439 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.DockAndServiceBehaviour - vessel_c001 finished service (8h) at berth_1 -> depart
+00:28:27.441 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted F001-D1 (ferry, contract CONTRACT-2-D1, eta sim 54000000)
+00:28:27.441 [vessel_c001_d1] [vessel_c001_d1] INFO  i.u.p.agents.ContractedVesselAgent - vessel_c001_d1 arrived (contracted, CONTRACT-1-D1) -> announce arrival
+00:28:27.446 [vessel_c001_d1] [vessel_c001_d1] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_c001_d1 announced arrival (contract CONTRACT-1-D1) -> harbour-master
+00:28:27.449 [vessel_c001_d1] [vessel_c001_d1] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_c001_d1: berth GRANTED berth_1 (price 5200.0, 8h) -> transit
+00:28:27.451 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - C001-D1: ACCEPT berth berth_1 (contract CONTRACT-1-D1), tugsRequired=2
+00:28:27.452 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:28:27.452 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:28:27.452 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:28:27.454 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE berth_busy -> harbour_master
+00:28:27.455 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP C001-D1 (2 tug(s) required) -> 4 tug(s) on CNP cnp-8c91324f-e77d-4715-bb73-cf8ec2d84cbb
+00:28:27.456 [tug_4] [tug_4] WARN  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 bidding past reply_by on CNP cnp-8c91324f-e77d-4715-bb73-cf8ec2d84cbb (sim now 52264800 > 52241000)
+00:28:27.456 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=481.53 eta=177.55min fuel=1.0 -> harbour_master
+00:28:27.456 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 PROPOSE cost=480.0 eta=175.49min fuel=0.3461542414459038 -> harbour_master
+00:28:27.456 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:28:27.456 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 PROPOSE cost=480.38 eta=176.0min fuel=0.3399680692503959 -> harbour_master
+00:28:27.507 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for C001-D1 closed with 4 bid(s)
+00:28:27.509 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D1: ACCEPT -> tug_1
+00:28:27.509 [tug_1] [tug_1] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_1 ACCEPTED escort of C001-D1 on CNP cnp-8c91324f-e77d-4715-bb73-cf8ec2d84cbb -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:28:27.509 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D1: ACCEPT -> tug_2
+00:28:27.509 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D1: REJECT -> tug_3
+00:28:27.509 [tug_2] [tug_2] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_2 ACCEPTED escort of C001-D1 on CNP cnp-8c91324f-e77d-4715-bb73-cf8ec2d84cbb -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:28:27.510 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001-D1: REJECT -> tug_4
+00:28:27.652 [vessel_c001] [vessel_c001] INFO  i.u.p.b.auto_flow.DepartBehaviour - vessel_c001 departed -> doDelete
+00:28:27.653 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - C001: departed — tracking closed (was DEPARTING, 2 tug(s) assigned)
+00:28:27.723 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+]]></system-out>
+  <system-err><![CDATA[Jul 28, 2026 12:28:16 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:28:16 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:28:16 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:28:16 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:28:16 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:28:16 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:28:16 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:28:17 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:28:17 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:28:17 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:28:20 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:28:20 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:28:20 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@4d9cf71d[Cannot bind server socket to localhost port 18099].
+Jul 28, 2026 12:28:20 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18099
+
+Jul 28, 2026 12:28:20 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:28:20 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:28:20 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:28:20 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:28:20 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:28:20 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:28:20 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:28:20 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:28:27 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+]]></system-err>
+</testsuite>

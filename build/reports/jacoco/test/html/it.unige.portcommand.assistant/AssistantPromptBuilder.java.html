@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AssistantPromptBuilder.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.assistant</a> &gt; <span class="el_source">AssistantPromptBuilder.java</span></div><h1>AssistantPromptBuilder.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.assistant;
+
+import java.util.Locale;
+
+/**
+ * Builds (a) the plain-text template fallback via {@link #template} and (b) the model-neutral
+ * prompt payload via {@link #prompt} (planning/10 Â§10.3). Deliberately does NOT emit Phi-4
+ * {@code &lt;|system|&gt;...&lt;|assistant|&gt;} tags â€” the Flask sidecar (task 13) applies whichever
+ * model's own chat template is loaded, and Phi-4 and Gemma-3 do not share one.
+ *
+ * &lt;p&gt;Every number is rendered with {@code &quot;%.0f&quot;} under {@link Locale#ROOT} (explicit locale so
+ * the decimal separator is always a dot); {@link HallucinationValidator} and
+ * {@link Recommendation#allFigures()} depend on this exact formatting to line up.
+ */
+public final class AssistantPromptBuilder {
+
+    /**
+     * The anti-hallucination system instruction. Mirrored (deliberately, not shared) by
+     * {@code llm_sidecar/prompts.py DEFAULT_SYSTEM_PROMPT}; Java always sends its own, so this
+     * constant is the one that reaches the model in production.
+     *
+     * &lt;p&gt;&lt;b&gt;2026-07-27 (task 26, decision a).&lt;/b&gt; Two sentences were added naming the two figures
+     * the model actually drops. Task 25 measured the gate at 2/20 with the sidecar up: the
+     * generations invent nothing (check 3 held on all 20) but check 1 requires EVERY figure in
+     * {@link Recommendation#allFigures()} to be reproduced, and Phi-4-mini silently omits the
+     * least salient one â€” the SAMPLE COUNT in 18/18 failures, and the duration / mean / stddev /
+     * EV in one each. Output was never truncated (~47 words of a 120-token budget), so this is a
+     * choice the instruction can address rather than a budget problem. No digit appears in this
+     * text on purpose: an example figure here would be copied into the answer and fail check 3
+     * (the positive control admits only numbers from the recommendation itself).
+     */
+    public static final String SYSTEM_PROMPT = &quot;&quot;&quot;
+            You are a harbour-master negotiation assistant. Paraphrase the input recommendation
+            in 2-3 sentences of clear, professional English. NEVER add, change, or omit any
+            numbers, prices, percentages, durations, or named entities (berths, vessels).
+            Every figure in the input must appear in your answer, including the service duration
+            in hours and the number of recent deals the market figure is based on. Leaving a
+            figure out is as wrong as inventing one.
+            If unsure, repeat the input verbatim.&quot;&quot;&quot;;
+
+    private AssistantPromptBuilder() {
+    }
+
+    /** The model-neutral {@code {system, user}} payload sent to {@code LLMBridge.explain}. */
+<span class="fc" id="L45">    public record PromptPayload(String system, String user) {</span>
+    }
+
+    public static PromptPayload prompt(Recommendation rec) {
+<span class="fc" id="L49">        String user = String.format(Locale.ROOT,</span>
+                &quot;Recommend: %s.%n%nReasoning: %s.%nYour proposed action has acceptance probability &quot;
+                        + &quot;%.0f%% and expected value â‚¬%.0f. Berth %s is %s.&quot;,
+<span class="fc" id="L52">                actionPricePart(rec), marketBasisSentence(rec),</span>
+<span class="fc" id="L53">                rec.pAccept() * 100.0, rec.ev(), rec.berthId(), rec.prologStatus());</span>
+<span class="fc" id="L54">        return new PromptPayload(SYSTEM_PROMPT, user);</span>
+    }
+
+    /** Plain-text fallback shown when the LLM is unavailable, times out, or fails validation. */
+    public static String template(Recommendation rec) {
+<span class="fc" id="L59">        return String.format(Locale.ROOT,</span>
+                &quot;Recommended %s for %s at %s (%dh). %s. Acceptance probability %.0f%%, &quot;
+                        + &quot;expected value â‚¬%.0f. Berth %s is %s.&quot;,
+<span class="fc" id="L62">                actionPricePart(rec), rec.vesselType(), rec.berthId(), rec.durationHours(),</span>
+<span class="fc" id="L63">                marketBasisSentence(rec), rec.pAccept() * 100.0, rec.ev(), rec.berthId(), rec.prologStatus());</span>
+    }
+
+    /**
+     * The one clause that says what the recommendation was priced against.
+     *
+     * &lt;p&gt;&lt;b&gt;Empty/thin market history (planning/10's filed Hint finding).&lt;/b&gt; Below 10 samples the
+     * algorithm scores against the static Â§7.5 fee band, not the market query â€” so quoting the
+     * query would print &quot;Market average is â‚¬0 (Â±â‚¬0, 0 recent deals)&quot; on the first Hint of every
+     * fresh run and make an otherwise-correct recommendation read as arbitrary. On that path the
+     * text names the band it actually used. The figures rendered here must stay exactly the set
+     * {@link Recommendation#allFigures()} publishes, in both branches â€” that set is the
+     * hallucination validator's required-number list AND its positive control.
+     */
+    private static String marketBasisSentence(Recommendation rec) {
+<span class="fc bfc" id="L78" title="All 2 branches covered.">        if (rec.usesFallbackBand()) {</span>
+            // vesselType and durationHours stay in this branch on purpose: allFigures() lists the
+            // duration, and check 1 requires every listed figure to appear in the generated text.
+            // Dropping it here would fail every low-confidence explanation and silently pin the
+            // Assistant to its template â€” a regression with no visible symptom but the LLM never
+            // being used. Never name the spec section (&quot;Â§7.5&quot;) in this sentence either: its digits
+            // would be numbers the positive control has no entry for.
+<span class="fc" id="L85">            return String.format(Locale.ROOT,</span>
+                    &quot;Market history for %s %dh is too thin to price from (%d recent deals), so this &quot;
+                            + &quot;uses the standard %s band of â‚¬%.0f to â‚¬%.0f&quot;,
+<span class="fc" id="L88">                    rec.vesselType(), rec.durationHours(), rec.marketStats().sampleCount(),</span>
+<span class="fc" id="L89">                    rec.vesselType(), rec.fallbackBand().lo(), rec.fallbackBand().hi());</span>
+        }
+<span class="fc" id="L91">        return String.format(Locale.ROOT,</span>
+                &quot;Market average for %s %dh is â‚¬%.0f (Â±â‚¬%.0f, based on %d recent deals)&quot;,
+<span class="fc" id="L93">                rec.vesselType(), rec.durationHours(), rec.marketStats().mean(),</span>
+<span class="fc" id="L94">                rec.marketStats().stddev(), rec.marketStats().sampleCount());</span>
+    }
+
+    private static String actionPricePart(Recommendation rec) {
+<span class="fc bfc" id="L98" title="All 2 branches covered.">        if (RecommendationCandidate.REJECT_SILENT.equals(rec.action())) {</span>
+<span class="fc" id="L99">            return &quot;reject silently&quot;;</span>
+        }
+<span class="fc" id="L101">        return rec.action() + &quot; at â‚¬&quot; + String.format(Locale.ROOT, &quot;%.0f&quot;, rec.price());</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

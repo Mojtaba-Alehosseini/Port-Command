@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>VesselTracking.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.harbourmaster</a> &gt; <span class="el_source">VesselTracking.java</span></div><h1>VesselTracking.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.harbourmaster;
+
+import java.util.List;
+
+import it.unige.portcommand.ontology.VesselSpec;
+import jade.core.AID;
+
+/**
+ * HarbourMaster's live view of one vessel currently in play â€” tracked from first
+ * contact (contracted REQUEST or walk-in opening PROPOSE) through departure.
+ * Immutable; state transitions replace the map entry (mirrors
+ * {@code agents.BerthOccupancy.withStatus}). Keyed by {@code vesselId} in
+ * {@code HarbourMasterAgent.activeVessels} ({@code ConcurrentHashMap} â€” multiple
+ * behaviours read/mutate it: auto-flow dispatch, walk-in relay, CNP award,
+ * weather/emergency holds).
+ *
+ * &lt;p&gt;Holds the full {@link VesselSpec} (not just the task file's bare &quot;type&quot; field)
+ * because the weather safety gate and the walk-in deal-confirmed berth grant both
+ * need to re-run {@code PrologQueries.isCompatible}/{@code operationSafe}, which
+ * require draft/length/tonnage, not just the type atom. {@code aid} and
+ * {@code blocked} likewise extend the task file's original field list â€” both are
+ * needed to correlate inbound messages (no {@code vessel_id} on every reply) and to
+ * record a customs-flagged hold.
+ *
+ * &lt;p&gt;{@code weatherHeld} (task 24, ADR-14): marks a vessel whose escort was
+ * CANCELled by a weather hold, so the weather-CLEAR re-dispatch sweeps exactly
+ * those. Without it a held vessel is indistinguishable from one whose FIRST tug
+ * CNP is still in flight ({@code AWAITING_TUG} + empty tug list in both cases),
+ * and a clear-signal sweep would fire a duplicate CFP at fresh vessels â€”
+ * double-award, double-charge.
+ */
+public record VesselTracking(
+        String vesselId,
+        VesselSpec spec,
+        Channel channel,
+        Stage stage,
+        AID aid,
+        String assignedBerth,
+        List&lt;String&gt; assignedTugs,
+        boolean blocked,
+        boolean weatherHeld) {
+
+<span class="fc" id="L43">    public enum Channel { CONTRACTED, WALK_IN }</span>
+
+<span class="fc" id="L45">    public enum Stage { ARRIVING, NEGOTIATING, AWAITING_TUG, IN_TRANSIT, DOCKED, DEPARTING }</span>
+
+<span class="fc" id="L47">    public VesselTracking {</span>
+<span class="pc bpc" id="L48" title="1 of 2 branches missed.">        assignedTugs = assignedTugs == null ? List.of() : List.copyOf(assignedTugs);</span>
+<span class="fc" id="L49">    }</span>
+
+    public static VesselTracking arriving(String vesselId, VesselSpec spec, Channel channel, AID aid) {
+<span class="fc" id="L52">        return new VesselTracking(vesselId, spec, channel, Stage.ARRIVING, aid, null, List.of(), false, false);</span>
+    }
+
+    /** Convenience accessor matching the task file's &quot;type&quot; field name. */
+    public String vesselType() {
+<span class="fc" id="L57">        return spec.vesselType();</span>
+    }
+
+    public VesselTracking withStage(Stage newStage) {
+<span class="fc" id="L61">        return new VesselTracking(vesselId, spec, channel, newStage, aid, assignedBerth, assignedTugs,</span>
+                blocked, weatherHeld);
+    }
+
+    public VesselTracking withBerth(String berthId) {
+<span class="fc" id="L66">        return new VesselTracking(vesselId, spec, channel, stage, aid, berthId, assignedTugs,</span>
+                blocked, weatherHeld);
+    }
+
+    public VesselTracking withTugs(List&lt;String&gt; tugs) {
+<span class="fc" id="L71">        return new VesselTracking(vesselId, spec, channel, stage, aid, assignedBerth, tugs,</span>
+                blocked, weatherHeld);
+    }
+
+    public VesselTracking withBlocked(boolean newBlocked) {
+<span class="fc" id="L76">        return new VesselTracking(vesselId, spec, channel, stage, aid, assignedBerth, assignedTugs,</span>
+                newBlocked, weatherHeld);
+    }
+
+    public VesselTracking withWeatherHeld(boolean newWeatherHeld) {
+<span class="fc" id="L81">        return new VesselTracking(vesselId, spec, channel, stage, aid, assignedBerth, assignedTugs,</span>
+                blocked, newWeatherHeld);
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

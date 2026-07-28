@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GameOverEvent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.lifecycle.events</a> &gt; <span class="el_source">GameOverEvent.java</span></div><h1>GameOverEvent.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.lifecycle.events;
+
+import it.unige.portcommand.util.Event;
+
+/**
+ * The run ended (task 24). Published exactly once per run by
+ * {@code GameOverGuard} (the single emitter), after it has recorded the score
+ * on the {@code Leaderboard} and moved {@code GameLifecycle} to GAME_OVER.
+ * Consumers: {@code MainWindow} (opens {@code GameOverDialog}).
+ *
+ * @param reason          {@code &quot;bankrupt&quot;} (wallet below the bankruptcy floor at
+ *                        end-of-day for 3 consecutive days), {@code &quot;day_cap&quot;}
+ *                        (day advanced past {@code Settings.maxGameDays}), or
+ *                        {@code &quot;quit&quot;} (player choice)
+ * @param finalWallet     last known wallet balance (absolute â‚¬)
+ * @param finalDay        the game day the run ended on
+ * @param finalReputation last known reputation, rounded to the 0â€“100 int scale
+ */
+<span class="fc" id="L19">public record GameOverEvent(String reason, double finalWallet, int finalDay, int finalReputation)</span>
+        implements Event {
+
+    public static final String REASON_BANKRUPT = &quot;bankrupt&quot;;
+    public static final String REASON_DAY_CAP = &quot;day_cap&quot;;
+    public static final String REASON_QUIT = &quot;quit&quot;;
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

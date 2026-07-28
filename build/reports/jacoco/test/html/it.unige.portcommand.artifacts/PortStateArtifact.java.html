@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PortStateArtifact.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.artifacts</a> &gt; <span class="el_source">PortStateArtifact.java</span></div><h1>PortStateArtifact.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.artifacts;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
+
+import it.unige.portcommand.agents.BerthOccupancy;
+import it.unige.portcommand.agents.TugStatus;
+import it.unige.portcommand.ontology.Position;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Thread-safe shared port state: per-berth occupancy and per-tug status, plus a
+ * publish/subscribe channel for deltas. One instance is created by
+ * {@code JadeBootstrap} and constructor-injected (via the {@code Object[]} args
+ * channel) into the terminal and tug agents â€” never a global static. The GUI map
+ * (task 18) reads snapshots directly; task 08's escort behaviour subscribes.
+ */
+<span class="fc" id="L23">public final class PortStateArtifact {</span>
+
+<span class="fc" id="L25">    private static final Logger log = LoggerFactory.getLogger(PortStateArtifact.class);</span>
+
+<span class="fc" id="L27">    private final Map&lt;String, BerthOccupancy&gt; berthOccupancy = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L28">    private final Map&lt;String, TugStatus&gt; tugStatuses = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc" id="L29">    private final List&lt;Consumer&lt;PortStateUpdate&gt;&gt; subscribers = new CopyOnWriteArrayList&lt;&gt;();</span>
+
+    /** Atomically records a berth delta, then notifies subscribers. */
+    public void update(BerthOccupancyUpdate delta) {
+<span class="fc" id="L33">        berthOccupancy.put(delta.berthId(), delta.occupancy());</span>
+<span class="fc" id="L34">        emit(new PortStateUpdate.BerthDelta(delta.berthId(), delta.occupancy()));</span>
+<span class="fc" id="L35">    }</span>
+
+    /** Atomically records a tug's position+status, then notifies subscribers. Task 08 calls this each transit tick. */
+    public void updateTug(String tugId, Position position, TugStatus status) {
+<span class="fc" id="L39">        tugStatuses.put(tugId, status);</span>
+<span class="fc" id="L40">        emit(new PortStateUpdate.TugDelta(tugId, position, status));</span>
+<span class="fc" id="L41">    }</span>
+
+    public Optional&lt;BerthOccupancy&gt; getBerth(String berthId) {
+<span class="fc" id="L44">        return Optional.ofNullable(berthOccupancy.get(berthId));</span>
+    }
+
+    /** Immutable snapshot of all berth occupancy (GUI map reads this each animation tick). */
+    public Map&lt;String, BerthOccupancy&gt; berthSnapshot() {
+<span class="fc" id="L49">        return Map.copyOf(berthOccupancy);</span>
+    }
+
+    /** Immutable snapshot of all tug statuses. */
+    public Map&lt;String, TugStatus&gt; tugSnapshot() {
+<span class="fc" id="L54">        return Map.copyOf(tugStatuses);</span>
+    }
+
+    public void subscribe(Consumer&lt;PortStateUpdate&gt; subscriber) {
+<span class="fc" id="L58">        subscribers.add(subscriber);</span>
+<span class="fc" id="L59">    }</span>
+
+    private void emit(PortStateUpdate update) {
+<span class="fc bfc" id="L62" title="All 2 branches covered.">        for (Consumer&lt;PortStateUpdate&gt; subscriber : subscribers) {</span>
+            try {
+<span class="fc" id="L64">                subscriber.accept(update);</span>
+<span class="fc" id="L65">            } catch (RuntimeException e) {</span>
+<span class="fc" id="L66">                log.warn(&quot;PortStateArtifact subscriber threw on {}&quot;, update.getClass().getSimpleName(), e);</span>
+<span class="fc" id="L67">            }</span>
+<span class="fc" id="L68">        }</span>
+<span class="fc" id="L69">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

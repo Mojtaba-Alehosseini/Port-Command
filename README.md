@@ -8,8 +8,14 @@ This directory is the buildable Gradle module. The authoritative specs live one
 level up: `../PROJECT_DEFINITION.md` (the what), `../MASTER_PLAN.md` (the how),
 `../CLAUDE.md` (operating rules).
 
-> **Task 01 status:** scaffolding + a JADE/JPL smoke test only. No game logic,
-> GUI, or NLP yet.
+> **Status (2026-07-27, task 26): feature-complete and demo-ready.** All 26 tasks are done — agents,
+> Prolog kernel, DCG grammar, Rasa, LLM sidecar, GUI, save/load, scenarios, game loop, test suite,
+> hardening. *(This note used to read "Task 01 status: scaffolding + a JADE/JPL smoke test only",
+> which had been stale since roughly task 05.)*
+>
+> **Start the game from the repo root, not here** — `../start.sh` / `..\start.bat` boot Rasa and the
+> LLM sidecar alongside it. The `start.sh`/`start.bat` in this directory are thin delegators kept so
+> older instructions still work. See [`../README.md`](../README.md) for the quickstart.
 
 ## Prerequisites
 

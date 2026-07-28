@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TerminalState.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">TerminalState.java</span></div><h1>TerminalState.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
+import it.unige.portcommand.agents.BerthOccupancy.Status;
+
+/**
+ * Mutable berth/crane bookkeeping for one {@code TerminalAgent}. Berth ownership
+ * is fixed at construction. Each public method is {@code synchronized}: JADE
+ * serialises an agent's behaviours, but a ticker callback may run on the JADE
+ * scheduler thread, so we guard the shared map.
+ */
+public final class TerminalState {
+
+    private static final long MILLIS_PER_HOUR = 3_600_000L;
+
+    /** Outcome of {@link #requestBerth}: either a confirmation (crane + free-at) or a refusal reason. */
+<span class="fc" id="L23">    public record Result(boolean confirmed, int craneId, long expectedFreeAtSim, String reason) {</span>
+        public static Result confirmed(int craneId, long expectedFreeAtSim) {
+<span class="fc" id="L25">            return new Result(true, craneId, expectedFreeAtSim, null);</span>
+        }
+
+        public static Result refused(String reason) {
+<span class="fc" id="L29">            return new Result(false, 0, 0L, reason);</span>
+        }
+    }
+
+    private final List&lt;String&gt; managedBerths;
+    private final int cranesTotal;
+<span class="fc" id="L35">    private final Map&lt;String, BerthOccupancy&gt; occupancy = new HashMap&lt;&gt;();</span>
+
+<span class="fc" id="L37">    public TerminalState(List&lt;String&gt; managedBerths, int cranesTotal) {</span>
+<span class="fc" id="L38">        this.managedBerths = List.copyOf(managedBerths);</span>
+<span class="fc" id="L39">        this.cranesTotal = cranesTotal;</span>
+<span class="fc bfc" id="L40" title="All 2 branches covered.">        for (String berthId : this.managedBerths) {</span>
+<span class="fc" id="L41">            occupancy.put(berthId, BerthOccupancy.free(berthId));</span>
+<span class="fc" id="L42">        }</span>
+<span class="fc" id="L43">    }</span>
+
+    /** {@code true} iff this terminal owns {@code berthId}. */
+    public boolean manages(String berthId) {
+<span class="fc" id="L47">        return managedBerths.contains(berthId);</span>
+    }
+
+    /**
+     * Adopts persisted occupancy for the berths this terminal manages (task 22 load).
+     * Entries for berths it does not own are ignored; managed berths absent from
+     * {@code persisted} stay FREE (the constructor's default). The loader has already
+     * reconciled the list against the restored vessel set, so no entry here can
+     * reference a vessel that no longer exists.
+     */
+    public synchronized void restoreOccupancies(List&lt;BerthOccupancy&gt; persisted) {
+<span class="fc bfc" id="L58" title="All 2 branches covered.">        for (BerthOccupancy o : persisted) {</span>
+<span class="pc bpc" id="L59" title="1 of 2 branches missed.">            if (manages(o.berthId())) {</span>
+<span class="fc" id="L60">                occupancy.put(o.berthId(), o);</span>
+            }
+<span class="fc" id="L62">        }</span>
+<span class="fc" id="L63">    }</span>
+
+    /**
+     * Provisionally books {@code berthId}: refuses {@code berth_busy} if occupied,
+     * {@code no_crane} if every crane is in use, else assigns the lowest free crane
+     * and returns a confirmation with the computed {@code expectedFreeAtSim}.
+     */
+    public synchronized Result requestBerth(String berthId, String vesselId, long etaSim, int durationHours) {
+<span class="fc" id="L71">        BerthOccupancy current = occupancy.get(berthId);</span>
+<span class="pc bpc" id="L72" title="1 of 4 branches missed.">        if (current != null &amp;&amp; current.status() != Status.FREE) {</span>
+<span class="fc" id="L73">            return Result.refused(&quot;berth_busy&quot;);</span>
+        }
+<span class="fc" id="L75">        int crane = nextFreeCrane();</span>
+<span class="fc bfc" id="L76" title="All 2 branches covered.">        if (crane == 0) {</span>
+<span class="fc" id="L77">            return Result.refused(&quot;no_crane&quot;);</span>
+        }
+<span class="fc" id="L79">        long expectedFreeAtSim = etaSim + (long) durationHours * MILLIS_PER_HOUR;</span>
+<span class="fc" id="L80">        occupancy.put(berthId,</span>
+                new BerthOccupancy(berthId, vesselId, etaSim, expectedFreeAtSim, crane, Status.PROVISIONAL));
+<span class="fc" id="L82">        return Result.confirmed(crane, expectedFreeAtSim);</span>
+    }
+
+    /** PROVISIONAL â†’ DOCKED when the vessel arrives; returns the new occupancy if it transitioned. */
+    public synchronized Optional&lt;BerthOccupancy&gt; confirmDocking(String berthId) {
+<span class="fc" id="L87">        BerthOccupancy o = occupancy.get(berthId);</span>
+<span class="pc bpc" id="L88" title="1 of 4 branches missed.">        if (o != null &amp;&amp; o.status() == Status.PROVISIONAL) {</span>
+<span class="fc" id="L89">            BerthOccupancy docked = o.withStatus(Status.DOCKED);</span>
+<span class="fc" id="L90">            occupancy.put(berthId, docked);</span>
+<span class="fc" id="L91">            return Optional.of(docked);</span>
+        }
+<span class="fc" id="L93">        return Optional.empty();</span>
+    }
+
+    /** Any non-free state â†’ FREE; returns the freed occupancy if it transitioned. */
+    public synchronized Optional&lt;BerthOccupancy&gt; releaseBerth(String berthId) {
+<span class="fc" id="L98">        BerthOccupancy o = occupancy.get(berthId);</span>
+<span class="pc bpc" id="L99" title="1 of 4 branches missed.">        if (o != null &amp;&amp; o.status() != Status.FREE) {</span>
+<span class="fc" id="L100">            BerthOccupancy freed = BerthOccupancy.free(berthId);</span>
+<span class="fc" id="L101">            occupancy.put(berthId, freed);</span>
+<span class="fc" id="L102">            return Optional.of(freed);</span>
+        }
+<span class="fc" id="L104">        return Optional.empty();</span>
+    }
+
+    /** Clears a still-PROVISIONAL booking for {@code vesselId} (CANCEL before docking). */
+    public synchronized Optional&lt;BerthOccupancy&gt; cancelProvisional(String vesselId) {
+<span class="pc bpc" id="L109" title="1 of 2 branches missed.">        for (BerthOccupancy o : occupancy.values()) {</span>
+<span class="pc bpc" id="L110" title="2 of 4 branches missed.">            if (vesselId.equals(o.vesselId()) &amp;&amp; o.status() == Status.PROVISIONAL) {</span>
+<span class="fc" id="L111">                BerthOccupancy freed = BerthOccupancy.free(o.berthId());</span>
+<span class="fc" id="L112">                occupancy.put(o.berthId(), freed);</span>
+<span class="fc" id="L113">                return Optional.of(freed);</span>
+            }
+<span class="nc" id="L115">        }</span>
+<span class="nc" id="L116">        return Optional.empty();</span>
+    }
+
+    public synchronized int cranesInUse() {
+<span class="fc bfc" id="L120" title="All 2 branches covered.">        return (int) occupancy.values().stream().filter(o -&gt; o.status() != Status.FREE).count();</span>
+    }
+
+    public synchronized int cranesFree() {
+<span class="fc" id="L124">        return cranesTotal - cranesInUse();</span>
+    }
+
+    public synchronized Optional&lt;BerthOccupancy&gt; berth(String berthId) {
+<span class="fc" id="L128">        return Optional.ofNullable(occupancy.get(berthId));</span>
+    }
+
+    /** Snapshot copy of every managed berth's occupancy (safe to iterate off-lock). */
+    public synchronized List&lt;BerthOccupancy&gt; occupancies() {
+<span class="fc" id="L133">        return List.copyOf(occupancy.values());</span>
+    }
+
+    private int nextFreeCrane() {
+<span class="fc" id="L137">        Set&lt;Integer&gt; used = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L138" title="All 2 branches covered.">        for (BerthOccupancy o : occupancy.values()) {</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">            if (o.status() != Status.FREE) {</span>
+<span class="fc" id="L140">                used.add(o.craneId());</span>
+            }
+<span class="fc" id="L142">        }</span>
+<span class="fc bfc" id="L143" title="All 2 branches covered.">        for (int crane = 1; crane &lt;= cranesTotal; crane++) {</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">            if (!used.contains(crane)) {</span>
+<span class="fc" id="L145">                return crane;</span>
+            }
+        }
+<span class="fc" id="L148">        return 0;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EscortToBerthBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.coordination</a> &gt; <span class="el_source">EscortToBerthBehaviour.java</span></div><h1>EscortToBerthBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.coordination;
+
+import java.util.Map;
+
+import it.unige.portcommand.agents.TugAgent;
+import it.unige.portcommand.agents.TugJob;
+import it.unige.portcommand.agents.TugStatus;
+import it.unige.portcommand.behaviours.SimTickerBehaviour;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.ontology.Position;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Second escort leg: shepherds the vessel from the pickup point to its assigned
+ * berth. The destination is the berth carried in the ACCEPT ({@code currentJob}) â€”
+ * the HarbourMaster is authoritative about it. The tug never reads a vessel agent's
+ * live state; it publishes its own position each tick to {@link it.unige.portcommand.artifacts.PortStateArtifact}.
+ *
+ * &lt;p&gt;On arrival it INFORMs the client ({@code escort_complete}) and hands off to
+ * {@link ReturnToBaseBehaviour}: work + next behaviour FIRST, {@code removeBehaviour(this)}
+ * LAST (nulls {@code myAgent}).
+ *
+ * &lt;p&gt;Note (task 08 doc-truth): task 06's {@code PortStateArtifact} carries no
+ * per-vessel position channel yet, so &quot;subscribe to the artefact for the vessel
+ * position&quot; is not wired here â€” the escort tracks the HM-assigned berth instead. When
+ * a vessel-position channel lands (task 18), the leg can follow the live vessel.
+ */
+public final class EscortToBerthBehaviour extends SimTickerBehaviour {
+
+<span class="fc" id="L33">    private static final Logger log = LoggerFactory.getLogger(EscortToBerthBehaviour.class);</span>
+    private static final long TICK_SIM_MILLIS = 1000L;
+
+    private final TugAgent tug;
+    private final Position berth;
+    private long lastSimMillis;
+
+    public EscortToBerthBehaviour(TugAgent tug) {
+<span class="fc" id="L41">        super(tug, tug.simClock(), TICK_SIM_MILLIS);</span>
+<span class="fc" id="L42">        this.tug = tug;</span>
+<span class="fc" id="L43">        TugJob job = tug.currentJob();</span>
+<span class="pc bpc" id="L44" title="2 of 4 branches missed.">        this.berth = (job != null &amp;&amp; job.berthPosition() != null) ? job.berthPosition() : tug.position();</span>
+<span class="fc" id="L45">        this.lastSimMillis = tug.simClock().nowSimMillis();</span>
+<span class="fc" id="L46">    }</span>
+
+    @Override
+    protected void onSimTick() {
+<span class="fc" id="L50">        long now = simClock().nowSimMillis();</span>
+<span class="fc" id="L51">        double dtSimSeconds = (now - lastSimMillis) / 1000.0;</span>
+<span class="fc" id="L52">        lastSimMillis = now;</span>
+<span class="fc bfc" id="L53" title="All 2 branches covered.">        if (dtSimSeconds &lt;= 0.0) {</span>
+<span class="fc" id="L54">            return;</span>
+        }
+<span class="fc" id="L56">        boolean arrived = tug.advanceToward(berth, dtSimSeconds);</span>
+<span class="fc" id="L57">        tug.pushState();</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">        if (arrived) {</span>
+<span class="fc" id="L59">            informEscortComplete();</span>
+<span class="fc" id="L60">            log.info(&quot;{} delivered vessel to berth {} -&gt; returning to base&quot;, tug.tugId(), berth);</span>
+<span class="fc" id="L61">            tug.setStatus(TugStatus.RETURNING);</span>
+<span class="fc" id="L62">            ReturnToBaseBehaviour ret = new ReturnToBaseBehaviour(tug);</span>
+<span class="fc" id="L63">            tug.setActiveMovement(ret);</span>
+<span class="fc" id="L64">            tug.addBehaviour(ret);</span>
+<span class="fc" id="L65">            tug.removeBehaviour(this); // LAST: nulls myAgent</span>
+        }
+<span class="fc" id="L67">    }</span>
+
+    private void informEscortComplete() {
+<span class="fc" id="L70">        TugJob job = tug.currentJob();</span>
+<span class="pc bpc" id="L71" title="2 of 4 branches missed.">        if (job == null || job.client() == null) {</span>
+<span class="nc" id="L72">            return;</span>
+        }
+<span class="fc" id="L74">        ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);</span>
+<span class="fc" id="L75">        inform.addReceiver(job.client());</span>
+<span class="pc bpc" id="L76" title="1 of 2 branches missed.">        if (job.conversationId() != null) {</span>
+<span class="fc" id="L77">            inform.setConversationId(job.conversationId()); // correlate completion to the CNP session</span>
+        }
+<span class="fc" id="L79">        inform.setContent(TerminalJson.write(Map.of(</span>
+<span class="fc" id="L80">                &quot;event&quot;, &quot;escort_complete&quot;, &quot;vessel_id&quot;, String.valueOf(job.vesselId()))));</span>
+<span class="fc" id="L81">        tug.send(inform);</span>
+<span class="fc" id="L82">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

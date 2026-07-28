@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>VesselTemplates.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.negotiation</a> &gt; <span class="el_source">VesselTemplates.java</span></div><h1>VesselTemplates.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.negotiation;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Map;
+import java.util.Set;
+
+import com.fasterxml.jackson.core.json.JsonReadFeature;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+
+/**
+ * Loads {@code data/vessel_templates.json} from the classpath once (the data is
+ * static config, not live shared state, so a cached read is fine â€” no DI needed).
+ * Keyed by vessel type ({@code tanker}, {@code container_vessel}, â€¦).
+ */
+public final class VesselTemplates {
+
+<span class="fc" id="L19">    private static final Map&lt;String, VesselTemplate&gt; TEMPLATES = load();</span>
+
+    private VesselTemplates() {
+    }
+
+    public static VesselTemplate forType(String vesselType) {
+<span class="fc" id="L25">        VesselTemplate template = TEMPLATES.get(vesselType);</span>
+<span class="fc bfc" id="L26" title="All 2 branches covered.">        if (template == null) {</span>
+<span class="fc" id="L27">            throw new IllegalArgumentException(&quot;no vessel template for type: &quot; + vesselType);</span>
+        }
+<span class="fc" id="L29">        return template;</span>
+    }
+
+    public static Set&lt;String&gt; types() {
+<span class="fc" id="L33">        return TEMPLATES.keySet();</span>
+    }
+
+    private static Map&lt;String, VesselTemplate&gt; load() {
+        // ALLOW_JAVA_COMMENTS so the data file can carry the ADR-13 semantic note at source
+        // (task 19); keys/values are unchanged. Jackson 2.16 non-deprecated builder API.
+<span class="fc" id="L39">        JsonMapper mapper = JsonMapper.builder().enable(JsonReadFeature.ALLOW_JAVA_COMMENTS).build();</span>
+<span class="fc" id="L40">        try (InputStream in = VesselTemplates.class.getResourceAsStream(&quot;/data/vessel_templates.json&quot;)) {</span>
+<span class="pc bpc" id="L41" title="1 of 2 branches missed.">            if (in == null) {</span>
+<span class="nc" id="L42">                throw new IllegalStateException(&quot;vessel_templates.json not found on classpath (/data/)&quot;);</span>
+            }
+<span class="fc" id="L44">            return mapper.readValue(in, new TypeReference&lt;Map&lt;String, VesselTemplate&gt;&gt;() {</span>
+            });
+<span class="nc" id="L46">        } catch (IOException e) {</span>
+<span class="nc" id="L47">            throw new IllegalStateException(&quot;failed to load vessel_templates.json&quot;, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

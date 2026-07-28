@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" tests="23" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:44" hostname="MOJI" time="0.1">
+  <properties/>
+  <testcase name="tableIsUnmodifiable()" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.002"/>
+  <testcase name="defaultsJsonMatchesTheHardCodedTable()" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="TIMEOUT engaged=true -&gt; -3.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.011"/>
+  <testcase name="TIMEOUT engaged=false -&gt; -1.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="WITHDRAW_PRICE engaged=true -&gt; -2.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="WITHDRAW_PRICE engaged=false -&gt; -2.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.003"/>
+  <testcase name="WITHDRAW_DURATION engaged=false -&gt; -2.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.002"/>
+  <testcase name="PLAYER_REFUSED engaged=false -&gt; 0.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.002"/>
+  <testcase name="PLAYER_REFUSED engaged=true -&gt; 0.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="DEAL -&gt; 1.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.006"/>
+  <testcase name="WITHDRAW_PRICE -&gt; -2.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.0"/>
+  <testcase name="WITHDRAW_DURATION -&gt; -2.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="TIMEOUT -&gt; -3.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="PLAYER_REFUSED -&gt; 0.0" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="theUnengagedTimeoutScalarIsMinusOneAndGentlerThanTheEngagedRow()" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="demoTranscriptDayOneArithmeticClosesAtPlusOne()" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.0"/>
+  <testcase name="[1] DEAL" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.005"/>
+  <testcase name="[2] WITHDRAW_PRICE" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="[3] WITHDRAW_DURATION" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="[4] TIMEOUT" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="[5] PLAYER_REFUSED" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.0"/>
+  <testcase name="unengagedDailyCapScalarIsMinusFiveAndTheAccumulatorClampsToIt()" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.001"/>
+  <testcase name="countingTheContractedVesselWouldContradictTheDemo()" classname="it.unige.portcommand.harbourmaster.financial.ReputationRulesTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

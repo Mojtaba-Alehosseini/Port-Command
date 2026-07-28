@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TransitToBerthBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.auto_flow</a> &gt; <span class="el_source">TransitToBerthBehaviour.java</span></div><h1>TransitToBerthBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.auto_flow;
+
+import it.unige.portcommand.agents.BaseVesselAgent;
+import it.unige.portcommand.behaviours.SimTickerBehaviour;
+import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.util.SimClock;
+import jade.core.Agent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Moves the vessel from the channel to its berth. Ticks every sim-second but
+ * COMPLETES on elapsed sim-time (so a test drives it by advancing the SimClock).
+ * On arrival it swaps itself for {@link DockAndServiceBehaviour}.
+ */
+public final class TransitToBerthBehaviour extends SimTickerBehaviour {
+
+<span class="fc" id="L18">    private static final Logger log = LoggerFactory.getLogger(TransitToBerthBehaviour.class);</span>
+    private static final long TICK_SIM_MILLIS = 1000L;       // 1 sim-second
+    private static final long TRANSIT_SIM_MILLIS = 120_000L; // ~2 sim-minutes channelâ†’berth
+
+    private final long arriveBySimMillis;
+
+    public TransitToBerthBehaviour(Agent agent, SimClock simClock) {
+<span class="fc" id="L25">        this(agent, simClock, simClock.nowSimMillis() + TRANSIT_SIM_MILLIS);</span>
+<span class="fc" id="L26">    }</span>
+
+    /** Task 22 resume: re-enter the transit with the SAVED absolute deadline, not a fresh leg. */
+    public static TransitToBerthBehaviour resuming(Agent agent, SimClock simClock, long arriveBySimMillis) {
+<span class="fc" id="L30">        return new TransitToBerthBehaviour(agent, simClock, arriveBySimMillis);</span>
+    }
+
+    private TransitToBerthBehaviour(Agent agent, SimClock simClock, long arriveBySimMillis) {
+<span class="fc" id="L34">        super(agent, simClock, TICK_SIM_MILLIS);</span>
+<span class="fc" id="L35">        this.arriveBySimMillis = arriveBySimMillis;</span>
+        // Task 22: report the flow position so the save snapshot knows where this vessel is.
+<span class="fc" id="L37">        ((BaseVesselAgent) agent).reportPhase(BaseVesselAgent.FlowPhase.TRANSIT, arriveBySimMillis);</span>
+<span class="fc" id="L38">    }</span>
+
+    @Override
+    protected void onSimTick() {
+<span class="fc" id="L42">        BaseVesselAgent vessel = (BaseVesselAgent) myAgent;</span>
+<span class="fc" id="L43">        Position p = vessel.position();</span>
+<span class="fc" id="L44">        vessel.setPosition(new Position(p.x() + 1.0, p.y(), p.headingDeg())); // cosmetic; GUI push is task 18</span>
+<span class="fc bfc" id="L45" title="All 2 branches covered.">        if (simClock().nowSimMillis() &gt;= arriveBySimMillis) {</span>
+<span class="fc" id="L46">            log.info(&quot;{} reached berth {} -&gt; docking&quot;, myAgent.getLocalName(), vessel.assignedBerth());</span>
+<span class="fc" id="L47">            myAgent.addBehaviour(new DockAndServiceBehaviour(myAgent, vessel.simClock()));</span>
+<span class="fc" id="L48">            myAgent.removeBehaviour(this); // MUST be last: removeBehaviour nulls myAgent</span>
+        }
+<span class="fc" id="L50">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

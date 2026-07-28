@@ -1,0 +1,427 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ForwardWalkInToPlayerBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.coordination</a> &gt; <span class="el_source">ForwardWalkInToPlayerBehaviour.java</span></div><h1>ForwardWalkInToPlayerBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.coordination;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
+import it.unige.portcommand.behaviours.cnp.InitiateCNPBehaviour;
+import it.unige.portcommand.behaviours.negotiation.WithdrawalBehaviour;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.AssistantChatEvent;
+import it.unige.portcommand.gui.events.DealClosedEvent;
+import it.unige.portcommand.gui.events.NegotiationClosedEvent;
+import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.WithdrawalEvent;
+import it.unige.portcommand.harbourmaster.BerthPositions;
+import it.unige.portcommand.harbourmaster.CnpRequest;
+import it.unige.portcommand.harbourmaster.VesselTracking;
+import it.unige.portcommand.harbourmaster.VesselTracking.Channel;
+import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
+import it.unige.portcommand.ontology.Deal;
+import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.prolog.PrologQueries;
+import jade.core.AID;
+import jade.core.Agent;
+import jade.core.behaviours.CyclicBehaviour;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Walk-in vessel (Channel B) inbound router on the HarbourMaster side: the
+ * opening/counter PROPOSE relays to the player as a {@link NegotiationOpenedEvent}
+ * (Prolog-picks the candidate berth â€” RULE R8 â€” since the vessel's own PROPOSE never
+ * carries one; no compatible berth means REFUSE outright, never forwarded, a
+ * non-vacuous Prolog gate); the {@code deal_confirmed} CONFIRM grants the final berth
+ * (RULE 1-8 gated, mirrors {@link AutoFlowDispatcherBehaviour}'s ACCEPT/REFUSE, on a
+ * fresh {@code &quot;berth-&quot;+localName} conversation that the vessel's own
+ * {@code AwaitBerthBehaviour} is already listening on) and â€” task 15, closing a gap ADR-08 left
+ * deliberately open â€” dispatches the same tug Contract Net {@link AutoFlowDispatcherBehaviour}
+ * initiates for contracted vessels, when {@code tugsRequired &gt; 0}; the {@code withdraw} INFORM
+ * just clears tracking.
+ *
+ * &lt;p&gt;{@link #TEMPLATE} excludes CNP traffic and the weather/customs/terminal
+ * conversations by protocol tag (never by sender AID â€” see the field's own
+ * javadoc for why).
+ */
+public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
+
+<span class="fc" id="L59">    private static final Logger log = LoggerFactory.getLogger(ForwardWalkInToPlayerBehaviour.class);</span>
+
+    public ForwardWalkInToPlayerBehaviour(Agent agent) {
+<span class="fc" id="L62">        super(agent);</span>
+<span class="fc" id="L63">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L67">        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;</span>
+<span class="fc" id="L68">        ACLMessage msg = hm.receiveLogged(TEMPLATE);</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">        if (msg == null) {</span>
+<span class="fc" id="L70">            block();</span>
+<span class="fc" id="L71">            return;</span>
+        }
+<span class="fc" id="L73">        JsonNode content = TerminalJson.readTreeOrNull(msg.getContent());</span>
+        // Audit A-01 (2026-07-27): the vessel's own REFUSE / ACCEPT_PROPOSAL replies to the
+        // player's counter. Handled by PERFORMATIVE, before the intent switch, because a REFUSE
+        // with unparseable content must still reach the player rather than fall through the
+        // intent == null branch below.
+<span class="fc bfc" id="L78" title="All 2 branches covered.">        if (msg.getPerformative() == ACLMessage.REFUSE) {</span>
+<span class="fc" id="L79">            handleVesselRefuse(hm, msg, content);</span>
+<span class="fc" id="L80">            return;</span>
+        }
+<span class="fc bfc" id="L82" title="All 2 branches covered.">        if (msg.getPerformative() == ACLMessage.ACCEPT_PROPOSAL) {</span>
+            // No action: the vessel's DealClosedBehaviour CONFIRM follows immediately and is what
+            // grants the berth. Matching it at all is the point â€” receiveLogged is the comm log's
+            // only instrumentation point, so before this the log showed the HM accepting and never
+            // the vessel, and the performative tally missed the vessel's side of the close.
+<span class="fc" id="L87">            log.debug(&quot;{}: vessel accepted the player's counter (deal_confirmed follows)&quot;,</span>
+<span class="fc" id="L88">                    msg.getSender().getLocalName());</span>
+<span class="fc" id="L89">            return;</span>
+        }
+<span class="fc" id="L91">        String intent = text(content, &quot;intent&quot;);</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">        if (intent == null) {</span>
+            // Tug-originated flow reports carry an &quot;event&quot; field, not &quot;intent&quot; (checkpoint-#6
+            // F1, fixed 2026-07-18): the escort_complete INFORM is the dock report this
+            // tracking previously swallowed silently.
+<span class="fc bfc" id="L96" title="All 2 branches covered.">            if (&quot;escort_complete&quot;.equals(text(content, &quot;event&quot;))) {</span>
+<span class="fc" id="L97">                advanceStage(hm, text(content, &quot;vessel_id&quot;), Stage.DOCKED);</span>
+            }
+<span class="fc" id="L99">            return; // anything else without an intent is not a walk-in negotiation message</span>
+        }
+<span class="pc bpc" id="L101" title="1 of 6 branches missed.">        switch (intent) {</span>
+<span class="fc" id="L102">            case &quot;opening_offer&quot;, &quot;counter_offer&quot; -&gt; handleOffer(hm, msg, content);</span>
+<span class="fc" id="L103">            case &quot;deal_confirmed&quot; -&gt; handleDealConfirmed(hm, msg, content);</span>
+<span class="fc" id="L104">            case &quot;withdraw&quot; -&gt; handleWithdraw(hm, msg, content);</span>
+            // Checkpoint-#6 F1/F5 (fixed 2026-07-18): both channels' DockAndServiceBehaviour
+            // INFORMs {intent: service_complete} at service end, and this switch used to fall
+            // through to the &quot;unrecognised&quot; branch â€” the HM-side stage never left
+            // AWAITING_TUG/IN_TRANSIT, so departures logged stale stages and the persisted
+            // VesselStateDTO.stage contradicted the vessel's own currentPhase.
+<span class="fc" id="L110">            case &quot;service_complete&quot; -&gt; advanceStage(hm, text(content, &quot;vessel_id&quot;), Stage.DEPARTING);</span>
+<span class="fc" id="L111">            case &quot;departed&quot; -&gt; handleDeparted(hm, content);</span>
+<span class="nc" id="L112">            default -&gt; log.debug(&quot;unrecognised walk-in intent '{}' from {}&quot;, intent, msg.getSender().getLocalName());</span>
+        }
+<span class="fc" id="L114">    }</span>
+
+    /**
+     * Forward-only stage advance from a received flow report (checkpoint-#6 F1). Monotone by
+     * {@link Stage} ordinal â€” a late or duplicate report (two escorting tugs each INFORM
+     * escort_complete; a delivered-then-storm-held vessel may report out of order) can never
+     * move tracking backwards. Deliberately does NOT touch tugs/holds: the weather CANCEL
+     * sweep's backward AWAITING_TUG reset stays the one legitimate regression, and the
+     * re-dispatch sweep (weatherHeld AND AWAITING_TUG) is naturally skipped for a vessel this
+     * advanced past AWAITING_TUG â€” a docked vessel must never be re-escorted. Terminal removal
+     * stays exclusively in {@link #handleDeparted}/{@link #handleWithdraw} (INVARIANTS
+     * &quot;terminal removal&quot; rule).
+     *
+     * &lt;p&gt;&lt;b&gt;Report lag is inherent&lt;/b&gt; (adversarial review F-1, 2026-07-18): the stage is the
+     * HM's best knowledge FROM RECEIVED REPORTS, not a mirror of the vessel's own phase. The
+     * DOCKED signal is the tug's escort_complete, which arrives escort-time after the vessel's
+     * fixed 2-sim-min self-docking â€” and a 0-tug vessel emits no dock report at all, so it
+     * tracks IN_TRANSIT until its service_complete. The pre-fix bug was stages STUCK for a
+     * vessel's whole life; transient lag (and the 0-tug DOCKED skip) is by design.
+     */
+    private static void advanceStage(HarbourMasterAgent hm, String vesselId, Stage target) {
+<span class="pc bpc" id="L135" title="1 of 2 branches missed.">        if (vesselId == null) {</span>
+<span class="nc" id="L136">            return;</span>
+        }
+<span class="fc" id="L138">        VesselTracking advanced = hm.activeVessels().computeIfPresent(vesselId,</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">                (id, tracking) -&gt; tracking.stage().ordinal() &lt; target.ordinal()</span>
+<span class="fc" id="L140">                        ? tracking.withStage(target)</span>
+<span class="fc" id="L141">                        : tracking);</span>
+<span class="pc bpc" id="L142" title="2 of 4 branches missed.">        if (advanced != null &amp;&amp; advanced.stage() == target) {</span>
+<span class="fc" id="L143">            log.debug(&quot;{}: tracking stage -&gt; {}&quot;, vesselId, target);</span>
+        }
+<span class="fc" id="L145">    }</span>
+
+    /**
+     * Terminal tracking cleanup (task 24, visual-checkpoint-#5 B1 â€” the GHOST-VESSEL bug).
+     * Both channels' {@code DepartBehaviour} INFORMs {@code {intent:departed, vessel_id}} on the
+     * way out, and before this handler NOTHING consumed it: the {@code VesselTracking} entry
+     * outlived its agent forever (a walk-in never even leaves IN_TRANSIT â€” the ADR-09 parity
+     * gap), so a later storm &quot;held&quot; long-gone vessels and the clear then re-dispatched REAL tug
+     * escorts (~â‚¬1,900 of charges for ghosts in the observed run). Departure now closes the
+     * entry; the weather sweeps additionally filter by live stage as defence in depth.
+     */
+    private void handleDeparted(HarbourMasterAgent hm, JsonNode content) {
+<span class="fc" id="L157">        String vesselId = text(content, &quot;vessel_id&quot;);</span>
+<span class="pc bpc" id="L158" title="1 of 2 branches missed.">        if (vesselId == null) {</span>
+<span class="nc" id="L159">            return;</span>
+        }
+<span class="fc" id="L161">        VesselTracking removed = hm.activeVessels().remove(vesselId);</span>
+<span class="pc bpc" id="L162" title="1 of 2 branches missed.">        if (removed != null) {</span>
+<span class="fc" id="L163">            log.info(&quot;{}: departed â€” tracking closed (was {}, {} tug(s) assigned)&quot;,</span>
+<span class="fc" id="L164">                    vesselId, removed.stage(), removed.assignedTugs().size());</span>
+        }
+<span class="fc" id="L166">    }</span>
+
+    /**
+     * The vessel bounced the player's counter (audit A-01). {@code EvaluateCounterOfferBehaviour}
+     * REFUSEs {@code invalid_price} (an absent/non-positive price â€” producer garbage it must not
+     * turn into a â‚¬0 deal) or {@code berth_incompatible}, in BOTH cases deliberately without
+     * consuming a round. So this surfaces the reason to the player's own tab and touches neither
+     * {@code negotiationRounds} nor {@code negotiationBerths}: the dialogue is exactly where it
+     * was, and the player can simply send a better counter.
+     *
+     * &lt;p&gt;Routed as an {@link AssistantChatEvent} because {@code ChatPanel} dispatches that by exact
+     * {@code dialogueId} into the tab the player is looking at â€” the conversation id the vessel
+     * replied on IS that dialogue id ({@code &quot;nego-&quot;+vesselId}, set by
+     * {@code DispatchPlayerCommandBehaviour}).
+     */
+    private void handleVesselRefuse(HarbourMasterAgent hm, ACLMessage msg, JsonNode content) {
+<span class="fc" id="L182">        String reason = text(content, &quot;reason&quot;);</span>
+<span class="fc" id="L183">        String dialogueId = msg.getConversationId();</span>
+<span class="fc" id="L184">        String vessel = msg.getSender().getLocalName();</span>
+<span class="pc bpc" id="L185" title="3 of 5 branches missed.">        String explanation = switch (reason == null ? &quot;&quot; : reason) {</span>
+<span class="fc" id="L186">            case &quot;invalid_price&quot; -&gt; &quot;That counter reached &quot; + vessel + &quot; without a usable price, so it &quot;</span>
+                    + &quot;could not act on it (invalid_price). No round was used â€” send a price.&quot;;
+<span class="nc" id="L188">            case &quot;berth_incompatible&quot; -&gt; vessel + &quot; cannot use that berth (berth_incompatible). &quot;</span>
+                    + &quot;No round was used â€” name a berth that fits, or leave the berth out.&quot;;
+<span class="pc" id="L190">            default -&gt; vessel + &quot; refused that counter (&quot; + reason + &quot;). No round was used.&quot;;</span>
+        };
+<span class="fc" id="L192">        hm.eventBus().publish(new AssistantChatEvent(dialogueId, explanation));</span>
+<span class="fc" id="L193">        log.info(&quot;{}: counter REFUSEd ({}) â€” surfaced to {}&quot;, vessel, reason, dialogueId);</span>
+<span class="fc" id="L194">    }</span>
+
+    private void handleOffer(HarbourMasterAgent hm, ACLMessage msg, JsonNode content) {
+<span class="fc" id="L197">        VesselSpec spec = TerminalJson.treeToOrNull(content.get(&quot;vessel_spec&quot;), VesselSpec.class);</span>
+<span class="pc bpc" id="L198" title="1 of 2 branches missed.">        if (spec == null) {</span>
+<span class="nc" id="L199">            return; // malformed offer; nothing binding was ever exchanged</span>
+        }
+<span class="fc" id="L201">        double price = num(content, &quot;price&quot;);</span>
+<span class="fc" id="L202">        int hours = (int) num(content, &quot;hours&quot;);</span>
+<span class="fc" id="L203">        String dialogueId = msg.getConversationId();</span>
+
+<span class="fc" id="L205">        String berthId = hm.negotiationBerths().computeIfAbsent(dialogueId, id -&gt; pickBerth(hm, spec));</span>
+<span class="fc bfc" id="L206" title="All 2 branches covered.">        if (berthId == null) {</span>
+<span class="fc" id="L207">            ACLMessage refuse = MessageFactory.reply(msg, ACLMessage.REFUSE);</span>
+<span class="fc" id="L208">            refuse.setContent(TerminalJson.write(Map.of(&quot;intent&quot;, &quot;refuse&quot;, &quot;reason&quot;, &quot;no_compatible_berth&quot;)));</span>
+<span class="fc" id="L209">            hm.sendLogged(refuse);</span>
+<span class="fc" id="L210">            hm.negotiationBerths().remove(dialogueId);</span>
+<span class="fc" id="L211">            log.info(&quot;{}: REFUSE opening offer (no compatible berth)&quot;, spec.vesselId());</span>
+<span class="fc" id="L212">            return;</span>
+        }
+
+<span class="fc" id="L215">        hm.activeVessels().computeIfAbsent(spec.vesselId(), id -&gt; VesselTracking</span>
+<span class="fc" id="L216">                .arriving(spec.vesselId(), spec, Channel.WALK_IN, msg.getSender())</span>
+<span class="fc" id="L217">                .withStage(Stage.NEGOTIATING)</span>
+<span class="fc" id="L218">                .withBerth(berthId));</span>
+
+<span class="fc" id="L220">        int roundsUsed = hm.negotiationRounds()</span>
+<span class="fc" id="L221">                .computeIfAbsent(dialogueId, id -&gt; new AtomicInteger(0))</span>
+<span class="fc" id="L222">                .incrementAndGet();</span>
+
+        // task 10's AutopilotExecuteBehaviour subscribes to this SAME event type
+        // (INVARIANTS.md &quot;Assistant (task 10)&quot;) â€” no separate INFORM needed; real
+        // dispatch arrives with task 17, matching every other EventBus consumer today.
+<span class="fc" id="L227">        WalkInDialogueSnapshot snapshot = WalkInDialogueSnapshot.of(</span>
+<span class="fc" id="L228">                spec.vesselId(), spec, berthId, hours, price, 0.0, roundsUsed, 0.0, false);</span>
+<span class="fc" id="L229">        hm.eventBus().publish(new NegotiationOpenedEvent(dialogueId, snapshot));</span>
+<span class="fc" id="L230">        log.info(&quot;{}: {} forwarded (round {}, berth {}, price {})&quot;,</span>
+<span class="pc bpc" id="L231" title="1 of 2 branches missed.">                spec.vesselId(), roundsUsed == 1 ? &quot;opening offer&quot; : &quot;counter&quot;, roundsUsed, berthId, price);</span>
+<span class="fc" id="L232">    }</span>
+
+    private void handleDealConfirmed(HarbourMasterAgent hm, ACLMessage msg, JsonNode content) {
+<span class="fc" id="L235">        VesselTracking tracking = findByAid(hm, msg.getSender());</span>
+<span class="pc bpc" id="L236" title="1 of 2 branches missed.">        if (tracking == null) {</span>
+<span class="nc" id="L237">            log.warn(&quot;deal_confirmed from untracked vessel {} â€” ignoring&quot;, msg.getSender().getLocalName());</span>
+<span class="nc" id="L238">            return;</span>
+        }
+<span class="fc" id="L240">        String dialogueId = msg.getConversationId();</span>
+<span class="fc" id="L241">        String berthId = hm.negotiationBerths().getOrDefault(dialogueId, tracking.assignedBerth());</span>
+<span class="fc" id="L242">        VesselSpec spec = tracking.spec();</span>
+<span class="fc" id="L243">        double price = num(content, &quot;price&quot;);</span>
+<span class="fc" id="L244">        int hours = (int) num(content, &quot;hours&quot;);</span>
+
+        // RULE 4 (CLAUDE.md): re-gated through Prolog before this SECOND binding
+        // grant too â€” a counter-PROPOSE round earlier is not a substitute.
+<span class="pc bpc" id="L248" title="2 of 4 branches missed.">        boolean compatible = berthId != null &amp;&amp; PrologQueries.isCompatible(</span>
+<span class="fc" id="L249">                berthId, spec.vesselType(), spec.draft(), spec.length(), spec.tonnage());</span>
+<span class="fc" id="L250">        String berthConversationId = &quot;berth-&quot; + msg.getSender().getLocalName();</span>
+<span class="pc bpc" id="L251" title="1 of 2 branches missed.">        if (!compatible) {</span>
+<span class="nc" id="L252">            ACLMessage refuse = MessageFactory.create(ACLMessage.REFUSE);</span>
+<span class="nc" id="L253">            refuse.addReceiver(msg.getSender());</span>
+<span class="nc" id="L254">            refuse.setConversationId(berthConversationId);</span>
+<span class="nc" id="L255">            refuse.setContent(TerminalJson.write(Map.of(&quot;reason&quot;, &quot;incompatible&quot;)));</span>
+<span class="nc" id="L256">            hm.sendLogged(refuse);</span>
+<span class="nc" id="L257">            log.info(&quot;{}: REFUSE berth grant (incompatible)&quot;, spec.vesselId());</span>
+<span class="nc" id="L258">            return;</span>
+        }
+
+<span class="fc" id="L261">        ACLMessage accept = MessageFactory.create(ACLMessage.ACCEPT_PROPOSAL);</span>
+<span class="fc" id="L262">        accept.addReceiver(msg.getSender());</span>
+<span class="fc" id="L263">        accept.setConversationId(berthConversationId);</span>
+<span class="fc" id="L264">        accept.setContent(TerminalJson.write(Map.of(&quot;berth_id&quot;, berthId, &quot;price&quot;, price, &quot;hours&quot;, hours)));</span>
+<span class="fc" id="L265">        hm.sendLogged(accept);</span>
+
+        // Checkpoint-#6 F1 (fixed 2026-07-18): a vessel that needs no escort never awaits one â€”
+        // it starts its transit the moment the grant lands (AwaitBerthBehaviour attaches the
+        // transit unconditionally), so AWAITING_TUG was a from-the-start lie for 0-tug vessels
+        // (W9 departed still showing it). Stage the grant by what actually happens next.
+<span class="fc" id="L271">        int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());</span>
+<span class="fc bfc" id="L272" title="All 2 branches covered.">        Stage grantStage = tugsRequired &gt; 0 ? Stage.AWAITING_TUG : Stage.IN_TRANSIT;</span>
+<span class="fc" id="L273">        hm.activeVessels().put(spec.vesselId(), tracking.withStage(grantStage).withBerth(berthId));</span>
+<span class="fc" id="L274">        hm.negotiationBerths().remove(dialogueId);</span>
+<span class="fc" id="L275">        hm.negotiationRounds().remove(dialogueId);</span>
+<span class="fc" id="L276">        log.info(&quot;{}: berth GRANTED {} (price {}, {}h)&quot;, spec.vesselId(), berthId, price, hours);</span>
+
+        // Task 19: closes a real gap â€” DealClosedEvent/NegotiationClosedEvent existed since
+        // task 17 but nothing published them, so a chat tab could never close/grey on a deal.
+<span class="fc" id="L280">        hm.eventBus().publish(new DealClosedEvent(new Deal(&quot;deal-&quot; + spec.vesselId(), spec.vesselId(), berthId,</span>
+<span class="fc" id="L281">                price, hours, hm.simClock().nowSimMillis(), Deal.Outcome.DEAL)));</span>
+<span class="fc" id="L282">        hm.eventBus().publish(new NegotiationClosedEvent(dialogueId, spec.vesselId(), Deal.Outcome.DEAL));</span>
+
+        // Task 15: closes the walk-in CNP-dispatch gap ADR-08 left deliberately open â€”
+        // mirrors AutoFlowDispatcherBehaviour's own tugsRequired&gt;0 gate exactly. Terminal/customs
+        // dispatch stays out of scope (not asked for; a separate, larger parity gap â€” see ADR-09).
+<span class="fc bfc" id="L287" title="All 2 branches covered.">        if (tugsRequired &gt; 0) {</span>
+<span class="fc" id="L288">            Position berthPosition = BerthPositions.position(berthId);</span>
+<span class="fc" id="L289">            hm.cnpCoordinator().initiate(new CnpRequest(spec.vesselId(), msg.getSender(),</span>
+                    AutoFlowDispatcherBehaviour.CHANNEL_ENTRY, berthPosition, tugsRequired));
+        }
+<span class="fc" id="L292">    }</span>
+
+    private void handleWithdraw(HarbourMasterAgent hm, ACLMessage msg, JsonNode content) {
+<span class="fc" id="L295">        VesselTracking tracking = findByAid(hm, msg.getSender());</span>
+<span class="pc bpc" id="L296" title="1 of 2 branches missed.">        if (tracking != null) {</span>
+<span class="fc" id="L297">            hm.activeVessels().remove(tracking.vesselId());</span>
+        }
+<span class="fc" id="L299">        String dialogueId = msg.getConversationId();</span>
+<span class="fc" id="L300">        hm.negotiationBerths().remove(dialogueId);</span>
+<span class="fc" id="L301">        hm.negotiationRounds().remove(dialogueId);</span>
+<span class="fc" id="L302">        String reason = text(content, &quot;reason&quot;);</span>
+<span class="fc" id="L303">        log.info(&quot;{}: walk-in withdrew ({})&quot;, msg.getSender().getLocalName(), reason);</span>
+
+        // Task 19: closes the same publisher gap as handleDealConfirmed's DealClosedEvent, for
+        // the non-DEAL outcomes. WithdrawalBehaviour.outcomeFor throws on an unrecognised reason
+        // (a boundary this CyclicBehaviour must never let kill its own message loop over) â€” the
+        // tracking cleanup above still happens either way.
+        try {
+<span class="pc bpc" id="L310" title="1 of 2 branches missed.">            String vesselId = tracking != null ? tracking.vesselId() : msg.getSender().getLocalName();</span>
+<span class="fc" id="L311">            Deal.Outcome outcome = WithdrawalBehaviour.outcomeFor(reason);</span>
+            // Task 24: the vessel-computed engagement bit (absent on a legacy/malformed message
+            // reads as false â€” a never-engaged timeout, the gentler penalty; a genuine engaged
+            // withdrawal always carries it). Only TIMEOUT's delta depends on it.
+<span class="fc" id="L315">            boolean engaged = content.path(&quot;engaged&quot;).asBoolean(false);</span>
+<span class="fc" id="L316">            hm.eventBus().publish(new WithdrawalEvent(vesselId, outcome, engaged, hm.simClock().nowSimMillis()));</span>
+<span class="fc" id="L317">            hm.eventBus().publish(new NegotiationClosedEvent(dialogueId, vesselId, outcome));</span>
+<span class="fc" id="L318">        } catch (IllegalArgumentException e) {</span>
+<span class="fc" id="L319">            log.warn(&quot;withdraw from {} carried an unrecognised reason '{}' -- GUI tab left as-is&quot;, msg.getSender().getLocalName(), reason);</span>
+<span class="fc" id="L320">        }</span>
+<span class="fc" id="L321">    }</span>
+
+    /**
+     * First Prolog-compatible berth for the vessel's dimensions (RULE R8) that no live vessel is
+     * already holding, or {@code null} when the vessel fits nowhere at all.
+     *
+     * &lt;p&gt;&lt;b&gt;Audit A-02 (2026-07-27).&lt;/b&gt; This used to be a bare {@code compatible.get(0)}. R8's
+     * {@code findall} enumerates {@code instance_of/2} in clause order, so that pick was
+     * DETERMINISTIC â€” every walk-in of a given class got the SAME berth (berth_1 for a
+     * cargo_vessel). Two overlapping same-class walk-ins (which {@code busy_day} scripts at t=300)
+     * were therefore both offered, and could both be granted, one berth: two vessels docked in it,
+     * with the map still painting it FREE. Nothing downstream catches that â€” a walk-in sends the
+     * terminal no berth REQUEST at all (ADR-09), so {@code TerminalState}'s {@code berth_busy}
+     * guard never sees it and no {@code BerthOccupancyUpdate} is ever pushed.
+     *
+     * &lt;p&gt;The de-duplication is deliberately a PREFERENCE, not a constraint: if every compatible
+     * berth is already held, this falls back to the old first-compatible pick rather than
+     * returning {@code null}. Returning null would REFUSE {@code no_compatible_berth} â€” a lie,
+     * since the berth does fit and is merely busy â€” and would newly turn away vessels the port
+     * previously served. Real occupancy arbitration belongs with the terminal-REQUEST parity fix
+     * (backlog), which is where a truthful {@code berth_busy} can come from.
+     */
+    private static String pickBerth(HarbourMasterAgent hm, VesselSpec spec) {
+<span class="fc" id="L344">        List&lt;String&gt; compatible = PrologQueries.findCompatibleBerths(</span>
+<span class="fc" id="L345">                spec.vesselType(), spec.draft(), spec.length(), spec.tonnage());</span>
+<span class="fc bfc" id="L346" title="All 2 branches covered.">        if (compatible.isEmpty()) {</span>
+<span class="fc" id="L347">            return null;</span>
+        }
+<span class="fc" id="L349">        Set&lt;String&gt; held = hm.activeVessels().values().stream()</span>
+<span class="fc" id="L350">                .map(VesselTracking::assignedBerth)</span>
+<span class="fc" id="L351">                .filter(Objects::nonNull)</span>
+<span class="fc" id="L352">                .collect(Collectors.toSet());</span>
+<span class="fc bfc" id="L353" title="All 2 branches covered.">        Optional&lt;String&gt; free = compatible.stream().filter(berth -&gt; !held.contains(berth)).findFirst();</span>
+<span class="fc bfc" id="L354" title="All 2 branches covered.">        if (free.isEmpty()) {</span>
+            // The residual A-02 case, made VISIBLE rather than silent (adversarial review, 2026-07-27):
+            // when every compatible berth is held we fall back to the old pick, which reproduces the
+            // original collision. Logging it is one line and turns &quot;two vessels in one berth, map
+            // still FREE&quot; from invisible into greppable.
+<span class="fc" id="L359">            log.warn(&quot;{}: every compatible berth {} is already held â€” falling back to {}; &quot;</span>
+                            + &quot;this vessel may collide with an existing one (audit A-02 residual)&quot;,
+<span class="fc" id="L361">                    spec.vesselId(), compatible, compatible.get(0));</span>
+        }
+<span class="fc" id="L363">        return free.orElse(compatible.get(0));</span>
+    }
+
+    private static VesselTracking findByAid(HarbourMasterAgent hm, AID aid) {
+<span class="pc bpc" id="L367" title="1 of 2 branches missed.">        for (VesselTracking vt : hm.activeVessels().values()) {</span>
+<span class="fc bfc" id="L368" title="All 2 branches covered.">            if (aid.equals(vt.aid())) {</span>
+<span class="fc" id="L369">                return vt;</span>
+            }
+<span class="fc" id="L371">        }</span>
+<span class="nc" id="L372">        return null;</span>
+    }
+
+    /**
+     * Matches PROPOSE/CONFIRM/INFORM/REFUSE/ACCEPT_PROPOSAL on the standard envelope, excluding
+     * every OTHER tagged conversation on the HarbourMaster's shared inbound queue: CNP
+     * bids, the weather threshold alert, the customs pre-clearance reply, and the
+     * terminal berth reply â€” each routed to its own behaviour instead. Excluding by
+     * PROTOCOL TAG (not sender AID) is deliberate: an earlier AID-based exclusion
+     * had a real gap where a message could arrive before the HarbourMaster's first
+     * successful DF lookup for that sender resolved, and this template would
+     * wrongly swallow it (adversarial review finding, task 11) â€” a protocol tag set
+     * at send time has no such timing dependency.
+     *
+     * &lt;p&gt;&lt;b&gt;REFUSE / ACCEPT_PROPOSAL added by audit A-01 (2026-07-27).&lt;/b&gt; The walk-in vessel's
+     * {@code EvaluateCounterOfferBehaviour} replies to the player's counter with both, on the
+     * {@code nego-} conversation and with no protocol tag â€” and no behaviour on this agent claimed
+     * either, so they sat in the inbox for the process's life. The four protocol exclusions above
+     * already fence off every OTHER producer of those two performatives that addresses the hub
+     * (tug bids under {@code fipa-contract-net}, terminal berth replies under the terminal
+     * protocol, customs under its own), which is what makes this widening safe. Verified by
+     * enumerating every {@code ACLMessage.REFUSE}/{@code ACCEPT_PROPOSAL} construction in
+     * {@code src/main}: the walk-in vessel's three are the only untagged ones aimed here.
+     */
+<span class="fc" id="L396">    private static final MessageTemplate TEMPLATE = MessageTemplate.and(</span>
+<span class="fc" id="L397">            MessageTemplate.and(MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY),</span>
+<span class="fc" id="L398">                    MessageTemplate.or(</span>
+<span class="fc" id="L399">                            MessageTemplate.or(MessageTemplate.or(MessageTemplate.MatchPerformative(ACLMessage.PROPOSE),</span>
+<span class="fc" id="L400">                                    MessageTemplate.MatchPerformative(ACLMessage.CONFIRM)),</span>
+<span class="fc" id="L401">                                    MessageTemplate.MatchPerformative(ACLMessage.INFORM)),</span>
+<span class="fc" id="L402">                            MessageTemplate.or(MessageTemplate.MatchPerformative(ACLMessage.REFUSE),</span>
+<span class="fc" id="L403">                                    MessageTemplate.MatchPerformative(ACLMessage.ACCEPT_PROPOSAL)))),</span>
+<span class="fc" id="L404">            MessageTemplate.and(MessageTemplate.and(</span>
+<span class="fc" id="L405">                    MessageTemplate.not(MessageTemplate.MatchProtocol(InitiateCNPBehaviour.CNP_PROTOCOL)),</span>
+<span class="fc" id="L406">                    MessageTemplate.not(MessageTemplate.MatchProtocol(HandleWeatherAlertBehaviour.WEATHER_ALERT_PROTOCOL))),</span>
+<span class="fc" id="L407">                    MessageTemplate.and(</span>
+<span class="fc" id="L408">                            MessageTemplate.not(MessageTemplate.MatchProtocol(HandleEmergencyBehaviour.CUSTOMS_CLEARANCE_PROTOCOL)),</span>
+<span class="fc" id="L409">                            MessageTemplate.not(MessageTemplate.MatchProtocol(AutoFlowDispatcherBehaviour.TERMINAL_BERTH_PROTOCOL)))));</span>
+
+    private static String text(JsonNode node, String field) {
+<span class="pc bpc" id="L412" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L413">            return null;</span>
+        }
+<span class="fc" id="L415">        JsonNode v = node.get(field);</span>
+<span class="fc bfc" id="L416" title="All 2 branches covered.">        return v == null ? null : v.asText();</span>
+    }
+
+    private static double num(JsonNode node, String field) {
+<span class="pc bpc" id="L420" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L421">            return 0.0;</span>
+        }
+<span class="fc" id="L423">        JsonNode v = node.get(field);</span>
+<span class="pc bpc" id="L424" title="1 of 2 branches missed.">        return v == null ? 0.0 : v.asDouble();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

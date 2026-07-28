@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.lifecycle.GameLifecycleLoadingTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:44" hostname="MOJI" time="0.069">
+  <properties/>
+  <testcase name="loadingIsLegalFromPausedAndFromGameOver()" classname="it.unige.portcommand.lifecycle.GameLifecycleLoadingTest" time="0.063"/>
+  <testcase name="failedLoadLandsInMenuAndANewGameIsStillPossible()" classname="it.unige.portcommand.lifecycle.GameLifecycleLoadingTest" time="0.002"/>
+  <testcase name="loadingFromMenuDirectlyIsLegalButFromLoadingIsNot()" classname="it.unige.portcommand.lifecycle.GameLifecycleLoadingTest" time="0.001"/>
+  <testcase name="beginCompleteLoadingFreezesThenResumes()" classname="it.unige.portcommand.lifecycle.GameLifecycleLoadingTest" time="0.001"/>
+  <system-out><![CDATA[00:12:44.567 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.567 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.567 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.567 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> PAUSED
+00:12:44.584 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode PAUSED -> LOADING
+00:12:44.584 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> GAME_OVER
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode GAME_OVER -> LOADING
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> LOADING
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> MENU
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer stopped
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.599 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.606 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.606 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:12:44.606 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:12:44.606 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (3600000 ms/tick, 300 real-s per game day)
+00:12:44.606 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode RUNNING -> LOADING
+00:12:44.610 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

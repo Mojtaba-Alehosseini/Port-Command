@@ -1,0 +1,54 @@
+{
+  "key": "storm",
+  "displayName": "Storm Event",
+  "description": "A tanker inbound as severe wind builds. Hold vessels offshore or expedite — includes one CANCEL cascade.",
+  "targetDailyRevenue": 8000,
+  "randomSeed": 20260320,
+  "settingsOverride": { "difficulty": "HARD", "autopilotEnabled": false, "realSecondsPerGameDay": 900 },
+  "initialState": {
+    "startDay": 1,
+    "startTimeOfDay": "08:00",
+    "wallet": 30000,
+    "reputation": 70,
+    "weatherOverride": { "windKn": 22, "visibility": "fair", "swell": 1.5, "state": "cloudy" },
+    "berths": [
+      { "berthId": 1, "occupied": false, "vessel": null },
+      { "berthId": 2, "occupied": true,
+        "vessel": { "vesselId": "STORM-C1", "vesselType": "cargo_vessel", "dealPrice": 1900, "dealHours": 2 } },
+      { "berthId": 3, "occupied": true,
+        "vessel": { "vesselId": "STORM-C2", "vesselType": "cargo_vessel", "dealPrice": 2100, "dealHours": 8 } },
+      { "berthId": 4, "occupied": false, "vessel": null }
+    ],
+    "tugs": [
+      { "tugId": 1, "status": "AVAILABLE", "fuel": 1.0 },
+      { "tugId": 2, "status": "AVAILABLE", "fuel": 1.0 },
+      { "tugId": 3, "status": "AVAILABLE", "fuel": 1.0 },
+      { "tugId": 4, "status": "AVAILABLE", "fuel": 1.0 }
+    ]
+  },
+  "contracts": [
+    {
+      "contract_id": "ST-901",
+      "vessel_id": "T901",
+      "vessel_type": "tanker",
+      "berth_id": "berth_1",
+      "contracted_fee": 9000.0,
+      "contracted_hours": 10,
+      "expected_arrival_sim_millis": 0
+    }
+  ],
+  "events": [
+    { "type": "Notification", "simTimeSeconds": 0, "severity": "WARN",
+      "text": "Tanker T901 due within the hour for berth 1. Forecast: severe wind building." },
+    { "type": "SpawnVessel", "simTimeSeconds": 960, "vesselType": "tanker", "channel": "contracted",
+      "vesselId": null, "contractRef": "ST-901", "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null },
+    { "type": "WeatherChange", "simTimeSeconds": 990, "windKn": 32, "visibility": "poor", "swell": 4.0, "state": "stormy" },
+    { "type": "Notification", "simTimeSeconds": 990, "severity": "EMERGENCY",
+      "text": "Storm: wind 32 kn — tanker operations unsafe. Escorts cancelled, vessels held offshore." },
+    { "type": "SpawnVessel", "simTimeSeconds": 1500, "vesselType": "cargo_vessel", "channel": "walk_in",
+      "vesselId": "STORM-W1", "contractRef": null, "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null },
+    { "type": "WeatherChange", "simTimeSeconds": 1980, "windKn": 24, "visibility": "good", "swell": 1.0, "state": "cloudy" },
+    { "type": "Notification", "simTimeSeconds": 1980, "severity": "INFO",
+      "text": "Storm clearing, tanker proceeding — escorts re-dispatched." }
+  ]
+}

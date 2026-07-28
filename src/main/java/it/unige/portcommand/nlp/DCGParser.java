@@ -3,11 +3,10 @@ package it.unige.portcommand.nlp;
 import java.util.Optional;
 
 /**
- * Stub interface for the SWI-Prolog DCG negotiation parser (PROJECT_DEFINITION.md §6.2).
- * The real JPL-backed implementation — consulting {@code dcg_negotiation.pl} via {@code
- * negotiation_move(Frame, DialogueCtx)} — is task 16's. This task only declares the
- * interface so {@link NLPPipeline} can be wired end-to-end ahead of the real grammar;
- * {@link NoOpDCGParser} is the production placeholder until task 16 lands.
+ * The SWI-Prolog DCG negotiation parser (PROJECT_DEFINITION.md §6.2). Declared by task 14 so
+ * {@link NLPPipeline} could be wired ahead of the grammar; implemented by task 16 as
+ * {@link PrologDcgParser}, which consults {@code dcg_negotiation.pl} and runs {@code parse_move}
+ * over the utterance via JPL. {@link NoOpDCGParser} remains as the always-miss null object.
  */
 public interface DCGParser {
 

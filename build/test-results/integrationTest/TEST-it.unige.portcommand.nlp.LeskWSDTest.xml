@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.LeskWSDTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:21:40" hostname="MOJI" time="0.077">
+  <properties/>
+  <testcase name="emptyContextYieldsNoSenseRatherThanGuessingSenseOne()" classname="it.unige.portcommand.nlp.LeskWSDTest" time="0.031"/>
+  <testcase name="picksTheHarbourSenseOfDockInAPortContext()" classname="it.unige.portcommand.nlp.LeskWSDTest" time="0.019"/>
+  <testcase name="stopWordsOnlyContextYieldsNoSense()" classname="it.unige.portcommand.nlp.LeskWSDTest" time="0.001"/>
+  <testcase name="theSameWordResolvesToDifferentSensesInDifferentContexts()" classname="it.unige.portcommand.nlp.LeskWSDTest" time="0.001"/>
+  <testcase name="unknownWordYieldsNoSense()" classname="it.unige.portcommand.nlp.LeskWSDTest" time="0.005"/>
+  <testcase name="contextThatOverlapsNoGlossYieldsNoSense()" classname="it.unige.portcommand.nlp.LeskWSDTest" time="0.01"/>
+  <testcase name="theTargetWordItselfDoesNotCountAsOverlap()" classname="it.unige.portcommand.nlp.LeskWSDTest" time="0.001"/>
+  <testcase name="picksTheCourtroomSenseOfDockInALegalContext()" classname="it.unige.portcommand.nlp.LeskWSDTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

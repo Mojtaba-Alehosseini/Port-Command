@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HallucinationValidator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.assistant</a> &gt; <span class="el_source">HallucinationValidator.java</span></div><h1>HallucinationValidator.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.assistant;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Gazetteer-bounded hallucination guard (planning/10 Â§10.4, v1.1 fixes). Mirrors the Python
+ * sidecar's {@code llm_sidecar.validator.HallucinationValidator} (task 13) for checks 1-2, and
+ * additionally runs the positive-control (check 3) that only the Java side can â€” it needs
+ * {@link Recommendation#allFigures()}, which never crosses the HTTP boundary to the sidecar.
+ *
+ * &lt;p&gt;Three checks, ALL must pass:
+ * &lt;ol&gt;
+ *   &lt;li&gt;Required-number presence â€” every figure in {@link Recommendation#requiredFigures()} must
+ *       appear in the output (v1.1: same numeric normalisation as check 3, digit-bounded so
+ *       required &quot;2000&quot; is not satisfied by &quot;12000&quot;). &lt;b&gt;2026-07-27 (task 26):&lt;/b&gt; this used to
+ *       require the whole of {@link Recommendation#allFigures()}; see
+ *       {@link Recommendation#requiredFigures()} for the measurement that narrowed it to the
+ *       decision figures. Check 3 below is unchanged and still spans every figure.&lt;/li&gt;
+ *   &lt;li&gt;Proper-noun negative control â€” every capitalised, non-sentence-initial word in the
+ *       output that is not a common English/domain word must be in the gazetteer
+ *       ({@link Recommendation#namedEntities()}).&lt;/li&gt;
+ *   &lt;li&gt;Positive control â€” every number extracted from the output (normalised the same way)
+ *       must be a member of {@link Recommendation#allFigures()}; a number absent from that set
+ *       (fabricated or altered) fails the check even if all required numbers are also present.&lt;/li&gt;
+ * &lt;/ol&gt;
+ */
+public final class HallucinationValidator {
+
+    // Common English function words + the domain's COMMON nouns (capitalised forms are NOT
+    // proper-noun names) + weekday/month names + Genova place names. Mirrors
+    // llm_sidecar/validator.py's _COMMON_WORDS exactly (task 13 parity).
+<span class="fc" id="L38">    private static final Set&lt;String&gt; COMMON_WORDS = Set.of(</span>
+            &quot;the&quot;, &quot;a&quot;, &quot;an&quot;, &quot;and&quot;, &quot;or&quot;, &quot;but&quot;, &quot;if&quot;, &quot;then&quot;, &quot;for&quot;, &quot;to&quot;, &quot;of&quot;, &quot;in&quot;,
+            &quot;on&quot;, &quot;at&quot;, &quot;by&quot;, &quot;with&quot;, &quot;from&quot;, &quot;as&quot;, &quot;is&quot;, &quot;are&quot;, &quot;was&quot;, &quot;were&quot;, &quot;be&quot;,
+            &quot;it&quot;, &quot;its&quot;, &quot;this&quot;, &quot;that&quot;, &quot;these&quot;, &quot;those&quot;, &quot;your&quot;, &quot;you&quot;, &quot;our&quot;, &quot;we&quot;,
+            &quot;i&quot;, &quot;he&quot;, &quot;she&quot;, &quot;they&quot;, &quot;his&quot;, &quot;her&quot;, &quot;their&quot;, &quot;no&quot;, &quot;not&quot;, &quot;yes&quot;, &quot;so&quot;,
+            // &quot;may&quot; (modal verb) deliberately omitted here â€” it reappears below as a month name,
+            // and Set.of rejects duplicate elements (unlike Python's frozenset, which the
+            // COMMON_WORDS list otherwise mirrors verbatim).
+            &quot;because&quot;, &quot;due&quot;, &quot;should&quot;, &quot;will&quot;, &quot;would&quot;, &quot;can&quot;, &quot;now&quot;, &quot;up&quot;, &quot;down&quot;,
+            &quot;berth&quot;, &quot;berths&quot;, &quot;tug&quot;, &quot;tugs&quot;, &quot;vessel&quot;, &quot;vessels&quot;, &quot;ship&quot;, &quot;ships&quot;,
+            &quot;tanker&quot;, &quot;tankers&quot;, &quot;container&quot;, &quot;containers&quot;, &quot;cargo&quot;, &quot;ferry&quot;, &quot;ferries&quot;,
+            &quot;cruise&quot;, &quot;port&quot;, &quot;harbour&quot;, &quot;harbor&quot;, &quot;master&quot;, &quot;customs&quot;, &quot;weather&quot;, &quot;storm&quot;,
+            &quot;escort&quot;, &quot;pilot&quot;, &quot;priority&quot;, &quot;market&quot;, &quot;deal&quot;, &quot;deals&quot;, &quot;offer&quot;, &quot;counteroffer&quot;,
+            &quot;hour&quot;, &quot;hours&quot;, &quot;minute&quot;, &quot;minutes&quot;, &quot;euro&quot;, &quot;euros&quot;, &quot;recommend&quot;, &quot;recommended&quot;,
+            &quot;reasoning&quot;, &quot;accept&quot;, &quot;reject&quot;, &quot;counter&quot;, &quot;hold&quot;, &quot;expedite&quot;, &quot;clear&quot;,
+            &quot;clearance&quot;, &quot;safe&quot;, &quot;average&quot;, &quot;value&quot;, &quot;expected&quot;, &quot;acceptance&quot;, &quot;probability&quot;,
+            &quot;action&quot;, &quot;proposed&quot;, &quot;based&quot;, &quot;recent&quot;, &quot;hazmat&quot;, &quot;class&quot;, &quot;liquid&quot;, &quot;bulk&quot;,
+            &quot;general&quot;, &quot;containerized&quot;, &quot;arrival&quot;, &quot;arrivals&quot;, &quot;eta&quot;, &quot;reputation&quot;,
+            &quot;genova&quot;, &quot;genoa&quot;, &quot;italy&quot;, &quot;italian&quot;, &quot;ligurian&quot;, &quot;mediterranean&quot;, &quot;eur&quot;,
+            &quot;monday&quot;, &quot;tuesday&quot;, &quot;wednesday&quot;, &quot;thursday&quot;, &quot;friday&quot;, &quot;saturday&quot;, &quot;sunday&quot;,
+            &quot;january&quot;, &quot;february&quot;, &quot;march&quot;, &quot;april&quot;, &quot;may&quot;, &quot;june&quot;, &quot;july&quot;, &quot;august&quot;,
+            &quot;september&quot;, &quot;october&quot;, &quot;november&quot;, &quot;december&quot;);
+
+<span class="fc" id="L61">    private static final Pattern WORD = Pattern.compile(&quot;[A-Za-z][A-Za-z_]*&quot;);</span>
+<span class="fc" id="L62">    private static final Pattern SENTENCE_SPLIT = Pattern.compile(&quot;[.!?]+&quot;);</span>
+<span class="fc" id="L63">    private static final Pattern SEPARATORS = Pattern.compile(&quot;[\\s_-]+&quot;);</span>
+    // Thousand separators (comma / apostrophe / whitespace) ONLY between two digits, so &quot;5 hours&quot;
+    // and &quot;berth 3&quot; are left untouched â€” mirrors validator.py's _THOUSANDS_RE.
+<span class="fc" id="L66">    private static final Pattern THOUSANDS = Pattern.compile(&quot;(?&lt;=\\d)[,'\\s](?=\\d)&quot;);</span>
+<span class="fc" id="L67">    private static final Pattern DIGIT_RUN = Pattern.compile(&quot;\\d+&quot;);</span>
+
+    private HallucinationValidator() {
+    }
+
+    public static boolean validate(String llmOutput, Recommendation rec) {
+<span class="fc bfc" id="L73" title="All 4 branches covered.">        if (llmOutput == null || llmOutput.isBlank()) {</span>
+<span class="fc" id="L74">            return false;</span>
+        }
+        // Two different sets on purpose: the narrow one says what must be THERE (check 1), the
+        // wide one says what is ALLOWED to be there (check 3). Collapsing them back into one is
+        // the change that took this gate from 18/20 to 2/20 â€” see Recommendation#requiredFigures.
+<span class="fc" id="L79">        Set&lt;String&gt; allowedFigures = rec.allFigures();</span>
+<span class="fc" id="L80">        String normalisedOutput = stripNumFormatting(llmOutput);</span>
+
+<span class="fc bfc" id="L82" title="All 2 branches covered.">        if (!requiredNumbersPresent(normalisedOutput, rec.requiredFigures())) {</span>
+<span class="fc" id="L83">            return false;</span>
+        }
+<span class="fc" id="L85">        Set&lt;String&gt; gazetteer = buildGazetteer(rec.namedEntities());</span>
+<span class="fc bfc" id="L86" title="All 2 branches covered.">        if (!properNounsKnown(llmOutput, gazetteer)) {</span>
+<span class="fc" id="L87">            return false;</span>
+        }
+<span class="fc bfc" id="L89" title="All 2 branches covered.">        return !containsFabricatedNumber(normalisedOutput, allowedFigures);</span>
+    }
+
+    private static boolean requiredNumbersPresent(String normalisedOutput, Set&lt;String&gt; requiredFigures) {
+<span class="fc bfc" id="L93" title="All 2 branches covered.">        for (String figure : requiredFigures) {</span>
+<span class="fc" id="L94">            String needle = stripNumFormatting(figure);</span>
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">            if (needle.isEmpty()) {</span>
+<span class="nc" id="L96">                continue;</span>
+            }
+<span class="fc" id="L98">            Pattern bounded = Pattern.compile(&quot;(?&lt;!\\d)&quot; + Pattern.quote(needle) + &quot;(?!\\d)&quot;);</span>
+<span class="fc bfc" id="L99" title="All 2 branches covered.">            if (!bounded.matcher(normalisedOutput).find()) {</span>
+<span class="fc" id="L100">                return false;</span>
+            }
+<span class="fc" id="L102">        }</span>
+<span class="fc" id="L103">        return true;</span>
+    }
+
+    private static boolean properNounsKnown(String llmOutput, Set&lt;String&gt; gazetteer) {
+<span class="fc bfc" id="L107" title="All 2 branches covered.">        for (String properNoun : properNouns(llmOutput)) {</span>
+<span class="fc" id="L108">            String key = normaliseEntity(properNoun);</span>
+<span class="fc bfc" id="L109" title="All 2 branches covered.">            if (COMMON_WORDS.contains(key)) {</span>
+<span class="fc" id="L110">                continue;</span>
+            }
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">            if (!gazetteer.contains(key)) {</span>
+<span class="fc" id="L113">                return false;</span>
+            }
+<span class="nc" id="L115">        }</span>
+<span class="fc" id="L116">        return true;</span>
+    }
+
+    /** True iff the output contains a number that is NOT one of {@code allowedFigures}. */
+    private static boolean containsFabricatedNumber(String normalisedOutput, Set&lt;String&gt; allowedFigures) {
+<span class="fc" id="L121">        Matcher m = DIGIT_RUN.matcher(normalisedOutput);</span>
+<span class="fc bfc" id="L122" title="All 2 branches covered.">        while (m.find()) {</span>
+<span class="fc bfc" id="L123" title="All 2 branches covered.">            if (!allowedFigures.contains(m.group())) {</span>
+<span class="fc" id="L124">                return true;</span>
+            }
+        }
+<span class="fc" id="L127">        return false;</span>
+    }
+
+    /** Capitalised, non-sentence-initial word tokens from the output (planning/10 step 4). */
+    private static List&lt;String&gt; properNouns(String text) {
+<span class="fc" id="L132">        List&lt;String&gt; out = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">        for (String sentence : SENTENCE_SPLIT.split(text)) {</span>
+<span class="fc" id="L134">            Matcher m = WORD.matcher(sentence);</span>
+<span class="fc" id="L135">            int index = 0;</span>
+<span class="fc bfc" id="L136" title="All 2 branches covered.">            while (m.find()) {</span>
+<span class="fc bfc" id="L137" title="All 4 branches covered.">                if (index &gt; 0 &amp;&amp; Character.isUpperCase(m.group().charAt(0))) {</span>
+<span class="fc" id="L138">                    out.add(m.group());</span>
+                }
+<span class="fc" id="L140">                index++;</span>
+            }
+        }
+<span class="fc" id="L143">        return out;</span>
+    }
+
+    private static Set&lt;String&gt; buildGazetteer(Set&lt;String&gt; entities) {
+<span class="fc" id="L147">        Set&lt;String&gt; gazetteer = new LinkedHashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L148" title="All 2 branches covered.">        for (String entity : entities) {</span>
+<span class="pc bpc" id="L149" title="2 of 4 branches missed.">            if (entity == null || entity.isBlank()) {</span>
+<span class="nc" id="L150">                continue;</span>
+            }
+<span class="fc" id="L152">            gazetteer.add(normaliseEntity(entity));</span>
+            // Index each word too so multi-word names (&quot;MV Aurora&quot;) match token-wise.
+<span class="fc bfc" id="L154" title="All 2 branches covered.">            for (String word : SEPARATORS.split(entity.strip())) {</span>
+<span class="pc bpc" id="L155" title="1 of 2 branches missed.">                if (!word.isEmpty()) {</span>
+<span class="fc" id="L156">                    gazetteer.add(normaliseEntity(word));</span>
+                }
+            }
+<span class="fc" id="L159">        }</span>
+<span class="fc" id="L160">        return gazetteer;</span>
+    }
+
+    /** &quot;Berth_3&quot; / &quot;Berth 3&quot; / &quot;berth3&quot; all -&gt; &quot;berth3&quot;; &quot;Aurora&quot; -&gt; &quot;aurora&quot;. */
+    private static String normaliseEntity(String token) {
+<span class="fc" id="L165">        return SEPARATORS.matcher(token.strip().toLowerCase(Locale.ROOT)).replaceAll(&quot;&quot;);</span>
+    }
+
+    /** &quot;â‚¬2,000&quot; -&gt; &quot;2000&quot;, &quot;2 000&quot; -&gt; &quot;2000&quot;, &quot;85%&quot; -&gt; &quot;85&quot;. */
+    private static String stripNumFormatting(String s) {
+<span class="fc" id="L170">        String noCurrency = s.replace(&quot;â‚¬&quot;, &quot;&quot;).replace(&quot;$&quot;, &quot;&quot;).replace(&quot;Â£&quot;, &quot;&quot;).replace(&quot;%&quot;, &quot;&quot;);</span>
+<span class="fc" id="L171">        return THOUSANDS.matcher(noCurrency).replaceAll(&quot;&quot;);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

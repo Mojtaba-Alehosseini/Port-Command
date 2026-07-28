@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ScenarioVessels.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.scenario</a> &gt; <span class="el_source">ScenarioVessels.java</span></div><h1>ScenarioVessels.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.scenario;
+
+import java.util.Map;
+import java.util.Random;
+
+import it.unige.portcommand.negotiation.VesselTemplate;
+import it.unige.portcommand.negotiation.VesselTemplates;
+import it.unige.portcommand.ontology.ServiceContract;
+import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.util.RandomSource;
+
+/**
+ * Vessel-spec construction for scripted spawns (task 23).
+ *
+ * &lt;p&gt;&lt;b&gt;Contracted spawns use pinned per-type dimensions&lt;/b&gt;, not template draws: a
+ * contracted vessel's berth is fixed by its contract, so its dims must be guaranteed
+ * compatible (RULES R1â€“R8) with that berth â€” a template roll could randomly exceed a
+ * berth limit and turn a scripted arrival into a REFUSE. The pinned values are the
+ * IT-proven combinations ({@code HarbourMasterAgentIT}: cargo 9.0/150/30k at berth_1,
+ * ferry 5.0/110/9k at berth_4, tanker at berth_1) extended per the task-04 berth table
+ * (berth_1 deep-water 22.0/350/50, berth_2 container 14.0/340/40); a unit test asserts
+ * every shipped (contract berth Ã— pinned dims) pair against the live Prolog gate.
+ *
+ * &lt;p&gt;&lt;b&gt;Walk-in spawns sample from {@code vessel_templates.json}&lt;/b&gt; via the same
+ * seeded per-vessel streams the Poisson spawner uses â€” their berth is negotiated at
+ * grant time against whatever dims they rolled, so sampling is safe there.
+ *
+ * &lt;p&gt;Cargo classes are the canonical {@code cargo_class/1} atoms.
+ *
+ * &lt;p&gt;&lt;b&gt;Correction 2026-07-27 (audit D-04): no shipped vessel is hazmat, and the customs leg is
+ * therefore cold in every scenario.&lt;/b&gt; This javadoc used to claim &quot;the tanker's {@code liquid_bulk}
+ * is deliberately hazmat so scripted tankers exercise the customs pre-clearance leg (the storm
+ * scenario's cascade)&quot;. That is false against the shipped ontology. {@code port_ontology.pl:80}
+ * generates {@code is_hazmat(C) :- subclass_of(C, hazmat_cargo).} â€” a ONE-HOP test over the
+ * converter's direct edges â€” and the only direct children of {@code hazmat_cargo} are
+ * {@code hazmat_class_1} and {@code hazmat_class_3}. {@code liquid_bulk}'s edge is
+ * {@code subclass_of(liquid_bulk, cargo)}, not {@code hazmat_cargo}. The complete set of cargo
+ * classes any vessel ever receives is {@code liquid_bulk} / {@code containerized_cargo} /
+ * {@code general_cargo} here plus a hard-coded {@code general_cargo} for every Poisson walk-in â€”
+ * none of them hazmat â€” so {@code AutoFlowDispatcherBehaviour}'s {@code isHazmat} gate never opens,
+ * {@code sendCustomsRequest} is never called, and the CustomsAgent registers on the DF and receives
+ * nothing all game. R22â€“R24 and {@code CustomsClearedEvent} are exercised only by tests, which use
+ * {@code hazmat_class_1}/{@code hazmat_class_3} â€” values the simulation never produces.
+ *
+ * &lt;p&gt;Turning it on is one map entry ({@code &quot;tanker&quot; -&gt; &quot;hazmat_class_3&quot;}) and is NOT taken here:
+ * it would start charging {@code ExpenseRules.customsClearance()} per scripted tanker and add a
+ * comm-log leg to all three scenarios, i.e. it moves money and traffic during the demo freeze and
+ * needs the Â§7.5 calibration re-checked. Filed for Moji's decision â€” see
+ * {@code docs/audit/AUDIT_RESOLUTION.md} (D-04) and {@code POST_DEMO_BACKLOG.md}.
+ */
+public final class ScenarioVessels {
+
+<span class="fc" id="L53">    private record Dims(double draft, double length, int tonnage) {</span>
+    }
+
+<span class="fc" id="L56">    private static final Map&lt;String, Dims&gt; CONTRACTED_DIMS = Map.of(</span>
+            &quot;cargo_vessel&quot;, new Dims(9.0, 150.0, 30_000),
+            &quot;ferry&quot;, new Dims(5.0, 110.0, 9_000),
+            &quot;tanker&quot;, new Dims(13.0, 210.0, 80_000),
+            &quot;container_vessel&quot;, new Dims(12.0, 250.0, 60_000),
+            &quot;cruise_ship&quot;, new Dims(8.5, 280.0, 100_000));
+
+<span class="fc" id="L63">    private static final Map&lt;String, String&gt; CARGO_CLASS = Map.of(</span>
+            &quot;tanker&quot;, &quot;liquid_bulk&quot;,
+            &quot;container_vessel&quot;, &quot;containerized_cargo&quot;,
+            &quot;cargo_vessel&quot;, &quot;general_cargo&quot;,
+            &quot;ferry&quot;, &quot;general_cargo&quot;,
+            &quot;cruise_ship&quot;, &quot;general_cargo&quot;);
+
+    private ScenarioVessels() {
+    }
+
+    /** The pinned, compat-guaranteed spec for a contracted spawn. */
+    public static VesselSpec contractedSpec(ServiceContract contract, long etaSimMillis) {
+<span class="fc" id="L75">        Dims d = CONTRACTED_DIMS.get(contract.vesselType());</span>
+<span class="fc" id="L76">        return new VesselSpec(contract.vesselId(), contract.vesselType(), d.draft(), d.length(),</span>
+<span class="fc" id="L77">                d.tonnage(), cargoClassFor(contract.vesselType()), etaSimMillis);</span>
+    }
+
+    /** A template-sampled walk-in spec, drawn from the vessel's own seeded sub-stream. */
+    public static VesselSpec sampledWalkInSpec(String vesselId, String vesselType,
+                                               RandomSource randomSource, long etaSimMillis) {
+<span class="fc" id="L83">        VesselTemplate template = VesselTemplates.forType(vesselType);</span>
+<span class="fc" id="L84">        Random r = randomSource.forStream(&quot;spawn-dims-&quot; + vesselId);</span>
+<span class="fc" id="L85">        return new VesselSpec(vesselId, vesselType, template.sampleDraft(r), template.sampleLength(r),</span>
+<span class="fc" id="L86">                template.sampleTonnage(r), cargoClassFor(vesselType), etaSimMillis);</span>
+    }
+
+    /** The canonical cargo-class atom a scripted spawn of {@code vesselType} carries. */
+    public static String cargoClassFor(String vesselType) {
+<span class="fc" id="L91">        return CARGO_CLASS.get(vesselType);</span>
+    }
+
+    /** The pinned draft/length/tonnage for compat tests. */
+    public static double[] pinnedDims(String vesselType) {
+<span class="fc" id="L96">        Dims d = CONTRACTED_DIMS.get(vesselType);</span>
+<span class="fc" id="L97">        return new double[] {d.draft(), d.length(), d.tonnage()};</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

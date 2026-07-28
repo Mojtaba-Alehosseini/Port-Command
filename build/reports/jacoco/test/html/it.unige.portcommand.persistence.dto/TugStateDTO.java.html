@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TugStateDTO.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.persistence.dto</a> &gt; <span class="el_source">TugStateDTO.java</span></div><h1>TugStateDTO.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.persistence.dto;
+
+import it.unige.portcommand.ontology.Position;
+
+/**
+ * One tug's persisted state (task 22). {@code pendingBids} are deliberately NOT saved:
+ * an un-awarded Contract Net dies with the save (its vessel is persisted tug-less at
+ * AWAITING_TUG and the rebuilt HarbourMaster re-runs the CNP), so a restored bid could
+ * only ever be answered by a session that no longer exists.
+ *
+ * @param tugId          {@code tug_1}..{@code tug_4}
+ * @param status         {@code TugStatus} name; BIDDING is normalised to IDLE at snapshot
+ * @param position       live position (pixels â€” the map/Position convention)
+ * @param fuelState      0..1 tank fraction
+ * @param job            the escort in progress, or null when idle. {@code client} (an AID)
+ *                       is not persisted â€” it is always the HarbourMaster and is
+ *                       reconstructed by local name on restore
+ * @param pickupTarget   the vessel pickup point while EN_ROUTE_TO_VESSEL, else null
+ */
+<span class="fc" id="L20">public record TugStateDTO(</span>
+        String tugId,
+        String status,
+        Position position,
+        double fuelState,
+        TugJobDTO job,
+        Position pickupTarget) {
+
+    /** {@code TugJob} minus the AID (rebuilt as {@code harbour_master} on restore). */
+<span class="fc" id="L29">    public record TugJobDTO(String vesselId, Position berthPosition, String conversationId) {</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EvaluateCounterOfferBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.negotiation</a> &gt; <span class="el_source">EvaluateCounterOfferBehaviour.java</span></div><h1>EvaluateCounterOfferBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.negotiation;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import it.unige.portcommand.agents.BaseVesselAgent;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.negotiation.Decision;
+import it.unige.portcommand.negotiation.NegotiationEngine;
+import it.unige.portcommand.negotiation.WalkInState;
+import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.prolog.PrologQueries;
+import jade.core.Agent;
+import jade.core.behaviours.CyclicBehaviour;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The walk-in negotiation core. On the player's counter (a PROPOSE relayed by the HM)
+ * it FIRST runs the {@code isCompatible} guard (REFUSE on fail, before the engine is
+ * ever consulted), then calls {@link NegotiationEngine#evaluate} and dispatches per
+ * {@link Decision.Type}: ACCEPTâ†’ACCEPT_PROPOSAL (+close), COUNTERâ†’a fresh PROPOSE,
+ * WITHDRAWâ†’{@link WithdrawalBehaviour}. Also folds in the old CounterOffer /
+ * AcceptOrReject stub behaviours (task-07 Â§64).
+ *
+ * &lt;p&gt;&lt;b&gt;Task 19 play-test fix:&lt;/b&gt; also matches the player's REJECT_PROPOSAL (&quot;reject&quot;
+ * in chat) and CANCEL (&quot;withdraw&quot;) â€” both end the negotiation with the canonical
+ * {@code player_refused} outcome. Before this, neither performative matched ANY
+ * vessel-side template: the player's refusal was silently ignored, the dialogue stayed
+ * open, and a later &quot;deal&quot; could still close it â€” and the {@code PLAYER_REFUSED}
+ * outcome (declared since task 02, mapped since task 07) was unreachable in production.
+ */
+public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
+
+<span class="fc" id="L41">    private static final Logger log = LoggerFactory.getLogger(EvaluateCounterOfferBehaviour.class);</span>
+
+    private final AtomicReference&lt;WalkInState&gt; stateRef;
+    private final NegotiationEngine engine;
+    private final String conversationId;
+    private final AtomicBoolean concluded;
+    private final MessageTemplate template;
+
+    public EvaluateCounterOfferBehaviour(Agent agent, AtomicReference&lt;WalkInState&gt; stateRef,
+                                         NegotiationEngine engine, String conversationId,
+                                         AtomicBoolean concluded) {
+<span class="fc" id="L52">        super(agent);</span>
+<span class="fc" id="L53">        this.stateRef = stateRef;</span>
+<span class="fc" id="L54">        this.engine = engine;</span>
+<span class="fc" id="L55">        this.conversationId = conversationId;</span>
+<span class="fc" id="L56">        this.concluded = concluded;</span>
+<span class="fc" id="L57">        this.template = MessageTemplate.and(</span>
+<span class="fc" id="L58">                MessageTemplate.MatchConversationId(conversationId),</span>
+<span class="fc" id="L59">                MessageTemplate.or(</span>
+<span class="fc" id="L60">                        MessageTemplate.or(</span>
+<span class="fc" id="L61">                                MessageTemplate.MatchPerformative(ACLMessage.PROPOSE),</span>
+<span class="fc" id="L62">                                MessageTemplate.MatchPerformative(ACLMessage.ACCEPT_PROPOSAL)),</span>
+<span class="fc" id="L63">                        MessageTemplate.or(</span>
+<span class="fc" id="L64">                                MessageTemplate.MatchPerformative(ACLMessage.REJECT_PROPOSAL),</span>
+<span class="fc" id="L65">                                MessageTemplate.MatchPerformative(ACLMessage.CANCEL))));</span>
+<span class="fc" id="L66">    }</span>
+
+    @Override
+    public void action() {
+<span class="pc bpc" id="L70" title="1 of 2 branches missed.">        if (concluded.get()) {</span>
+<span class="nc" id="L71">            myAgent.removeBehaviour(this);</span>
+<span class="nc" id="L72">            return;</span>
+        }
+<span class="fc" id="L74">        ACLMessage msg = myAgent.receive(template);</span>
+<span class="fc bfc" id="L75" title="All 2 branches covered.">        if (msg == null) {</span>
+<span class="fc" id="L76">            block();</span>
+<span class="fc" id="L77">            return;</span>
+        }
+<span class="fc" id="L79">        BaseVesselAgent vessel = (BaseVesselAgent) myAgent;</span>
+
+        // Player accepted OUR standing PROPOSE -&gt; close at our last offer: the standing price
+        // AND the standing hours term (task 19b â€” after an hours counter, &quot;deal&quot; closes at the
+        // countered hours, not the original preferred stay).
+<span class="fc bfc" id="L84" title="All 2 branches covered.">        if (msg.getPerformative() == ACLMessage.ACCEPT_PROPOSAL) {</span>
+<span class="fc" id="L85">            WalkInState s = stateRef.get();</span>
+<span class="fc" id="L86">            closeDeal(vessel, msg, &quot;&quot;, s.lastOwnOffer(), s.lastOwnHours()); // berth granted later (task 11)</span>
+<span class="fc" id="L87">            return;</span>
+        }
+
+        // Player refused (&quot;reject&quot;) or withdrew (&quot;withdraw&quot;) -&gt; leave with the canonical
+        // player_refused outcome (task 19; see class javadoc).
+<span class="pc bpc" id="L92" title="1 of 4 branches missed.">        if (msg.getPerformative() == ACLMessage.REJECT_PROPOSAL || msg.getPerformative() == ACLMessage.CANCEL) {</span>
+<span class="fc" id="L93">            concluded.set(true);</span>
+<span class="fc" id="L94">            log.info(&quot;{}: player refused/withdrew -&gt; leaving&quot;, myAgent.getLocalName());</span>
+<span class="fc" id="L95">            myAgent.addBehaviour(new WithdrawalBehaviour(myAgent, stateRef, conversationId, &quot;player_refused&quot;));</span>
+<span class="fc" id="L96">            myAgent.removeBehaviour(this); // MUST be last: removeBehaviour nulls myAgent</span>
+<span class="fc" id="L97">            return;</span>
+        }
+
+        // Player's counter (a PROPOSE). Task 19b: Â§7.3 negotiates price AND duration, so a
+        // PRESENT parsed duration flows to the engine as a real term. An ABSENT &quot;hours&quot; key
+        // resolves to the vessel's standing hours term (initially its preferred stay) â€” NEVER
+        // to the JSON-decoder's 0.0 default: that absent-key-&gt;0 coercion was exactly task 19's
+        // &quot;deal closes at 0 hours&quot; bug, which task 19 fixed by ignoring the frame's duration
+        // entirely and 19b re-opens deliberately. A present-but-degenerate value (0/negative)
+        // is left to the engine, whose floor branch counters it up â€” templates pin every floor
+        // &gt;= 1, so a degenerate proposal can never survive into a deal either way.
+<span class="fc" id="L108">        JsonNode counter = TerminalJson.readTreeOrNull(msg.getContent());</span>
+<span class="fc" id="L109">        Double parsedPrice = numOrNull(counter, &quot;price&quot;);</span>
+<span class="fc" id="L110">        Integer proposedHours = intOrNull(counter, &quot;hours&quot;);</span>
+<span class="fc bfc" id="L111" title="All 2 branches covered.">        int hours = proposedHours != null ? proposedHours : stateRef.get().lastOwnHours();</span>
+<span class="fc" id="L112">        String berthId = text(counter, &quot;berth_id&quot;);</span>
+
+        // Price guard (post-19b hardening; adversarial review observation). Unlike an absent
+        // DURATION â€” a legitimate conversational move, resolved to the standing hours above â€”
+        // an absent/non-positive PRICE is producer garbage: the DCG fails a price-less counter
+        // at parse time (&quot;a counter with no price is meaningless&quot;), so nothing legitimate emits
+        // one. Under buyer semantics a defaulted 0.0 would satisfy price &lt;= lastOwnOffer and
+        // close a deal at â‚¬0 the player never uttered. No binding action from malformed input:
+        // REFUSE loudly (same precedent as the berth guard below), don't consult the engine,
+        // don't burn a round.
+<span class="pc bpc" id="L122" title="1 of 4 branches missed.">        if (parsedPrice == null || parsedPrice &lt;= 0) {</span>
+<span class="fc" id="L123">            ACLMessage refuse = MessageFactory.reply(msg, ACLMessage.REFUSE);</span>
+<span class="fc" id="L124">            refuse.setContent(TerminalJson.write(Map.of(&quot;intent&quot;, &quot;refuse&quot;, &quot;reason&quot;, &quot;invalid_price&quot;)));</span>
+<span class="fc" id="L125">            myAgent.send(refuse);</span>
+<span class="fc" id="L126">            log.warn(&quot;{}: REFUSE counter (absent/non-positive price in {})&quot;, myAgent.getLocalName(), msg.getContent());</span>
+<span class="fc" id="L127">            return;</span>
+        }
+<span class="fc" id="L129">        double price = parsedPrice;</span>
+
+<span class="fc" id="L131">        VesselSpec spec = vessel.spec();</span>
+<span class="pc bpc" id="L132" title="2 of 4 branches missed.">        if (berthId == null || !PrologQueries.isCompatible(berthId, spec.vesselType(),</span>
+<span class="fc" id="L133">                spec.draft(), spec.length(), spec.tonnage())) {</span>
+<span class="nc" id="L134">            ACLMessage refuse = MessageFactory.reply(msg, ACLMessage.REFUSE);</span>
+<span class="nc" id="L135">            refuse.setContent(TerminalJson.write(Map.of(&quot;intent&quot;, &quot;refuse&quot;, &quot;reason&quot;, &quot;berth_incompatible&quot;)));</span>
+<span class="nc" id="L136">            myAgent.send(refuse);</span>
+<span class="nc" id="L137">            log.info(&quot;{}: REFUSE counter (berth {} incompatible)&quot;, myAgent.getLocalName(), berthId);</span>
+<span class="nc" id="L138">            return;</span>
+        }
+
+<span class="fc" id="L141">        WalkInState state = stateRef.get().recordPlayerCounter(price, hours);</span>
+<span class="fc" id="L142">        stateRef.set(state);</span>
+<span class="fc" id="L143">        Decision decision = engine.evaluate(price, hours, state);</span>
+<span class="pc bpc" id="L144" title="1 of 4 branches missed.">        switch (decision.type()) {</span>
+            case ACCEPT -&gt; {
+<span class="fc" id="L146">                ACLMessage accept = MessageFactory.reply(msg, ACLMessage.ACCEPT_PROPOSAL);</span>
+<span class="fc" id="L147">                accept.setContent(TerminalJson.write(</span>
+<span class="fc" id="L148">                        Map.of(&quot;intent&quot;, &quot;accept&quot;, &quot;price&quot;, price, &quot;hours&quot;, decision.newHours())));</span>
+<span class="fc" id="L149">                myAgent.send(accept);</span>
+<span class="fc" id="L150">                closeDeal(vessel, msg, berthId, price, decision.newHours());</span>
+<span class="fc" id="L151">            }</span>
+            case COUNTER -&gt; {
+<span class="fc" id="L153">                Map&lt;String, Object&gt; content = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L154">                content.put(&quot;intent&quot;, &quot;counter_offer&quot;);</span>
+<span class="fc" id="L155">                content.put(&quot;price&quot;, decision.newCounter());</span>
+<span class="fc" id="L156">                content.put(&quot;hours&quot;, decision.newHours());</span>
+<span class="fc" id="L157">                content.put(&quot;vessel_spec&quot;, spec);</span>
+<span class="fc" id="L158">                ACLMessage propose = MessageFactory.reply(msg, ACLMessage.PROPOSE);</span>
+<span class="fc" id="L159">                propose.setContent(TerminalJson.write(content));</span>
+<span class="fc" id="L160">                myAgent.send(propose);</span>
+<span class="fc" id="L161">                stateRef.set(state.recordOwnOffer(decision.newCounter(), decision.newHours()));</span>
+<span class="fc" id="L162">                log.info(&quot;{}: COUNTER at {} for {}h (round {}, {})&quot;, myAgent.getLocalName(),</span>
+<span class="fc" id="L163">                        decision.newCounter(), decision.newHours(), state.round(), decision.reason());</span>
+<span class="fc" id="L164">            }</span>
+            case WITHDRAW -&gt; {
+                // The engine only ever withdraws at rounds-exhausted, for the dimension that
+                // killed the deal (task 15's outcome-ownership contract, widened by 19b:
+                // evaluate() produces WITHDRAW(&quot;over_priced&quot;) or WITHDRAW(&quot;too_short&quot;) only;
+                // TIMEOUT and PLAYER_REFUSED come from TimeoutWithdrawalBehaviour and the
+                // explicit player-refuse path respectively, never from here) -- pass the
+                // engine's own reason straight through so WithdrawalBehaviour.outcomeFor
+                // records the canonical WITHDRAW_PRICE / WITHDRAW_DURATION.
+<span class="fc" id="L173">                concluded.set(true);</span>
+<span class="fc" id="L174">                myAgent.addBehaviour(new WithdrawalBehaviour(myAgent, stateRef, conversationId, decision.reason()));</span>
+<span class="fc" id="L175">                myAgent.removeBehaviour(this);</span>
+            }
+        }
+<span class="fc" id="L178">    }</span>
+
+    private void closeDeal(BaseVesselAgent vessel, ACLMessage trigger, String berthId, double price, int hours) {
+<span class="fc" id="L181">        vessel.setDeal(berthId, price, hours);</span>
+<span class="fc" id="L182">        concluded.set(true);</span>
+<span class="fc" id="L183">        log.info(&quot;{}: ACCEPT at {} ({}h) -&gt; closing deal&quot;, myAgent.getLocalName(), price, hours);</span>
+<span class="fc" id="L184">        myAgent.addBehaviour(new DealClosedBehaviour(myAgent, conversationId));</span>
+<span class="fc" id="L185">        myAgent.removeBehaviour(this); // MUST be last: removeBehaviour nulls myAgent</span>
+<span class="fc" id="L186">    }</span>
+
+    private static String text(JsonNode node, String field) {
+<span class="pc bpc" id="L189" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L190">            return null;</span>
+        }
+<span class="fc" id="L192">        JsonNode v = node.get(field);</span>
+<span class="pc bpc" id="L193" title="1 of 2 branches missed.">        return v == null ? null : v.asText();</span>
+    }
+
+    /** Absent key -&gt; {@code null} (so the caller can fall back to the standing hours), never a
+     * silent 0 â€” the 0-default coercion is what made task 19's &quot;deal at 0 hours&quot; bug. */
+    private static Integer intOrNull(JsonNode node, String field) {
+<span class="pc bpc" id="L199" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L200">            return null;</span>
+        }
+<span class="fc" id="L202">        JsonNode v = node.get(field);</span>
+<span class="pc bpc" id="L203" title="1 of 4 branches missed.">        return v == null || v.isNull() ? null : (int) v.asDouble();</span>
+    }
+
+    /** Absent key -&gt; {@code null} (so the price guard can REFUSE instead of reading a silent
+     * 0.0 â€” the same coercion class as the hours bug, on the dimension where 0 would CLOSE
+     * a â‚¬0 deal under buyer semantics rather than get floor-countered). */
+    private static Double numOrNull(JsonNode node, String field) {
+<span class="pc bpc" id="L210" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L211">            return null;</span>
+        }
+<span class="fc" id="L213">        JsonNode v = node.get(field);</span>
+<span class="pc bpc" id="L214" title="1 of 4 branches missed.">        return v == null || v.isNull() ? null : v.asDouble();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

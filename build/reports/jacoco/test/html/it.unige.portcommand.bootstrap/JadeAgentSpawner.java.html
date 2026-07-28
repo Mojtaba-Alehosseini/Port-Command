@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JadeAgentSpawner.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.bootstrap</a> &gt; <span class="el_source">JadeAgentSpawner.java</span></div><h1>JadeAgentSpawner.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.bootstrap;
+
+import java.util.Objects;
+import java.util.regex.Pattern;
+
+import jade.core.Agent;
+import jade.wrapper.AgentContainer;
+import jade.wrapper.AgentController;
+import jade.wrapper.StaleProxyException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The only class that calls {@code container.createNewAgent(...)} â€” every other
+ * package spawns through the {@link AgentSpawner} interface (SOLID: single
+ * responsibility, testable seam).
+ */
+public final class JadeAgentSpawner implements AgentSpawner {
+
+<span class="fc" id="L20">    private static final Logger log = LoggerFactory.getLogger(JadeAgentSpawner.class);</span>
+<span class="fc" id="L21">    private static final Pattern LOCAL_NAME = Pattern.compile(&quot;^[a-z][a-z0-9_]*$&quot;);</span>
+
+    private final AgentContainer container;
+
+<span class="fc" id="L25">    public JadeAgentSpawner(AgentContainer container) {</span>
+<span class="fc" id="L26">        this.container = Objects.requireNonNull(container, &quot;container&quot;);</span>
+<span class="fc" id="L27">    }</span>
+
+    @Override
+    public AgentController spawn(String localName, Class&lt;? extends Agent&gt; agentClass, Object[] args) {
+<span class="fc" id="L31">        Objects.requireNonNull(agentClass, &quot;agentClass&quot;);</span>
+<span class="pc bpc" id="L32" title="2 of 4 branches missed.">        if (localName == null || !LOCAL_NAME.matcher(localName).matches()) {</span>
+<span class="nc" id="L33">            throw new IllegalArgumentException(&quot;localName must match ^[a-z][a-z0-9_]*$, got &quot; + localName);</span>
+        }
+        try {
+<span class="fc" id="L36">            AgentController controller = container.createNewAgent(localName, agentClass.getName(), args);</span>
+<span class="fc" id="L37">            controller.start();</span>
+            // DEBUG since task 26: one line per agent, and vessels are created continuously.
+        // The roster's single &quot;Roster spawned: 10 fixed agents&quot; line covers boot.
+<span class="fc" id="L40">        log.debug(&quot;Agent {} spawned (class={})&quot;, localName, agentClass.getSimpleName());</span>
+<span class="fc" id="L41">            return controller;</span>
+<span class="nc" id="L42">        } catch (StaleProxyException e) {</span>
+<span class="nc" id="L43">            throw new AgentSpawnException(&quot;failed to spawn agent &quot; + localName, e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

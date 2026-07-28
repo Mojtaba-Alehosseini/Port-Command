@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BerthPositions.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.harbourmaster</a> &gt; <span class="el_source">BerthPositions.java</span></div><h1>BerthPositions.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.harbourmaster;
+
+import java.util.Map;
+
+import it.unige.portcommand.ontology.Position;
+
+/**
+ * Static {@code berth_id -&gt; physical Position} table. No berth-position registry
+ * exists anywhere else in the repo ({@code BerthOccupancy}, {@code BerthSpec},
+ * {@code PortOntology}, {@code port_ontology.pl} carry no x/y); ADR-07 already
+ * commits the HarbourMaster to being authoritative for the {@code berth_position} a
+ * tug's ACCEPT carries, so this is that table. Placeholder coordinates â€” task 18's
+ * real map layout supersedes these (same placeholder spirit as
+ * {@code AgentRoster.TUG_BASES}).
+ */
+public final class BerthPositions {
+
+<span class="fc" id="L18">    private static final Map&lt;String, Position&gt; BERTHS = Map.of(</span>
+            &quot;berth_1&quot;, new Position(400.0, 150.0, 0.0),
+            &quot;berth_2&quot;, new Position(500.0, 150.0, 0.0),
+            &quot;berth_3&quot;, new Position(400.0, 350.0, 0.0),
+            &quot;berth_4&quot;, new Position(500.0, 350.0, 0.0));
+
+    private BerthPositions() {
+    }
+
+    /** The physical position of {@code berthId}, or {@code null} if unknown. */
+    public static Position position(String berthId) {
+<span class="fc" id="L29">        return BERTHS.get(berthId);</span>
+    }
+
+    /**
+     * The full {@code berth_id -&gt; Position} table â€” the single canonical source for both the
+     * berth id list and coordinates (task 18's {@code MapModel} seeds its initial berth
+     * rectangles from this rather than hardcoding {@code &quot;berth_1&quot;..&quot;berth_4&quot;} a second time).
+     */
+    public static Map&lt;String, Position&gt; all() {
+<span class="fc" id="L38">        return BERTHS;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

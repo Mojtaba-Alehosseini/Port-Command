@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ConfidenceGate.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">ConfidenceGate.java</span></div><h1>ConfidenceGate.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+/**
+ * Routes a Rasa intent confidence to one of three branches. Boundaries are locked
+ * (PROJECT_DEFINITION.md Â§6.1, planning/14 Â§14.4) and half-open â€” every confidence in
+ * {@code [0,1]} maps to exactly one branch, no overlap, no gap. The upper boundary of a
+ * range belongs to the higher branch: {@code 0.60 -&gt; A}, {@code 0.40 -&gt; B}, {@code 0.3999 -&gt; C}.
+ */
+<span class="fc" id="L9">public final class ConfidenceGate {</span>
+
+    public static final double HIGH_THRESHOLD = 0.60;
+    public static final double MEDIUM_THRESHOLD = 0.40;
+
+<span class="fc" id="L14">    public enum Branch {</span>
+        /** confidence &amp;ge; 0.60 â€” map straight to an action/ACL. */
+<span class="fc" id="L16">        A_HIGH_CONFIDENCE,</span>
+        /** 0.40 &amp;le; confidence &amp;lt; 0.60 â€” DCG-only territory; not confident enough for Rasa alone. */
+<span class="fc" id="L18">        B_MEDIUM_DCG_ONLY,</span>
+        /** confidence &amp;lt; 0.40 â€” ask the player to clarify. */
+<span class="fc" id="L20">        C_CLARIFICATION</span>
+    }
+
+    public Branch route(double confidence) {
+<span class="fc bfc" id="L24" title="All 2 branches covered.">        if (confidence &gt;= HIGH_THRESHOLD) {</span>
+<span class="fc" id="L25">            return Branch.A_HIGH_CONFIDENCE;</span>
+        }
+<span class="fc bfc" id="L27" title="All 2 branches covered.">        if (confidence &gt;= MEDIUM_THRESHOLD) {</span>
+<span class="fc" id="L28">            return Branch.B_MEDIUM_DCG_ONLY;</span>
+        }
+<span class="fc" id="L30">        return Branch.C_CLARIFICATION;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PrologDcgParser.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">PrologDcgParser.java</span></div><h1>PrologDcgParser.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+
+import it.unige.portcommand.prolog.PrologEngine;
+
+import org.jpl7.Term;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The real {@link DCGParser}: runs {@code dcg_negotiation.pl}'s {@code parse_move/2} over the
+ * player's utterance via JPL and decodes the bound frame. Replaces {@link NoOpDCGParser} in
+ * production wiring (task 16; PROJECT_DEFINITION.md Â§6.1's DCG-first branch).
+ *
+ * &lt;p&gt;&lt;b&gt;Why this class lives in {@code nlp} and not {@code prolog}&lt;/b&gt; (ADR-10): task 14 already
+ * shipped {@code nlp.DCGParser} as the interface {@link NLPPipeline} is constructed against, and
+ * the {@code prolog} package is generic JPL infrastructure ({@code PrologEngine},
+ * {@code PrologQueries}, {@code PrologTerms}) that carries no domain grammar. planning/16's file
+ * table names a second {@code prolog.DCGParser}; two classes with the same simple name would be
+ * pure confusion. The Prolog artifact the reports point at is {@code dcg_negotiation.pl} itself,
+ * which lives under {@code resources/prolog/} either way.
+ *
+ * &lt;p&gt;&lt;b&gt;Never throws on bad input.&lt;/b&gt; A parse miss, a malformed frame, or a JPL error all resolve
+ * to {@link Optional#empty()} â€” the pipeline then falls through to Rasa, which is the correct
+ * behaviour for anything this deliberately-narrow grammar does not model.
+ */
+public final class PrologDcgParser implements DCGParser {
+
+<span class="fc" id="L33">    private static final Logger log = LoggerFactory.getLogger(PrologDcgParser.class);</span>
+
+    private final PrologEngine engine;
+    private final DcgTokenizer tokenizer;
+
+<span class="fc" id="L38">    public PrologDcgParser(PrologEngine engine, DcgTokenizer tokenizer) {</span>
+<span class="fc" id="L39">        this.engine = Objects.requireNonNull(engine, &quot;engine&quot;);</span>
+<span class="fc" id="L40">        this.tokenizer = Objects.requireNonNull(tokenizer, &quot;tokenizer&quot;);</span>
+<span class="fc" id="L41">    }</span>
+
+    /**
+     * @param ctx the v1.1 dialogue context, rendered to a Prolog {@code ctx(â€¦)} term
+     *            ({@link DialogueCtxTerm}) and threaded into the grammar via {@code parse_move/3}
+     *            (16-M2). {@link DialogueCtx#NONE} renders as the empty context, under which the
+     *            phenomenon blocks are inert and the parse is identical to 16-M1's {@code parse_move/2}.
+     */
+    @Override
+    public Optional&lt;Frame&gt; parse(String text, DialogueCtx ctx) {
+<span class="fc" id="L51">        List&lt;String&gt; tokens = tokenizer.tokenize(text);</span>
+<span class="fc bfc" id="L52" title="All 2 branches covered.">        if (tokens.isEmpty()) {</span>
+<span class="fc" id="L53">            return Optional.empty();</span>
+        }
+<span class="fc" id="L55">        String goal = &quot;parse_move(&quot; + tokenizer.toPrologList(tokens) + &quot;, &quot;</span>
+<span class="fc" id="L56">                + DialogueCtxTerm.toPrologTerm(ctx) + &quot;, Frame)&quot;;</span>
+        try {
+<span class="fc" id="L58">            Optional&lt;Map&lt;String, Term&gt;&gt; solution = engine.oneSolution(goal);</span>
+<span class="fc bfc" id="L59" title="All 2 branches covered.">            if (solution.isEmpty()) {</span>
+<span class="fc" id="L60">                log.debug(&quot;DCG miss (-&gt; Rasa fallback) for tokens {}&quot;, tokens);</span>
+<span class="fc" id="L61">                return Optional.empty();</span>
+            }
+<span class="fc" id="L63">            Frame frame = Frame.fromProlog(solution.get().get(&quot;Frame&quot;));</span>
+<span class="fc" id="L64">            log.debug(&quot;DCG hit: {} -&gt; {}&quot;, tokens, frame);</span>
+<span class="fc" id="L65">            return Optional.of(frame);</span>
+<span class="nc" id="L66">        } catch (RuntimeException e) {</span>
+            // Covers PrologException (a RuntimeException subclass) and any JPL fault. A
+            // grammar/marshalling problem must degrade to the Rasa fallback, never kill the
+            // caller's turn: this runs on a JADE agent thread via NLPPipeline's executor.
+<span class="nc" id="L70">            log.warn(&quot;DCG parse failed for goal {} â€” falling through to Rasa&quot;, goal, e);</span>
+<span class="nc" id="L71">            return Optional.empty();</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

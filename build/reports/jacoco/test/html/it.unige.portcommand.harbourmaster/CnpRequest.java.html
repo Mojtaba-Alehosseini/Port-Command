@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CnpRequest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.harbourmaster</a> &gt; <span class="el_source">CnpRequest.java</span></div><h1>CnpRequest.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.harbourmaster;
+
+import java.util.Objects;
+
+import it.unige.portcommand.ontology.Position;
+import jade.core.AID;
+
+/**
+ * One tug-escort Contract Net request. {@code cfpId}/{@code replyBy} are assigned
+ * inside the coordinator, not supplied by the caller â€” mirrors planning/15's own
+ * documented shape, extended with {@code vesselAid} (to address the zero-bid hold
+ * INFORM) and {@code berthPosition} (ADR-07: the HarbourMaster is authoritative for
+ * the escort destination carried in the tug's ACCEPT).
+ */
+public record CnpRequest(
+        String vesselId,
+        AID vesselAid,
+        Position vesselPosition,
+        Position berthPosition,
+        int tugsRequired) {
+
+<span class="fc" id="L22">    public CnpRequest {</span>
+<span class="fc" id="L23">        Objects.requireNonNull(vesselId, &quot;vesselId&quot;);</span>
+<span class="fc" id="L24">        Objects.requireNonNull(vesselAid, &quot;vesselAid&quot;);</span>
+<span class="fc" id="L25">        Objects.requireNonNull(vesselPosition, &quot;vesselPosition&quot;);</span>
+<span class="fc" id="L26">        Objects.requireNonNull(berthPosition, &quot;berthPosition&quot;);</span>
+<span class="pc bpc" id="L27" title="1 of 2 branches missed.">        if (tugsRequired &lt; 1) {</span>
+<span class="nc" id="L28">            throw new IllegalArgumentException(&quot;tugsRequired must be &gt;= 1, got &quot; + tugsRequired);</span>
+        }
+<span class="fc" id="L30">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:21:51" hostname="MOJI" time="0.492">
+  <properties/>
+  <testcase name="tanker is accepted (already canonical)" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.058"/>
+  <testcase name="container_vessel is accepted (already canonical)" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.002"/>
+  <testcase name="cargo_vessel is accepted (already canonical)" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.002"/>
+  <testcase name="ferry is accepted (already canonical)" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.002"/>
+  <testcase name="cruise_ship is accepted (already canonical)" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.002"/>
+  <testcase name="freighter -&gt; cargo_vessel via the handcrafted table" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.002"/>
+  <testcase name="merchantman -&gt; cargo_vessel via the handcrafted table" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.002"/>
+  <testcase name="cargo ship -&gt; cargo_vessel via the handcrafted table" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.002"/>
+  <testcase name="tankers is accepted via WordNet morphology" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.374"/>
+  <testcase name="ferries is accepted via WordNet morphology" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.001"/>
+  <testcase name="pleasure is still rejected after normalisation" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.002"/>
+  <testcase name="submarine is still rejected after normalisation" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.001"/>
+  <testcase name="zzzznotaword is still rejected after normalisation" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.002"/>
+  <testcase name="dock is still rejected after normalisation" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.001"/>
+  <testcase name="[1] tankers" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.001"/>
+  <testcase name="[2] ferries" classname="it.unige.portcommand.nlp.OntologyValidatorWordNetIT" time="0.0"/>
+  <system-out><![CDATA[00:21:51.273 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

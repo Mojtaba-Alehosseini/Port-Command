@@ -1,5 +1,54 @@
 [
   {
+    "text": "I can put 2200 on the table for 2 hours",
+    "entities": [
+      {
+        "start": 10,
+        "end": 14,
+        "value": "2200",
+        "entity": "price_expression"
+      },
+      {
+        "start": 32,
+        "end": 39,
+        "value": "2 hours",
+        "entity": "time_expression"
+      }
+    ],
+    "predicted_entities": [
+      {
+        "entity": "price_expression",
+        "start": 10,
+        "end": 14,
+        "confidence_entity": 0.9995885491371155,
+        "value": "2200",
+        "extractor": "DIETClassifier",
+        "processors": [
+          "EntitySynonymMapper"
+        ]
+      },
+      {
+        "entity": "time_expression",
+        "start": 22,
+        "end": 27,
+        "confidence_entity": 0.6770788431167603,
+        "value": "table",
+        "extractor": "DIETClassifier"
+      },
+      {
+        "entity": "time_expression",
+        "start": 32,
+        "end": 39,
+        "confidence_entity": 0.992751955986023,
+        "value": "2 hours",
+        "extractor": "DIETClassifier",
+        "processors": [
+          "EntitySynonymMapper"
+        ]
+      }
+    ]
+  },
+  {
     "text": "I'd pay 1900 to berth for 5 hrs",
     "entities": [
       {
@@ -20,7 +69,7 @@
         "entity": "price_expression",
         "start": 8,
         "end": 12,
-        "confidence_entity": 0.9994786381721497,
+        "confidence_entity": 0.9948746562004089,
         "value": "1900",
         "extractor": "DIETClassifier",
         "processors": [
@@ -31,7 +80,7 @@
         "entity": "berth_id",
         "start": 16,
         "end": 21,
-        "confidence_entity": 0.9985892176628113,
+        "confidence_entity": 0.9992372989654541,
         "value": "berth",
         "extractor": "DIETClassifier"
       },
@@ -39,7 +88,7 @@
         "entity": "time_expression",
         "start": 26,
         "end": 31,
-        "confidence_entity": 0.9946205615997314,
+        "confidence_entity": 0.8844720721244812,
         "value": "5 hrs",
         "extractor": "DIETClassifier",
         "processors": [
@@ -49,56 +98,30 @@
     ]
   },
   {
-    "text": "We tender 2800 for a couple of hours at pier 4",
+    "text": "meet halfway at 1850 euros",
     "entities": [
       {
-        "start": 10,
-        "end": 14,
-        "value": "2800",
+        "start": 16,
+        "end": 26,
+        "value": "1850 euros",
         "entity": "price_expression"
-      },
-      {
-        "start": 19,
-        "end": 36,
-        "value": "a couple of hours",
-        "entity": "time_expression"
-      },
-      {
-        "start": 40,
-        "end": 46,
-        "value": "berth_4",
-        "entity": "berth_id"
       }
     ],
     "predicted_entities": [
       {
-        "entity": "berth_id",
-        "start": 10,
-        "end": 14,
-        "confidence_entity": 0.5713951587677002,
-        "value": "2800",
-        "extractor": "DIETClassifier",
-        "processors": [
-          "EntitySynonymMapper"
-        ]
+        "entity": "price_expression",
+        "start": 5,
+        "end": 12,
+        "confidence_entity": 0.6765268445014954,
+        "value": "halfway",
+        "extractor": "DIETClassifier"
       },
       {
-        "entity": "time_expression",
-        "start": 19,
-        "end": 36,
-        "confidence_entity": 0.9652969241142273,
-        "value": "a couple of hours",
-        "extractor": "DIETClassifier",
-        "processors": [
-          "EntitySynonymMapper"
-        ]
-      },
-      {
-        "entity": "berth_id",
-        "start": 40,
-        "end": 46,
-        "confidence_entity": 0.999697208404541,
-        "value": "berth_4",
+        "entity": "price_expression",
+        "start": 16,
+        "end": 26,
+        "confidence_entity": 0.9992755055427551,
+        "value": "1850 euros",
         "extractor": "DIETClassifier",
         "processors": [
           "EntitySynonymMapper"
@@ -114,7 +137,7 @@
         "entity": "berth_id",
         "start": 15,
         "end": 18,
-        "confidence_entity": 0.6045805215835571,
+        "confidence_entity": 0.6314380764961243,
         "value": "one",
         "extractor": "DIETClassifier"
       }
@@ -128,29 +151,8 @@
         "entity": "vessel_name",
         "start": 4,
         "end": 8,
-        "confidence_entity": 0.6291162371635437,
+        "confidence_entity": 0.36084887385368347,
         "value": "even",
-        "extractor": "DIETClassifier"
-      }
-    ]
-  },
-  {
-    "text": "Keep the hazmat class 1 cargo offshore",
-    "entities": [
-      {
-        "start": 9,
-        "end": 23,
-        "value": "hazmat_class_1",
-        "entity": "hazmat_code"
-      }
-    ],
-    "predicted_entities": [
-      {
-        "entity": "hazmat_code",
-        "start": 9,
-        "end": 29,
-        "confidence_entity": 0.4542095959186554,
-        "value": "hazmat class 1 cargo",
         "extractor": "DIETClassifier"
       }
     ]
@@ -170,7 +172,7 @@
         "entity": "vessel_class",
         "start": 4,
         "end": 10,
-        "confidence_entity": 0.9991971850395203,
+        "confidence_entity": 0.9994021654129028,
         "value": "tanker",
         "extractor": "DIETClassifier",
         "processors": [
@@ -181,7 +183,7 @@
         "entity": "time_expression",
         "start": 26,
         "end": 33,
-        "confidence_entity": 0.9233737587928772,
+        "confidence_entity": 0.9754796624183655,
         "value": "harbour",
         "extractor": "DIETClassifier"
       }

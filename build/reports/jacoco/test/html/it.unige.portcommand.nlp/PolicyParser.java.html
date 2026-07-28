@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PolicyParser.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">PolicyParser.java</span></div><h1>PolicyParser.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Predicate;
+import java.util.function.ToDoubleFunction;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import it.unige.portcommand.artifacts.PolicyRule;
+import it.unige.portcommand.artifacts.PolicyRule.PolicyAction;
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
+import it.unige.portcommand.gui.events.NotificationEvent;
+import it.unige.portcommand.gui.events.PolicyParsedEvent;
+import it.unige.portcommand.util.EventBus;
+
+/**
+ * Parses a player-typed autopilot policy expression into a typed {@link PolicyRule} using a
+ * small regex-DSL (planning/10 Â§10.5b) â€” NOT a second Rasa pipeline (explicitly cut,
+ * PROJECT_DEFINITION Â§9 item 6; {@code NLPPipeline} routes {@code set_policy} text here
+ * verbatim, ignoring Rasa's entities on that path).
+ *
+ * &lt;p&gt;Grammar (informal):
+ * &lt;pre&gt;
+ * POLICY      := &quot;auto&quot; ACTION &quot;if&quot; CONDITION [&quot;for&quot; VESSEL_TYPE]
+ * ACTION      := &quot;accept&quot; | &quot;reject&quot; | &quot;counter&quot; &quot;+&quot;? INT &quot;%&quot;
+ * CONDITION   := FIELD OP NUMBER (&quot;and&quot; CONDITION)?
+ * FIELD       := &quot;price&quot; | &quot;duration&quot; | &quot;rounds_used&quot;
+ * OP          := &quot;&gt;&quot; | &quot;&lt;&quot; | &quot;&gt;=&quot; | &quot;&lt;=&quot; | &quot;=&quot;
+ * VESSEL_TYPE := &quot;tankers&quot; | &quot;container_vessels&quot; | &quot;cargo_vessels&quot; | &quot;ferries&quot; | &quot;cruise_ships&quot;
+ * &lt;/pre&gt;
+ */
+<span class="fc" id="L34">public final class PolicyParser {</span>
+
+<span class="fc" id="L36">    private static final Pattern TOP_LEVEL = Pattern.compile(</span>
+            &quot;^auto\\s+(.+?)\\s+if\\s+(.+?)(?:\\s+for\\s+(\\S+))?$&quot;, Pattern.CASE_INSENSITIVE);
+<span class="fc" id="L38">    private static final Pattern COUNTER_ACTION = Pattern.compile(</span>
+            &quot;^counter\\s*\\+?\\s*(\\d+)\\s*%$&quot;, Pattern.CASE_INSENSITIVE);
+<span class="fc" id="L40">    private static final Pattern CONDITION_CLAUSE = Pattern.compile(</span>
+            &quot;^(price|duration|rounds_used)\\s*(&gt;=|&lt;=|&gt;|&lt;|=)\\s*(\\d+(?:\\.\\d+)?)$&quot;, Pattern.CASE_INSENSITIVE);
+<span class="fc" id="L42">    private static final Pattern AND_SPLIT = Pattern.compile(&quot;\\s+and\\s+&quot;, Pattern.CASE_INSENSITIVE);</span>
+
+<span class="fc" id="L44">    private static final Map&lt;String, String&gt; VESSEL_TYPE_PLURALS = Map.of(</span>
+            &quot;tankers&quot;, &quot;tanker&quot;,
+            &quot;container_vessels&quot;, &quot;container_vessel&quot;,
+            &quot;cargo_vessels&quot;, &quot;cargo_vessel&quot;,
+            &quot;ferries&quot;, &quot;ferry&quot;,
+            &quot;cruise_ships&quot;, &quot;cruise_ship&quot;);
+
+    /**
+     * Parses {@code text}. On success, publishes {@link PolicyParsedEvent} (consumed by
+     * {@code PolicyParseBehaviour}) and returns the rule. On failure, publishes a clarification
+     * {@link NotificationEvent} and returns empty â€” there is no throw path.
+     */
+    public Optional&lt;PolicyRule&gt; parse(String text, EventBus eventBus) {
+<span class="fc" id="L57">        Optional&lt;PolicyRule&gt; rule = tryParse(text);</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">        if (rule.isPresent()) {</span>
+<span class="fc" id="L59">            eventBus.publish(new PolicyParsedEvent(rule.get()));</span>
+        } else {
+<span class="fc" id="L61">            eventBus.publish(new NotificationEvent(</span>
+                    &quot;Could not parse policy: &quot; + text, NotificationEvent.Severity.WARNING, 0L));
+        }
+<span class="fc" id="L64">        return rule;</span>
+    }
+
+    /**
+     * Parse WITHOUT publishing (task 22): the save/load restore re-parses persisted trigger
+     * strings and registers the rules directly into the registry â€” routing them through
+     * {@code PolicyParsedEvent} would race the freshly respawned Assistant's ASYNC
+     * subscribe-once (rule lost if the parse wins, doubled if both paths land).
+     */
+    public Optional&lt;PolicyRule&gt; parseQuietly(String text) {
+<span class="fc" id="L74">        return tryParse(text);</span>
+    }
+
+    private Optional&lt;PolicyRule&gt; tryParse(String text) {
+<span class="pc bpc" id="L78" title="1 of 2 branches missed.">        if (text == null) {</span>
+<span class="nc" id="L79">            return Optional.empty();</span>
+        }
+<span class="fc" id="L81">        String normalised = text.trim().replaceAll(&quot;\\s+&quot;, &quot; &quot;);</span>
+<span class="fc" id="L82">        Matcher top = TOP_LEVEL.matcher(normalised);</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">        if (!top.matches()) {</span>
+<span class="fc" id="L84">            return Optional.empty();</span>
+        }
+<span class="fc" id="L86">        Optional&lt;PolicyAction&gt; action = parseAction(top.group(1).trim());</span>
+<span class="pc bpc" id="L87" title="1 of 2 branches missed.">        if (action.isEmpty()) {</span>
+<span class="nc" id="L88">            return Optional.empty();</span>
+        }
+<span class="fc" id="L90">        Optional&lt;Predicate&lt;WalkInDialogueSnapshot&gt;&gt; condition = parseCondition(top.group(2).trim());</span>
+<span class="pc bpc" id="L91" title="1 of 2 branches missed.">        if (condition.isEmpty()) {</span>
+<span class="nc" id="L92">            return Optional.empty();</span>
+        }
+<span class="fc" id="L94">        Predicate&lt;WalkInDialogueSnapshot&gt; predicate = condition.get();</span>
+
+<span class="fc" id="L96">        String vesselTypeWord = top.group(3);</span>
+<span class="fc bfc" id="L97" title="All 2 branches covered.">        if (vesselTypeWord != null) {</span>
+<span class="fc" id="L98">            Optional&lt;String&gt; canonical = canonicalVesselType(vesselTypeWord);</span>
+<span class="fc bfc" id="L99" title="All 2 branches covered.">            if (canonical.isEmpty()) {</span>
+<span class="fc" id="L100">                return Optional.empty();</span>
+            }
+<span class="fc" id="L102">            predicate = predicate.and(snap -&gt; snap.vesselType().equals(canonical.get()));</span>
+        }
+<span class="fc" id="L104">        return Optional.of(new PolicyRule(text, predicate, action.get()));</span>
+    }
+
+    private static Optional&lt;PolicyAction&gt; parseAction(String actionText) {
+<span class="fc bfc" id="L108" title="All 2 branches covered.">        if (actionText.equalsIgnoreCase(&quot;accept&quot;)) {</span>
+<span class="fc" id="L109">            return Optional.of(PolicyAction.accept());</span>
+        }
+<span class="fc bfc" id="L111" title="All 2 branches covered.">        if (actionText.equalsIgnoreCase(&quot;reject&quot;)) {</span>
+<span class="fc" id="L112">            return Optional.of(PolicyAction.rejectSilent());</span>
+        }
+<span class="fc" id="L114">        Matcher counter = COUNTER_ACTION.matcher(actionText);</span>
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">        if (counter.matches()) {</span>
+<span class="fc" id="L116">            double pct = Double.parseDouble(counter.group(1)) / 100.0;</span>
+<span class="fc" id="L117">            return Optional.of(PolicyAction.counter(pct));</span>
+        }
+<span class="nc" id="L119">        return Optional.empty();</span>
+    }
+
+    private static Optional&lt;Predicate&lt;WalkInDialogueSnapshot&gt;&gt; parseCondition(String conditionText) {
+<span class="fc" id="L123">        Predicate&lt;WalkInDialogueSnapshot&gt; combined = null;</span>
+<span class="fc bfc" id="L124" title="All 2 branches covered.">        for (String clause : AND_SPLIT.split(conditionText)) {</span>
+<span class="fc" id="L125">            Matcher m = CONDITION_CLAUSE.matcher(clause.trim());</span>
+<span class="pc bpc" id="L126" title="1 of 2 branches missed.">            if (!m.matches()) {</span>
+<span class="nc" id="L127">                return Optional.empty();</span>
+            }
+<span class="fc" id="L129">            Predicate&lt;WalkInDialogueSnapshot&gt; clausePredicate = fieldPredicate(</span>
+<span class="fc" id="L130">                    m.group(1).toLowerCase(Locale.ROOT), m.group(2), Double.parseDouble(m.group(3)));</span>
+<span class="fc bfc" id="L131" title="All 2 branches covered.">            combined = combined == null ? clausePredicate : combined.and(clausePredicate);</span>
+        }
+<span class="fc" id="L133">        return Optional.ofNullable(combined);</span>
+    }
+
+    private static Predicate&lt;WalkInDialogueSnapshot&gt; fieldPredicate(String field, String op, double value) {
+<span class="pc bpc" id="L137" title="2 of 4 branches missed.">        ToDoubleFunction&lt;WalkInDialogueSnapshot&gt; accessor = switch (field) {</span>
+<span class="fc" id="L138">            case &quot;price&quot; -&gt; WalkInDialogueSnapshot::lastVesselOffer;</span>
+<span class="nc" id="L139">            case &quot;duration&quot; -&gt; snap -&gt; snap.durationHours();</span>
+<span class="fc" id="L140">            case &quot;rounds_used&quot; -&gt; snap -&gt; snap.roundsUsed();</span>
+<span class="pc" id="L141">            default -&gt; throw new IllegalStateException(&quot;unreachable: field regex restricts to 3 values&quot;);</span>
+        };
+<span class="pc bpc" id="L143" title="3 of 6 branches missed.">        return switch (op) {</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">            case &quot;&gt;&quot; -&gt; snap -&gt; accessor.applyAsDouble(snap) &gt; value;</span>
+<span class="fc bfc" id="L145" title="All 2 branches covered.">            case &quot;&lt;&quot; -&gt; snap -&gt; accessor.applyAsDouble(snap) &lt; value;</span>
+<span class="fc bfc" id="L146" title="All 2 branches covered.">            case &quot;&gt;=&quot; -&gt; snap -&gt; accessor.applyAsDouble(snap) &gt;= value;</span>
+<span class="nc bnc" id="L147" title="All 2 branches missed.">            case &quot;&lt;=&quot; -&gt; snap -&gt; accessor.applyAsDouble(snap) &lt;= value;</span>
+            // Exact float equality is fragile against a computed offer; a small epsilon keeps
+            // &quot;price = 2200&quot; usable without changing the DSL's documented operator set.
+<span class="nc bnc" id="L150" title="All 2 branches missed.">            case &quot;=&quot; -&gt; snap -&gt; Math.abs(accessor.applyAsDouble(snap) - value) &lt; 1e-6;</span>
+<span class="nc" id="L151">            default -&gt; throw new IllegalStateException(&quot;unreachable: op regex restricts to 5 values&quot;);</span>
+        };
+    }
+
+    private static Optional&lt;String&gt; canonicalVesselType(String word) {
+<span class="fc" id="L156">        return Optional.ofNullable(VESSEL_TYPE_PLURALS.get(word.toLowerCase(Locale.ROOT)));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>OpeningProposalBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.negotiation</a> &gt; <span class="el_source">OpeningProposalBehaviour.java</span></div><h1>OpeningProposalBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.negotiation;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+
+import it.unige.portcommand.agents.BaseVesselAgent;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.negotiation.Personality;
+import it.unige.portcommand.negotiation.WalkInState;
+import jade.core.AID;
+import jade.core.Agent;
+import jade.core.behaviours.OneShotBehaviour;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Walk-in opening move: PROPOSE an opening price (a personality-sampled lowball
+ * fraction of {@code targetPrice} â€” task 19 STEP 1; see {@link Personality}'s
+ * javadoc) and the desired duration to the HarbourMaster, and stamp the negotiation
+ * start time. Only price / hours / vessel_spec go on the wire â€” the hidden beliefs
+ * stay in {@link WalkInState}.
+ */
+public final class OpeningProposalBehaviour extends OneShotBehaviour {
+
+<span class="fc" id="L30">    private static final Logger log = LoggerFactory.getLogger(OpeningProposalBehaviour.class);</span>
+
+    private final AtomicReference&lt;WalkInState&gt; stateRef;
+    private final String conversationId;
+    private final AtomicBoolean concluded;
+    private final double openingRoll;
+
+    /**
+     * @param openingRoll a pre-drawn {@code [0,1)} value (from the caller's own seeded
+     *                    sub-stream) picking where in the personality's opening sub-band
+     *                    this vessel's offer lands â€” kept out of this class so
+     *                    {@link #computeOpening} stays a pure, directly unit-testable
+     *                    function with no {@code java.util.Random} dependency here.
+     */
+    public OpeningProposalBehaviour(Agent agent, AtomicReference&lt;WalkInState&gt; stateRef,
+                                    String conversationId, AtomicBoolean concluded, double openingRoll) {
+<span class="fc" id="L46">        super(agent);</span>
+<span class="fc" id="L47">        this.stateRef = stateRef;</span>
+<span class="fc" id="L48">        this.conversationId = conversationId;</span>
+<span class="fc" id="L49">        this.concluded = concluded;</span>
+<span class="fc" id="L50">        this.openingRoll = openingRoll;</span>
+<span class="fc" id="L51">    }</span>
+
+    @Override
+    public void action() {
+<span class="pc bpc" id="L55" title="1 of 2 branches missed.">        if (concluded.get()) {</span>
+<span class="nc" id="L56">            return;</span>
+        }
+<span class="fc" id="L58">        BaseVesselAgent vessel = (BaseVesselAgent) myAgent;</span>
+<span class="fc" id="L59">        WalkInState state = stateRef.get();</span>
+<span class="fc" id="L60">        double opening = computeOpening(state.targetPrice(), state.personality(), openingRoll);</span>
+
+<span class="fc" id="L62">        Optional&lt;AID&gt; harbourMaster = vessel.serviceLocator().findUnique(&quot;harbour-master&quot;);</span>
+<span class="pc bpc" id="L63" title="1 of 2 branches missed.">        if (harbourMaster.isEmpty()) {</span>
+<span class="nc" id="L64">            log.warn(&quot;{}: no harbour-master in DF; cannot open negotiation&quot;, myAgent.getLocalName());</span>
+<span class="nc" id="L65">            return;</span>
+        }
+<span class="fc" id="L67">        Map&lt;String, Object&gt; content = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L68">        content.put(&quot;intent&quot;, &quot;opening_offer&quot;);</span>
+<span class="fc" id="L69">        content.put(&quot;price&quot;, opening);</span>
+<span class="fc" id="L70">        content.put(&quot;hours&quot;, state.dealHours());</span>
+<span class="fc" id="L71">        content.put(&quot;vessel_spec&quot;, vessel.spec());</span>
+
+<span class="fc" id="L73">        ACLMessage propose = MessageFactory.create(ACLMessage.PROPOSE);</span>
+<span class="fc" id="L74">        propose.addReceiver(harbourMaster.get());</span>
+<span class="fc" id="L75">        propose.setConversationId(conversationId);</span>
+<span class="fc" id="L76">        propose.setContent(TerminalJson.write(content));</span>
+<span class="fc" id="L77">        myAgent.send(propose);</span>
+
+<span class="fc" id="L79">        stateRef.set(state.markStarted(vessel.simClock().nowSimMillis())</span>
+<span class="fc" id="L80">                .recordOwnOffer(opening, state.dealHours()));</span>
+        // DEBUG since task 26: the PROPOSE is already in the comm log, and the hub logs the
+        // forwarded offer. Three classes were reporting one event.
+<span class="fc" id="L83">        log.debug(&quot;{} opened at {} ({}h) -&gt; harbour-master&quot;, myAgent.getLocalName(), opening, state.dealHours());</span>
+<span class="fc" id="L84">    }</span>
+
+    /**
+     * The opening price: a personality-sampled lowball fraction of {@code targetPrice},
+     * rounded to whole euros at the source (task 19 STEP 1 â€” the player must never see
+     * sub-euro cents). Public and static (not package-private) so the
+     * {@code [0.70*minTarget, 0.85*maxTarget]} bound is unit-testable with no live JADE
+     * agent at all, from {@code OpeningProposalBehaviourTest} in the parent {@code
+     * behaviours} test package â€” a test in this sub-package would shadow
+     * {@code BehaviourCatalogueTest}'s scan.
+     */
+    public static double computeOpening(double targetPrice, Personality personality, double roll) {
+<span class="fc" id="L96">        return Math.round(targetPrice * personality.sampleOpeningFraction(roll));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

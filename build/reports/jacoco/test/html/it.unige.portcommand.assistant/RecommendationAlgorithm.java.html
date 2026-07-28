@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RecommendationAlgorithm.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.assistant</a> &gt; <span class="el_source">RecommendationAlgorithm.java</span></div><h1>RecommendationAlgorithm.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.assistant;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.artifacts.MarketStats;
+import it.unige.portcommand.harbourmaster.financial.ExpenseRules;
+import it.unige.portcommand.harbourmaster.financial.IncomeRules;
+import it.unige.portcommand.prolog.PrologQueries;
+
+/**
+ * Pure EV-based recommendation heuristic (planning/10 Â§10.2, v1.1 fixes). {@link #run} is a
+ * deterministic function of its {@link WalkInDialogueSnapshot} input plus two read-only
+ * collaborators ({@link MarketHistoryArtifact}, the static {@link PrologQueries} facade) â€” no
+ * JADE dependency, no hidden hidden-belief reads (the snapshot type structurally cannot carry
+ * one; see {@link WalkInDialogueSnapshot}).
+ */
+public final class RecommendationAlgorithm {
+
+    /** EV penalty applied to a rejected counter-offer (the vessel walks away). Configurable
+     * in spirit of &quot;defaults.json&quot; (task 15); a plain constant until that file exists. */
+    public static final double WITHDRAWAL_PENALTY = -500.0;
+
+    private static final double COUNTER_10_PCT = 0.10;
+    private static final double COUNTER_20_PCT = 0.20;
+
+    private final MarketHistoryArtifact marketHistory;
+
+<span class="fc" id="L31">    public RecommendationAlgorithm(MarketHistoryArtifact marketHistory) {</span>
+<span class="fc" id="L32">        this.marketHistory = Objects.requireNonNull(marketHistory, &quot;marketHistory&quot;);</span>
+<span class="fc" id="L33">    }</span>
+
+    public Recommendation run(WalkInDialogueSnapshot snapshot) {
+<span class="fc" id="L36">        Objects.requireNonNull(snapshot, &quot;snapshot&quot;);</span>
+
+<span class="fc" id="L38">        boolean compatible = PrologQueries.isCompatible(snapshot.berthId(), snapshot.vesselType(),</span>
+<span class="fc" id="L39">                snapshot.draft(), snapshot.length(), snapshot.tonnage());</span>
+<span class="fc" id="L40">        MarketStats stats = marketHistory.queryStats(snapshot.vesselType(), snapshot.durationHours());</span>
+<span class="fc" id="L41">        ScoringBand band = bandFor(snapshot, stats);</span>
+<span class="fc" id="L42">        double urgency = UrgencyCalculator.compute(snapshot.roundsUsed(), UrgencyCalculator.DEFAULT_ROUND_LIMIT,</span>
+<span class="fc" id="L43">                snapshot.timeUsedSec(), UrgencyCalculator.DEFAULT_TIME_LIMIT_SEC, snapshot.threatenedWithdrawal());</span>
+<span class="fc" id="L44">        double marginalCost = ExpenseRules.marginalCost(snapshot.vesselType(), snapshot.cargoClass(),</span>
+<span class="fc" id="L45">                snapshot.durationHours(), snapshot.tonnage());</span>
+
+        // Incompatible berth: no candidate that &quot;involves&quot; it (accept/counter both price a deal
+        // at this berth) may be recommended â€” planning/10 Â§10.2 step 2. Only reject_silent stays.
+<span class="fc" id="L49">        List&lt;ScoredCandidate&gt; candidates = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L50" title="All 2 branches covered.">        if (compatible) {</span>
+<span class="fc" id="L51">            candidates.add(scoreAccept(snapshot, marginalCost));</span>
+<span class="fc" id="L52">            candidates.add(scoreCounter(snapshot, marginalCost, band, urgency, COUNTER_10_PCT));</span>
+<span class="fc" id="L53">            candidates.add(scoreCounter(snapshot, marginalCost, band, urgency, COUNTER_20_PCT));</span>
+        }
+<span class="fc" id="L55">        candidates.add(scoreRejectSilent());</span>
+
+<span class="fc" id="L57">        ScoredCandidate chosen = argmax(candidates);</span>
+        // compatible/2 (R7) is the only rule PrologQueries.isCompatible actually queries; the fee
+        // range / marginal cost are Java-computed figures, never cited as Rn (planning/10 Â§10.2.7).
+<span class="fc" id="L60">        List&lt;String&gt; trace = List.of(&quot;R7&quot;);</span>
+<span class="fc" id="L61">        return new Recommendation(chosen.candidate.action(), chosen.candidate.price(), chosen.pAccept, chosen.ev,</span>
+<span class="fc" id="L62">                trace, stats, snapshot.vesselType(), snapshot.berthId(), snapshot.durationHours(),</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">                compatible ? &quot;compatible&quot; : &quot;incompatible&quot;, band.fallback());</span>
+    }
+
+    private static ScoredCandidate scoreAccept(WalkInDialogueSnapshot snapshot, double marginalCost) {
+<span class="fc" id="L67">        double price = snapshot.lastVesselOffer();</span>
+        // Deterministic â€” no p_accept (v1.1 fix). Accepting the vessel's own standing offer
+        // closes the deal outright; p_accept models the VESSEL accepting the PLAYER's counter,
+        // so applying it here would double-discount and systematically over-recommend countering.
+<span class="fc" id="L71">        double ev = price - marginalCost;</span>
+<span class="fc" id="L72">        return new ScoredCandidate(new RecommendationCandidate(RecommendationCandidate.ACCEPT, price, marginalCost),</span>
+                1.0, ev);
+    }
+
+    private static ScoredCandidate scoreCounter(WalkInDialogueSnapshot snapshot, double marginalCost,
+                                                ScoringBand band, double urgency, double pct) {
+<span class="fc" id="L78">        double raw = snapshot.lastVesselOffer() * (1.0 + pct);</span>
+<span class="fc" id="L79">        double price = clamp(raw, band.clampLo(), band.clampHi());</span>
+<span class="fc" id="L80">        double pAccept = clamp01(sigmoid((band.sigmoidMean() - price) / band.sigmoidStddev()) * urgency);</span>
+<span class="fc" id="L81">        double ev = pAccept * (price - marginalCost) + (1.0 - pAccept) * WITHDRAWAL_PENALTY;</span>
+<span class="fc" id="L82">        return new ScoredCandidate(new RecommendationCandidate(RecommendationCandidate.COUNTER, price, marginalCost),</span>
+                pAccept, ev);
+    }
+
+    private static ScoredCandidate scoreRejectSilent() {
+        // The &quot;do nothing&quot; baseline (planning/10 Â§10.2 step 5).
+<span class="fc" id="L88">        return new ScoredCandidate(</span>
+                new RecommendationCandidate(RecommendationCandidate.REJECT_SILENT, 0.0, 0.0), 0.0, 0.0);
+    }
+
+    /**
+     * Clamp bounds + sigmoid reference point/scale, from either the real market query or (when
+     * {@code sampleCount &lt; 10}) the static {@link IncomeRules#berthFeeRange} fallback band
+     * (planning/10 Â§10.2: &quot;price = midpoint of the range, p_accept estimated from distance to
+     * the band centre&quot;). The fallback's own [lo, hi] edges become the clamp bounds directly (no
+     * synthesised Â±2*stddev round trip); a quarter of the band width stands in for &quot;stddev&quot; in
+     * the sigmoid, mirroring the real path's {@code mean Â± 2*stddev == [lo, hi]} relationship.
+     */
+    private static ScoringBand bandFor(WalkInDialogueSnapshot snapshot, MarketStats stats) {
+<span class="pc bpc" id="L101" title="1 of 2 branches missed.">        if (stats.lowConfidence()) {</span>
+<span class="fc" id="L102">            IncomeRules.PriceRange range = IncomeRules.berthFeeRange(snapshot.berthId(), snapshot.vesselType());</span>
+<span class="fc" id="L103">            double sigmoidStddev = Math.max((range.hi() - range.lo()) / 4.0, 1.0);</span>
+<span class="fc" id="L104">            return new ScoringBand(range.lo(), range.hi(), range.midpoint(), sigmoidStddev, range);</span>
+        }
+<span class="nc" id="L106">        double clampLo = Math.max(0.0, stats.mean() - 2 * stats.stddev());</span>
+<span class="nc" id="L107">        double clampHi = stats.mean() + 2 * stats.stddev();</span>
+<span class="nc" id="L108">        double sigmoidStddev = Math.max(stats.stddev(), 1.0);</span>
+<span class="nc" id="L109">        return new ScoringBand(clampLo, clampHi, stats.mean(), sigmoidStddev, null);</span>
+    }
+
+    private static double sigmoid(double x) {
+<span class="fc" id="L113">        return 1.0 / (1.0 + Math.exp(-x));</span>
+    }
+
+    private static double clamp(double v, double lo, double hi) {
+<span class="fc" id="L117">        return Math.max(lo, Math.min(hi, v));</span>
+    }
+
+    private static double clamp01(double v) {
+<span class="fc" id="L121">        return clamp(v, 0.0, 1.0);</span>
+    }
+
+    private static ScoredCandidate argmax(List&lt;ScoredCandidate&gt; candidates) {
+<span class="fc" id="L125">        ScoredCandidate best = candidates.get(0);</span>
+<span class="fc bfc" id="L126" title="All 2 branches covered.">        for (ScoredCandidate c : candidates) {</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">            if (c.ev &gt; best.ev) {</span>
+<span class="fc" id="L128">                best = c;</span>
+            }
+<span class="fc" id="L130">        }</span>
+<span class="fc" id="L131">        return best;</span>
+    }
+
+    /**
+     * @param fallback the static Â§7.5 band when this band CAME from {@link IncomeRules#berthFeeRange}
+     *                 (low-confidence market), else {@code null}. Handed to the {@link Recommendation}
+     *                 so the explanation names the band it scored against instead of quoting the
+     *                 zeroed market stats â€” the planning/10 empty-history Hint finding.
+     */
+<span class="fc" id="L140">    private record ScoringBand(double clampLo, double clampHi, double sigmoidMean, double sigmoidStddev,</span>
+                               IncomeRules.PriceRange fallback) {
+    }
+
+<span class="fc" id="L144">    private record ScoredCandidate(RecommendationCandidate candidate, double pAccept, double ev) {</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

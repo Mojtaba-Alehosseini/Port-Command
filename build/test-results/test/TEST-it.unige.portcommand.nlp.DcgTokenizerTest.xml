@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.DcgTokenizerTest" tests="51" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:45" hostname="MOJI" time="0.044">
+  <properties/>
+  <testcase name="decimalPriceSurvivesAsOneNumber()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="sentenceFinalDotDoesNotStickToTheWord()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[5h] normalises to 5 h" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[5 h] normalises to 5 h" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[5hrs] normalises to 5 h" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[5 hrs] normalises to 5 h" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[5hr] normalises to 5 h" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[5hours] normalises to 5 h" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[5 hours] normalises to 5 h" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[5hour] normalises to 5 h" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="backslashesAreEscapedInsideQuotedAtoms()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="thousandsSeparatorIsRemovedRatherThanSplitting()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[1] " classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[2]    " classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[3] !!!" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[4] ..." classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="clitalApostropheIsKeptSoTheGrammarSeesOneToken()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="anApostropheCannotTerminateTheAtomEarly()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="strayPunctuationIsStripped()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="emptyTokenListMarshalsToTheEmptyPrologList()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="typographicApostropheFoldsToAscii()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="aNumberBeforeAnHWordIsNotTreatedAsADuration()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="anInjectedTermCannotEscapeTheAtomQuoting()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="decimalNumberIsEmittedBare()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="nullInputYieldsNoTokens()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="berthFusedNormalisationDoesNotSplitOtherWords()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="mixedNormalisationsInOneUtterance()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="aCommaAfterANumberIsStillASeparator()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="colonSplitsWhenItIsNotBetweenDigits()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[euros] is passed through for the grammar to map" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[euro] is passed through for the grammar to map" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[eur] is passed through for the grammar to map" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[dollars] is passed through for the grammar to map" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[dollar] is passed through for the grammar to map" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[usd] is passed through for the grammar to map" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="clockTimeStaysASingleToken()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[€2000] normalises to 2000 eur" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[€ 2000] normalises to 2000 eur" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[2000€] normalises to 2000 eur" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[2000 €] normalises to 2000 eur" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[$2000] normalises to 2000 usd" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[$ 2000] normalises to 2000 usd" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[2000$] normalises to 2000 usd" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[2000 $] normalises to 2000 usd" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[berth2] normalises to berth 2" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="[berth_2] normalises to berth 2" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="[berth 2] normalises to berth 2" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.0"/>
+  <testcase name="numbersAreEmittedBareAndWordsAreQuoted()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="clockTokenIsQuotedBecauseItIsNotAnAtom()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="apostrophesAreEscapedInsideQuotedAtoms()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <testcase name="theFullAcceptanceUtteranceTokenisesForTheGrammar()" classname="it.unige.portcommand.nlp.DcgTokenizerTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

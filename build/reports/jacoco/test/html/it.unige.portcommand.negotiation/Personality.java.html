@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Personality.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.negotiation</a> &gt; <span class="el_source">Personality.java</span></div><h1>Personality.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.negotiation;
+
+import java.util.Map;
+
+/**
+ * Walk-in vessel negotiation personality (a hidden belief; never leaves the agent).
+ * Drawn at spawn from {@code vessel_templates.json} via {@code RandomSource}.
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@code openingFractionMin}/{@code openingFractionMax} â€” the opening PROPOSE
+ *       is a lowball {@code sampleOpeningFraction(roll) * targetPrice}, never a markup
+ *       over it (task 19 STEP 1 fix: an earlier &amp;gt;1.0 modifier produced openings
+ *       above the PROJECT_DEFINITION Â§7.5-derivable ceiling, e.g. &amp;euro;9,169.75 for a
+ *       tanker whose target range tops out at &amp;euro;8,000). The three personality
+ *       sub-bands are contiguous across the spec's overall {@code [0.70,0.85]} band:
+ *       AGGRESSIVE opens with the deepest lowball and holds out longest (matches its
+ *       {@code RealNegotiationEngine.ACCEPT_THRESHOLD} being the lowest of the three);
+ *       DESPERATE opens closest to its own target, since it also settles fastest
+ *       in-band elsewhere in the engine. Because {@code targetPrice} is itself sampled
+ *       within the vessel type's own target range, {@code targetPrice * fraction} is
+ *       mathematically guaranteed to land inside
+ *       {@code [0.70*typeMinTarget, 0.85*typeMaxTarget]} â€” the product of two positive
+ *       ranges is bounded by the product of their own min/max.&lt;/li&gt;
+ *   &lt;li&gt;{@code concessionRate} â€” how fast it concedes per round (0..1). Consumed by
+ *       the real {@code NegotiationEngine} in task 15; declared here so the surface
+ *       is stable, unused by task 07's mocked-engine flow.&lt;/li&gt;
+ * &lt;/ul&gt;
+ */
+<span class="fc" id="L29">public enum Personality {</span>
+
+<span class="fc" id="L31">    AGGRESSIVE(0.70, 0.75, 0.10),</span>
+<span class="fc" id="L32">    NEUTRAL(0.75, 0.80, 0.20),</span>
+<span class="fc" id="L33">    DESPERATE(0.80, 0.85, 0.40);</span>
+
+    private final double openingFractionMin;
+    private final double openingFractionMax;
+    private final double concessionRate;
+
+<span class="fc" id="L39">    Personality(double openingFractionMin, double openingFractionMax, double concessionRate) {</span>
+<span class="fc" id="L40">        this.openingFractionMin = openingFractionMin;</span>
+<span class="fc" id="L41">        this.openingFractionMax = openingFractionMax;</span>
+<span class="fc" id="L42">        this.concessionRate = concessionRate;</span>
+<span class="fc" id="L43">    }</span>
+
+    public double openingFractionMin() {
+<span class="fc" id="L46">        return openingFractionMin;</span>
+    }
+
+    public double openingFractionMax() {
+<span class="fc" id="L50">        return openingFractionMax;</span>
+    }
+
+    /** @param roll a {@code [0,1)} draw. @return a fraction inside this personality's opening sub-band. */
+    public double sampleOpeningFraction(double roll) {
+<span class="fc" id="L55">        return openingFractionMin + roll * (openingFractionMax - openingFractionMin);</span>
+    }
+
+    public double concessionRate() {
+<span class="fc" id="L59">        return concessionRate;</span>
+    }
+
+    /**
+     * Pick a personality from a {@code name -&gt; weight} distribution by cumulative
+     * sampling against {@code roll} (a 0..1 draw). Deterministic for a given roll.
+     * Falls back to {@link #NEUTRAL} if the distribution under-specifies the weights.
+     * (Lives here rather than on {@code RandomSource} to keep {@code util}
+     * dependency-free â€” the caller supplies the roll from a seeded sub-stream.)
+     */
+    public static Personality fromDistribution(Map&lt;String, Double&gt; distribution, double roll) {
+<span class="fc" id="L70">        double cumulative = 0.0;</span>
+<span class="fc bfc" id="L71" title="All 2 branches covered.">        for (Personality p : values()) {</span>
+<span class="fc" id="L72">            Double weight = distribution.get(p.name());</span>
+<span class="fc bfc" id="L73" title="All 2 branches covered.">            if (weight == null) {</span>
+<span class="fc" id="L74">                continue;</span>
+            }
+<span class="fc" id="L76">            cumulative += weight;</span>
+<span class="fc bfc" id="L77" title="All 2 branches covered.">            if (roll &lt; cumulative) {</span>
+<span class="fc" id="L78">                return p;</span>
+            }
+        }
+<span class="fc" id="L81">        return NEUTRAL;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

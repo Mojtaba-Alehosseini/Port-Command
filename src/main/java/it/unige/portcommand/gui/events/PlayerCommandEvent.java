@@ -1,5 +1,7 @@
 package it.unige.portcommand.gui.events;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -17,10 +19,19 @@ import it.unige.portcommand.util.Event;
 public record PlayerCommandEvent(PlayerCommandKind kind, String targetVesselId, Map<String, Object> content)
         implements Event {
 
+    /**
+     * Defensive copy that KEEPS insertion order — deliberately not {@code Map.copyOf}, which
+     * randomises iteration order per JVM launch. {@code content} flows straight into ACL wire
+     * content via {@code DispatchPlayerCommandBehaviour}'s {@code proposeMessage}/{@code
+     * plainMessage} -> {@code TerminalJson.write} (through {@code PlayerCommand}, which shares
+     * this exact fix), so a random order here means the same player command serialises to
+     * different bytes between runs. Same established anti-pattern as {@code Frame} and {@code
+     * RasaParseResult} (INVARIANTS.md).
+     */
     public PlayerCommandEvent {
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(targetVesselId, "targetVesselId");
-        content = content == null ? Map.of() : Map.copyOf(content);
+        content = content == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(content));
     }
 
     /** Identical to the internal {@code PlayerCommand.kind} (task 11) this event is mapped to. */

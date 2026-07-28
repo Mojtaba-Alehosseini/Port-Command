@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" tests="19" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:44" hostname="MOJI" time="0.172">
+  <properties/>
+  <testcase name="aRetryReawardingTheSameTugChargesAgainButInventsNoExtraTugSurcharge()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.054"/>
+  <testcase name="aClosedWalkInDealCreditsTheFeeAndLiftsReputation()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.049"/>
+  <testcase name="aNeverEngagedTimeoutIsTheGentlerPenalty()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.002"/>
+  <testcase name="aDealClosedEventCarryingANonDealOutcomeIsIgnored()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.005"/>
+  <testcase name="aWithdrawalPenaltyIsStampedWithItsRealSimTime()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.003"/>
+  <testcase name="aContractedGrantCreditsTheFeeButEarnsNoReputation()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.001"/>
+  <testcase name="aCustomsClearanceChargesOneHundredExactlyOnce()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.002"/>
+  <testcase name="twoVesselsOnOneConversationIdDoNotPoolTheirTugsIntoOneSurcharge()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.001"/>
+  <testcase name="aTugAwardChargesTheWinningBidExactlyOnce()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.005"/>
+  <testcase name="aThirdDistinctTugBillsASecondExtraTugSurcharge()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.003"/>
+  <testcase name="tugsForDifferentVesselsDoNotShareASurchargeCount()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.001"/>
+  <testcase name="aSecondEscortAfterAWeatherHoldBillsItsOwnSurchargeNotACumulativeOne()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.003"/>
+  <testcase name="twoCoWinningTugsOnOneConversationAreBothChargedAndBillOneExtraTugSurcharge()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.005"/>
+  <testcase name="unengagedTimeoutLossIsCappedAtMinusFivePerDayAndResetsAtRollover()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.005"/>
+  <testcase name="premiumSurchargeIsCreditedOnlyOnceReputationReachesEighty()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.002"/>
+  <testcase name="aWithdrawalMovesNoMoney()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.004"/>
+  <testcase name="eachWithdrawalOutcomeAppliesItsCanonicalPenalty()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.003"/>
+  <testcase name="aDuplicateDealOrContractOrWithdrawalIsCreditedOnce()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.003"/>
+  <testcase name="aDaysIncomeAndVariableExpenseAggregateBackOutOfHistory()" classname="it.unige.portcommand.harbourmaster.financial.LedgerCoordinatorTest" time="0.001"/>
+  <system-out><![CDATA[00:12:44.245 [Test worker] [] WARN  i.u.p.h.financial.LedgerCoordinator - DealClosedEvent with non-DEAL outcome TIMEOUT for V9 — ignoring (WithdrawalEvent's job)
+00:12:44.245 [Test worker] [] WARN  i.u.p.h.financial.LedgerCoordinator - duplicate CustomsClearedEvent for V1 — already charged, ignoring
+00:12:44.262 [Test worker] [] WARN  i.u.p.h.financial.LedgerCoordinator - duplicate TugJobAwardedEvent for cnp-abc/tug_1 — already charged, ignoring
+00:12:44.285 [Test worker] [] INFO  i.u.p.h.financial.LedgerCoordinator - unengaged timeout for U6 — daily reputation cap (-5.0) reached, no further penalty
+00:12:44.285 [Test worker] [] INFO  i.u.p.h.financial.LedgerCoordinator - unengaged timeout for U7 — daily reputation cap (-5.0) reached, no further penalty
+00:12:44.286 [Test worker] [] INFO  i.u.p.h.financial.LedgerCoordinator - unengaged timeout for U8 — daily reputation cap (-5.0) reached, no further penalty
+00:12:44.286 [Test worker] [] INFO  i.u.p.h.financial.LedgerCoordinator - unengaged timeout for U9 — daily reputation cap (-5.0) reached, no further penalty
+00:12:44.286 [Test worker] [] INFO  i.u.p.h.financial.LedgerCoordinator - unengaged timeout for U10 — daily reputation cap (-5.0) reached, no further penalty
+00:12:44.303 [Test worker] [] WARN  i.u.p.h.financial.LedgerCoordinator - duplicate DealClosedEvent for V1 — already credited, ignoring
+00:12:44.303 [Test worker] [] WARN  i.u.p.h.financial.LedgerCoordinator - duplicate ContractedFeeEarnedEvent for CONTRACT-1 — already credited, ignoring
+00:12:44.305 [Test worker] [] WARN  i.u.p.h.financial.LedgerCoordinator - duplicate WithdrawalEvent for V2 — already penalised, ignoring
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

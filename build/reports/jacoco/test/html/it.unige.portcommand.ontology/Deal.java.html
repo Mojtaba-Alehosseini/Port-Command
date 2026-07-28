@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Deal.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.ontology</a> &gt; <span class="el_source">Deal.java</span></div><h1>Deal.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.ontology;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+/**
+ * The closed result of a negotiation. Declares the &lt;strong&gt;single canonical&lt;/strong&gt;
+ * {@link Outcome} taxonomy: tasks 07 ({@code WithdrawalBehaviour}/
+ * {@code DealClosedBehaviour}) and 09 ({@code MarketHistoryArtifact.DealRecord})
+ * reuse this enum and MUST NOT define their own outcome strings.
+ */
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public record Deal(
+        @JsonProperty(&quot;deal_id&quot;) String dealId,
+        @JsonProperty(&quot;vessel_id&quot;) String vesselId,
+        @JsonProperty(&quot;berth_id&quot;) String berthId,
+        @JsonProperty(&quot;final_price&quot;) double finalPrice,
+        @JsonProperty(&quot;final_hours&quot;) int finalHours,
+        @JsonProperty(&quot;closed_at_sim_millis&quot;) long closedAtSimMillis,
+        @JsonProperty(&quot;outcome&quot;) Outcome outcome) {
+
+    /** The four â€” and only four â€” negotiation outcomes. */
+<span class="fc" id="L23">    public enum Outcome {</span>
+        /** Both sides agreed; berth assigned. */
+<span class="fc" id="L25">        DEAL,</span>
+        /** Vessel withdrew because the price never met its threshold (incl. rounds exhausted). */
+<span class="fc" id="L27">        WITHDRAW_PRICE,</span>
+        /** Vessel withdrew because the player never granted its physically required stay length
+         * (task 19b, Â§7.3 duration bargaining): the fee was affordable at the final call, but the
+         * proposed hours were still below the vessel's hidden cargo-handling floor. */
+<span class="fc" id="L31">        WITHDRAW_DURATION,</span>
+        /** Negotiation timed out with no agreement. */
+<span class="fc" id="L33">        TIMEOUT,</span>
+        /** The player (HarbourMaster) explicitly refused. */
+<span class="fc" id="L35">        PLAYER_REFUSED</span>
+    }
+
+<span class="fc" id="L38">    public Deal {</span>
+<span class="fc bfc" id="L39" title="All 2 branches covered.">        if (outcome == null) {</span>
+<span class="fc" id="L40">            throw new IllegalArgumentException(&quot;outcome must not be null&quot;);</span>
+        }
+<span class="fc" id="L42">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

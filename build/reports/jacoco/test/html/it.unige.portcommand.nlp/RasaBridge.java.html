@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RasaBridge.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">RasaBridge.java</span></div><h1>RasaBridge.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.io.IOException;
+import java.net.ConnectException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
+import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * HTTP client to the single Rasa NLU pipeline's {@code /model/parse} endpoint (task 12,
+ * port 5005). Constructed once in {@code JadeBootstrap}; there is no second Rasa pipeline â€”
+ * the policy pipeline was cut (PROJECT_DEFINITION.md Â§9 item 6), {@code set_policy} is
+ * handled in-process by {@code PolicyParser} (task 10).
+ *
+ * &lt;p&gt;&lt;b&gt;Timeouts.&lt;/b&gt; Connect 1&amp;nbsp;s, request 3&amp;nbsp;s (planning/14 hard constraints).
+ * &lt;b&gt;Retries.&lt;/b&gt; One retry on a connection failure or a 5xx response; no retry on 4xx, and
+ * no retry on a genuine request timeout (retrying an already-slow call would just double the
+ * worst-case latency the caller is budgeting for).
+ *
+ * &lt;p&gt;{@link #parse} blocks the calling thread for up to ~4&amp;nbsp;s (worst case, with the one
+ * retry). Never call it from a JADE agent thread or the Swing EDT â€” {@link NLPPipeline} runs
+ * it on its own bounded {@code ExecutorService}; a caller that only needs a single one-off
+ * call off-thread can use {@link #parseAsync}.
+ */
+public final class RasaBridge {
+
+<span class="fc" id="L43">    private static final Logger log = LoggerFactory.getLogger(RasaBridge.class);</span>
+
+<span class="fc" id="L45">    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(1);</span>
+<span class="fc" id="L46">    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(3);</span>
+    private static final int DEFAULT_PORT = 5005;
+    // Security-audit boundary check: a chat line has no legitimate reason to be this long;
+    // caps the payload sent upstream and logged.
+    private static final int MAX_TEXT_LENGTH = 1000;
+
+    private final URI parseUri;
+    private final HttpClient client;
+    private final ObjectMapper json;
+
+<span class="fc" id="L56">    public RasaBridge(URI parseUri, HttpClient client, ObjectMapper json) {</span>
+<span class="fc" id="L57">        this.parseUri = Objects.requireNonNull(parseUri, &quot;parseUri&quot;);</span>
+<span class="fc" id="L58">        this.client = Objects.requireNonNull(client, &quot;client&quot;);</span>
+<span class="fc" id="L59">        this.json = Objects.requireNonNull(json, &quot;json&quot;);</span>
+<span class="fc" id="L60">    }</span>
+
+    /** {@code connectTimeout} is set on the shared {@link HttpClient}, not per-request. */
+    public static HttpClient.Builder newClientBuilder() {
+<span class="fc" id="L64">        return HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT);</span>
+    }
+
+    /** Reads {@code -Drasa.port} (default 5005): {@code http://localhost:&lt;port&gt;/model/parse}. */
+    public static URI resolveParseUri() {
+<span class="fc" id="L69">        int port = Integer.getInteger(&quot;rasa.port&quot;, DEFAULT_PORT);</span>
+<span class="fc" id="L70">        return URI.create(&quot;http://localhost:&quot; + port + &quot;/model/parse&quot;);</span>
+    }
+
+    /**
+     * Synchronous parse of one chat line.
+     *
+     * @throws IllegalArgumentException {@code text} is null, blank, or exceeds {@value #MAX_TEXT_LENGTH} chars
+     * @throws RasaTimeoutException     the request exceeded its 3&amp;nbsp;s timeout (no retry)
+     * @throws NlpServiceException      any other HTTP/parse failure (4xx, 5xx after one retry,
+     *                                  connection failure after one retry, malformed JSON)
+     */
+    public RasaParseResult parse(String text) {
+<span class="fc" id="L82">        validate(text);</span>
+<span class="fc" id="L83">        return attempt(text, true);</span>
+    }
+
+    public CompletableFuture&lt;RasaParseResult&gt; parseAsync(String text) {
+<span class="fc" id="L87">        return CompletableFuture.supplyAsync(() -&gt; parse(text));</span>
+    }
+
+    private static void validate(String text) {
+<span class="pc bpc" id="L91" title="1 of 4 branches missed.">        if (text == null || text.isBlank()) {</span>
+<span class="fc" id="L92">            throw new IllegalArgumentException(&quot;text must not be blank&quot;);</span>
+        }
+<span class="fc bfc" id="L94" title="All 2 branches covered.">        if (text.length() &gt; MAX_TEXT_LENGTH) {</span>
+<span class="fc" id="L95">            throw new IllegalArgumentException(&quot;text exceeds &quot; + MAX_TEXT_LENGTH + &quot; chars&quot;);</span>
+        }
+<span class="fc" id="L97">    }</span>
+
+    private RasaParseResult attempt(String text, boolean allowRetry) {
+<span class="fc" id="L100">        HttpRequest request = HttpRequest.newBuilder(parseUri)</span>
+<span class="fc" id="L101">                .header(&quot;Content-Type&quot;, &quot;application/json&quot;)</span>
+<span class="fc" id="L102">                .timeout(REQUEST_TIMEOUT)</span>
+<span class="fc" id="L103">                .POST(HttpRequest.BodyPublishers.ofString(writeBody(text)))</span>
+<span class="fc" id="L104">                .build();</span>
+
+        HttpResponse&lt;String&gt; response;
+        try {
+<span class="fc" id="L108">            response = client.send(request, HttpResponse.BodyHandlers.ofString());</span>
+<span class="fc" id="L109">        } catch (HttpTimeoutException e) {</span>
+<span class="fc" id="L110">            log.debug(&quot;rasa parse timed out ({} chars)&quot;, text.length());</span>
+<span class="fc" id="L111">            throw new RasaTimeoutException(&quot;rasa timeout&quot;, e);</span>
+<span class="fc" id="L112">        } catch (ConnectException e) {</span>
+<span class="fc bfc" id="L113" title="All 2 branches covered.">            if (allowRetry) {</span>
+<span class="fc" id="L114">                log.debug(&quot;rasa connection failure, retrying once&quot;);</span>
+<span class="nc" id="L115">                return attempt(text, false);</span>
+            }
+<span class="fc" id="L117">            throw new NlpServiceException(&quot;rasa connection failure: &quot; + e.getMessage(), e);</span>
+<span class="nc" id="L118">        } catch (IOException e) {</span>
+<span class="nc" id="L119">            throw new NlpServiceException(&quot;rasa I/O failure: &quot; + e.getMessage(), e);</span>
+<span class="nc" id="L120">        } catch (InterruptedException e) {</span>
+<span class="nc" id="L121">            Thread.currentThread().interrupt();</span>
+<span class="nc" id="L122">            throw new NlpServiceException(&quot;interrupted while calling rasa&quot;, e);</span>
+<span class="fc" id="L123">        }</span>
+
+<span class="fc" id="L125">        int status = response.statusCode();</span>
+<span class="fc bfc" id="L126" title="All 4 branches covered.">        if (status &gt;= 500 &amp;&amp; allowRetry) {</span>
+<span class="fc" id="L127">            log.debug(&quot;rasa returned HTTP {}, retrying once&quot;, status);</span>
+<span class="nc" id="L128">            return attempt(text, false);</span>
+        }
+<span class="fc bfc" id="L130" title="All 2 branches covered.">        if (status &gt;= 400) {</span>
+<span class="fc" id="L131">            throw new NlpServiceException(&quot;rasa returned HTTP &quot; + status + &quot;: &quot; + response.body());</span>
+        }
+<span class="fc" id="L133">        return toResult(parseBody(response.body()));</span>
+    }
+
+    private String writeBody(String text) {
+        try {
+<span class="fc" id="L138">            return json.writeValueAsString(Map.of(&quot;text&quot;, text));</span>
+<span class="nc" id="L139">        } catch (JsonProcessingException e) {</span>
+<span class="nc" id="L140">            throw new NlpServiceException(&quot;failed to serialize rasa request&quot;, e);</span>
+        }
+    }
+
+    private RawParseResponse parseBody(String body) {
+        try {
+<span class="fc" id="L146">            return json.readValue(body, RawParseResponse.class);</span>
+<span class="fc" id="L147">        } catch (JsonProcessingException e) {</span>
+<span class="fc" id="L148">            throw new NlpServiceException(&quot;malformed rasa response: &quot; + e.getMessage(), e);</span>
+        }
+    }
+
+    private static RasaParseResult toResult(RawParseResponse raw) {
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">        String intentName = raw.intent != null ? raw.intent.name : null;</span>
+<span class="pc bpc" id="L154" title="1 of 2 branches missed.">        double confidence = raw.intent != null ? raw.intent.confidence : 0.0;</span>
+
+<span class="fc" id="L156">        Map&lt;String, EntityHit&gt; entities = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">        if (raw.entities != null) {</span>
+<span class="fc bfc" id="L158" title="All 2 branches covered.">            for (RawEntity e : raw.entities) {</span>
+<span class="fc" id="L159">                entities.put(e.entity, new EntityHit(e.entity, e.value, e.start, e.end));</span>
+<span class="fc" id="L160">            }</span>
+        }
+
+<span class="fc bfc" id="L163" title="All 2 branches covered.">        List&lt;RankedIntent&gt; ranking = raw.intentRanking == null</span>
+<span class="fc" id="L164">                ? List.of()</span>
+<span class="fc" id="L165">                : raw.intentRanking.stream().map(r -&gt; new RankedIntent(r.name, r.confidence)).toList();</span>
+
+<span class="fc" id="L167">        return new RasaParseResult(intentName, confidence, entities, ranking);</span>
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private static final class RawParseResponse {
+        @JsonProperty(&quot;intent&quot;)
+        RawIntent intent;
+        @JsonProperty(&quot;entities&quot;)
+        List&lt;RawEntity&gt; entities;
+        @JsonProperty(&quot;intent_ranking&quot;)
+        List&lt;RawIntent&gt; intentRanking;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private static final class RawIntent {
+        @JsonProperty(&quot;name&quot;)
+        String name;
+        @JsonProperty(&quot;confidence&quot;)
+        double confidence;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private static final class RawEntity {
+        @JsonProperty(&quot;entity&quot;)
+        String entity;
+        @JsonProperty(&quot;value&quot;)
+        String value;
+        @JsonProperty(&quot;start&quot;)
+        int start;
+        @JsonProperty(&quot;end&quot;)
+        int end;
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

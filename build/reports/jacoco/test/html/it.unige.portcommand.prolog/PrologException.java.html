@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PrologException.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.prolog</a> &gt; <span class="el_source">PrologException.java</span></div><h1>PrologException.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.prolog;
+
+/**
+ * Unchecked failure from the Prolog layer: a consult that did not succeed, a
+ * query that unexpectedly produced no solution, or a term that could not be
+ * decoded into the expected Java type.
+ *
+ * &lt;p&gt;Unchecked because agent plan bodies treat a Prolog malfunction as a
+ * programming error (a malformed goal or a missing rule), not a recoverable
+ * condition â€” the binding decision simply cannot be made and the caller aborts.
+ */
+public final class PrologException extends RuntimeException {
+
+    private static final long serialVersionUID = 1L;
+
+    public PrologException(String message) {
+<span class="fc" id="L17">        super(message);</span>
+<span class="fc" id="L18">    }</span>
+
+    public PrologException(String message, Throwable cause) {
+<span class="nc" id="L21">        super(message, cause);</span>
+<span class="nc" id="L22">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

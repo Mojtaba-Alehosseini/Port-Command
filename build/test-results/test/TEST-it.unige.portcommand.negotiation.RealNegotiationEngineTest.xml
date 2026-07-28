@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.negotiation.RealNegotiationEngineTest" tests="21" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:44" hostname="MOJI" time="0.016">
+  <properties/>
+  <testcase name="concessionRateOrdersThePersonalities()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.003"/>
+  <testcase name="repeatedIdenticalDemandsConvergeMonotonically()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.001"/>
+  <testcase name="theHoursBranchDoesNotForkTheSeededRollSequence()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="roundsExhausted_affordableButStillTooShort_withdrawsAsDurationFailure()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="aCapHitAgainstAFractionalDemandAcceptsWhenHoursWork()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="beyondBudgetWithTooShortHours_countersOnBothDimensions()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="roundsExhausted_demandBeyondBudget_withdrawsOverPriced()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="demandAtOrBelowTheVesselsOwnOffer_withWorkableHours_acceptsImmediately()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.001"/>
+  <testcase name="affordable_rollBelowThreshold_acceptsTheDemandAndItsHours()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="affordable_holdOutWithTooShortHours_movesOnBothDimensions()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.001"/>
+  <testcase name="roundsExhausted_affordableDemandWithWorkableHours_settles()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="sameSeedProducesSameDecisionSequence()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.001"/>
+  <testcase name="hoursAboveThePreferredStayAreStillHonored()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="affordable_rollAboveThreshold_concedesUpward_neverPastTheDemand_echoingWorkableHours()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="aCapHitCounterStillReturnsWholeEurosWhenTheHoursBlock()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="affordable_rollWouldSettleButHoursTooShort_countersPriceAgreedAtTheFloor()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="beyondBudget_concedesTowardTheCeilingOnly_neverAcceptsTheDemand()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="affordable_forcedSettleAtTheLastOpenRound_regardlessOfRoll()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="zeroOrNegativeHoursNeverReachADeal_evenWithAnIrresistiblePrice()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.0"/>
+  <testcase name="concessionReachingTheDemandIsAgreementNotAnEchoCounter()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.002"/>
+  <testcase name="agreedPriceButTooShortStay_countersThePlayersOwnPriceAtTheFloor()" classname="it.unige.portcommand.negotiation.RealNegotiationEngineTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

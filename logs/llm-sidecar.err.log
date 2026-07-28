@@ -1,0 +1,12 @@
+2026-07-27 17:26:55,293 INFO llm_sidecar.server: loading model microsoft/Phi-4-mini-instruct (key=phi-4-mini quant=onnx device=cpu) ...
+2026-07-27 17:26:55,294 INFO llm_sidecar.server: LLM sidecar -> http://127.0.0.1:5006  (GET /health, POST /explain)
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5006
+Press CTRL+C to quit
+127.0.0.1 - - [27/Jul/2026 17:27:10] "GET /health HTTP/1.1" 503 -
+127.0.0.1 - - [27/Jul/2026 17:27:10] "GET /health HTTP/1.1" 503 -
+2026-07-27 17:27:11,637 INFO llm_sidecar.model: model ready: key=phi-4-mini repo=C:\Users\aleho\.cache\port-command-genova\Phi-4-mini-instruct-onnx\cpu_and_mobile\cpu-int4-rtn-block-32-acc-level-4 backend=onnx device=cpu
+2026-07-27 17:27:11,651 INFO llm_sidecar.server: model ready in 16.3s
+127.0.0.1 - - [27/Jul/2026 17:27:11] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [27/Jul/2026 17:27:15] "GET /health HTTP/1.1" 200 -
+127.0.0.1 - - [27/Jul/2026 17:44:58] "GET /health HTTP/1.1" 200 -

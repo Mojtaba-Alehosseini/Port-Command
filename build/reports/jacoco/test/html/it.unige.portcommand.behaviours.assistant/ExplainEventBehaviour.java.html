@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ExplainEventBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.assistant</a> &gt; <span class="el_source">ExplainEventBehaviour.java</span></div><h1>ExplainEventBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.assistant;
+
+import java.util.Optional;
+
+import it.unige.portcommand.assistant.AssistantPromptBuilder;
+import it.unige.portcommand.assistant.AssistantPromptBuilder.PromptPayload;
+import it.unige.portcommand.assistant.HallucinationValidator;
+import it.unige.portcommand.assistant.Recommendation;
+import it.unige.portcommand.assistant.RecommendationCache;
+import it.unige.portcommand.gui.events.AssistantChatEvent;
+import it.unige.portcommand.gui.events.ExplainRequestEvent;
+import it.unige.portcommand.nlp.LLMBridge;
+import it.unige.portcommand.nlp.LLMRequest;
+import it.unige.portcommand.util.DeliveryMode;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
+import jade.core.Agent;
+import jade.core.behaviours.OneShotBehaviour;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The Assistant's fourth plan, {@code explain_event} (PROJECT_DEFINITION Â§4.8): regenerates a
+ * plain-English explanation for a PAST decision when the player clicks &quot;Why?&quot; (planning/10
+ * Â§10.8b). Looks the decision up in {@link RecommendationCache} and reuses the same explain path
+ * as {@link RecommendOnDemandBehaviour}: build prompt + template, call the LLM, validate, fall
+ * back to template.
+ */
+public final class ExplainEventBehaviour extends OneShotBehaviour {
+
+<span class="fc" id="L31">    private static final Logger log = LoggerFactory.getLogger(ExplainEventBehaviour.class);</span>
+
+    private final RecommendationCache cache;
+    private final LLMBridge llmBridge;
+    private final EventBus eventBus;
+
+    public ExplainEventBehaviour(Agent agent, RecommendationCache cache, LLMBridge llmBridge, EventBus eventBus) {
+<span class="fc" id="L38">        super(agent);</span>
+<span class="fc" id="L39">        this.cache = cache;</span>
+<span class="fc" id="L40">        this.llmBridge = llmBridge;</span>
+<span class="fc" id="L41">        this.eventBus = eventBus;</span>
+<span class="fc" id="L42">    }</span>
+
+    /** Held so AssistantAgent cancels on takedown (task 22): the bus outlives the agent,
+     * and a respawn would otherwise leave this handler subscribed alongside the new one,
+     * double-firing every reaction. */
+    private volatile Subscription&lt;ExplainRequestEvent&gt; subscription;
+
+    @Override
+    public void action() {
+<span class="fc" id="L51">        subscription = eventBus.subscribe(ExplainRequestEvent.class, this::onExplainRequest, DeliveryMode.ASYNC);</span>
+<span class="fc" id="L52">        log.debug(&quot;subscribed to ExplainRequestEvent&quot;);</span>
+<span class="fc" id="L53">    }</span>
+
+    /** Cancels the bus subscription; safe if {@link #action()} never ran. */
+    public void cancelSubscription() {
+<span class="fc" id="L57">        Subscription&lt;ExplainRequestEvent&gt; s = subscription;</span>
+<span class="pc bpc" id="L58" title="1 of 2 branches missed.">        if (s != null) {</span>
+<span class="fc" id="L59">            s.cancel();</span>
+        }
+<span class="fc" id="L61">    }</span>
+
+    public void onExplainRequest(ExplainRequestEvent event) {
+<span class="fc" id="L64">        Optional&lt;Recommendation&gt; cached = cache.get(event.decisionId());</span>
+<span class="fc bfc" id="L65" title="All 2 branches covered.">        if (cached.isEmpty()) {</span>
+<span class="fc" id="L66">            log.debug(&quot;no cached recommendation for decisionId={}&quot;, event.decisionId());</span>
+<span class="fc" id="L67">            eventBus.publish(new AssistantChatEvent(event.decisionId(),</span>
+                    &quot;Sorry, I no longer remember the reasoning for that decision.&quot;));
+<span class="fc" id="L69">            return;</span>
+        }
+<span class="fc" id="L71">        Recommendation rec = cached.get();</span>
+<span class="fc" id="L72">        String template = AssistantPromptBuilder.template(rec);</span>
+<span class="fc" id="L73">        PromptPayload prompt = AssistantPromptBuilder.prompt(rec);</span>
+        // requiredFigures(), not allFigures(): the sidecar's own check 1 mirrors the Java one
+        // (task 13 parity), so both sides must narrow together â€” see Recommendation#requiredFigures.
+        // The sidecar's verdict is advisory anyway; HallucinationValidator below is what gates the
+        // fall back to the plain template.
+<span class="fc" id="L78">        LLMRequest request = new LLMRequest(prompt.user(), prompt.system(),</span>
+<span class="fc" id="L79">                rec.requiredFigures().stream().toList(), rec.namedEntities().stream().toList(), true);</span>
+
+<span class="fc" id="L81">        llmBridge.explain(request)</span>
+<span class="fc" id="L82">                .thenAccept(response -&gt; {</span>
+<span class="pc bpc" id="L83" title="1 of 2 branches missed.">                    String text = HallucinationValidator.validate(response.text(), rec) ? response.text() : template;</span>
+<span class="fc" id="L84">                    eventBus.publish(new AssistantChatEvent(event.decisionId(), text));</span>
+<span class="fc" id="L85">                })</span>
+<span class="fc" id="L86">                .exceptionally(ex -&gt; {</span>
+<span class="nc" id="L87">                    log.debug(&quot;{}: llm explain failed/timed out; falling back to template&quot;,</span>
+<span class="nc" id="L88">                            event.decisionId(), ex);</span>
+<span class="nc" id="L89">                    eventBus.publish(new AssistantChatEvent(event.decisionId(), template));</span>
+<span class="nc" id="L90">                    return null;</span>
+                });
+<span class="fc" id="L92">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

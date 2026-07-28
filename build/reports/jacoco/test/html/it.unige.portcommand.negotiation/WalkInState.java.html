@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WalkInState.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.negotiation</a> &gt; <span class="el_source">WalkInState.java</span></div><h1>WalkInState.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.negotiation;
+
+/**
+ * The hidden negotiation state of one walk-in vessel â€” the input to
+ * {@link NegotiationEngine#evaluate}. Immutable; the agent holds a reference and
+ * swaps it as the dialogue advances ({@link #markStarted}, {@link #recordOwnOffer},
+ * {@link #recordPlayerCounter}).
+ *
+ * &lt;p&gt;The first five fields are &lt;b&gt;hidden beliefs&lt;/b&gt;: they drive the decision but
+ * must never appear in an outgoing ACL message (enforced by a grep test). They are
+ * read only by the engine (same package) and the owning agent.
+ *
+ * &lt;p&gt;&lt;b&gt;Task 19b â€” the duration dimension.&lt;/b&gt; {@code minDurationHours} is the vessel's hard
+ * cargo-handling floor (a physical need, not a preference) and joins the hidden-belief set
+ * (P-04): the FIELD never goes on the wire. Its VALUE surfaces only as the hours term of a
+ * {@code too_short} counter â€” the &quot;we need at least Nh&quot; pushback Â§7.3's bargaining is made of â€”
+ * exactly like price counters approach the hidden {@code targetPrice} without naming it.
+ * {@code dealHours} (the PREFERRED stay, announced in the opening PROPOSE) stays observable.
+ * {@code lastOwnHours} is the vessel's standing hours term â€” what its last PROPOSE said after
+ * &quot;for&quot; â€” and is the duration a bare &quot;deal&quot; closes at; it starts at {@code dealHours} and
+ * follows the negotiation. {@code lastPlayerHours} mirrors {@code lastPlayerPrice} as pure
+ * bookkeeping of the player's side.
+ */
+<span class="fc" id="L24">public record WalkInState(</span>
+        String vesselType,
+        double minAcceptablePrice,
+        double targetPrice,
+        Personality personality,
+        int maxWaitMinutes,
+        int minDurationHours,
+        int round,
+        long negotiationStartedAtSimMillis,
+        double lastPlayerPrice,
+        double lastOwnOffer,
+        int lastPlayerHours,
+        int lastOwnHours,
+        int dealHours) {
+
+    /** Round 1, not yet started, no offers exchanged; the standing hours open at the
+     * preferred stay (what the opening PROPOSE announces). */
+    public static WalkInState initial(String vesselType, double minAcceptablePrice, double targetPrice,
+                                      Personality personality, int maxWaitMinutes, int dealHours,
+                                      int minDurationHours) {
+<span class="fc" id="L44">        return new WalkInState(vesselType, minAcceptablePrice, targetPrice, personality, maxWaitMinutes,</span>
+                minDurationHours, 1, 0L, 0.0, 0.0, 0, dealHours, dealHours);
+    }
+
+    /** Stamp the negotiation start (when the opening PROPOSE is sent) for the timeout ticker. */
+    public WalkInState markStarted(long simMillis) {
+<span class="fc" id="L50">        return new WalkInState(vesselType, minAcceptablePrice, targetPrice, personality, maxWaitMinutes,</span>
+                minDurationHours, round, simMillis, lastPlayerPrice, lastOwnOffer,
+                lastPlayerHours, lastOwnHours, dealHours);
+    }
+
+    /** Record the terms this vessel just proposed (opening or counter): price and hours. */
+    public WalkInState recordOwnOffer(double offer, int hours) {
+<span class="fc" id="L57">        return new WalkInState(vesselType, minAcceptablePrice, targetPrice, personality, maxWaitMinutes,</span>
+                minDurationHours, round, negotiationStartedAtSimMillis, lastPlayerPrice, offer,
+                lastPlayerHours, hours, dealHours);
+    }
+
+    /** Advance a round on receiving the player's counter, recording their price and hours. */
+    public WalkInState recordPlayerCounter(double playerPrice, int playerHours) {
+<span class="fc" id="L64">        return new WalkInState(vesselType, minAcceptablePrice, targetPrice, personality, maxWaitMinutes,</span>
+                minDurationHours, round + 1, negotiationStartedAtSimMillis, playerPrice, lastOwnOffer,
+                playerHours, lastOwnHours, dealHours);
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

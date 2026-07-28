@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LeskWSD.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">LeskWSD.java</span></div><h1>LeskWSD.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+import net.sf.extjwnl.JWNLException;
+import net.sf.extjwnl.data.IndexWord;
+import net.sf.extjwnl.data.POS;
+import net.sf.extjwnl.data.Synset;
+import net.sf.extjwnl.dictionary.Dictionary;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Simplified Lesk word-sense disambiguation over WordNet glosses (planning/16 Step 16.6): score
+ * each sense of a word by how many content words its gloss shares with the surrounding context,
+ * and take the winner. Used ONLY for the handful of nouns whose port meaning differs from their
+ * dominant WordNet sense â€” it is not run on every token (it is slow, and needless).
+ *
+ * &lt;p&gt;&lt;b&gt;Why this is not decorative.&lt;/b&gt; WordNet 3.1's FIRST sense of &quot;dock&quot; is &lt;i&gt;&quot;an enclosure in
+ * a court of law where the defendant sits during the trial&quot;&lt;/i&gt;; the harbour sense is #5. So the
+ * naive first-sense heuristic that most pipelines fall back on resolves &quot;dock&quot; to a COURTROOM.
+ * Lesk over a negotiation context picks the harbour sense instead â€” a real disambiguation with a
+ * different outcome, which is the point of the NLP-report claim.
+ *
+ * &lt;p&gt;&lt;b&gt;Deviation from planning/16 Step 16.6, recorded in ADR-10.&lt;/b&gt; The sketch has
+ * {@code disambiguate} return the winning sense's LEMMA (a {@code String}) and then map that lemma
+ * through the handcrafted table. That cannot work: &quot;dock&quot; is a member of both the courtroom synset
+ * and the harbour synset, so the winning lemma is the string &quot;dock&quot; either way and the table maps
+ * it to {@code berth} regardless of which sense won â€” the WSD would change nothing. Returning the
+ * {@link Synset} lets {@link WordNetResolver} ask which SENSE won, which is the only version of
+ * this that does any work.
+ */
+public final class LeskWSD {
+
+<span class="fc" id="L43">    private static final Logger log = LoggerFactory.getLogger(LeskWSD.class);</span>
+
+<span class="fc" id="L45">    private static final Pattern NON_WORD = Pattern.compile(&quot;[^a-z0-9]+&quot;);</span>
+
+    /** Function words carry no sense signal and would otherwise dominate every gloss overlap
+     * (&quot;a&quot;/&quot;the&quot;/&quot;of&quot; appear in nearly all of them). Classic Lesk filters them out. */
+<span class="fc" id="L49">    private static final Set&lt;String&gt; STOP_WORDS = Set.of(</span>
+            &quot;a&quot;, &quot;an&quot;, &quot;the&quot;, &quot;of&quot;, &quot;in&quot;, &quot;on&quot;, &quot;at&quot;, &quot;to&quot;, &quot;for&quot;, &quot;from&quot;, &quot;by&quot;, &quot;with&quot;, &quot;and&quot;,
+            &quot;or&quot;, &quot;but&quot;, &quot;is&quot;, &quot;are&quot;, &quot;was&quot;, &quot;were&quot;, &quot;be&quot;, &quot;been&quot;, &quot;being&quot;, &quot;as&quot;, &quot;that&quot;, &quot;this&quot;,
+            &quot;these&quot;, &quot;those&quot;, &quot;it&quot;, &quot;its&quot;, &quot;into&quot;, &quot;out&quot;, &quot;up&quot;, &quot;down&quot;, &quot;over&quot;, &quot;under&quot;, &quot;than&quot;,
+            &quot;then&quot;, &quot;there&quot;, &quot;where&quot;, &quot;when&quot;, &quot;which&quot;, &quot;who&quot;, &quot;whom&quot;, &quot;may&quot;, &quot;can&quot;, &quot;will&quot;,
+            &quot;would&quot;, &quot;should&quot;, &quot;could&quot;, &quot;have&quot;, &quot;has&quot;, &quot;had&quot;, &quot;do&quot;, &quot;does&quot;, &quot;did&quot;, &quot;not&quot;, &quot;no&quot;,
+            &quot;so&quot;, &quot;such&quot;, &quot;more&quot;, &quot;most&quot;, &quot;some&quot;, &quot;any&quot;, &quot;all&quot;, &quot;each&quot;, &quot;other&quot;, &quot;certain&quot;,
+            &quot;usually&quot;, &quot;sometimes&quot;, &quot;etc&quot;, &quot;i&quot;, &quot;you&quot;, &quot;he&quot;, &quot;she&quot;, &quot;they&quot;, &quot;we&quot;, &quot;my&quot;, &quot;your&quot;);
+
+    private final Dictionary dictionary;
+
+<span class="fc" id="L60">    public LeskWSD(Dictionary dictionary) {</span>
+<span class="fc" id="L61">        this.dictionary = Objects.requireNonNull(dictionary, &quot;dictionary&quot;);</span>
+<span class="fc" id="L62">    }</span>
+
+    /**
+     * @param word    the ambiguous noun
+     * @param context the surrounding tokens (the utterance, plus any domain seed the caller adds)
+     * @return the highest-overlap sense, or {@link Optional#empty()} when the word is unknown to
+     *         WordNet or NO sense shares a single content word with the context (a zero-overlap
+     *         &quot;winner&quot; would be the first sense by accident, which is exactly the naive behaviour
+     *         this class exists to avoid â€” the caller must decide what to do with no signal)
+     */
+    public Optional&lt;Synset&gt; disambiguate(String word, List&lt;String&gt; context) {
+<span class="fc" id="L73">        Objects.requireNonNull(word, &quot;word&quot;);</span>
+<span class="fc" id="L74">        Objects.requireNonNull(context, &quot;context&quot;);</span>
+        try {
+<span class="fc" id="L76">            IndexWord indexWord = dictionary.lookupIndexWord(POS.NOUN, word);</span>
+<span class="fc bfc" id="L77" title="All 2 branches covered.">            if (indexWord == null) {</span>
+<span class="fc" id="L78">                return Optional.empty();</span>
+            }
+<span class="fc" id="L80">            Set&lt;String&gt; contextWords = contentWords(context);</span>
+            // The target word itself appears in its own glosses and carries no sense signal.
+<span class="fc" id="L82">            contextWords.remove(word.toLowerCase(Locale.ROOT));</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">            if (contextWords.isEmpty()) {</span>
+<span class="fc" id="L84">                return Optional.empty();</span>
+            }
+
+<span class="fc" id="L87">            Synset best = null;</span>
+<span class="fc" id="L88">            int bestScore = 0; // strictly-positive overlap required; ties keep the earlier sense</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">            for (Synset sense : indexWord.getSenses()) {</span>
+<span class="fc" id="L90">                int score = overlap(sense, contextWords);</span>
+<span class="fc bfc" id="L91" title="All 2 branches covered.">                if (score &gt; bestScore) {</span>
+<span class="fc" id="L92">                    bestScore = score;</span>
+<span class="fc" id="L93">                    best = sense;</span>
+                }
+<span class="fc" id="L95">            }</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">            if (best == null) {</span>
+<span class="fc" id="L97">                log.debug(&quot;Lesk: no sense of '{}' overlaps the context {}&quot;, word, contextWords);</span>
+<span class="fc" id="L98">                return Optional.empty();</span>
+            }
+<span class="fc" id="L100">            return Optional.of(best);</span>
+<span class="nc" id="L101">        } catch (JWNLException | RuntimeException e) {</span>
+<span class="nc" id="L102">            log.warn(&quot;Lesk lookup failed for '{}' â€” treating as unresolved&quot;, word, e);</span>
+<span class="nc" id="L103">            return Optional.empty();</span>
+        }
+    }
+
+    private static int overlap(Synset sense, Set&lt;String&gt; contextWords) {
+<span class="fc" id="L108">        Set&lt;String&gt; glossWords = contentWords(List.of(sense.getGloss()));</span>
+<span class="fc" id="L109">        glossWords.retainAll(contextWords);</span>
+<span class="fc" id="L110">        return glossWords.size();</span>
+    }
+
+    private static Set&lt;String&gt; contentWords(List&lt;String&gt; texts) {
+<span class="fc" id="L114">        Set&lt;String&gt; words = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L115" title="All 2 branches covered.">        for (String text : texts) {</span>
+<span class="pc bpc" id="L116" title="1 of 2 branches missed.">            if (text == null) {</span>
+<span class="nc" id="L117">                continue;</span>
+            }
+<span class="fc" id="L119">            Arrays.stream(NON_WORD.split(text.toLowerCase(Locale.ROOT)))</span>
+<span class="pc bpc" id="L120" title="1 of 2 branches missed.">                    .filter(w -&gt; !w.isBlank())</span>
+<span class="fc bfc" id="L121" title="All 2 branches covered.">                    .filter(w -&gt; !STOP_WORDS.contains(w))</span>
+<span class="fc" id="L122">                    .forEach(words::add);</span>
+<span class="fc" id="L123">        }</span>
+<span class="fc" id="L124">        return words;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PeriodicWeatherBroadcastBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.coordination</a> &gt; <span class="el_source">PeriodicWeatherBroadcastBehaviour.java</span></div><h1>PeriodicWeatherBroadcastBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.coordination;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+
+import it.unige.portcommand.agents.WeatherAlertPolicy;
+import it.unige.portcommand.agents.WeatherAlertPolicy.Direction;
+import it.unige.portcommand.agents.WeatherSnapshot;
+import it.unige.portcommand.behaviours.SimTickerBehaviour;
+import it.unige.portcommand.bootstrap.ServiceLocator;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.NotificationEvent;
+import it.unige.portcommand.gui.events.WeatherChangeEvent;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.SimClock;
+import jade.core.AID;
+import jade.core.Agent;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Broadcasts the current weather to all {@code weather-subscriber} agents every 15
+ * sim-minutes, publishes the GUI's {@link WeatherChangeEvent} (task 24 â€” the map's
+ * weather chip goes live), and â€” when {@link WeatherAlertPolicy} reports a genuine
+ * severity transition â€” sends the HarbourMaster an alert on the
+ * {@code WEATHER_ALERT_PROTOCOL}, in BOTH directions:
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@code weather_threshold}, {@code priority=high} â€” conditions crossed a
+ *       limit upward; {@code HandleWeatherAlertBehaviour} runs the hold sweep.&lt;/li&gt;
+ *   &lt;li&gt;{@code weather_clear} (normal priority) â€” conditions recovered a limit;
+ *       the hold behaviour re-evaluates weather-held vessels and re-dispatches
+ *       their tug CNP. This is the signal whose absence permanently stranded
+ *       held vessels (task-19 finding, filed at planning/24).&lt;/li&gt;
+ * &lt;/ul&gt;
+ * The current snapshot is shared (read-only here) with
+ * {@code WeatherEvolutionBehaviour} via the {@link AtomicReference}.
+ *
+ * &lt;p&gt;&lt;b&gt;Task 19 cadence fix.&lt;/b&gt; The tick was 60 sim-seconds, which at the default
+ * 300-real-second game day compresses to ~0.2&amp;nbsp;s of wall time â€” hundreds of
+ * broadcasts per real second, needless load. It is now 15 sim-minutes (~3&amp;nbsp;s wall),
+ * still finer-grained than {@code WeatherEvolutionBehaviour}'s 60-sim-minute evolution
+ * so no weather change is ever missed between broadcasts.
+ *
+ * &lt;p&gt;&lt;b&gt;Task 24 threshold/priority fix.&lt;/b&gt; Alerts fire only on genuine 30/35/40/45
+ * (or swell/state) crossings between consecutive readings, and only the WORSENING
+ * direction carries {@code priority=high} â€” the task-18 checkpoint's
+ * &quot;every broadcast paraphrases as URGENT&quot; is structurally gone. Paused game
+ * (SimClock paused) â†’ no broadcasts, no alerts, no GUI events.
+ */
+public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour {
+
+<span class="fc" id="L57">    private static final Logger log = LoggerFactory.getLogger(PeriodicWeatherBroadcastBehaviour.class);</span>
+    private static final long TICK_SIM_MILLIS = 900_000L; // 15 sim-minutes
+
+    private final AtomicReference&lt;WeatherSnapshot&gt; current;
+    private final ServiceLocator locator;
+    private final EventBus eventBus;
+    /** The previous reading â€” {@link WeatherAlertPolicy}'s baseline. Null until the first tick. */
+    private WeatherSnapshot lastObserved;
+
+    public PeriodicWeatherBroadcastBehaviour(Agent agent, SimClock simClock,
+                                             AtomicReference&lt;WeatherSnapshot&gt; current, ServiceLocator locator,
+                                             EventBus eventBus) {
+<span class="fc" id="L69">        super(agent, simClock, TICK_SIM_MILLIS);</span>
+<span class="fc" id="L70">        this.current = current;</span>
+<span class="fc" id="L71">        this.locator = locator;</span>
+<span class="fc" id="L72">        this.eventBus = eventBus;</span>
+<span class="fc" id="L73">    }</span>
+
+    /**
+     * Runs one broadcast cycle immediately, off the ticker.
+     *
+     * &lt;p&gt;&lt;b&gt;2026-07-27 (task 26).&lt;/b&gt; A scripted {@code WeatherChange} adopts its snapshot into
+     * the shared cell synchronously, but the ALERT that actually holds vessels only left on the
+     * next periodic tick â€” up to 15 sim-minutes later. A vessel's channel-to-berth transit is
+     * {@code TransitToBerthBehaviour.TRANSIT_SIM_MILLIS} = 2 sim-minutes, so the alert essentially
+     * never caught a vessel in transit, and the storm scenario's CANCEL cascade â€” the one the
+     * scenario's own EMERGENCY banner announces as &quot;Escorts cancelled, vessels held offshore&quot;,
+     * and the one PROJECT_DEFINITION Â§13 counts on for the CANCEL performative â€” could not fire.
+     * The scripted event now calls this so the change takes effect at the instant it is scripted
+     * for. Idempotent with respect to the ticker: {@code lastObserved} advances here, so the next
+     * periodic tick simply sees no transition.
+     */
+    public void broadcastNow() {
+<span class="fc" id="L90">        onSimTick();</span>
+<span class="fc" id="L91">    }</span>
+
+    @Override
+    protected void onSimTick() {
+<span class="fc bfc" id="L95" title="All 2 branches covered.">        if (simClock().isPaused()) {</span>
+<span class="fc" id="L96">            return; // pause gate (task 24): a paused game broadcasts nothing</span>
+        }
+<span class="fc" id="L98">        WeatherSnapshot w = current.get();</span>
+<span class="pc bpc" id="L99" title="1 of 2 branches missed.">        if (w == null) {</span>
+<span class="nc" id="L100">            return;</span>
+        }
+<span class="fc" id="L102">        broadcast(w);</span>
+<span class="fc" id="L103">        Optional&lt;Direction&gt; transition = WeatherAlertPolicy.transition(lastObserved, w);</span>
+<span class="fc" id="L104">        transition.ifPresent(direction -&gt; alertHarbourMaster(w, direction));</span>
+<span class="fc" id="L105">        eventBus.publish(new WeatherChangeEvent(w.wind(), w.visibility(), w.swell(), w.state(),</span>
+<span class="fc" id="L106">                transition.isPresent()));</span>
+<span class="fc" id="L107">        lastObserved = w;</span>
+<span class="fc" id="L108">    }</span>
+
+    private void broadcast(WeatherSnapshot w) {
+<span class="fc" id="L111">        List&lt;AID&gt; subscribers = locator.findAll(&quot;weather-subscriber&quot;);</span>
+<span class="fc bfc" id="L112" title="All 2 branches covered.">        if (subscribers.isEmpty()) {</span>
+<span class="fc" id="L113">            return;</span>
+        }
+<span class="fc" id="L115">        ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);</span>
+<span class="fc" id="L116">        subscribers.forEach(inform::addReceiver);</span>
+<span class="fc" id="L117">        inform.setContent(TerminalJson.write(Map.of(</span>
+<span class="fc" id="L118">                &quot;wind_knots&quot;, w.wind(),</span>
+<span class="fc" id="L119">                &quot;visibility&quot;, w.visibility(),</span>
+<span class="fc" id="L120">                &quot;swell&quot;, w.swell(),</span>
+<span class="fc" id="L121">                &quot;state&quot;, w.state(),</span>
+<span class="fc" id="L122">                &quot;sim_time&quot;, w.simTime())));</span>
+<span class="fc" id="L123">        myAgent.send(inform);</span>
+<span class="fc" id="L124">        log.debug(&quot;weather broadcast wind={} state={} -&gt; {} subscriber(s)&quot;, w.wind(), w.state(), subscribers.size());</span>
+<span class="fc" id="L125">    }</span>
+
+    private void alertHarbourMaster(WeatherSnapshot w, Direction direction) {
+<span class="fc" id="L128">        Optional&lt;AID&gt; hm = locator.findUnique(&quot;harbour-master&quot;);</span>
+<span class="pc bpc" id="L129" title="1 of 2 branches missed.">        if (hm.isEmpty()) {</span>
+<span class="nc" id="L130">            log.warn(&quot;no harbour-master in DF; dropping weather {} alert (wind {})&quot;, direction, w.wind());</span>
+<span class="nc" id="L131">            return;</span>
+        }
+<span class="fc bfc" id="L133" title="All 2 branches covered.">        boolean worsened = direction == Direction.WORSENED;</span>
+<span class="fc" id="L134">        ACLMessage alert = MessageFactory.create(ACLMessage.INFORM);</span>
+<span class="fc" id="L135">        alert.addReceiver(hm.get());</span>
+        // v1.1: visibility + swell ride along so the HarbourMaster can evaluate
+        // operationSafe/swellWithinLimit/weatherStateUnsafe from this SAME reading,
+        // instead of risking a second, possibly-stale query (task 11).
+<span class="fc" id="L139">        alert.setContent(TerminalJson.write(Map.of(</span>
+<span class="fc bfc" id="L140" title="All 2 branches covered.">                &quot;event&quot;, worsened ? &quot;weather_threshold&quot; : &quot;weather_clear&quot;,</span>
+<span class="fc" id="L141">                &quot;wind_knots&quot;, w.wind(), &quot;visibility&quot;, w.visibility(),</span>
+<span class="fc" id="L142">                &quot;swell&quot;, w.swell(), &quot;state&quot;, w.state())));</span>
+<span class="fc bfc" id="L143" title="All 2 branches covered.">        if (worsened) {</span>
+            // Only the worsening direction is URGENT (task 24 priority fix).
+<span class="fc" id="L145">            alert.addUserDefinedParameter(&quot;priority&quot;, &quot;high&quot;);</span>
+        }
+        // Lets HandleWeatherAlertBehaviour match by protocol instead of sender AID â€”
+        // avoids a DF-lookup timing race (task 11 adversarial review finding).
+        // Same package, no import needed.
+<span class="fc" id="L150">        alert.setProtocol(HandleWeatherAlertBehaviour.WEATHER_ALERT_PROTOCOL);</span>
+<span class="fc" id="L151">        myAgent.send(alert);</span>
+<span class="fc" id="L152">        publishNotification(w, worsened);</span>
+<span class="fc" id="L153">        log.info(&quot;weather {} (wind {} kn, {}) -&gt; INFORM to harbour-master&quot;, direction, w.wind(), w.state());</span>
+<span class="fc" id="L154">    }</span>
+
+    private void publishNotification(WeatherSnapshot w, boolean worsened) {
+<span class="fc" id="L157">        String text = String.format(Locale.ROOT, &quot;%s: %d kn, %s, swell %.1f m&quot;,</span>
+<span class="fc bfc" id="L158" title="All 2 branches covered.">                worsened ? &quot;Weather worsening&quot; : &quot;Weather clearing&quot;, w.wind(), w.state(), w.swell());</span>
+<span class="fc" id="L159">        eventBus.publish(new NotificationEvent(text,</span>
+<span class="fc bfc" id="L160" title="All 2 branches covered.">                worsened ? NotificationEvent.Severity.WARNING : NotificationEvent.Severity.INFO,</span>
+<span class="fc" id="L161">                w.simTime()));</span>
+<span class="fc" id="L162">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

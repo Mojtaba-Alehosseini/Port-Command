@@ -60,7 +60,7 @@ public final class RecommendationAlgorithm {
         List<String> trace = List.of("R7");
         return new Recommendation(chosen.candidate.action(), chosen.candidate.price(), chosen.pAccept, chosen.ev,
                 trace, stats, snapshot.vesselType(), snapshot.berthId(), snapshot.durationHours(),
-                compatible ? "compatible" : "incompatible");
+                compatible ? "compatible" : "incompatible", band.fallback());
     }
 
     private static ScoredCandidate scoreAccept(WalkInDialogueSnapshot snapshot, double marginalCost) {
@@ -101,12 +101,12 @@ public final class RecommendationAlgorithm {
         if (stats.lowConfidence()) {
             IncomeRules.PriceRange range = IncomeRules.berthFeeRange(snapshot.berthId(), snapshot.vesselType());
             double sigmoidStddev = Math.max((range.hi() - range.lo()) / 4.0, 1.0);
-            return new ScoringBand(range.lo(), range.hi(), range.midpoint(), sigmoidStddev);
+            return new ScoringBand(range.lo(), range.hi(), range.midpoint(), sigmoidStddev, range);
         }
         double clampLo = Math.max(0.0, stats.mean() - 2 * stats.stddev());
         double clampHi = stats.mean() + 2 * stats.stddev();
         double sigmoidStddev = Math.max(stats.stddev(), 1.0);
-        return new ScoringBand(clampLo, clampHi, stats.mean(), sigmoidStddev);
+        return new ScoringBand(clampLo, clampHi, stats.mean(), sigmoidStddev, null);
     }
 
     private static double sigmoid(double x) {
@@ -131,7 +131,14 @@ public final class RecommendationAlgorithm {
         return best;
     }
 
-    private record ScoringBand(double clampLo, double clampHi, double sigmoidMean, double sigmoidStddev) {
+    /**
+     * @param fallback the static §7.5 band when this band CAME from {@link IncomeRules#berthFeeRange}
+     *                 (low-confidence market), else {@code null}. Handed to the {@link Recommendation}
+     *                 so the explanation names the band it scored against instead of quoting the
+     *                 zeroed market stats — the planning/10 empty-history Hint finding.
+     */
+    private record ScoringBand(double clampLo, double clampHi, double sigmoidMean, double sigmoidStddev,
+                               IncomeRules.PriceRange fallback) {
     }
 
     private record ScoredCandidate(RecommendationCandidate candidate, double pAccept, double ev) {

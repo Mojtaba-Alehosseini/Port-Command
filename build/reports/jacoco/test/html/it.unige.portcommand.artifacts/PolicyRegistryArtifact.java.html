@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PolicyRegistryArtifact.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.artifacts</a> &gt; <span class="el_source">PolicyRegistryArtifact.java</span></div><h1>PolicyRegistryArtifact.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.artifacts;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
+
+/**
+ * Thread-safe, registration-ordered store of player-typed autopilot policies (planning/10
+ * Â§10.5). One instance per Assistant; {@code PolicyParseBehaviour} registers on every
+ * {@code PolicyParsedEvent}, {@code AutopilotExecuteBehaviour} reads via {@link #firstMatching}
+ * before falling back to the EV algorithm.
+ */
+<span class="fc" id="L15">public final class PolicyRegistryArtifact {</span>
+
+<span class="fc" id="L17">    private final List&lt;PolicyRule&gt; rules = new ArrayList&lt;&gt;();</span>
+
+    public synchronized void register(PolicyRule rule) {
+<span class="fc" id="L20">        rules.add(rule);</span>
+<span class="fc" id="L21">    }</span>
+
+    /** The first registered rule (registration order) whose predicate matches {@code snapshot}. */
+    public synchronized Optional&lt;PolicyRule&gt; firstMatching(WalkInDialogueSnapshot snapshot) {
+<span class="fc bfc" id="L25" title="All 2 branches covered.">        for (PolicyRule rule : rules) {</span>
+<span class="pc bpc" id="L26" title="1 of 2 branches missed.">            if (rule.predicate().test(snapshot)) {</span>
+<span class="fc" id="L27">                return Optional.of(rule);</span>
+            }
+<span class="nc" id="L29">        }</span>
+<span class="fc" id="L30">        return Optional.empty();</span>
+    }
+
+    /** All registered rules, in registration order (read-only snapshot; test/HUD introspection). */
+    public synchronized List&lt;PolicyRule&gt; all() {
+<span class="fc" id="L35">        return List.copyOf(rules);</span>
+    }
+
+    /**
+     * Drops every registered rule (task 22 load): the loader re-parses the save file's
+     * persisted trigger strings through the live {@code nlp.PolicyParser} path, which
+     * re-registers each rule here with a freshly built predicate.
+     */
+    public synchronized void clear() {
+<span class="fc" id="L44">        rules.clear();</span>
+<span class="fc" id="L45">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

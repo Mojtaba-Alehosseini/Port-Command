@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>InitiateCNPBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.cnp</a> &gt; <span class="el_source">InitiateCNPBehaviour.java</span></div><h1>InitiateCNPBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.cnp;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.bootstrap.ServiceLocator;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.Settings;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.harbourmaster.CnpRequest;
+import it.unige.portcommand.util.SimClock;
+import jade.core.AID;
+import jade.core.Agent;
+import jade.core.behaviours.OneShotBehaviour;
+import jade.core.behaviours.WakerBehaviour;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Opens a tug Contract Net: DF-discovers every {@code tug-escort}, sends a CFP with
+ * a sim-time {@code reply_by} deadline, then attaches the non-blocking
+ * {@link BidCollectorBehaviour} paired with a {@link WakerBehaviour} that closes the
+ * window. Never blocks the agent thread. Zero tugs registered -&gt; INFORM the vessel
+ * to hold; nothing to collect.
+ */
+public final class InitiateCNPBehaviour extends OneShotBehaviour {
+
+<span class="fc" id="L32">    private static final Logger log = LoggerFactory.getLogger(InitiateCNPBehaviour.class);</span>
+
+    /**
+     * FIPA's standard Contract-Net protocol tag â€” discriminates CNP traffic from
+     * every other conversation on the HarbourMaster's shared inbound queue
+     * ({@code ForwardWalkInToPlayerBehaviour} explicitly excludes it).
+     */
+    public static final String CNP_PROTOCOL = &quot;fipa-contract-net&quot;;
+
+    /**
+     * Wall-clock floor for the CFP bid window and the CNP retry delay (audit A-03, 2026-07-27).
+     *
+     * &lt;p&gt;These two were the only simâ†’wall conversions in the codebase without one â€”
+     * {@code SimTickerBehaviour.wallPeriodMs}, {@code RefuelIfLowBehaviour} and
+     * {@code PoissonSpawnBehaviour.nextGapWallMs} all clamp. At the sandbox default (300
+     * real-seconds per game day) {@code simSecondsToWallMs(5)} is &lt;b&gt;17 ms&lt;/b&gt;: every tug had to
+     * receive the CFP, score a bid and reply, and the hub's collector had to run, inside 17 ms â€”
+     * and on the first CNP of a process, with Jackson still class-loading its serializers, that is
+     * a coin flip. Under {@code --day-length 17} or below the integer division floors to a literal
+     * &lt;b&gt;0&lt;/b&gt;, so the waker fired on the next scheduler pass and {@code closeAndAward()} ran with
+     * zero bids every single time. The retry delay collapsed with it â€” 30 sim-seconds is 5 ms at
+     * {@code --day-length 17} and 1 ms at the {@code --day-length 5} that {@code Main}'s own javadoc
+     * names for integration runs â€” so all three retries were spent as fast as the scheduler could
+     * run them. The visible outcome was an empty Contract Net: a held vessel, no
+     * CANCEL/ACCEPT/REJECT traffic at all.
+     *
+     * &lt;p&gt;&lt;b&gt;Why 50 and not more.&lt;/b&gt; The floor must stay BELOW the smallest window any shipped
+     * scenario already uses â€” 52 ms at 900 s/day â€” so that no scenario timing moves. That matters
+     * concretely: in {@code storm.json} the tanker SPAWNS at t=960 s and the wind crosses 30 kn at
+     * t=990 s, which is 312 ms of wall clock at 900 s/day, and the demo's CANCEL beat only exists if
+     * the tugs are awarded inside that gap. Note 312 ms is an UPPER BOUND on the real margin, not
+     * the margin itself: the grant follows the spawn through the arrival REQUEST, a DF resolve and
+     * the Prolog gate, so the window the award actually has is strictly shorter. A larger floor
+     * would eat the margin task 26 retimed (BUG-02). Pinned by {@code CnpWindowFloorTest}.
+     */
+    public static final long MIN_CNP_WINDOW_WALL_MS = 50L;
+
+    /** {@link SimClock#simSecondsToWallMs} with {@link #MIN_CNP_WINDOW_WALL_MS} applied. */
+    public static long cnpWindowWallMs(SimClock simClock, long simSeconds) {
+<span class="fc" id="L71">        return Math.max(MIN_CNP_WINDOW_WALL_MS, simClock.simSecondsToWallMs(simSeconds));</span>
+    }
+
+    private final CnpRequest req;
+    private final ServiceLocator serviceLocator;
+    private final SimClock simClock;
+
+    public InitiateCNPBehaviour(Agent agent, CnpRequest req, ServiceLocator serviceLocator, SimClock simClock) {
+<span class="fc" id="L79">        super(agent);</span>
+<span class="fc" id="L80">        this.req = req;</span>
+<span class="fc" id="L81">        this.serviceLocator = serviceLocator;</span>
+<span class="fc" id="L82">        this.simClock = simClock;</span>
+<span class="fc" id="L83">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L87">        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;</span>
+<span class="fc" id="L88">        List&lt;AID&gt; tugs = serviceLocator.findAll(&quot;tug-escort&quot;);</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">        if (tugs.isEmpty()) {</span>
+<span class="fc" id="L90">            log.warn(&quot;no tug-escort registered in DF; holding vessel {}&quot;, req.vesselId());</span>
+<span class="fc" id="L91">            holdVessel(hm, &quot;no_tugs_registered&quot;);</span>
+            // Terminal path with no collector spawned â€” release the serialized-CNP queue (B2).
+<span class="fc" id="L93">            hm.cnpCoordinator().completed();</span>
+<span class="fc" id="L94">            return;</span>
+        }
+
+<span class="fc" id="L97">        int replyBySimSeconds = Settings.load().cnpReplyBySimSeconds();</span>
+<span class="fc" id="L98">        String cfpId = &quot;cnp-&quot; + UUID.randomUUID();</span>
+<span class="fc" id="L99">        long replyBySimMillis = simClock.nowSimMillis() + replyBySimSeconds * 1000L;</span>
+
+<span class="fc" id="L101">        Map&lt;String, Object&gt; content = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L102">        content.put(&quot;target_vessel_id&quot;, req.vesselId());</span>
+<span class="fc" id="L103">        content.put(&quot;target_vessel_position&quot;, req.vesselPosition());</span>
+<span class="fc" id="L104">        content.put(&quot;reply_by&quot;, replyBySimMillis);</span>
+
+<span class="fc" id="L106">        ACLMessage cfp = MessageFactory.create(ACLMessage.CFP);</span>
+<span class="fc" id="L107">        tugs.forEach(cfp::addReceiver);</span>
+<span class="fc" id="L108">        cfp.setProtocol(CNP_PROTOCOL);</span>
+<span class="fc" id="L109">        cfp.setConversationId(cfpId);</span>
+<span class="fc" id="L110">        cfp.setContent(TerminalJson.write(content));</span>
+<span class="fc" id="L111">        hm.sendLogged(cfp);</span>
+<span class="fc" id="L112">        log.info(&quot;CFP {} ({} tug(s) required) -&gt; {} tug(s) on CNP {}&quot;,</span>
+<span class="fc" id="L113">                req.vesselId(), req.tugsRequired(), tugs.size(), cfpId);</span>
+
+<span class="fc" id="L115">        BidCollectorBehaviour collector = new BidCollectorBehaviour(myAgent, cfpId, req);</span>
+<span class="fc" id="L116">        myAgent.addBehaviour(collector);</span>
+<span class="fc" id="L117">        myAgent.addBehaviour(new WakerBehaviour(myAgent, cnpWindowWallMs(simClock, replyBySimSeconds)) {</span>
+            @Override
+            protected void onWake() {
+<span class="fc" id="L120">                collector.closeAndAward();</span>
+<span class="fc" id="L121">            }</span>
+        });
+<span class="fc" id="L123">    }</span>
+
+    private void holdVessel(HarbourMasterAgent hm, String reason) {
+<span class="fc" id="L126">        ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);</span>
+<span class="fc" id="L127">        inform.addReceiver(req.vesselAid());</span>
+<span class="fc" id="L128">        inform.setContent(TerminalJson.write(Map.of(&quot;event&quot;, &quot;tug_hold&quot;, &quot;reason&quot;, reason)));</span>
+<span class="fc" id="L129">        hm.sendLogged(inform);</span>
+<span class="fc" id="L130">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

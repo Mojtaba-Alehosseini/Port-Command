@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WalkInDialogueSnapshotPrivacyTest {
 
     private static final List<String> FORBIDDEN_TOKENS = List.of(
-            "minacceptable", "targetprice", "maxwait", "personality");
+            "minacceptable", "targetprice", "maxwait", "personality", "minduration");
 
     @Test
     void recordComponentsContainNoHiddenBeliefFields() {
@@ -41,7 +41,7 @@ class WalkInDialogueSnapshotPrivacyTest {
         // changes, and has to consciously re-check the privacy constraint above.
         List<String> expected = List.of("vesselId", "vesselType", "draft", "length", "tonnage", "cargoClass",
                 "berthId", "durationHours", "lastVesselOffer", "lastPlayerOffer", "roundsUsed", "timeUsedSec",
-                "threatenedWithdrawal");
+                "threatenedWithdrawal", "vesselName");
         List<String> actual = List.of(WalkInDialogueSnapshot.class.getRecordComponents()).stream()
                 .map(RecordComponent::getName)
                 .toList();

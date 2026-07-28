@@ -169,12 +169,12 @@ accept_deal,Perfct,Perfct,train
 accept_deal,deal then,deal then,train
 accept_deal,agreed then,agreed then,train
 accept_deal,"yep, done","yep, done",train
-accept_deal,It's a deal then,It's a deal then,test
-accept_deal,"Ok, that works","Ok, that works",test
-accept_deal,"Sure, let's proceed","Sure, let's proceed",test
-accept_deal,"Agreed, we have a deal","Agreed, we have a deal",test
+accept_deal,"Right then, book it in","Right then, book it in",test
+accept_deal,"Ok, we're on","Ok, we're on",test
+accept_deal,"Fine, that deal works for us","Fine, that deal works for us",test
+accept_deal,"Yes, that price suits us","Yes, that price suits us",test
 accept_deal,"Yes, I accept that","Yes, I accept that",test
-accept_deal,"Fine, good deal","Fine, good deal",test
+accept_deal,We are happy with that offer,We are happy with that offer,test
 accept_deal,I'll take that one,I'll take that one,test
 accept_deal,That's done then,That's done then,test
 accept_deal,"Sounds good, I'm in","Sounds good, I'm in",test
@@ -235,7 +235,7 @@ reject_deal,Not even close,Not even close,test
 reject_deal,Rejected,Rejected,test
 reject_deal,We won't take that,We won't take that,test
 reject_deal,Way too low for us,Way too low for us,test
-reject_deal,"Sorry, no","Sorry, no",test
+reject_deal,"No, that price is not good enough","No, that price is not good enough",test
 reject_deal,That's a hard pass,That's a hard pass,test
 reject_deal,Can't make that work,Can't make that work,test
 reject_deal,"No, decline it","No, decline it",test
@@ -478,7 +478,7 @@ request_help,What's possible here,What's possible here,test
 request_help,Tell me the commands,Tell me the commands,test
 request_help,How do things work here,How do things work here,test
 request_help,Need a hand,Need a hand,test
-request_help,What are the available actions,What are the available actions,test
+request_help,Walk me through my choices,Walk me through my choices,test
 cancel_action,Cancel,Cancel,train
 cancel_action,Never mind,Never mind,train
 cancel_action,Stop the deal,Stop the deal,train
@@ -533,9 +533,49 @@ cancel_action,Let's cancel,Let's cancel,test
 cancel_action,Scrap the negotiation,Scrap the negotiation,test
 cancel_action,I'm pulling out,I'm pulling out,test
 cancel_action,Cancel it all,Cancel it all,test
-cancel_action,Abort this,Abort this,test
+cancel_action,Withdraw that request,Withdraw that request,test
 cancel_action,Withdraw the request,Withdraw the request,test
-cancel_action,Call it off now,Call it off now,test
+cancel_action,Withdraw the whole booking,Withdraw the whole booking,test
 cancel_action,Stop the booking,Stop the booking,test
-cancel_action,Never mind then,Never mind then,test
+cancel_action,Let's shut this negotiation down,Let's shut this negotiation down,test
 cancel_action,Drop the deal,Drop the deal,test
+out_of_scope,asdfghjkl,asdfghjkl,train
+out_of_scope,sdkfjsldkfj,sdkfjsldkfj,train
+out_of_scope,;lkjhgfdsa,;lkjhgfdsa,train
+out_of_scope,aaaaaaaaaa,aaaaaaaaaa,train
+out_of_scope,zzzzz,zzzzz,train
+out_of_scope,blargh blargh,blargh blargh,train
+out_of_scope,xyzzy,xyzzy,train
+out_of_scope,fdsa fdsa fdsa,fdsa fdsa fdsa,train
+out_of_scope,mmmmmmm,mmmmmmm,train
+out_of_scope,uhh,uhh,train
+out_of_scope,errr,errr,train
+out_of_scope,hmmmm,hmmmm,train
+out_of_scope,eh,eh,train
+out_of_scope,uh huh,uh huh,train
+out_of_scope,whatever,whatever,train
+out_of_scope,oh,oh,train
+out_of_scope,good morning,good morning,train
+out_of_scope,hello there,hello there,train
+out_of_scope,hi,hi,train
+out_of_scope,how are you today,how are you today,train
+out_of_scope,thanks a lot,thanks a lot,train
+out_of_scope,cheers mate,cheers mate,train
+out_of_scope,haha very funny,haha very funny,train
+out_of_scope,see you later,see you later,train
+out_of_scope,nice to meet you,nice to meet you,train
+out_of_scope,what is the capital of france,what is the capital of france,train
+out_of_scope,tell me a joke,tell me a joke,train
+out_of_scope,who won the football match last night,who won the football match last night,train
+out_of_scope,can you write me a poem,can you write me a poem,train
+out_of_scope,what time does the pizzeria close,what time does the pizzeria close,train
+out_of_scope,play some music,play some music,train
+out_of_scope,how do I reset my password,how do I reset my password,train
+out_of_scope,order me a pizza,order me a pizza,train
+out_of_scope,what is your favourite colour,what is your favourite colour,train
+out_of_scope,qwertyuiop,qwertyuiop,test
+out_of_scope,meh,meh,test
+out_of_scope,goodbye,goodbye,test
+out_of_scope,what is the meaning of life,what is the meaning of life,test
+out_of_scope,sing me a song,sing me a song,test
+out_of_scope,book me a flight to rome,book me a flight to rome,test

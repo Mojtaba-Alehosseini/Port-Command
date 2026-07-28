@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>HandleWeatherAlertBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.coordination</a> &gt; <span class="el_source">HandleWeatherAlertBehaviour.java</span></div><h1>HandleWeatherAlertBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.coordination;
+
+import java.util.List;
+import java.util.Map;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.harbourmaster.BerthPositions;
+import it.unige.portcommand.harbourmaster.CnpRequest;
+import it.unige.portcommand.harbourmaster.VesselTracking;
+import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
+import it.unige.portcommand.ontology.Position;
+import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.prolog.PrologQueries;
+import jade.core.AID;
+import jade.core.Agent;
+import jade.core.behaviours.CyclicBehaviour;
+import jade.lang.acl.ACLMessage;
+import jade.lang.acl.MessageTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The v1.1 weather safety gate â€” since task 24, in BOTH directions.
+ *
+ * &lt;p&gt;&lt;b&gt;{@code weather_threshold}&lt;/b&gt; (worsening): re-evaluates every in-transit
+ * vessel against RULES R15/R16 ({@code operationSafe}), R17
+ * ({@code swellWithinLimit}), and R19 ({@code weatherStateUnsafe}) from the SAME
+ * reading (all four fields ride in one alert â€” see
+ * {@code PeriodicWeatherBroadcastBehaviour}'s enrichment). Unsafe â†’ CANCEL every
+ * assigned tug + INFORM the vessel + mark the tracking {@code weatherHeld}, never
+ * a silent proceed.
+ *
+ * &lt;p&gt;&lt;b&gt;{@code weather_clear}&lt;/b&gt; (recovery â€” task 24, closing the stranded-vessel
+ * gap filed at planning/24): re-evaluates every {@code weatherHeld} vessel against
+ * the SAME three-predicate gate with the recovered reading; safe again â†’ INFORM
+ * the vessel ({@code weather_resume}) and re-initiate the tug Contract Net through
+ * {@code cnpCoordinator().initiate(...)} â€” a fresh CFP with a fresh
+ * {@code cfpId}, exactly the deal-confirmed dispatch shape. The old award was
+ * CANCELled, so the fresh conversation id is a genuinely new job for the
+ * {@code (conversationId, tugId)} ledger key: the re-dispatched escort charges
+ * exactly once, and no refund of the cancelled leg exists by design (task 20's
+ * charge-at-award decision). The {@code weatherHeld} flag is what separates held
+ * vessels from ones whose FIRST CNP is still in flight â€” sweeping on
+ * {@code AWAITING_TUG}+no-tugs alone would double-CFP those (ADR-14).
+ *
+ * &lt;p&gt;Matched by protocol tag, not sender AID: an earlier AID-based
+ * {@code MatchSender(weatherAid)} design had a real gap â€” {@code ServiceLocator}
+ * negatively caches an empty DF search for 1 s, so a threshold alert arriving
+ * before the HarbourMaster's first successful weather-AID lookup would fall
+ * through to {@code ForwardWalkInToPlayerBehaviour}'s broader template and be
+ * silently dropped (adversarial review finding, task 11). Tagging the alert itself
+ * with {@link #WEATHER_ALERT_PROTOCOL} removes the timing dependency entirely.
+ */
+public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
+
+<span class="fc" id="L59">    private static final Logger log = LoggerFactory.getLogger(HandleWeatherAlertBehaviour.class);</span>
+
+    /** Set on both alert directions' INFORMs by {@code PeriodicWeatherBroadcastBehaviour}. */
+    public static final String WEATHER_ALERT_PROTOCOL = &quot;port-command-weather-alert&quot;;
+<span class="fc" id="L63">    private static final MessageTemplate TEMPLATE = MessageTemplate.and(</span>
+<span class="fc" id="L64">            MessageTemplate.MatchProtocol(WEATHER_ALERT_PROTOCOL), MessageTemplate.MatchPerformative(ACLMessage.INFORM));</span>
+
+    public HandleWeatherAlertBehaviour(Agent agent) {
+<span class="fc" id="L67">        super(agent);</span>
+<span class="fc" id="L68">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L72">        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;</span>
+<span class="fc" id="L73">        ACLMessage msg = hm.receiveLogged(TEMPLATE);</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">        if (msg == null) {</span>
+<span class="fc" id="L75">            block();</span>
+<span class="fc" id="L76">            return;</span>
+        }
+
+<span class="fc" id="L79">        JsonNode content = TerminalJson.readTreeOrNull(msg.getContent());</span>
+<span class="fc" id="L80">        String visibility = text(content, &quot;visibility&quot;);</span>
+<span class="fc" id="L81">        String state = text(content, &quot;state&quot;);</span>
+<span class="pc bpc" id="L82" title="3 of 6 branches missed.">        if (content == null || visibility == null || state == null) {</span>
+<span class="nc" id="L83">            log.warn(&quot;malformed weather alert (missing visibility/state) â€” ignoring: {}&quot;, msg.getContent());</span>
+<span class="nc" id="L84">            return;</span>
+        }
+<span class="fc" id="L86">        double windKnots = num(content, &quot;wind_knots&quot;);</span>
+<span class="fc" id="L87">        double swell = num(content, &quot;swell&quot;);</span>
+        // Absent event field = the pre-task-24 alert shape, which was always a worsening.
+<span class="fc" id="L89">        boolean clearing = &quot;weather_clear&quot;.equals(text(content, &quot;event&quot;));</span>
+
+<span class="fc bfc" id="L91" title="All 2 branches covered.">        for (VesselTracking tracking : hm.activeVessels().values()) {</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">            if (clearing) {</span>
+                // weatherHeld AND still genuinely waiting (checkpoint-#5 B1): a held vessel can
+                // only be AWAITING_TUG; anything else (or a stale flag on an entry some other
+                // path advanced) must never trigger a re-dispatch. Departure removes the entry
+                // entirely (ForwardWalkInToPlayerBehaviour.handleDeparted) â€” this stage filter
+                // is the defence-in-depth layer under that fix.
+<span class="pc bpc" id="L98" title="1 of 4 branches missed.">                if (!tracking.weatherHeld() || tracking.stage() != Stage.AWAITING_TUG) {</span>
+<span class="nc" id="L99">                    continue;</span>
+                }
+<span class="pc bpc" id="L101" title="1 of 2 branches missed.">                if (safeFor(tracking, windKnots, visibility, swell, state)) {</span>
+<span class="fc" id="L102">                    redispatch(hm, tracking, windKnots, state);</span>
+                }
+            } else {
+<span class="pc bpc" id="L105" title="1 of 4 branches missed.">                if (tracking.stage() != Stage.IN_TRANSIT || tracking.assignedTugs().isEmpty()) {</span>
+<span class="nc" id="L106">                    continue;</span>
+                }
+<span class="fc bfc" id="L108" title="All 2 branches covered.">                if (!safeFor(tracking, windKnots, visibility, swell, state)) {</span>
+<span class="fc" id="L109">                    holdVessel(hm, tracking, windKnots, swell, state);</span>
+                }
+            }
+<span class="fc" id="L112">        }</span>
+<span class="fc" id="L113">    }</span>
+
+    /** The binding safety gate â€” Prolog first, always (CLAUDE.md rule 4). */
+    private static boolean safeFor(VesselTracking tracking, double windKnots, String visibility,
+                                   double swell, String state) {
+<span class="fc bfc" id="L118" title="All 2 branches covered.">        return PrologQueries.operationSafe(tracking.vesselType(), windKnots, visibility)</span>
+<span class="fc bfc" id="L119" title="All 2 branches covered.">                &amp;&amp; PrologQueries.swellWithinLimit(swell)</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">                &amp;&amp; !PrologQueries.weatherStateUnsafe(state);</span>
+    }
+
+    private void holdVessel(HarbourMasterAgent hm, VesselTracking tracking, double windKnots, double swell,
+                            String state) {
+<span class="fc" id="L125">        List&lt;AID&gt; tugs = hm.serviceLocator().findAll(&quot;tug-escort&quot;);</span>
+<span class="fc bfc" id="L126" title="All 2 branches covered.">        for (String tugId : tracking.assignedTugs()) {</span>
+<span class="fc" id="L127">            tugs.stream().filter(aid -&gt; aid.getLocalName().equals(tugId)).findFirst().ifPresent(tugAid -&gt; {</span>
+<span class="fc" id="L128">                ACLMessage cancel = MessageFactory.create(ACLMessage.CANCEL);</span>
+<span class="fc" id="L129">                cancel.addReceiver(tugAid);</span>
+<span class="fc" id="L130">                cancel.setContent(TerminalJson.write(Map.of(&quot;reason&quot;, &quot;weather_hold&quot;)));</span>
+<span class="fc" id="L131">                hm.sendLogged(cancel);</span>
+<span class="fc" id="L132">            });</span>
+<span class="fc" id="L133">        }</span>
+<span class="fc" id="L134">        ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);</span>
+<span class="fc" id="L135">        inform.addReceiver(tracking.aid());</span>
+<span class="fc" id="L136">        inform.setContent(TerminalJson.write(Map.of(</span>
+<span class="fc" id="L137">                &quot;event&quot;, &quot;weather_hold&quot;, &quot;wind_knots&quot;, windKnots, &quot;swell&quot;, swell, &quot;state&quot;, state)));</span>
+<span class="fc" id="L138">        hm.sendLogged(inform);</span>
+
+<span class="fc" id="L140">        hm.activeVessels().put(tracking.vesselId(),</span>
+<span class="fc" id="L141">                tracking.withTugs(List.of()).withStage(Stage.AWAITING_TUG).withWeatherHeld(true));</span>
+<span class="fc" id="L142">        log.info(&quot;{}: weather HOLD (wind={} swell={} state={}) -&gt; CANCEL {} tug(s)&quot;,</span>
+<span class="fc" id="L143">                tracking.vesselId(), windKnots, swell, state, tracking.assignedTugs().size());</span>
+<span class="fc" id="L144">    }</span>
+
+    /**
+     * The recovery half of the cascade. Clears {@code weatherHeld} BEFORE initiating, so a
+     * second clear alert arriving while the fresh CNP is still collecting bids finds nothing
+     * to re-dispatch â€” the exactly-once guard on the HM side, complementing the ledger's
+     * {@code (conversationId, tugId)} key on the money side.
+     */
+    private void redispatch(HarbourMasterAgent hm, VesselTracking tracking, double windKnots, String state) {
+<span class="fc" id="L153">        hm.activeVessels().put(tracking.vesselId(), tracking.withWeatherHeld(false));</span>
+<span class="fc" id="L154">        VesselSpec spec = tracking.spec();</span>
+<span class="fc" id="L155">        int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());</span>
+<span class="fc" id="L156">        String berthId = tracking.assignedBerth();</span>
+<span class="pc bpc" id="L157" title="2 of 4 branches missed.">        if (tugsRequired &lt;= 0 || berthId == null) {</span>
+            // Unreachable today: a hold requires assigned tugs, which required tugsRequired &gt; 0
+            // and a granted berth. Kept as a guard because CnpRequest rejects both conditions.
+<span class="nc" id="L160">            log.warn(&quot;{}: weather cleared but nothing to re-dispatch (tugsRequired={} berth={})&quot;,</span>
+<span class="nc" id="L161">                    tracking.vesselId(), tugsRequired, berthId);</span>
+<span class="nc" id="L162">            return;</span>
+        }
+<span class="fc" id="L164">        ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);</span>
+<span class="fc" id="L165">        inform.addReceiver(tracking.aid());</span>
+<span class="fc" id="L166">        inform.setContent(TerminalJson.write(Map.of(</span>
+<span class="fc" id="L167">                &quot;event&quot;, &quot;weather_resume&quot;, &quot;vessel_id&quot;, tracking.vesselId(),</span>
+<span class="fc" id="L168">                &quot;wind_knots&quot;, windKnots, &quot;state&quot;, state)));</span>
+<span class="fc" id="L169">        hm.sendLogged(inform);</span>
+
+<span class="fc" id="L171">        Position berthPosition = BerthPositions.position(berthId);</span>
+<span class="fc" id="L172">        hm.cnpCoordinator().initiate(new CnpRequest(tracking.vesselId(), tracking.aid(),</span>
+                AutoFlowDispatcherBehaviour.CHANNEL_ENTRY, berthPosition, tugsRequired));
+<span class="fc" id="L174">        log.info(&quot;{}: weather CLEAR (wind={} state={}) -&gt; fresh tug CNP ({} tug(s)) toward {}&quot;,</span>
+<span class="fc" id="L175">                tracking.vesselId(), windKnots, state, tugsRequired, berthId);</span>
+<span class="fc" id="L176">    }</span>
+
+    private static String text(JsonNode node, String field) {
+<span class="pc bpc" id="L179" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L180">            return null;</span>
+        }
+<span class="fc" id="L182">        JsonNode v = node.get(field);</span>
+<span class="pc bpc" id="L183" title="1 of 2 branches missed.">        return v == null ? null : v.asText();</span>
+    }
+
+    private static double num(JsonNode node, String field) {
+<span class="pc bpc" id="L187" title="1 of 2 branches missed.">        if (node == null) {</span>
+<span class="nc" id="L188">            return 0.0;</span>
+        }
+<span class="fc" id="L190">        JsonNode v = node.get(field);</span>
+<span class="pc bpc" id="L191" title="1 of 2 branches missed.">        return v == null ? 0.0 : v.asDouble();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

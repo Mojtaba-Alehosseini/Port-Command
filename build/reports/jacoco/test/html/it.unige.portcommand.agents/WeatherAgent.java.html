@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WeatherAgent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.agents</a> &gt; <span class="el_source">WeatherAgent.java</span></div><h1>WeatherAgent.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.agents;
+
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.atomic.AtomicReference;
+
+import it.unige.portcommand.agents.InitArgs.WeatherInitArgs;
+import it.unige.portcommand.behaviours.DebugWeatherOverrideBehaviour;
+import it.unige.portcommand.behaviours.coordination.PeriodicWeatherBroadcastBehaviour;
+import it.unige.portcommand.behaviours.coordination.WeatherEvolutionBehaviour;
+import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.RandomSource;
+import it.unige.portcommand.util.SimClock;
+
+/**
+ * Weather service. Holds the current {@link WeatherSnapshot} (shared with its two
+ * behaviours via an {@link AtomicReference}); evolves it on a seeded Markov chain
+ * every 60 sim-minutes and broadcasts it every 15 sim-minutes (task-19 cadence fix â€”
+ * see the two behaviours' javadocs). The master RNG, sim clock and shared bus are
+ * injected via the {@code Object[]} args channel (args[1], args[2], args[3] â€” the bus
+ * added by task 24 for the {@code WeatherChangeEvent}/{@code NotificationEvent} GUI
+ * publishes).
+ */
+<span class="fc" id="L24">public final class WeatherAgent extends PortCommandAgent</span>
+        implements it.unige.portcommand.persistence.Mementoable {
+
+<span class="fc" id="L27">    private final AtomicReference&lt;WeatherSnapshot&gt; current = new AtomicReference&lt;&gt;();</span>
+    private DebugWeatherOverrideBehaviour debugOverride;
+    /** Held so a scripted weather change can force an immediate broadcast (task 26). */
+    private PeriodicWeatherBroadcastBehaviour broadcast;
+
+    @Override
+    protected void registerServices() {
+<span class="fc" id="L34">        registerDfService(&quot;weather&quot;, getLocalName());</span>
+<span class="fc" id="L35">    }</span>
+
+    @Override
+    protected void onSetup() {
+<span class="fc" id="L39">        WeatherInitArgs args = initArg(WeatherInitArgs.class);</span>
+<span class="pc bpc" id="L40" title="1 of 2 branches missed.">        if (args == null) {</span>
+<span class="nc" id="L41">            throw new IllegalStateException(</span>
+<span class="nc" id="L42">                    &quot;WeatherAgent &quot; + getLocalName() + &quot; requires WeatherInitArgs at args[0]&quot;);</span>
+        }
+<span class="fc" id="L44">        RandomSource randomSource = argAt(1, RandomSource.class);</span>
+<span class="fc" id="L45">        SimClock simClock = argAt(2, SimClock.class);</span>
+<span class="fc" id="L46">        EventBus eventBus = argAt(3, EventBus.class);</span>
+
+<span class="fc" id="L48">        current.set(args.initial());</span>
+<span class="fc" id="L49">        Random weatherRng = randomSource.forStream(&quot;weather&quot;);</span>
+<span class="pc bpc" id="L50" title="1 of 2 branches missed.">        TransitionMatrix matrix = args.matrix() != null ? args.matrix() : TransitionMatrix.defaults();</span>
+        List&lt;WeatherInitArgs.ScriptedWeather&gt; overrides =
+<span class="pc bpc" id="L52" title="1 of 2 branches missed.">                args.overrides() != null ? args.overrides() : List.of();</span>
+
+<span class="fc" id="L54">        addBehaviour(new WeatherEvolutionBehaviour(this, simClock, current, matrix, weatherRng, overrides));</span>
+<span class="fc" id="L55">        broadcast = new PeriodicWeatherBroadcastBehaviour(this, simClock, current, getServiceLocator(),</span>
+                eventBus);
+<span class="fc" id="L57">        addBehaviour(broadcast);</span>
+        // Task 24: Debug-menu storm trigger (checkpoint demos) â€” uncounted parent-pkg behaviour.
+<span class="fc" id="L59">        debugOverride = new DebugWeatherOverrideBehaviour(this, current, simClock, eventBus);</span>
+<span class="fc" id="L60">        addBehaviour(debugOverride);</span>
+
+        // Task 22 restore: a persisted current snapshot (appended by the restore-aware roster)
+        // replaces the init-args starting weather â€” evolution continues from it with fresh
+        // seeded draws (the Markov stream has no persistable cursor; dated note, planning/22).
+<span class="fc" id="L65">        WeatherSnapshot restored = optionalArgOfType(WeatherSnapshot.class);</span>
+<span class="fc bfc" id="L66" title="All 2 branches covered.">        if (restored != null) {</span>
+<span class="fc" id="L67">            current.set(restored);</span>
+<span class="fc" id="L68">            log.info(&quot;{}: restored weather {} kn / {} / {}&quot;, getLocalName(),</span>
+<span class="fc" id="L69">                    restored.wind(), restored.visibility(), restored.state());</span>
+        }
+<span class="fc" id="L71">    }</span>
+
+    /**
+     * Broadcasts the current weather immediately instead of waiting for the next 15-sim-minute
+     * tick (task 26). Called by {@code WeatherChangeScriptedEvent} through a {@code
+     * OneShotBehaviour} added to this agent, so the work runs on THIS agent's own thread â€” the
+     * scripted event itself executes on the HarbourMaster's.
+     *
+     * &lt;p&gt;Without it a scripted storm's alert arrived up to 15 sim-minutes late, while a vessel's
+     * channel-to-berth transit lasts 2, so the storm scenario's CANCEL cascade never fired in a
+     * real playthrough. See {@link PeriodicWeatherBroadcastBehaviour#broadcastNow()}.
+     */
+    public void broadcastWeatherNow() {
+<span class="pc bpc" id="L84" title="1 of 2 branches missed.">        if (broadcast != null) {</span>
+<span class="fc" id="L85">            broadcast.broadcastNow();</span>
+        }
+<span class="fc" id="L87">    }</span>
+
+    /** Unsubscribes the debug-override plan (task 22) â€” same rationale as the other takedowns. */
+    @Override
+    protected void onTakeDown() {
+<span class="pc bpc" id="L92" title="1 of 2 branches missed.">        if (debugOverride != null) {</span>
+<span class="fc" id="L93">            debugOverride.cancelSubscription();</span>
+        }
+<span class="fc" id="L95">    }</span>
+
+    public it.unige.portcommand.persistence.dto.WeatherStateDTO snapshotDto() {
+<span class="fc" id="L98">        return new it.unige.portcommand.persistence.dto.WeatherStateDTO(current.get());</span>
+    }
+
+    @Override
+    public com.fasterxml.jackson.databind.JsonNode snapshot() {
+<span class="nc" id="L103">        return persistenceMapper().valueToTree(snapshotDto());</span>
+    }
+
+    @Override
+    public void restore(com.fasterxml.jackson.databind.JsonNode node) {
+<span class="nc" id="L108">        current.set(persistenceMapper()</span>
+<span class="nc" id="L109">                .convertValue(node, it.unige.portcommand.persistence.dto.WeatherStateDTO.class).current());</span>
+<span class="nc" id="L110">    }</span>
+
+    private &lt;T&gt; T argAt(int index, Class&lt;T&gt; type) {
+<span class="fc" id="L113">        Object[] a = getArguments();</span>
+<span class="pc bpc" id="L114" title="3 of 6 branches missed.">        if (a == null || a.length &lt;= index || a[index] == null) {</span>
+<span class="nc" id="L115">            throw new IllegalStateException(&quot;WeatherAgent &quot; + getLocalName() + &quot; requires &quot;</span>
+<span class="nc" id="L116">                    + type.getSimpleName() + &quot; at args[&quot; + index + &quot;]&quot;);</span>
+        }
+<span class="fc" id="L118">        return type.cast(a[index]);</span>
+    }
+
+    WeatherSnapshot current() {
+<span class="nc" id="L122">        return current.get();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

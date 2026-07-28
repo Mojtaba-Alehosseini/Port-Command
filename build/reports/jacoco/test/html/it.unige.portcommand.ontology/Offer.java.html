@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Offer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.ontology</a> &gt; <span class="el_source">Offer.java</span></div><h1>Offer.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.ontology;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+/**
+ * A single negotiation move over price (&amp;euro;/hour) and duration (hours),
+ * exchanged between a walk-in vessel and the HarbourMaster. One offer per round
+ * (up to four rounds).
+ */
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public record Offer(
+        @JsonProperty(&quot;price&quot;) double price,
+        @JsonProperty(&quot;duration_hours&quot;) int durationHours,
+        @JsonProperty(&quot;berth_id&quot;) String berthId,
+        @JsonProperty(&quot;from_agent&quot;) String fromAgent,
+        @JsonProperty(&quot;to_agent&quot;) String toAgent,
+        @JsonProperty(&quot;timestamp&quot;) long timestamp) {
+
+<span class="fc" id="L20">    public Offer {</span>
+<span class="pc bpc" id="L21" title="1 of 2 branches missed.">        if (price &lt;= 0) {</span>
+<span class="nc" id="L22">            throw new IllegalArgumentException(&quot;price must be &gt; 0, got &quot; + price);</span>
+        }
+<span class="pc bpc" id="L24" title="1 of 4 branches missed.">        if (durationHours &lt; 1 || durationHours &gt; 24) {</span>
+<span class="fc" id="L25">            throw new IllegalArgumentException(&quot;durationHours must be in 1..24, got &quot; + durationHours);</span>
+        }
+<span class="fc" id="L27">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

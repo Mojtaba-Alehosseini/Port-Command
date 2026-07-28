@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" tests="18" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:43" hostname="MOJI" time="0.071">
+  <properties/>
+  <testcase name="marginalCostRejectsAnUnknownType()" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.003"/>
+  <testcase name="variableForDaySumsOnlyThatDaysVariableExpenses()" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.003"/>
+  <testcase name="marginalCost(tanker) = 1000.0 (2 tugs)" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.007"/>
+  <testcase name="marginalCost(container_vessel) = 1000.0 (2 tugs)" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.001"/>
+  <testcase name="marginalCost(cargo_vessel) = 650.0 (1 tugs)" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.001"/>
+  <testcase name="marginalCost(cruise_ship) = 1000.0 (2 tugs)" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.001"/>
+  <testcase name="marginalCost(ferry) = 300.0 (0 tugs)" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.001"/>
+  <testcase name="customsAndIncidentAreTheCanonicalFlatFigures()" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.003"/>
+  <testcase name="dailyFixedBreakdownKeepsCanonicalOrderAndIsUnmodifiable()" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.002"/>
+  <testcase name="variableForDayExcludesTheFixedLinesEvenAfterTaskTwentyFourChargesThem()" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.003"/>
+  <testcase name="dailyFixedIsNeverTheOldFiftyFiftyBug()" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.001"/>
+  <testcase name="tugJob(350.0) = 350.0" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.005"/>
+  <testcase name="tugJob(425.5) = 425.5" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.001"/>
+  <testcase name="tugJob(600.0) = 600.0" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.001"/>
+  <testcase name="tugJob(0.0) = 0.0" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.0"/>
+  <testcase name="variableForDayDoesNotMutateTheLedger()" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.001"/>
+  <testcase name="dailyFixedIsTheSumOfItsFiveCanonicalComponents()" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.002"/>
+  <testcase name="tugJobRejectsANegativeBid()" classname="it.unige.portcommand.harbourmaster.financial.ExpenseRulesTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

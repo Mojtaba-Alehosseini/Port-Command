@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DockAndServiceBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.auto_flow</a> &gt; <span class="el_source">DockAndServiceBehaviour.java</span></div><h1>DockAndServiceBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.auto_flow;
+
+import java.util.Map;
+import java.util.Optional;
+
+import it.unige.portcommand.agents.BaseVesselAgent;
+import it.unige.portcommand.behaviours.SimTickerBehaviour;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.util.SimClock;
+import jade.core.AID;
+import jade.core.Agent;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Occupies the berth for the deal's {@code dealHours} (measured in sim-time), then
+ * INFORMs the HarbourMaster the service is complete and swaps itself for
+ * {@link DepartBehaviour}. A test completes it by advancing the SimClock.
+ */
+public final class DockAndServiceBehaviour extends SimTickerBehaviour {
+
+<span class="fc" id="L24">    private static final Logger log = LoggerFactory.getLogger(DockAndServiceBehaviour.class);</span>
+    private static final long TICK_SIM_MILLIS = 1000L;
+    private static final long SIM_MILLIS_PER_HOUR = 3_600_000L;
+
+    private final long completeBySimMillis;
+
+    public DockAndServiceBehaviour(Agent agent, SimClock simClock) {
+<span class="fc" id="L31">        this(agent, simClock, simClock.nowSimMillis()</span>
+<span class="fc" id="L32">                + (long) ((BaseVesselAgent) agent).dealHours() * SIM_MILLIS_PER_HOUR);</span>
+<span class="fc" id="L33">    }</span>
+
+    /** Task 22 resume: keep serving until the SAVED deadline â€” hours already served stay served. */
+    public static DockAndServiceBehaviour resuming(Agent agent, SimClock simClock, long completeBySimMillis) {
+<span class="fc" id="L37">        return new DockAndServiceBehaviour(agent, simClock, completeBySimMillis);</span>
+    }
+
+    private DockAndServiceBehaviour(Agent agent, SimClock simClock, long completeBySimMillis) {
+<span class="fc" id="L41">        super(agent, simClock, TICK_SIM_MILLIS);</span>
+<span class="fc" id="L42">        this.completeBySimMillis = completeBySimMillis;</span>
+<span class="fc" id="L43">        ((BaseVesselAgent) agent).reportPhase(BaseVesselAgent.FlowPhase.DOCKED, completeBySimMillis);</span>
+<span class="fc" id="L44">    }</span>
+
+    @Override
+    protected void onSimTick() {
+<span class="fc bfc" id="L48" title="All 2 branches covered.">        if (simClock().nowSimMillis() &lt; completeBySimMillis) {</span>
+<span class="fc" id="L49">            return;</span>
+        }
+<span class="fc" id="L51">        BaseVesselAgent vessel = (BaseVesselAgent) myAgent;</span>
+<span class="fc" id="L52">        Optional&lt;AID&gt; hm = vessel.serviceLocator().findUnique(&quot;harbour-master&quot;);</span>
+<span class="pc bpc" id="L53" title="1 of 2 branches missed.">        if (hm.isPresent()) {</span>
+<span class="fc" id="L54">            ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);</span>
+<span class="fc" id="L55">            inform.addReceiver(hm.get());</span>
+<span class="fc" id="L56">            inform.setContent(TerminalJson.write(Map.of(</span>
+                    &quot;intent&quot;, &quot;service_complete&quot;,
+<span class="fc" id="L58">                    &quot;vessel_id&quot;, vessel.spec().vesselId(),</span>
+<span class="pc bpc" id="L59" title="1 of 2 branches missed.">                    &quot;berth_id&quot;, vessel.assignedBerth() == null ? &quot;&quot; : vessel.assignedBerth())));</span>
+<span class="fc" id="L60">            myAgent.send(inform);</span>
+        }
+<span class="fc" id="L62">        log.info(&quot;{} finished service ({}h) at {} -&gt; depart&quot;, myAgent.getLocalName(),</span>
+<span class="fc" id="L63">                vessel.dealHours(), vessel.assignedBerth());</span>
+<span class="fc" id="L64">        myAgent.addBehaviour(new DepartBehaviour(myAgent, vessel.simClock()));</span>
+<span class="fc" id="L65">        myAgent.removeBehaviour(this); // MUST be last: removeBehaviour nulls myAgent</span>
+<span class="fc" id="L66">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

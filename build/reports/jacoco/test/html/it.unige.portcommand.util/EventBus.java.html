@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EventBus.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.util</a> &gt; <span class="el_source">EventBus.java</span></div><h1>EventBus.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.util;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.Queue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+
+import javax.swing.SwingUtilities;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Typed publish/subscribe bus for the whole app: agents publish from JADE
+ * behaviour threads, GUI panels (task 18+) subscribe on the EDT, other
+ * behaviours subscribe ASYNC. Replaces the task-03 stub â€” the public surface
+ * ({@link #publish(Event)}, {@link #subscribe(Class, Consumer, DeliveryMode)}
+ * returning a {@link Subscription}) is unchanged so every existing caller
+ * compiles untouched; what changes is that {@code publish} now actually
+ * invokes subscribers instead of only recording them.
+ *
+ * &lt;p&gt;&lt;b&gt;Delivery modes&lt;/b&gt; ({@link DeliveryMode}): {@code EDT} always dispatches
+ * via {@link SwingUtilities#invokeLater} â€” even when {@code publish} is itself
+ * called from the EDT â€” rather than invoking in-line when already on the EDT;
+ * this trades one extra event-queue hop for never re-entering a handler while
+ * an earlier delivery for the same event is still on the stack. {@code ASYNC}
+ * buffers into a small bounded per-subscriber queue drained on a shared
+ * 2-thread background pool (see {@link #ASYNC_EXECUTOR}'s javadoc for the
+ * &quot;handlers must not block&quot; contract this implies); {@code CALLER_THREAD}
+ * invokes the handler synchronously, in-line, on the publisher's own thread (a
+ * slow {@code CALLER_THREAD} subscriber therefore blocks the publisher for
+ * that subscriber's turn â€” the only mode where that happens; the tradeoff is
+ * inherent to &quot;direct call&quot;, not a bug). EDT and ASYNC never block the
+ * publisher.
+ *
+ * &lt;p&gt;&lt;b&gt;No cross-subscriber ordering guarantee.&lt;/b&gt; Different subscribers of
+ * the same event type may observe it in different orders relative to other
+ * events (EDT interleaves with whatever else is queued on the EDT; ASYNC runs
+ * on a shared pool). Delivery TO ONE subscriber is FIFO (its own queue/EDT
+ * post order is preserved), but there is no cross-subscriber ordering
+ * contract â€” do not write a handler that assumes it runs before/after another
+ * subscriber's handler for the same event.
+ *
+ * &lt;p&gt;&lt;b&gt;Isolation.&lt;/b&gt; A subscriber that throws is caught and logged; it never
+ * breaks the publisher or any other subscriber. Every publish is also kept in
+ * an append-only audit log (unbounded â€” this list is a test/diagnostic seam,
+ * see {@link EventBusProbe}, not consulted by production code) so tests that
+ * predate real dispatch (several task-10/11 integration tests poll this list
+ * instead of subscribing) keep working unmodified.
+ */
+<span class="fc" id="L59">public final class EventBus {</span>
+
+<span class="fc" id="L61">    private static final Logger log = LoggerFactory.getLogger(EventBus.class);</span>
+
+    /** Per-subscriber ASYNC buffer size (planning/17 hard constraint). */
+    static final int ASYNC_QUEUE_CAPACITY = 1024;
+
+    // Shared across every EventBus instance rather than one pool per bus: many
+    // tests construct short-lived buses (AssistantAgentIT alone makes ~9), and a
+    // per-instance pool would leak idle daemon threads over a full suite run.
+    // &quot;A small ExecutorService&quot; per the task spec â€” fixed at 2 threads, daemon so
+    // it never holds the JVM open.
+    //
+    // CONTRACT (adversarial review finding, not yet violated by any live handler but worth
+    // stating explicitly): an ASYNC handler must return promptly. drain() below holds one of
+    // these 2 process-wide threads for the full duration of a subscriber's queued run; a
+    // handler that blocks forever or infinite-loops permanently strands that thread, and two
+    // such handlers (across ANY subscriber, on ANY bus instance â€” the pool is shared) would
+    // starve ASYNC delivery everywhere for the rest of the JVM's life. Long-running or
+    // potentially-blocking work belongs on its own thread/executor, dispatched FROM the
+    // handler, not run synchronously inside it.
+<span class="fc" id="L80">    private static final ExecutorService ASYNC_EXECUTOR = Executors.newFixedThreadPool(2, runnable -&gt; {</span>
+<span class="fc" id="L81">        Thread t = new Thread(runnable, &quot;eventbus-async&quot;);</span>
+<span class="fc" id="L82">        t.setDaemon(true);</span>
+<span class="fc" id="L83">        return t;</span>
+    });
+
+<span class="fc" id="L86">    private final Queue&lt;Event&gt; published = new ConcurrentLinkedQueue&lt;&gt;();</span>
+<span class="fc" id="L87">    private final ConcurrentHashMap&lt;Class&lt;? extends Event&gt;, CopyOnWriteArrayList&lt;SubscriberEntry&lt;?&gt;&gt;&gt; subscribers =</span>
+            new ConcurrentHashMap&lt;&gt;();
+
+    /**
+     * Records the event, then dispatches it to every current subscriber of its
+     * exact runtime type (no supertype/interface matching). Never blocks on a
+     * subscriber's handler for EDT/ASYNC modes; see the class javadoc for
+     * {@code CALLER_THREAD}.
+     */
+    public void publish(Event event) {
+<span class="fc" id="L97">        Objects.requireNonNull(event, &quot;event&quot;);</span>
+<span class="fc" id="L98">        published.add(event);</span>
+<span class="fc" id="L99">        List&lt;SubscriberEntry&lt;?&gt;&gt; entries = subscribers.get(event.getClass());</span>
+<span class="fc bfc" id="L100" title="All 4 branches covered.">        if (entries == null || entries.isEmpty()) {</span>
+<span class="fc" id="L101">            log.debug(&quot;EventBus.publish {} (0 subscribers)&quot;, event.getClass().getSimpleName());</span>
+<span class="fc" id="L102">            return;</span>
+        }
+<span class="fc bfc" id="L104" title="All 2 branches covered.">        for (SubscriberEntry&lt;?&gt; entry : entries) {</span>
+<span class="fc" id="L105">            entry.deliver(event);</span>
+<span class="fc" id="L106">        }</span>
+<span class="fc" id="L107">    }</span>
+
+    /** Convenience overload defaulting to {@link DeliveryMode#EDT} â€” the common case for GUI panels. */
+    public &lt;E extends Event&gt; Subscription&lt;E&gt; subscribe(Class&lt;E&gt; type, Consumer&lt;E&gt; handler) {
+<span class="nc" id="L111">        return subscribe(type, handler, DeliveryMode.EDT);</span>
+    }
+
+    /**
+     * Registers {@code handler} for every future {@code publish} of exactly
+     * {@code type}. Returns a {@link Subscription} the caller keeps and cancels
+     * to stop delivery (e.g. a Swing panel in {@code removeNotify()}).
+     */
+    public &lt;E extends Event&gt; Subscription&lt;E&gt; subscribe(Class&lt;E&gt; type, Consumer&lt;E&gt; handler, DeliveryMode mode) {
+<span class="fc" id="L120">        Objects.requireNonNull(type, &quot;type&quot;);</span>
+<span class="fc" id="L121">        Objects.requireNonNull(handler, &quot;handler&quot;);</span>
+<span class="fc" id="L122">        Objects.requireNonNull(mode, &quot;mode&quot;);</span>
+<span class="fc" id="L123">        SubscriberEntry&lt;E&gt; entry = new SubscriberEntry&lt;&gt;(handler, mode);</span>
+<span class="fc" id="L124">        CopyOnWriteArrayList&lt;SubscriberEntry&lt;?&gt;&gt; list =</span>
+<span class="fc" id="L125">                subscribers.computeIfAbsent(type, k -&gt; new CopyOnWriteArrayList&lt;&gt;());</span>
+<span class="fc" id="L126">        list.add(entry);</span>
+<span class="fc" id="L127">        log.debug(&quot;EventBus.subscribe {} mode={}&quot;, type.getSimpleName(), mode);</span>
+<span class="fc" id="L128">        return new Subscription&lt;&gt;(() -&gt; list.remove(entry));</span>
+    }
+
+    /** Test-only (package-private): every event ever published, in order. See {@link EventBusProbe}. */
+    List&lt;Event&gt; publishedEvents() {
+<span class="fc" id="L133">        return List.copyOf(published);</span>
+    }
+
+    /** Test-only (package-private): number of live subscribers for an event type. */
+    int subscriberCount(Class&lt;? extends Event&gt; type) {
+<span class="fc" id="L138">        CopyOnWriteArrayList&lt;SubscriberEntry&lt;?&gt;&gt; list = subscribers.get(type);</span>
+<span class="pc bpc" id="L139" title="1 of 2 branches missed.">        return list == null ? 0 : list.size();</span>
+    }
+
+    /**
+     * One subscriber's handler + delivery mode. EDT and {@code CALLER_THREAD}
+     * dispatch directly; {@code ASYNC} buffers into its own bounded queue and
+     * drains it on the shared executor with at most one drain task in flight at
+     * a time per subscriber (a per-subscriber &quot;serial executor&quot; over the shared
+     * pool â€” see Doug Lea's {@code java.util.concurrent.Executor} javadoc
+     * example): this keeps one subscriber's own deliveries in order and
+     * prevents two threads from ever calling the same handler concurrently,
+     * while different subscribers still run in parallel on the pool.
+     */
+    private static final class SubscriberEntry&lt;E extends Event&gt; {
+        private final Consumer&lt;E&gt; handler;
+        private final DeliveryMode mode;
+        private final BlockingQueue&lt;Event&gt; asyncQueue;
+<span class="fc" id="L156">        private final AtomicBoolean draining = new AtomicBoolean(false);</span>
+
+<span class="fc" id="L158">        SubscriberEntry(Consumer&lt;E&gt; handler, DeliveryMode mode) {</span>
+<span class="fc" id="L159">            this.handler = handler;</span>
+<span class="fc" id="L160">            this.mode = mode;</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">            this.asyncQueue = mode == DeliveryMode.ASYNC ? new LinkedBlockingQueue&lt;&gt;(ASYNC_QUEUE_CAPACITY) : null;</span>
+<span class="fc" id="L162">        }</span>
+
+        void deliver(Event event) {
+<span class="pc bpc" id="L165" title="1 of 4 branches missed.">            switch (mode) {</span>
+<span class="fc" id="L166">                case EDT -&gt; SwingUtilities.invokeLater(() -&gt; invoke(event));</span>
+<span class="fc" id="L167">                case CALLER_THREAD -&gt; invoke(event);</span>
+<span class="fc" id="L168">                case ASYNC -&gt; enqueue(event);</span>
+            }
+<span class="fc" id="L170">        }</span>
+
+        /** Bounded, non-blocking: full queue drops the oldest buffered event (+ WARN) to admit the new one. */
+        private void enqueue(Event event) {
+<span class="fc bfc" id="L174" title="All 2 branches covered.">            while (!asyncQueue.offer(event)) {</span>
+<span class="fc" id="L175">                Event dropped = asyncQueue.poll();</span>
+<span class="pc bpc" id="L176" title="1 of 2 branches missed.">                if (dropped != null) {</span>
+<span class="fc" id="L177">                    log.warn(&quot;EventBus ASYNC queue full (capacity {}); dropping oldest {} to admit {}&quot;,</span>
+<span class="fc" id="L178">                            ASYNC_QUEUE_CAPACITY, dropped.getClass().getSimpleName(),</span>
+<span class="fc" id="L179">                            event.getClass().getSimpleName());</span>
+                }
+<span class="fc" id="L181">            }</span>
+<span class="fc" id="L182">            scheduleDrain();</span>
+<span class="fc" id="L183">        }</span>
+
+        private void scheduleDrain() {
+<span class="fc bfc" id="L186" title="All 2 branches covered.">            if (draining.compareAndSet(false, true)) {</span>
+<span class="fc" id="L187">                ASYNC_EXECUTOR.execute(this::drain);</span>
+            }
+<span class="fc" id="L189">        }</span>
+
+        private void drain() {
+            try {
+                Event event;
+<span class="fc bfc" id="L194" title="All 2 branches covered.">                while ((event = asyncQueue.poll()) != null) {</span>
+<span class="fc" id="L195">                    invoke(event);</span>
+                }
+            } finally {
+<span class="fc" id="L198">                draining.set(false);</span>
+                // An offer() can land right after the loop above sees an empty queue but
+                // before `draining` flips back to false; re-check so that event isn't
+                // stranded un-drained until some unrelated future publish reschedules it.
+<span class="pc bpc" id="L202" title="1 of 2 branches missed.">                if (!asyncQueue.isEmpty()) {</span>
+<span class="nc" id="L203">                    scheduleDrain();</span>
+                }
+            }
+<span class="fc" id="L206">        }</span>
+
+        @SuppressWarnings(&quot;unchecked&quot;)
+        private void invoke(Event event) {
+            try {
+<span class="fc" id="L211">                handler.accept((E) event);</span>
+<span class="fc" id="L212">            } catch (RuntimeException e) {</span>
+<span class="fc" id="L213">                log.error(&quot;EventBus subscriber threw handling {} (mode={}) â€” isolated, other subscribers unaffected&quot;,</span>
+<span class="fc" id="L214">                        event.getClass().getSimpleName(), mode, e);</span>
+<span class="fc" id="L215">            }</span>
+<span class="fc" id="L216">        }</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

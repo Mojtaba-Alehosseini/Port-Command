@@ -72,6 +72,9 @@ public final class RetractIfFloodBehaviour extends CyclicBehaviour {
         }
         ACLMessage disconfirm = MessageFactory.create(ACLMessage.DISCONFIRM);
         disconfirm.addReceiver(hm.get());
+        // Task 26: lets AutoFlowDispatcherBehaviour match this unsolicited retraction by protocol
+        // instead of claiming every DISCONFIRM on the game ontology.
+        disconfirm.setProtocol(AutoFlowDispatcherBehaviour.FLOOD_RETRACT_PROTOCOL);
         disconfirm.setContent(TerminalJson.write(Map.of("notice", "retracted", "berth_id", berthId)));
         myAgent.send(disconfirm);
         log.info("DISCONFIRM retracted berth={} -> harbour-master", berthId);

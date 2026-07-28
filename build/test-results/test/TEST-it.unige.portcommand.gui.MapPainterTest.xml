@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.gui.MapPainterTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:39" hostname="MOJI" time="0.064">
+  <properties/>
+  <testcase name="allFourBerthsRenderFullyOnPanelAtARealisticSmallSize()" classname="it.unige.portcommand.gui.MapPainterTest" time="0.034"/>
+  <testcase name="weatherChipRendersNearTheTopRightCorner()" classname="it.unige.portcommand.gui.MapPainterTest" time="0.006"/>
+  <testcase name="dockedBerthRendersADifferentColourThanFree()" classname="it.unige.portcommand.gui.MapPainterTest" time="0.005"/>
+  <testcase name="aLiveTugDeltaMovesTheDotToItsNewPosition()" classname="it.unige.portcommand.gui.MapPainterTest" time="0.002"/>
+  <testcase name="idleTugsAreSeededAndRenderAtTheirBasesFromBoot()" classname="it.unige.portcommand.gui.MapPainterTest" time="0.003"/>
+  <testcase name="manyConcurrentArrivalsDoNotThrowAndTheMostRecentStaysOnCanvas()" classname="it.unige.portcommand.gui.MapPainterTest" time="0.005"/>
+  <testcase name="noTugRendersAwayFromTheBasesUntilADeltaMovesOneThere()" classname="it.unige.portcommand.gui.MapPainterTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.persistence.SaveLoadManagerRoundTripTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:56" hostname="MOJI" time="0.169">
+  <properties/>
+  <testcase name="minimalHandCraftedFixtureBinds()" classname="it.unige.portcommand.persistence.SaveLoadManagerRoundTripTest" time="0.02"/>
+  <testcase name="saveLoadRoundTripPreservesEverythingAndReSaveIsByteIdentical()" classname="it.unige.portcommand.persistence.SaveLoadManagerRoundTripTest" time="0.111"/>
+  <testcase name="otherChannelFieldsStayNullThroughTheRoundTrip()" classname="it.unige.portcommand.persistence.SaveLoadManagerRoundTripTest" time="0.038"/>
+  <system-out><![CDATA[00:12:56.412 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Projects\SDAI and NLP joint Project\PortCommand\port-command-genova\build\resources\test\savefixtures\v1_minimal.json (schemaVersion 1, day 1, wallet 50000.0)
+00:12:56.457 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - saved C:\Users\aleho\AppData\Local\Temp\junit16914897813717571299\savegame.json (schemaVersion 1, 4848 bytes)
+00:12:56.496 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Users\aleho\AppData\Local\Temp\junit16914897813717571299\savegame.json (schemaVersion 1, day 1, wallet 47350.0)
+00:12:56.529 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - saved C:\Users\aleho\AppData\Local\Temp\junit16914897813717571299\resaved.json (schemaVersion 1, 4848 bytes)
+00:12:56.556 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - saved C:\Users\aleho\AppData\Local\Temp\junit9353989355575947986\savegame.json (schemaVersion 1, 4848 bytes)
+00:12:56.562 [Test worker] [] INFO  i.u.p.persistence.SaveLoadManager - loaded C:\Users\aleho\AppData\Local\Temp\junit9353989355575947986\savegame.json (schemaVersion 1, day 1, wallet 47350.0)
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

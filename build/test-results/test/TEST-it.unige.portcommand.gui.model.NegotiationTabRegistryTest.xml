@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:41" hostname="MOJI" time="0.013">
+  <properties/>
+  <testcase name="openingCreatesExactlyOneNewTabWithAnOrientationLine()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.001"/>
+  <testcase name="recordPlayerOfferOnAClosedOrUnknownDialogueIsANoOp()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.0"/>
+  <testcase name="aRoundTwoUpdateOnTheSameDialogueIdUpdatesNotDuplicates()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.001"/>
+  <testcase name="aPriceOnlyCounterResolvesToTheHoursUnderDiscussionLikeTheVesselDoes()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.001"/>
+  <testcase name="closeMarksTheRightTabByDialogueId()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.0"/>
+  <testcase name="assistantChatRoutesByExactDialogueIdMatch()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.0"/>
+  <testcase name="neitherRegistryNorTabModelReadsAHiddenBelief()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.002"/>
+  <testcase name="closingAnUnknownDialogueIdReturnsEmpty()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.0"/>
+  <testcase name="onChangeFiresOnOpenCloseAndAssistantChat()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.001"/>
+  <testcase name="aDurationWithdrawalClosesWithItsOwnHonestSummary()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.0"/>
+  <testcase name="recordPlayerOfferUpdatesTheSnapshotAndTheCtxStandingOffer()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.0"/>
+  <testcase name="aVesselCounterAboveThePlayersHoursGetsTheFloorPushbackNote()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.0"/>
+  <testcase name="aRoundUpdateCarriesThePlayerOfferForward()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.001"/>
+  <testcase name="dialogueIdForVesselReverseLookupWorks()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.0"/>
+  <testcase name="buildCtxFocusesOnTheGivenVesselAndExcludesClosedDialogues()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.0"/>
+  <testcase name="aVesselCounterEchoingThePlayersHoursGetsNoPushbackNote()" classname="it.unige.portcommand.gui.model.NegotiationTabRegistryTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

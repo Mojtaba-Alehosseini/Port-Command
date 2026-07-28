@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GameStateBuilder.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.persistence</a> &gt; <span class="el_source">GameStateBuilder.java</span></div><h1>GameStateBuilder.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.persistence;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import it.unige.portcommand.agents.BaseVesselAgent;
+import it.unige.portcommand.agents.BerthOccupancy;
+import it.unige.portcommand.agents.CustomsAgent;
+import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.agents.TerminalAgent;
+import it.unige.portcommand.agents.TugAgent;
+import it.unige.portcommand.agents.WeatherAgent;
+import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
+import it.unige.portcommand.artifacts.PolicyRule;
+import it.unige.portcommand.bootstrap.AgentRoster;
+import it.unige.portcommand.core.Settings;
+import it.unige.portcommand.harbourmaster.VesselTracking;
+import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
+import it.unige.portcommand.lifecycle.GameOverGuard;
+import it.unige.portcommand.persistence.dto.TerminalStateDTO;
+import it.unige.portcommand.persistence.dto.TugStateDTO;
+import it.unige.portcommand.persistence.dto.VesselStateDTO;
+import it.unige.portcommand.util.RandomSource;
+import it.unige.portcommand.util.SimClock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Assembles a {@link GameState} from the live world (task 22). &lt;b&gt;Must run on the
+ * HarbourMaster's agent thread&lt;/b&gt; â€” the autosave subscriber is already there
+ * (CALLER_THREAD chain from the EOD settlement), and the manual save schedules a
+ * one-shot behaviour to get there. On that thread no other HM behaviour can interleave,
+ * so tracking, ledgers and counters are at a phase boundary by construction; the money
+ * path cannot move (every money mutation happens on this same thread, task 24's
+ * race-free-EOD argument). Tug/vessel threads still tick their cosmetic movement â€” their
+ * volatile phase/position reads are individually coherent, and any lag replays a
+ * money-free step after load.
+ *
+ * &lt;h2&gt;Open negotiations&lt;/h2&gt;
+ * A vessel whose tracking stage is NEGOTIATING (or whose vessel-side flow phase has not
+ * been reported yet â€” the grant is still on the wire) has no clean resumable state.
+ * The MANUAL save refuses ({@link SaveNotAllowedException}, planning/22 Step 22.7); the
+ * AUTOSAVE â€” which cannot refuse, it is the EOD hook â€” DROPS those vessels from the
+ * snapshot: in the saved timeline the walk-in never appeared. Berth reservations are
+ * reconciled against the surviving vessel set at load ({@link #reconcileTerminals}), so
+ * nothing leaks (decision dated 2026-07-17).
+ */
+public final class GameStateBuilder {
+
+<span class="fc" id="L55">    private static final Logger log = LoggerFactory.getLogger(GameStateBuilder.class);</span>
+
+    /** Everything the snapshot walk reads, bundled once by {@code GameSession}. */
+<span class="fc" id="L58">    public record Sources(</span>
+            SimClock simClock,
+            RandomSource randomSource,
+            AgentDirectory directory,
+            MarketHistoryArtifact marketHistory,
+            PolicyRegistryArtifact policyRegistry,
+            GameOverGuard gameOverGuard) {
+    }
+
+    private static final int MARKET_HISTORY_LIMIT = 200;
+
+    private GameStateBuilder() {
+    }
+
+    /**
+     * Builds the full save-file state. Call ON the HarbourMaster thread only.
+     *
+     * @param savedAt         ISO-8601 wall instant stamped into the file (audit field)
+     * @param dropNegotiating {@code true} for the autosave (drop unfinished negotiations),
+     *                        {@code false} for a manual save (refuse instead)
+     */
+    public static GameState build(Sources src, String savedAt, boolean dropNegotiating)
+            throws SaveNotAllowedException {
+<span class="fc" id="L81">        HarbourMasterAgent hm = (HarbourMasterAgent) src.directory().byName(&quot;harbour_master&quot;)</span>
+<span class="pc" id="L82">                .orElseThrow(() -&gt; new IllegalStateException(&quot;harbour_master not in AgentDirectory&quot;));</span>
+
+<span class="fc" id="L84">        List&lt;VesselStateDTO&gt; vessels = snapshotVessels(hm, src.directory(), dropNegotiating);</span>
+
+<span class="fc" id="L86">        List&lt;TugStateDTO&gt; tugs = src.directory().byType(TugAgent.class).stream()</span>
+<span class="fc" id="L87">                .map(TugAgent::snapshotDto)</span>
+<span class="fc" id="L88">                .sorted(Comparator.comparing(TugStateDTO::tugId))</span>
+<span class="fc" id="L89">                .toList();</span>
+<span class="fc" id="L90">        List&lt;TerminalStateDTO&gt; terminals = src.directory().byType(TerminalAgent.class).stream()</span>
+<span class="fc" id="L91">                .map(TerminalAgent::snapshotDto)</span>
+<span class="fc" id="L92">                .sorted(Comparator.comparing(TerminalStateDTO::terminalId))</span>
+<span class="fc" id="L93">                .toList();</span>
+<span class="fc" id="L94">        WeatherAgent weather = src.directory().byType(WeatherAgent.class).stream().findFirst()</span>
+<span class="pc" id="L95">                .orElseThrow(() -&gt; new IllegalStateException(&quot;weather_agent not in AgentDirectory&quot;));</span>
+<span class="fc" id="L96">        CustomsAgent customs = src.directory().byType(CustomsAgent.class).stream().findFirst()</span>
+<span class="pc" id="L97">                .orElseThrow(() -&gt; new IllegalStateException(&quot;customs_agent not in AgentDirectory&quot;));</span>
+
+<span class="fc" id="L99">        long simMillis = src.simClock().nowSimMillis();</span>
+        // Task 23: the scenario engine's persisted slice, read on this same HM thread. A
+        // stub-harness HM without the engine snapshots sandbox semantics (null key, []).
+<span class="fc" id="L102">        var scripted = hm.scriptedEvents();</span>
+<span class="fc" id="L103">        return new GameState(</span>
+                SaveLoadManager.SCHEMA_VERSION,
+                savedAt,
+<span class="fc" id="L106">                src.randomSource().saveSeedAt(simMillis),</span>
+<span class="fc" id="L107">                Settings.load(),</span>
+<span class="fc" id="L108">                new GameState.SimClockState(simMillis, src.simClock().realSecondsPerGameDay()),</span>
+<span class="fc" id="L109">                hm.walletLedger().balance(),</span>
+<span class="fc" id="L110">                (int) Math.round(hm.reputationLedger().score()),</span>
+<span class="pc bpc" id="L111" title="1 of 2 branches missed.">                src.gameOverGuard() == null ? 0 : src.gameOverGuard().consecutiveDeepDebtDays(),</span>
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">                src.gameOverGuard() == null ? 0 : src.gameOverGuard().lastDeepDebtDay(),</span>
+<span class="fc" id="L113">                src.marketHistory().lastN(MARKET_HISTORY_LIMIT),</span>
+<span class="fc" id="L114">                src.policyRegistry().all().stream().map(PolicyRule::trigger).toList(),</span>
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">                scripted == null ? null : scripted.scenarioKey(),</span>
+<span class="pc bpc" id="L116" title="1 of 2 branches missed.">                scripted == null ? List.of() : scripted.firedEventIdsSorted(),</span>
+                new GameState.AgentsState(
+<span class="fc" id="L118">                        hm.snapshotDto(),</span>
+<span class="fc" id="L119">                        weather.snapshotDto(),</span>
+<span class="fc" id="L120">                        customs.snapshotDto(),</span>
+                        tugs,
+                        terminals,
+                        vessels));
+    }
+
+    /**
+     * The active-vessel walk: HM tracking (authoritative for stage/tugs/holds) merged with
+     * each vessel agent's own snapshot (authoritative for phase/deal/position/beliefs).
+     * Sorted by vessel id (determinism rule).
+     */
+    private static List&lt;VesselStateDTO&gt; snapshotVessels(HarbourMasterAgent hm, AgentDirectory directory,
+                                                        boolean dropNegotiating)
+            throws SaveNotAllowedException {
+<span class="fc" id="L134">        List&lt;VesselStateDTO&gt; out = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L135">        List&lt;VesselTracking&gt; tracked = hm.activeVessels().values().stream()</span>
+<span class="fc" id="L136">                .sorted(Comparator.comparing(VesselTracking::vesselId))</span>
+<span class="fc" id="L137">                .toList();</span>
+<span class="fc bfc" id="L138" title="All 2 branches covered.">        for (VesselTracking tracking : tracked) {</span>
+<span class="pc bpc" id="L139" title="1 of 4 branches missed.">            if (tracking.stage() == Stage.NEGOTIATING || tracking.stage() == Stage.ARRIVING) {</span>
+<span class="fc bfc" id="L140" title="All 2 branches covered.">                if (!dropNegotiating) {</span>
+<span class="fc" id="L141">                    throw new SaveNotAllowedException(</span>
+<span class="fc" id="L142">                            &quot;Finish the current negotiation with &quot; + tracking.vesselId() + &quot; before saving.&quot;);</span>
+                }
+<span class="fc" id="L144">                log.info(&quot;autosave: dropping {} (stage {}) from the snapshot&quot;, tracking.vesselId(),</span>
+<span class="fc" id="L145">                        tracking.stage());</span>
+<span class="fc" id="L146">                continue;</span>
+            }
+<span class="fc" id="L148">            BaseVesselAgent agent = directory.byName(AgentRoster.vesselLocalName(tracking.spec()))</span>
+<span class="fc" id="L149">                    .filter(BaseVesselAgent.class::isInstance)</span>
+<span class="fc" id="L150">                    .map(BaseVesselAgent.class::cast)</span>
+<span class="fc" id="L151">                    .orElse(null);</span>
+<span class="pc bpc" id="L152" title="2 of 4 branches missed.">            if (agent == null || agent.flowPhase() == null) {</span>
+                // The grant is still on the wire (vessel never reported a phase) or the agent
+                // is already gone: no resumable state. Manual saves refuse â€” this is the same
+                // &quot;no clean phase boundary&quot; case as an open negotiation; autosaves drop.
+<span class="nc bnc" id="L156" title="All 2 branches missed.">                if (!dropNegotiating) {</span>
+<span class="nc" id="L157">                    throw new SaveNotAllowedException(</span>
+<span class="nc" id="L158">                            &quot;Vessel &quot; + tracking.vesselId() + &quot; is between phases; try again in a moment.&quot;);</span>
+                }
+<span class="nc" id="L160">                log.info(&quot;autosave: dropping {} (no reported flow phase) from the snapshot&quot;,</span>
+<span class="nc" id="L161">                        tracking.vesselId());</span>
+<span class="nc" id="L162">                continue;</span>
+            }
+<span class="fc" id="L164">            VesselStateDTO vesselSide = agent.snapshotDto();</span>
+<span class="fc" id="L165">            out.add(mergeTracking(vesselSide, tracking));</span>
+<span class="fc" id="L166">        }</span>
+<span class="fc" id="L167">        return out;</span>
+    }
+
+    /** Fills the HM-side tracking fields into the vessel-side DTO (records are immutable). */
+    private static VesselStateDTO mergeTracking(VesselStateDTO v, VesselTracking t) {
+<span class="fc" id="L172">        return new VesselStateDTO(</span>
+<span class="fc" id="L173">                v.id(), v.vesselType(), v.channel(),</span>
+<span class="fc" id="L174">                v.draft(), v.length(), v.tonnage(), v.cargoClass(), v.etaArrivalSimMillis(),</span>
+<span class="fc" id="L175">                t.stage().name(), v.currentPhase(), v.phaseDeadlineSimMillis(),</span>
+<span class="pc bpc" id="L176" title="1 of 2 branches missed.">                v.assignedBerth() != null ? v.assignedBerth() : t.assignedBerth(),</span>
+<span class="fc" id="L177">                v.dealPrice(), v.dealHours(),</span>
+<span class="fc" id="L178">                t.assignedTugs(), t.blocked(), t.weatherHeld(),</span>
+<span class="fc" id="L179">                v.posX(), v.posY(), v.posHeading(),</span>
+<span class="fc" id="L180">                v.contractRef(),</span>
+<span class="fc" id="L181">                v.personality(), v.minAcceptablePrice(), v.targetPrice(),</span>
+<span class="fc" id="L182">                v.maxWaitMinutes(), v.minDurationHours(), v.negotiationRound(),</span>
+<span class="fc" id="L183">                v.negotiationStartedAtSimMillis());</span>
+    }
+
+    /**
+     * Task 23: a scenario's opening {@link GameState} â€” &lt;b&gt;the same shape a save file
+     * has&lt;/b&gt;, so scenario start reuses the task-22 load path verbatim (validate â†’
+     * teardown â†’ rebuild; reconciliation dated 2026-07-18 â€” planning/23's Â§23.10
+     * {@code Main.startScenario} sketch predates {@code GameSession}). Pre-docked berth
+     * vessels materialise as restored DOCKED walk-ins whose deal closed pre-scenario
+     * (no fee re-earned: {@code LedgerCoordinator} only credits on live events), with
+     * dims from {@code ScenarioVessels}' pinned table.
+     *
+     * @param resolvedSeed          the pinned {@code randomSeed}, or the freshly generated
+     *                              one when the scenario's field is null (0 is a valid pin)
+     * @param realSecondsPerGameDay the already-resolved pacing (CLI {@code --day-length}
+     *                              beats the scenario override beats the sandbox default)
+     */
+    public static GameState fromScenario(it.unige.portcommand.scenario.Scenario s, long resolvedSeed,
+                                         long realSecondsPerGameDay, String savedAt) {
+<span class="fc" id="L202">        it.unige.portcommand.scenario.Scenario.InitialState init = s.initialState();</span>
+<span class="fc" id="L203">        long simMillis = init.startSimMillis();</span>
+
+<span class="fc" id="L205">        List&lt;VesselStateDTO&gt; docked = new ArrayList&lt;&gt;();</span>
+<span class="fc" id="L206">        Map&lt;String, List&lt;BerthOccupancy&gt;&gt; occupanciesByTerminal = new java.util.LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L207">        occupanciesByTerminal.put(&quot;terminal_container&quot;, new ArrayList&lt;&gt;());</span>
+<span class="fc" id="L208">        occupanciesByTerminal.put(&quot;terminal_general&quot;, new ArrayList&lt;&gt;());</span>
+<span class="fc" id="L209">        init.berths().stream()</span>
+<span class="fc" id="L210">                .sorted(Comparator.comparingInt(it.unige.portcommand.scenario.Scenario.BerthInit::berthId))</span>
+<span class="fc" id="L211">                .forEach(berth -&gt; {</span>
+<span class="fc" id="L212">                    String berthId = &quot;berth_&quot; + berth.berthId();</span>
+<span class="fc bfc" id="L213" title="All 2 branches covered.">                    String terminal = berth.berthId() == 2 ? &quot;terminal_container&quot; : &quot;terminal_general&quot;;</span>
+<span class="fc bfc" id="L214" title="All 2 branches covered.">                    if (berth.occupied()) {</span>
+<span class="fc" id="L215">                        var v = berth.vessel();</span>
+<span class="fc" id="L216">                        long freeAt = simMillis + v.dealHours() * 3_600_000L;</span>
+<span class="fc" id="L217">                        docked.add(dockedVessel(v, berthId, simMillis, freeAt));</span>
+<span class="fc" id="L218">                        occupanciesByTerminal.get(terminal).add(new BerthOccupancy(berthId,</span>
+<span class="fc" id="L219">                                v.vesselId(), simMillis, freeAt, 1, BerthOccupancy.Status.DOCKED));</span>
+<span class="fc" id="L220">                    } else {</span>
+<span class="fc" id="L221">                        occupanciesByTerminal.get(terminal).add(BerthOccupancy.free(berthId));</span>
+                    }
+<span class="fc" id="L223">                });</span>
+<span class="fc" id="L224">        docked.sort(Comparator.comparing(VesselStateDTO::id));</span>
+<span class="fc" id="L225">        List&lt;TerminalStateDTO&gt; terminals = List.of(</span>
+<span class="fc" id="L226">                new TerminalStateDTO(&quot;terminal_container&quot;, occupanciesByTerminal.get(&quot;terminal_container&quot;)),</span>
+<span class="fc" id="L227">                new TerminalStateDTO(&quot;terminal_general&quot;, occupanciesByTerminal.get(&quot;terminal_general&quot;)));</span>
+
+<span class="fc" id="L229">        List&lt;TugStateDTO&gt; tugs = init.tugs().stream()</span>
+<span class="fc" id="L230">                .sorted(Comparator.comparingInt(it.unige.portcommand.scenario.Scenario.TugInit::tugId))</span>
+<span class="fc" id="L231">                .map(t -&gt; new TugStateDTO(&quot;tug_&quot; + t.tugId(),</span>
+                        // Â§3.15's AVAILABLE is the engine's IDLE; a REFUELING boot restores
+                        // IDLE-with-low-tank and RefuelIfLowBehaviour re-triggers (task-22 rule).
+<span class="fc bfc" id="L234" title="All 2 branches covered.">                        &quot;AVAILABLE&quot;.equals(t.status()) ? &quot;IDLE&quot; : t.status(),</span>
+<span class="fc" id="L235">                        null, t.fuel(), null, null))</span>
+<span class="fc" id="L236">                .toList();</span>
+
+<span class="fc" id="L238">        var weather = init.weatherOverride();</span>
+<span class="fc" id="L239">        return new GameState(</span>
+                SaveLoadManager.SCHEMA_VERSION,
+                savedAt,
+                resolvedSeed,
+<span class="fc" id="L243">                mergedSettings(s, realSecondsPerGameDay),</span>
+                new GameState.SimClockState(simMillis, realSecondsPerGameDay),
+<span class="fc" id="L245">                init.wallet(),</span>
+<span class="fc" id="L246">                init.reputation(),</span>
+                0, 0,
+<span class="fc" id="L248">                List.of(), List.of(),</span>
+<span class="fc" id="L249">                s.key(),</span>
+<span class="fc" id="L250">                List.of(),</span>
+                new GameState.AgentsState(
+                        new it.unige.portcommand.persistence.dto.HarbourMasterStateDTO(
+<span class="fc" id="L253">                                List.of(), List.of(), new java.util.LinkedHashMap&lt;&gt;(),</span>
+                                new java.util.LinkedHashMap&lt;&gt;(), 0),
+                        new it.unige.portcommand.persistence.dto.WeatherStateDTO(
+<span class="fc" id="L256">                                new it.unige.portcommand.agents.WeatherSnapshot(weather.windKn(),</span>
+<span class="fc" id="L257">                                        weather.visibility(), weather.swell(), weather.state(), simMillis)),</span>
+                        new it.unige.portcommand.persistence.dto.CustomsStateDTO(1),
+                        tugs, terminals, docked));
+    }
+
+    private static VesselStateDTO dockedVessel(it.unige.portcommand.scenario.Scenario.DockedVessel v,
+                                               String berthId, long simMillis, long freeAt) {
+<span class="fc" id="L264">        double[] dims = it.unige.portcommand.scenario.ScenarioVessels.pinnedDims(v.vesselType());</span>
+<span class="fc" id="L265">        var position = it.unige.portcommand.harbourmaster.BerthPositions.position(berthId);</span>
+<span class="fc" id="L266">        return new VesselStateDTO(</span>
+<span class="fc" id="L267">                v.vesselId(), v.vesselType(), VesselStateDTO.CHANNEL_WALK_IN,</span>
+                dims[0], dims[1], (int) dims[2],
+<span class="fc" id="L269">                it.unige.portcommand.scenario.ScenarioVessels.cargoClassFor(v.vesselType()),</span>
+                simMillis,
+<span class="fc" id="L271">                Stage.DOCKED.name(), &quot;DOCKED&quot;, freeAt,</span>
+<span class="fc" id="L272">                berthId, v.dealPrice(), v.dealHours(),</span>
+<span class="fc" id="L273">                List.of(), false, false,</span>
+<span class="fc" id="L274">                position.x(), position.y(), 0.0,</span>
+                null,
+                null, null, null, null, null, null, null);
+    }
+
+    /** {@code Settings.load()} with the scenario's partial override applied (task 23). */
+    private static Settings mergedSettings(it.unige.portcommand.scenario.Scenario s,
+                                           long realSecondsPerGameDay) {
+<span class="fc" id="L282">        Settings base = Settings.load();</span>
+<span class="fc" id="L283">        var override = s.settingsOverride();</span>
+<span class="fc" id="L284">        return new Settings(</span>
+<span class="fc" id="L285">                base.roundLimit(), base.timeLimitSeconds(),</span>
+<span class="pc bpc" id="L286" title="2 of 4 branches missed.">                override != null &amp;&amp; override.autopilotEnabled() != null</span>
+<span class="pc" id="L287">                        ? override.autopilotEnabled() : base.autopilotEnabled(),</span>
+<span class="pc bpc" id="L288" title="2 of 4 branches missed.">                override != null &amp;&amp; override.difficulty() != null</span>
+<span class="pc" id="L289">                        ? override.difficulty() : base.difficulty(),</span>
+                realSecondsPerGameDay,
+<span class="fc" id="L291">                base.maxGameDays(), base.firstLaunch(), base.llmModel(),</span>
+<span class="fc" id="L292">                base.withdrawalPenaltyEur(), base.cnpReplyBySimSeconds(),</span>
+<span class="fc" id="L293">                base.cnpRetryAfterSimSeconds(), base.dailyTargetEur(), base.bankruptcyFloorEur());</span>
+    }
+
+    /**
+     * Load-side reconciliation (task 22): berth occupancy that references a vessel absent
+     * from the restored set (dropped negotiation, grant-limbo drop) loads as FREE. Keeps
+     * &quot;a berth is never leaked to a ghost&quot; true by construction.
+     */
+    public static List&lt;TerminalStateDTO&gt; reconcileTerminals(GameState state) {
+<span class="fc" id="L302">        Set&lt;String&gt; restoredIds = new HashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L303" title="All 2 branches covered.">        for (VesselStateDTO v : state.agents().activeVessels()) {</span>
+<span class="fc" id="L304">            restoredIds.add(v.id());</span>
+<span class="fc" id="L305">        }</span>
+<span class="fc" id="L306">        List&lt;TerminalStateDTO&gt; out = new ArrayList&lt;&gt;();</span>
+<span class="fc bfc" id="L307" title="All 2 branches covered.">        for (TerminalStateDTO terminal : state.agents().terminals()) {</span>
+<span class="fc" id="L308">            List&lt;BerthOccupancy&gt; reconciled = terminal.occupancies().stream()</span>
+<span class="pc bpc" id="L309" title="1 of 4 branches missed.">                    .map(o -&gt; o.vesselId() == null || restoredIds.contains(o.vesselId())</span>
+<span class="fc" id="L310">                            ? o</span>
+<span class="nc" id="L311">                            : BerthOccupancy.free(o.berthId()))</span>
+<span class="fc" id="L312">                    .toList();</span>
+<span class="fc" id="L313">            out.add(new TerminalStateDTO(terminal.terminalId(), reconciled));</span>
+<span class="fc" id="L314">        }</span>
+<span class="fc" id="L315">        return out;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

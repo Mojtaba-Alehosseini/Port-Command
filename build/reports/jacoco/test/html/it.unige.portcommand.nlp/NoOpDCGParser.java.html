@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>NoOpDCGParser.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.nlp</a> &gt; <span class="el_source">NoOpDCGParser.java</span></div><h1>NoOpDCGParser.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.nlp;
+
+import java.util.Optional;
+
+/**
+ * Always misses â€” see {@link DCGParser}. Was the production wiring until task 16; production now
+ * uses {@link PrologDcgParser} over the real grammar. Kept as the null object for tests and
+ * callers that need to force {@link NLPPipeline} down its Rasa fallback branch deterministically,
+ * without standing up a Prolog engine.
+ */
+<span class="fc" id="L11">public final class NoOpDCGParser implements DCGParser {</span>
+
+    @Override
+    public Optional&lt;Frame&gt; parse(String text, DialogueCtx ctx) {
+<span class="fc" id="L15">        return Optional.empty();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

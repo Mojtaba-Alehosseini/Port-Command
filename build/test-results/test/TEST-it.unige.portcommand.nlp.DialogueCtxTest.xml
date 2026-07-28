@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.nlp.DialogueCtxTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:45" hostname="MOJI" time="0.018">
+  <properties/>
+  <testcase name="fromWithNoFocusHasAnEmptyStandingOfferButStillARoster()" classname="it.unige.portcommand.nlp.DialogueCtxTest" time="0.001"/>
+  <testcase name="fromTakesTheStandingOfferFromTheFocusedDialogue()" classname="it.unige.portcommand.nlp.DialogueCtxTest" time="0.0"/>
+  <testcase name="fromTreatsAZeroOfferAsNoOfferOnThatSide()" classname="it.unige.portcommand.nlp.DialogueCtxTest" time="0.0"/>
+  <testcase name="fromMapsObservableFieldsToATypeTaggedRoster()" classname="it.unige.portcommand.nlp.DialogueCtxTest" time="0.001"/>
+  <testcase name="ctxConstructionReadsNoHiddenBelief()" classname="it.unige.portcommand.nlp.DialogueCtxTest" time="0.001"/>
+  <testcase name="theLegacyThreeArgConstructorMapsOntoThePlayerSide()" classname="it.unige.portcommand.nlp.DialogueCtxTest" time="0.015"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.commlog.ParaphraserTest" tests="28" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:12:36" hostname="MOJI" time="0.13">
+  <properties/>
+  <testcase name="malformedJsonContentNeverThrows()" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.019"/>
+  <testcase name="REQUEST vessel-&gt;HM request_berth (AnnounceArrivalBehaviour)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.014"/>
+  <testcase name="REQUEST HM-&gt;terminal 9-field BerthRequest (AutoFlowDispatcherBehaviour:171)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <testcase name="REQUEST HM-&gt;customs pre-clearance (AutoFlowDispatcherBehaviour:213)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.0"/>
+  <testcase name="PROPOSE walk-in opening offer (OpeningProposalBehaviour:62)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.003"/>
+  <testcase name="PROPOSE tug CNP bid (BidInCNPBehaviour:80)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.002"/>
+  <testcase name="ACCEPT_PROPOSAL HM grants berth (AutoFlowDispatcherBehaviour:114)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <testcase name="ACCEPT_PROPOSAL CNP award to winning tug (AwardContractBehaviour:71)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <testcase name="REJECT_PROPOSAL CNP loser, no content at all (AwardContractBehaviour:77)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <testcase name="CFP tug escort (InitiateCNPBehaviour:69)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.0"/>
+  <testcase name="CONFIRM vessel deal_confirmed (DealClosedBehaviour:46)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.0"/>
+  <testcase name="CONFIRM terminal berth assignment (HandleBerthRequestBehaviour:90)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <testcase name="CONFIRM customs clearance ref (HandleClearanceRequestBehaviour:75)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.002"/>
+  <testcase name="INFORM vessel withdraw (WithdrawalBehaviour:49)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <testcase name="INFORM vessel departed (DepartBehaviour:45)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <testcase name="INFORM tug_hold no bids (AwardContractBehaviour:89)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.0"/>
+  <testcase name="INFORM weather_threshold + priority=high envelope param (PeriodicWeatherBroadcastBehaviour:82)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <testcase name="INFORM cargo handling complete (ProcessCargoHandlingBehaviour:71)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <testcase name="INFORM routine weather broadcast, no intent/event/notice key (PeriodicWeatherBroadcastBehaviour:64)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.006"/>
+  <testcase name="REFUSE incompatible (ForwardWalkInToPlayerBehaviour:132)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <testcase name="REFUSE no_compatible_berth + intent (ForwardWalkInToPlayerBehaviour:87)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.0"/>
+  <testcase name="CANCEL weather hold (HandleWeatherAlertBehaviour:90)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.0"/>
+  <testcase name="CANCEL player withdrew (DispatchPlayerCommandBehaviour:92)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.0"/>
+  <testcase name="DISCONFIRM terminal retracts after flood (RetractIfFloodBehaviour:73)" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.0"/>
+  <testcase name="harbourMasterProposeReadsAsDemandWhileAVesselOfferStaysOffering()" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <testcase name="unknownPerformativeFallsBackSafelyInsteadOfThrowing()" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.0"/>
+  <testcase name="missingContentEntirelyNeverThrows()" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.0"/>
+  <testcase name="nullMessageNeverThrows()" classname="it.unige.portcommand.commlog.ParaphraserTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,482 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="it.unige.portcommand.smoke.SmokeRunIT" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-07-27T22:29:27" hostname="MOJI" time="97.544">
+  <properties/>
+  <testcase name="allTenPerformativesAppearAcrossTheThreeScenarios()" classname="it.unige.portcommand.smoke.SmokeRunIT" time="97.544"/>
+  <system-out><![CDATA[00:29:27.646 [Test worker] [] INFO  i.u.portcommand.smoke.SmokeRunner - --smoke: booting scenario 'tutorial'
+00:29:28.922 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:29:28.946 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:29:29.305 [Test worker] [] INFO  i.u.portcommand.prolog.PrologEngine - Prolog engine initialised: 5 rule modules, 21 ontology facts, 30 rules (R1–R30), DCG negotiation grammar loaded
+00:29:29.315 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18299
+00:29:31.829 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:29:31.845 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:29:31.845 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:29:31.845 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18299
+00:29:31.861 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:29:31.893 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - weather_agent: restored weather 8 kn / good / sunny
+00:29:31.893 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - customs_agent: restored clearance sequence at 1
+00:29:31.908 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - restored 0 tracked vessel(s)
+00:29:31.918 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - terminal_container: restored 1 berth occupancy record(s)
+00:29:31.918 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - terminal_general: restored 3 berth occupancy record(s)
+00:29:31.920 [harbour_master] [harbour_master] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'tutorial' armed: 7 pending / 0 already fired
+00:29:31.928 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster respawned from save: 10 fixed agents + 0 restored vessel(s)
+00:29:31.931 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - tug_1 restored: status=IDLE fuel=1.0 job=-
+00:29:31.932 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - tug_2 restored: status=IDLE fuel=1.0 job=-
+00:29:31.934 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - tug_3 restored: status=IDLE fuel=1.0 job=-
+00:29:31.936 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - tug_4 restored: status=IDLE fuel=1.0 job=-
+00:29:31.934 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:31.933 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:31.936 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:31.933 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:29:31.943 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:29:31.946 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (100 ms/tick, 1800 real-s per game day)
+00:29:31.951 [Test worker] [] INFO  i.u.p.persistence.GameSession - scenario 'tutorial' started (seed 20260101, day length 1800s)
+00:29:32.558 [harbour_master] [harbour_master] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 1 advanced
+00:29:36.320 [harbour_master] [harbour_master] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 2 advanced
+00:29:38.849 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted C501 (cargo_vessel, contract C-501, eta sim 29126400)
+00:29:38.852 [vessel_c501] [vessel_c501] INFO  i.u.p.agents.ContractedVesselAgent - vessel_c501 arrived (contracted, C-501) -> announce arrival
+00:29:38.902 [vessel_c501] [vessel_c501] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_c501 announced arrival (contract C-501) -> harbour-master
+00:29:38.933 [vessel_c501] [vessel_c501] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_c501: berth GRANTED berth_1 (price 2000.0, 6h) -> transit
+00:29:38.956 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - C501: ACCEPT berth berth_1 (contract C-501), tugsRequired=2
+00:29:38.956 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:38.956 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:29:38.964 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP C501 (2 tug(s) required) -> 4 tug(s) on CNP cnp-66af7759-b9b1-4b45-b9bc-09f8d1d2b409
+00:29:38.964 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:29:38.965 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 PROPOSE cost=480.0 eta=175.49min fuel=1.0 -> harbour_master
+00:29:38.965 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=481.53 eta=177.55min fuel=1.0 -> harbour_master
+00:29:38.965 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:29:38.965 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:29:38.965 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> harbour_master
+00:29:38.968 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal CONFIRM ({"berth_id":"berth_1","crane_assigned":1}) <- terminal_general
+00:29:39.074 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for C501 closed with 4 bid(s)
+00:29:39.079 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C501: REJECT -> tug_1
+00:29:39.080 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C501: ACCEPT -> tug_3
+00:29:39.082 [tug_3] [tug_3] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_3 ACCEPTED escort of C501 on CNP cnp-66af7759-b9b1-4b45-b9bc-09f8d1d2b409 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:29:39.084 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C501: REJECT -> tug_2
+00:29:39.085 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C501: ACCEPT -> tug_4
+00:29:39.085 [tug_4] [tug_4] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_4 ACCEPTED escort of C501 on CNP cnp-66af7759-b9b1-4b45-b9bc-09f8d1d2b409 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:29:40.680 [terminal_general] [terminal_general] INFO  i.u.p.b.c.ProcessCargoHandlingBehaviour - INFORM handling_complete vessel=C501 berth=berth_1 -> harbour-master
+00:29:41.364 [vessel_c501] [vessel_c501] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_c501 reached berth berth_1 -> docking
+00:29:44.485 [harbour_master] [harbour_master] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 3 advanced
+00:29:50.783 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: walk-in WALKIN-S1 (cargo_vessel, beliefs pinned)
+00:29:50.786 [vessel_walkin_s1] [vessel_walkin_s1] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_s1 arrived (walk-in, NEUTRAL) -> opening proposal
+00:29:50.800 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-S1: opening offer forwarded (round 1, berth berth_2, price 1436.0)
+00:29:55.167 [harbour_master] [harbour_master] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 4 advanced
+00:30:03.307 [harbour_master] [harbour_master] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'tutorial' script complete — Poisson walk-in traffic resumes
+00:30:03.307 [harbour_master] [harbour_master] INFO  i.u.p.s.e.TutorialStepAdvanceEvent - tutorial step 5 advanced
+00:30:15.830 [Test worker] [] INFO  i.u.portcommand.smoke.SmokeRunner - --smoke: 'tutorial' done — 8 performative(s): [REQUEST, INFORM, PROPOSE, ACCEPT-PROPOSAL, REJECT-PROPOSAL, REFUSE, CFP, CONFIRM]
+00:30:15.851 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:30:15.851 [Test worker] [] INFO  i.u.portcommand.smoke.SmokeRunner - --smoke: booting scenario 'busy_day'
+00:30:15.899 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:30:15.908 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:30:15.908 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18299
+00:30:18.889 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:30:18.905 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:30:18.905 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:30:18.905 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18299
+00:30:18.910 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:30:18.910 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - restored 0 tracked vessel(s)
+00:30:18.910 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - weather_agent: restored weather 15 kn / good / sunny
+00:30:18.910 [harbour_master] [harbour_master] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'busy_day' armed: 9 pending / 0 already fired
+00:30:18.917 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - customs_agent: restored clearance sequence at 1
+00:30:18.919 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster respawned from save: 10 fixed agents + 0 restored vessel(s)
+00:30:18.919 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - terminal_container: restored 1 berth occupancy record(s)
+00:30:18.920 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:30:18.921 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (100 ms/tick, 900 real-s per game day)
+00:30:18.922 [Test worker] [] INFO  i.u.p.persistence.GameSession - scenario 'busy_day' started (seed 20260214, day length 900s)
+00:30:18.922 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - terminal_general: restored 3 berth occupancy record(s)
+00:30:18.923 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - tug_1 restored: status=IDLE fuel=0.05 job=-
+00:30:18.923 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=0.05 topSpeed=12.0kn status=IDLE
+00:30:18.923 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - tug_2 restored: status=IDLE fuel=1.0 job=-
+00:30:18.924 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:30:18.924 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - tug_3 restored: status=IDLE fuel=1.0 job=-
+00:30:18.924 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:30:18.925 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - tug_4 restored: status=IDLE fuel=1.0 job=-
+00:30:18.925 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:30:19.553 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted C001 (cargo_vessel, contract CONTRACT-1, eta sim 28857600)
+00:30:19.555 [vessel_c001] [vessel_c001] INFO  i.u.p.agents.ContractedVesselAgent - vessel_c001 arrived (contracted, CONTRACT-1) -> announce arrival
+00:30:19.557 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_c001 announced arrival (contract CONTRACT-1) -> harbour-master
+00:30:19.559 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_c001: berth GRANTED berth_1 (price 5200.0, 8h) -> transit
+00:30:19.562 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - C001: ACCEPT berth berth_1 (contract CONTRACT-1), tugsRequired=2
+00:30:19.562 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:30:19.562 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:30:19.562 [harbour_master] [harbour_master] WARN  i.u.p.b.cnp.InitiateCNPBehaviour - no tug-escort registered in DF; holding vessel C001
+00:30:19.562 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:30:19.563 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=1 -> harbour_master
+00:30:19.565 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal CONFIRM ({"berth_id":"berth_1","crane_assigned":1}) <- terminal_general
+00:30:19.869 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted F001 (ferry, contract CONTRACT-2, eta sim 28886400)
+00:30:19.873 [vessel_f001] [vessel_f001] INFO  i.u.p.agents.ContractedVesselAgent - vessel_f001 arrived (contracted, CONTRACT-2) -> announce arrival
+00:30:19.879 [vessel_f001] [vessel_f001] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_f001 announced arrival (contract CONTRACT-2) -> harbour-master
+00:30:19.883 [vessel_f001] [vessel_f001] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_f001: berth GRANTED berth_4 (price 1800.0, 4h) -> transit
+00:30:19.885 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - F001: ACCEPT berth berth_4 (contract CONTRACT-2), tugsRequired=0
+00:30:19.885 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:30:19.885 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:30:19.887 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:30:19.887 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_4 crane=2 -> harbour_master
+00:30:19.887 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal CONFIRM ({"berth_id":"berth_4","crane_assigned":2}) <- terminal_general
+00:30:19.924 [tug_1] [tug_1] INFO  i.u.p.b.c.RefuelIfLowBehaviour - tug_1 low fuel (0.05) at base -> refuelling for 60 sim-s
+00:30:20.129 [harbour_master] [harbour_master] INFO  i.u.p.b.RestoreDispatchBehaviour - restore dispatch: fresh CNP for C001 (2 tug(s))
+00:30:20.130 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP C001 (2 tug(s) required) -> 4 tug(s) on CNP cnp-a07f6b0c-a601-437a-be48-cef97511b835
+00:30:20.131 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 PROPOSE cost=480.0 eta=175.49min fuel=1.0 -> harbour_master
+00:30:20.131 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:30:20.131 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:30:20.131 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 REFUSE low_fuel -> harbour_master
+00:30:20.183 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for C001 closed with 3 bid(s)
+00:30:20.184 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001: ACCEPT -> tug_3
+00:30:20.185 [tug_3] [tug_3] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_3 ACCEPTED escort of C001 on CNP cnp-a07f6b0c-a601-437a-be48-cef97511b835 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:30:20.185 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001: ACCEPT -> tug_4
+00:30:20.185 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for C001: REJECT -> tug_2
+00:30:20.185 [tug_4] [tug_4] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_4 ACCEPTED escort of C001 on CNP cnp-a07f6b0c-a601-437a-be48-cef97511b835 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:30:20.495 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted BD503 (container_vessel, contract BD-503, eta sim 28944000)
+00:30:20.497 [vessel_bd503] [vessel_bd503] INFO  i.u.p.agents.ContractedVesselAgent - vessel_bd503 arrived (contracted, BD-503) -> announce arrival
+00:30:20.499 [vessel_bd503] [vessel_bd503] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_bd503 announced arrival (contract BD-503) -> harbour-master
+00:30:20.501 [vessel_bd503] [vessel_bd503] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_bd503: berth GRANTED berth_2 (price 3000.0, 5h) -> transit
+00:30:20.502 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - BD503: ACCEPT berth berth_2 (contract BD-503), tugsRequired=2
+00:30:20.502 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:30:20.502 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:30:20.502 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:30:20.503 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP BD503 (2 tug(s) required) -> 4 tug(s) on CNP cnp-8ed89394-ac5d-46f6-8893-11d79a2c3520
+00:30:20.503 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 REFUSE busy -> harbour_master
+00:30:20.503 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 REFUSE low_fuel -> harbour_master
+00:30:20.503 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:30:20.503 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 REFUSE busy -> harbour_master
+00:30:20.503 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_2 crane=1 -> harbour_master
+00:30:20.504 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal CONFIRM ({"berth_id":"berth_2","crane_assigned":1}) <- terminal_container
+00:30:20.550 [tug_1] [tug_1] INFO  i.u.p.b.c.RefuelIfLowBehaviour - tug_1 refuelled to full
+00:30:20.556 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for BD503 closed with 1 bid(s)
+00:30:20.557 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for BD503: ACCEPT -> tug_2
+00:30:20.557 [tug_2] [tug_2] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_2 ACCEPTED escort of BD503 on CNP cnp-8ed89394-ac5d-46f6-8893-11d79a2c3520 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:30:20.828 [vessel_c001] [vessel_c001] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_c001 reached berth berth_1 -> docking
+00:30:21.131 [vessel_f001] [vessel_f001] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_f001 reached berth berth_4 -> docking
+00:30:21.425 [terminal_container] [terminal_container] INFO  i.u.p.b.c.ProcessCargoHandlingBehaviour - INFORM handling_complete vessel=BD503 berth=berth_2 -> harbour-master
+00:30:21.725 [vessel_bd503] [vessel_bd503] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_bd503 reached berth berth_2 -> docking
+00:30:22.374 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: walk-in WALKIN-B1 (cargo_vessel)
+00:30:22.375 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: walk-in WALKIN-B2 (ferry)
+00:30:22.376 [vessel_walkin_b1] [vessel_walkin_b1] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_b1 arrived (walk-in, NEUTRAL) -> opening proposal
+00:30:22.377 [vessel_walkin_b2] [vessel_walkin_b2] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_b2 arrived (walk-in, DESPERATE) -> opening proposal
+00:30:22.380 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-B1: opening offer forwarded (round 1, berth berth_3, price 1564.0)
+00:30:22.381 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-B2: every compatible berth [berth_4] is already held — falling back to berth_4; this vessel may collide with an existing one (audit A-02 residual)
+00:30:22.381 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-B2: opening offer forwarded (round 1, berth berth_4, price 1425.0)
+00:30:26.447 [harbour_master] [harbour_master] INFO  i.u.p.s.e.TugRefuelCompleteEvent - scripted refuel-complete: tug_1 back in service
+00:30:27.391 [harbour_master] [harbour_master] INFO  i.u.p.s.events.BerthFloodEvent - scripted berth flood: INFORM flood berth_2 -> 2 terminal(s)
+00:30:27.391 [terminal_container] [terminal_container] INFO  i.u.p.b.c.RetractIfFloodBehaviour - flood INFORM for berth berth_2 — retracting occupancy
+00:30:27.393 [terminal_container] [terminal_container] INFO  i.u.p.b.c.RetractIfFloodBehaviour - DISCONFIRM retracted berth=berth_2 -> harbour-master
+00:30:27.393 [harbour_master] [harbour_master] WARN  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal DISCONFIRM: berth berth_2 retracted <- terminal_container
+00:30:28.641 [harbour_master] [harbour_master] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'busy_day' script complete — Poisson walk-in traffic resumes
+00:30:28.642 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: walk-in WALKIN-B3 (tanker, beliefs pinned)
+00:30:28.648 [vessel_walkin_b3] [vessel_walkin_b3] INFO  i.u.p.agents.WalkInVesselAgent - vessel_walkin_b3 arrived (walk-in, AGGRESSIVE) -> opening proposal
+00:30:28.652 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-B3: every compatible berth [berth_1] is already held — falling back to berth_1; this vessel may collide with an existing one (audit A-02 residual)
+00:30:28.653 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - WALKIN-B3: opening offer forwarded (round 1, berth berth_1, price 4702.0)
+00:30:34.634 [Test worker] [] INFO  i.u.portcommand.smoke.SmokeRunner - --smoke: 'busy_day' done — 9 performative(s): [REQUEST, INFORM, PROPOSE, ACCEPT-PROPOSAL, REJECT-PROPOSAL, REFUSE, CFP, CONFIRM, DISCONFIRM]
+00:30:34.657 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:30:34.657 [Test worker] [] INFO  i.u.portcommand.smoke.SmokeRunner - --smoke: booting scenario 'storm'
+00:30:34.713 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:30:34.713 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:30:34.717 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18299
+00:30:37.689 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+00:30:37.707 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - BootstrapProbeAgent up — running DF self-check
+00:30:37.707 [bootstrap_probe] [bootstrap_probe] INFO  i.u.p.bootstrap.BootstrapProbeAgent - DF self-check: 0 'smoke-test' provider(s)
+00:30:37.709 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container up on port 18299
+00:30:37.709 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode MENU -> LOADING
+00:30:37.711 [weather_agent] [weather_agent] INFO  i.u.portcommand.agents.WeatherAgent - weather_agent: restored weather 22 kn / fair / cloudy
+00:30:37.711 [harbour_master] [harbour_master] INFO  i.u.p.agents.HarbourMasterAgent - restored 2 tracked vessel(s)
+00:30:37.717 [harbour_master] [harbour_master] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'storm' armed: 7 pending / 0 already fired
+00:30:37.717 [customs_agent] [customs_agent] INFO  i.u.portcommand.agents.CustomsAgent - customs_agent: restored clearance sequence at 1
+00:30:37.719 [terminal_container] [terminal_container] INFO  i.u.portcommand.agents.TerminalAgent - terminal_container: restored 1 berth occupancy record(s)
+00:30:37.721 [terminal_general] [terminal_general] INFO  i.u.portcommand.agents.TerminalAgent - terminal_general: restored 3 berth occupancy record(s)
+00:30:37.723 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - tug_1 restored: status=IDLE fuel=1.0 job=-
+00:30:37.723 [tug_1] [tug_1] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_1 ready: base=Position[x=50.0, y=100.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:30:37.725 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - tug_2 restored: status=IDLE fuel=1.0 job=-
+00:30:37.725 [tug_2] [tug_2] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_2 ready: base=Position[x=50.0, y=150.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:30:37.725 [Test worker] [] INFO  i.u.p.bootstrap.AgentRoster - Roster respawned from save: 10 fixed agents + 2 restored vessel(s)
+00:30:37.726 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - tug_3 restored: status=IDLE fuel=1.0 job=-
+00:30:37.726 [Test worker] [] INFO  i.u.p.lifecycle.GameLifecycle - game mode LOADING -> RUNNING
+00:30:37.726 [tug_3] [tug_3] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_3 ready: base=Position[x=50.0, y=200.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:30:37.726 [Test worker] [] INFO  i.u.p.lifecycle.WallClockAdvancer - wall-clock advancer started (100 ms/tick, 900 real-s per game day)
+00:30:37.727 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - tug_4 restored: status=IDLE fuel=1.0 job=-
+00:30:37.727 [Test worker] [] INFO  i.u.p.persistence.GameSession - scenario 'storm' started (seed 20260320, day length 900s)
+00:30:37.727 [tug_4] [tug_4] INFO  i.unige.portcommand.agents.TugAgent - Tug tug_4 ready: base=Position[x=50.0, y=250.0, headingDeg=0.0] fuel=1.0 topSpeed=12.0kn status=IDLE
+00:30:37.728 [vessel_storm_c1] [vessel_storm_c1] INFO  i.u.p.agents.WalkInVesselAgent - vessel_storm_c1 restored: phase=DOCKED deadline=36000000 berth=berth_2 (2h at 1900.0)
+00:30:37.728 [vessel_storm_c2] [vessel_storm_c2] INFO  i.u.p.agents.WalkInVesselAgent - vessel_storm_c2 restored: phase=DOCKED deadline=57600000 berth=berth_3 (8h at 2100.0)
+00:30:47.760 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: contracted T901 (tanker, contract ST-901, eta sim 29760000)
+00:30:47.762 [vessel_t901] [vessel_t901] INFO  i.u.p.agents.ContractedVesselAgent - vessel_t901 arrived (contracted, ST-901) -> announce arrival
+00:30:47.764 [vessel_t901] [vessel_t901] INFO  i.u.p.b.a.AnnounceArrivalBehaviour - vessel_t901 announced arrival (contract ST-901) -> harbour-master
+00:30:47.766 [vessel_t901] [vessel_t901] INFO  i.u.p.b.a.AwaitBerthBehaviour - vessel_t901: berth GRANTED berth_1 (price 9000.0, 10h) -> transit
+00:30:47.768 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:30:47.768 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - T901: ACCEPT berth berth_1 (contract ST-901), tugsRequired=2
+00:30:47.768 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REQUEST received from harbour_master
+00:30:47.769 [terminal_container] [terminal_container] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - REFUSE wrong_terminal -> harbour_master
+00:30:47.770 [terminal_general] [terminal_general] INFO  i.u.p.b.c.HandleBerthRequestBehaviour - CONFIRM berth=berth_1 crane=2 -> harbour_master
+00:30:47.771 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP T901 (2 tug(s) required) -> 4 tug(s) on CNP cnp-869292c5-9ff0-4096-bfb4-242ddb7ac363
+00:30:47.771 [harbour_master] [harbour_master] INFO  i.u.p.b.c.AutoFlowDispatcherBehaviour - terminal CONFIRM ({"berth_id":"berth_1","crane_assigned":2}) <- terminal_general
+00:30:47.771 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:30:47.771 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:30:47.771 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 PROPOSE cost=480.0 eta=175.49min fuel=1.0 -> harbour_master
+00:30:47.771 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=481.53 eta=177.55min fuel=1.0 -> harbour_master
+00:30:47.824 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for T901 closed with 4 bid(s)
+00:30:47.825 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T901: REJECT -> tug_2
+00:30:47.826 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T901: ACCEPT -> tug_4
+00:30:47.826 [tug_4] [tug_4] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_4 ACCEPTED escort of T901 on CNP cnp-869292c5-9ff0-4096-bfb4-242ddb7ac363 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:30:47.826 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T901: ACCEPT -> tug_3
+00:30:47.826 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T901: REJECT -> tug_1
+00:30:47.826 [tug_3] [tug_3] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_3 ACCEPTED escort of T901 on CNP cnp-869292c5-9ff0-4096-bfb4-242ddb7ac363 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:30:48.388 [harbour_master] [harbour_master] INFO  i.u.p.b.DebugWeatherOverrideBehaviour - weather_agent: DEBUG weather override -> wind=32 vis=poor swell=4.0 state=stormy
+00:30:48.388 [harbour_master] [harbour_master] INFO  i.u.p.s.e.WeatherChangeScriptedEvent - scripted weather: wind=32kn vis=poor swell=4.0 state=stormy
+00:30:48.392 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather WORSENED (wind 32 kn, stormy) -> INFORM to harbour-master
+00:30:48.396 [tug_3] [tug_3] INFO  i.u.p.b.c.HandleCancelBehaviour - tug_3 CANCEL from harbour_master -> abort, return to base
+00:30:48.396 [tug_4] [tug_4] INFO  i.u.p.b.c.HandleCancelBehaviour - tug_4 CANCEL from harbour_master -> abort, return to base
+00:30:48.396 [harbour_master] [harbour_master] INFO  i.u.p.b.c.HandleWeatherAlertBehaviour - T901: weather HOLD (wind=32.0 swell=4.0 state=stormy) -> CANCEL 2 tug(s)
+00:30:48.933 [tug_4] [tug_4] INFO  i.u.p.b.c.ReturnToBaseBehaviour - tug_4 back at base -> idle
+00:30:48.934 [tug_3] [tug_3] INFO  i.u.p.b.c.ReturnToBaseBehaviour - tug_3 back at base -> idle
+00:30:49.046 [vessel_t901] [vessel_t901] INFO  i.u.p.b.a.TransitToBerthBehaviour - vessel_t901 reached berth berth_1 -> docking
+00:30:53.709 [harbour_master] [harbour_master] INFO  i.u.p.s.events.SpawnVesselEvent - scripted spawn: walk-in STORM-W1 (cargo_vessel)
+00:30:53.711 [vessel_storm_w1] [vessel_storm_w1] INFO  i.u.p.agents.WalkInVesselAgent - vessel_storm_w1 arrived (walk-in, NEUTRAL) -> opening proposal
+00:30:53.714 [harbour_master] [harbour_master] WARN  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - STORM-W1: every compatible berth [berth_1, berth_2, berth_3] is already held — falling back to berth_1; this vessel may collide with an existing one (audit A-02 residual)
+00:30:53.714 [harbour_master] [harbour_master] INFO  i.u.p.b.c.ForwardWalkInToPlayerBehaviour - STORM-W1: opening offer forwarded (round 1, berth berth_1, price 1482.0)
+00:30:58.721 [harbour_master] [harbour_master] INFO  i.u.p.b.DebugWeatherOverrideBehaviour - weather_agent: DEBUG weather override -> wind=24 vis=good swell=1.0 state=cloudy
+00:30:58.721 [harbour_master] [harbour_master] INFO  i.u.p.s.e.WeatherChangeScriptedEvent - scripted weather: wind=24kn vis=good swell=1.0 state=cloudy
+00:30:58.721 [harbour_master] [harbour_master] INFO  i.u.p.s.ScriptedEventBehaviour - scenario 'storm' script complete — Poisson walk-in traffic resumes
+00:30:58.724 [weather_agent] [weather_agent] INFO  i.u.p.b.c.PeriodicWeatherBroadcastBehaviour - weather CLEARED (wind 24 kn, cloudy) -> INFORM to harbour-master
+00:30:58.725 [harbour_master] [harbour_master] INFO  i.u.p.b.c.HandleWeatherAlertBehaviour - T901: weather CLEAR (wind=24.0 state=cloudy) -> fresh tug CNP (2 tug(s)) toward berth_1
+00:30:58.728 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.InitiateCNPBehaviour - CFP T901 (2 tug(s) required) -> 4 tug(s) on CNP cnp-3b119f3e-79f0-4083-b9e8-fb379a8744b6
+00:30:58.729 [tug_1] [tug_1] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_1 PROPOSE cost=481.53 eta=177.55min fuel=1.0 -> harbour_master
+00:30:58.729 [tug_3] [tug_3] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_3 PROPOSE cost=480.0 eta=175.49min fuel=0.9964441599999998 -> harbour_master
+00:30:58.729 [tug_2] [tug_2] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_2 PROPOSE cost=480.38 eta=176.0min fuel=1.0 -> harbour_master
+00:30:58.729 [tug_4] [tug_4] INFO  i.u.p.b.cnp.BidInCNPBehaviour - tug_4 PROPOSE cost=480.38 eta=176.0min fuel=0.9964441599999998 -> harbour_master
+00:30:58.782 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.BidCollectorBehaviour - CNP for T901 closed with 4 bid(s)
+00:30:58.783 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T901: ACCEPT -> tug_3
+00:30:58.784 [tug_3] [tug_3] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_3 ACCEPTED escort of T901 on CNP cnp-3b119f3e-79f0-4083-b9e8-fb379a8744b6 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:30:58.784 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T901: REJECT -> tug_1
+00:30:58.784 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T901: ACCEPT -> tug_2
+00:30:58.784 [harbour_master] [harbour_master] INFO  i.u.p.b.cnp.AwardContractBehaviour - CNP for T901: REJECT -> tug_4
+00:30:58.784 [tug_2] [tug_2] INFO  i.u.p.b.c.HandleAcceptRejectBehaviour - tug_2 ACCEPTED escort of T901 on CNP cnp-3b119f3e-79f0-4083-b9e8-fb379a8744b6 -> transit to Position[x=700.0, y=200.0, headingDeg=180.0]
+00:31:04.671 [Test worker] [] INFO  i.u.portcommand.smoke.SmokeRunner - --smoke: 'storm' done — 9 performative(s): [REQUEST, INFORM, PROPOSE, ACCEPT-PROPOSAL, REJECT-PROPOSAL, REFUSE, CFP, CANCEL, CONFIRM]
+00:31:04.681 [Test worker] [] INFO  i.u.p.bootstrap.JadeBootstrap - JADE Main Container down
+
+=== --smoke: Port Command Genova ===
+
+DEMO_CHECKLIST row 10 — all 10 FIPA performatives across the three scenarios
+
+| performative     | tutorial  | busy_day  | storm     | union |
+| REQUEST          | yes       | yes       | yes       | YES   |
+| INFORM           | yes       | yes       | yes       | YES   |
+| PROPOSE          | yes       | yes       | yes       | YES   |
+| ACCEPT-PROPOSAL  | yes       | yes       | yes       | YES   |
+| REJECT-PROPOSAL  | yes       | yes       | yes       | YES   |
+| REFUSE           | yes       | yes       | yes       | YES   |
+| CFP              | yes       | yes       | yes       | YES   |
+| CANCEL           | -         | -         | yes       | YES   |
+| CONFIRM          | yes       | yes       | yes       | YES   |
+| DISCONFIRM       | -         | yes       | -         | YES   |
+
+Checklist coverage (what establishes each row — mirrored in docs/DEMO_CHECKLIST.md):
+  1  Channel A fully automatic               engine: ContractedVesselAgentIT + ScenarioSessionIT | GUI half: manual
+  2  Walk-in negotiation, happy path         engine: WalkInVesselAgentIT + NegotiationEngine tests | GUI half: manual
+  3  Walk-in withdrawal, timeout             engine: WalkInVesselAgentIT | GUI half: manual
+  4  Walk-in withdrawal, over-priced         engine: WalkInVesselAgentIT | GUI half: manual
+  5  Autopilot ON                            engine: AssistantAgentIT | Settings toggle + GUI half: manual
+  6  Policy parsing via PolicyParser         engine: PolicyParserTest | GUI half: manual
+  7  Weather event, tanker hold              engine: WeatherAgentIT + PrologRulesIT (R15-R20) | GUI half: manual
+  8  Save & load                             engine: SaveLoadSessionIT + SaveLoadMidTransitIT | dialog + previews: manual
+  9  End-of-day summary                      engine: GameLifecycleIT + EndOfDaySummaryModelTest | dialog: manual
+  10 All 10 performatives across the 3 scenarios THIS RUNNER — nothing else plays all three and takes the union
+
+Rows 1-9 have a GUI half that only a human can sign off. This runner does not
+claim them, and DEMO_CHECKLIST.md records them as manual with a tester and a date.
+
+RESULT: PASS — 10/10 performatives observed, all three scenarios ran clean.
+
+]]></system-out>
+  <system-err><![CDATA[Jul 28, 2026 12:29:28 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:29:28 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18299
+
+Jul 28, 2026 12:29:28 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:29:28 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:29:28 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:29:28 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:29:28 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:29:28 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:29:28 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:29:28 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:29:31 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:29:31 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:29:31 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@3369e2ce[Cannot bind server socket to localhost port 18299].
+Jul 28, 2026 12:29:31 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18299
+
+Jul 28, 2026 12:29:31 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:29:31 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:29:31 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:29:31 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:29:31 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:29:31 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:29:31 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:29:31 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:30:15 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:30:15 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:30:15 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18299
+
+Jul 28, 2026 12:30:15 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:30:15 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:30:15 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:30:15 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:30:15 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:30:15 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:30:15 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:30:15 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:30:18 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:30:18 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:30:18 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@5adc71e7[Cannot bind server socket to localhost port 18299].
+Jul 28, 2026 12:30:18 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18299
+
+Jul 28, 2026 12:30:18 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:30:18 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:30:18 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:30:18 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:30:18 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:30:18 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:30:18 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:30:18 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:30:34 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:30:34 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:30:34 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18299
+
+Jul 28, 2026 12:30:34 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:30:34 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:30:34 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:30:34 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:30:34 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:30:34 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:30:34 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:30:34 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:30:37 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+Jul 28, 2026 12:30:37 AM jade.core.Runtime beginContainer
+INFO: ----------------------------------
+    This is JADE 4.6.0 - revision 6869 of 30-11-2022 14:47:03
+    downloaded in Open Source, under LGPL restrictions,
+    at http://jade.tilab.com/
+----------------------------------------
+Jul 28, 2026 12:30:37 AM jade.imtp.leap.CommandDispatcher addICP
+WARNING: Error adding ICP jade.imtp.leap.JICP.JICPPeer@1b5d1d9[Cannot bind server socket to localhost port 18299].
+Jul 28, 2026 12:30:37 AM jade.imtp.leap.LEAPIMTPManager initialize
+INFO: Listening for intra-platform commands on address:
+- jicp://10.158.73.230:18299
+
+Jul 28, 2026 12:30:37 AM jade.core.BaseService init
+INFO: Service jade.core.management.AgentManagement initialized
+Jul 28, 2026 12:30:37 AM jade.core.BaseService init
+INFO: Service jade.core.messaging.Messaging initialized
+Jul 28, 2026 12:30:37 AM jade.core.BaseService init
+INFO: Service jade.core.resource.ResourceManagement initialized
+Jul 28, 2026 12:30:37 AM jade.core.BaseService init
+INFO: Service jade.core.mobility.AgentMobility initialized
+Jul 28, 2026 12:30:37 AM jade.core.BaseService init
+INFO: Service jade.core.event.Notification initialized
+Jul 28, 2026 12:30:37 AM jade.mtp.http.HTTPServer <init>
+INFO: HTTP-MTP Using XML parser com.sun.org.apache.xerces.internal.jaxp.SAXParserImpl$JAXPSAXParser
+Jul 28, 2026 12:30:37 AM jade.core.messaging.MessagingService boot
+INFO: MTP addresses:
+http://Moji:7778/acc
+Jul 28, 2026 12:30:37 AM jade.core.AgentContainerImpl joinPlatform
+INFO: --------------------------------------
+Agent container Main-Container@10.158.73.230 is ready.
+--------------------------------------------
+Jul 28, 2026 12:31:04 AM jade.core.messaging.MessageManager shutdown
+INFO: MessageManager shutting down ...
+]]></system-err>
+</testsuite>

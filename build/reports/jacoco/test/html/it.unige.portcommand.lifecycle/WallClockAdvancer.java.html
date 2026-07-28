@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WallClockAdvancer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.lifecycle</a> &gt; <span class="el_source">WallClockAdvancer.java</span></div><h1>WallClockAdvancer.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.lifecycle;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+import it.unige.portcommand.util.SimClock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * The live wallâ†’sim clock driver â€” the task-03 &quot;Option B&quot; advancer, landed by
+ * task 24. This class is &lt;strong&gt;the single sanctioned wall-clock consumer in
+ * the whole game&lt;/strong&gt; (CLAUDE.md rule: SimClock is the only authoritative
+ * time source; wall-clock is allowed only for log timestamps and for the
+ * SimClock's own tick driver).
+ *
+ * &lt;p&gt;Mechanism: a single-thread daemon {@link ScheduledExecutorService} at a
+ * fixed rate calls {@code simClock.advance(TICK_PERIOD_MS)} once per tick.
+ * The scheduler's cadence &lt;em&gt;is&lt;/em&gt; the wall-time source â€” the task never
+ * reads {@code System.currentTimeMillis()}; it credits exactly one period per
+ * firing, and {@code scheduleAtFixedRate} makes up missed firings, so sim time
+ * tracks wall time in the long run without accumulating drift from per-tick
+ * jitter (planning/24 &quot;Risks&quot;: count ticks, don't measure deltas).
+ *
+ * &lt;p&gt;Pause needs no cooperation here: {@link SimClock#pause()} already makes
+ * {@code advance()} a no-op, so a paused game just burns empty 100&amp;nbsp;ms
+ * ticks. Determinism: production is the only caller of {@link #start()};
+ * integration tests never run the advancer â€” they drive
+ * {@code simClock.advance(...)} directly (the established task-06..20 IT
+ * pattern), which is what keeps seeded runs replayable.
+ */
+public final class WallClockAdvancer {
+
+    /** 100 ms per tick â‰ˆ 28.8 sim-seconds at the default 300 s/game-day. */
+    static final long DEFAULT_TICK_PERIOD_MS = 100L;
+
+<span class="fc" id="L38">    private static final Logger log = LoggerFactory.getLogger(WallClockAdvancer.class);</span>
+
+    private final SimClock simClock;
+    private final long tickPeriodMs;
+    private ScheduledExecutorService executor;
+
+    public WallClockAdvancer(SimClock simClock) {
+<span class="fc" id="L45">        this(simClock, DEFAULT_TICK_PERIOD_MS);</span>
+<span class="fc" id="L46">    }</span>
+
+    /** Test seam: a shorter period keeps the advancer's own unit test fast. */
+<span class="fc" id="L49">    WallClockAdvancer(SimClock simClock, long tickPeriodMs) {</span>
+<span class="fc bfc" id="L50" title="All 2 branches covered.">        if (tickPeriodMs &lt;= 0) {</span>
+<span class="fc" id="L51">            throw new IllegalArgumentException(&quot;tickPeriodMs must be &gt; 0, got &quot; + tickPeriodMs);</span>
+        }
+<span class="fc" id="L53">        this.simClock = simClock;</span>
+<span class="fc" id="L54">        this.tickPeriodMs = tickPeriodMs;</span>
+<span class="fc" id="L55">    }</span>
+
+    /** Starts driving the clock. Idempotent (a second call while running is a no-op). */
+    public synchronized void start() {
+<span class="fc bfc" id="L59" title="All 2 branches covered.">        if (executor != null) {</span>
+<span class="fc" id="L60">            return;</span>
+        }
+<span class="fc" id="L62">        executor = Executors.newSingleThreadScheduledExecutor(r -&gt; {</span>
+<span class="fc" id="L63">            Thread t = new Thread(r, &quot;sim-clock-advancer&quot;);</span>
+<span class="fc" id="L64">            t.setDaemon(true);</span>
+<span class="fc" id="L65">            return t;</span>
+        });
+<span class="fc" id="L67">        executor.scheduleAtFixedRate(this::tick, tickPeriodMs, tickPeriodMs, TimeUnit.MILLISECONDS);</span>
+<span class="fc" id="L68">        log.info(&quot;wall-clock advancer started ({} ms/tick, {} real-s per game day)&quot;,</span>
+<span class="fc" id="L69">                tickPeriodMs, simClock.realSecondsPerGameDay());</span>
+<span class="fc" id="L70">    }</span>
+
+    /** Stops driving the clock. Idempotent. */
+    public synchronized void stop() {
+<span class="fc bfc" id="L74" title="All 2 branches covered.">        if (executor == null) {</span>
+<span class="fc" id="L75">            return;</span>
+        }
+<span class="fc" id="L77">        executor.shutdownNow();</span>
+<span class="fc" id="L78">        executor = null;</span>
+<span class="fc" id="L79">        log.info(&quot;wall-clock advancer stopped&quot;);</span>
+<span class="fc" id="L80">    }</span>
+
+    public synchronized boolean isRunning() {
+<span class="fc bfc" id="L83" title="All 2 branches covered.">        return executor != null;</span>
+    }
+
+    private void tick() {
+        try {
+<span class="fc" id="L88">            simClock.advance(tickPeriodMs);</span>
+<span class="nc" id="L89">        } catch (RuntimeException e) {</span>
+            // scheduleAtFixedRate silently cancels the task on an uncaught throw â€” a frozen
+            // game clock with no error would be the worst possible failure shape. advance()
+            // is pure arithmetic and should never throw; log loudly if it somehow does.
+<span class="nc" id="L93">            log.error(&quot;sim-clock advance failed â€” game time may stall&quot;, e);</span>
+<span class="fc" id="L94">        }</span>
+<span class="fc" id="L95">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WithdrawalBehaviour.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.behaviours.negotiation</a> &gt; <span class="el_source">WithdrawalBehaviour.java</span></div><h1>WithdrawalBehaviour.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.behaviours.negotiation;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
+
+import it.unige.portcommand.agents.BaseVesselAgent;
+import it.unige.portcommand.artifacts.DealRecord;
+import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.negotiation.WalkInState;
+import it.unige.portcommand.ontology.Deal;
+import jade.core.AID;
+import jade.core.Agent;
+import jade.core.behaviours.OneShotBehaviour;
+import jade.lang.acl.ACLMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Ends a walk-in negotiation: INFORM the HarbourMaster of the withdrawal, record the
+ * outcome in {@link it.unige.portcommand.artifacts.MarketHistoryArtifact} with the
+ * canonical {@link Deal.Outcome} for the reason, then {@code doDelete()}. Fired from the
+ * counter-eval (the engine withdraws with {@code over_priced}, or â€” task 19b â€”
+ * {@code too_short} when the fee was affordable at the final call but the player never
+ * granted the cargo-handling floor), the player-refuse path ({@code player_refused}),
+ * and the timeout ticker ({@code timeout}).
+ */
+public final class WithdrawalBehaviour extends OneShotBehaviour {
+
+<span class="fc" id="L31">    private static final Logger log = LoggerFactory.getLogger(WithdrawalBehaviour.class);</span>
+
+    private final AtomicReference&lt;WalkInState&gt; stateRef;
+    private final String conversationId;
+    private final String reason;
+
+    public WithdrawalBehaviour(Agent agent, AtomicReference&lt;WalkInState&gt; stateRef,
+                               String conversationId, String reason) {
+<span class="fc" id="L39">        super(agent);</span>
+<span class="fc" id="L40">        this.stateRef = stateRef;</span>
+<span class="fc" id="L41">        this.conversationId = conversationId;</span>
+<span class="fc" id="L42">        this.reason = reason;</span>
+<span class="fc" id="L43">    }</span>
+
+    @Override
+    public void action() {
+<span class="fc" id="L47">        BaseVesselAgent vessel = (BaseVesselAgent) myAgent;</span>
+<span class="fc" id="L48">        WalkInState state = stateRef.get();</span>
+        // Task 24 (checkpoint #5, Moji's balance call): did the player ever counter in this
+        // dialogue? round() starts at 1 and increments only in WalkInState.recordPlayerCounter
+        // (called synchronously when a player counter is processed, before any vessel response),
+        // so round() &gt; 1 is a race-free &quot;player engaged&quot; signal. It rides the withdraw INFORM so
+        // the HM can split the TIMEOUT reputation penalty (âˆ’1 never-engaged vs âˆ’3 abandoned).
+<span class="pc bpc" id="L54" title="1 of 4 branches missed.">        boolean playerEngaged = state != null &amp;&amp; state.round() &gt; 1;</span>
+<span class="fc" id="L55">        Optional&lt;AID&gt; hm = vessel.serviceLocator().findUnique(&quot;harbour-master&quot;);</span>
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">        if (hm.isPresent()) {</span>
+<span class="fc" id="L57">            ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);</span>
+<span class="fc" id="L58">            inform.addReceiver(hm.get());</span>
+<span class="fc" id="L59">            inform.setConversationId(conversationId);</span>
+<span class="fc" id="L60">            inform.setContent(TerminalJson.write(Map.of(</span>
+<span class="fc" id="L61">                    &quot;intent&quot;, &quot;withdraw&quot;, &quot;reason&quot;, reason, &quot;engaged&quot;, playerEngaged)));</span>
+<span class="fc" id="L62">            myAgent.send(inform);</span>
+        }
+<span class="pc bpc" id="L64" title="1 of 2 branches missed.">        double lastPrice = state == null ? 0.0 : state.lastOwnOffer();</span>
+<span class="pc bpc" id="L65" title="1 of 2 branches missed.">        int hours = state == null ? 0 : state.lastOwnHours(); // the standing hours term (19b), = dealHours pre-counter</span>
+<span class="fc" id="L66">        vessel.marketHistory().record(new DealRecord(</span>
+<span class="fc" id="L67">                vessel.spec().vesselType(), hours, lastPrice,</span>
+<span class="fc" id="L68">                vessel.simClock().nowSimMillis(), outcomeFor(reason)));</span>
+        // DEBUG since task 26 - see TimeoutWithdrawalBehaviour: one event, one INFO line, at the hub.
+<span class="fc" id="L70">        log.debug(&quot;{}: withdrew ({}) -&gt; INFORM + recorded + doDelete&quot;, myAgent.getLocalName(), reason);</span>
+<span class="fc" id="L71">        myAgent.doDelete();</span>
+<span class="fc" id="L72">    }</span>
+
+    /** Maps a withdrawal reason to its canonical {@link Deal.Outcome} (task-07 Â§164;
+     * {@code too_short} added by task 19b for the duration dimension's terminal case). */
+    public static Deal.Outcome outcomeFor(String reason) {
+<span class="fc bfc" id="L77" title="All 5 branches covered.">        return switch (reason) {</span>
+<span class="fc" id="L78">            case &quot;over_priced&quot; -&gt; Deal.Outcome.WITHDRAW_PRICE;</span>
+<span class="fc" id="L79">            case &quot;too_short&quot; -&gt; Deal.Outcome.WITHDRAW_DURATION;</span>
+<span class="fc" id="L80">            case &quot;timeout&quot; -&gt; Deal.Outcome.TIMEOUT;</span>
+<span class="fc" id="L81">            case &quot;player_refused&quot; -&gt; Deal.Outcome.PLAYER_REFUSED;</span>
+<span class="fc" id="L82">            default -&gt; throw new IllegalArgumentException(&quot;unknown withdrawal reason: &quot; + reason);</span>
+        };
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

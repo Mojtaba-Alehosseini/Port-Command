@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CnpCoordinator.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">port-command-genova</a> &gt; <a href="index.source.html" class="el_package">it.unige.portcommand.harbourmaster</a> &gt; <span class="el_source">CnpCoordinator.java</span></div><h1>CnpCoordinator.java</h1><pre class="source lang-java linenums">package it.unige.portcommand.harbourmaster;
+
+/**
+ * Seam between the HarbourMaster's auto-flow dispatch and the tug Contract Net.
+ * {@link RealCnpCoordinator} implements the real CFP/collect/award cycle (task 11/ADR-08), with
+ * zero-bid retry and Settings-driven timing added by task 15; post-ACCEPT-failure handling
+ * (a winning tug REFUSEs) remains the one documented, accepted exit ramp.
+ */
+public interface CnpCoordinator {
+
+    /**
+     * Starts a Contract Net for tug escort. Implementations must add a
+     * {@code Behaviour} rather than sending directly, so this is safe to call from
+     * within another behaviour's {@code action()} on the same agent thread. Since task 24
+     * (checkpoint-#5 B2) the real implementation SERIALIZES sessions â€” a call while one is in
+     * flight queues until that session reports {@link #completed()}.
+     */
+    void initiate(CnpRequest req);
+
+    /**
+     * A Contract Net session reached a terminal state (awards sent, zero-bid hold, or no tugs
+     * in DF) â€” the implementation may launch the next queued session. Called by
+     * {@code InitiateCNPBehaviour}/{@code AwardContractBehaviour} on every terminal path.
+     * Default no-op so test fakes only implementing {@link #initiate} keep compiling.
+     */
+    default void completed() {
+<span class="nc" id="L27">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

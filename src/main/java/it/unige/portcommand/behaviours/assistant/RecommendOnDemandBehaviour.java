@@ -13,17 +13,19 @@ import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.nlp.LLMRequest;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
+import it.unige.portcommand.util.Subscription;
 import jade.core.Agent;
 import jade.core.behaviours.OneShotBehaviour;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The "Hint" button plan (planning/10 §10.6). A {@link OneShotBehaviour} that registers an
- * {@link EventBus} subscription for {@link HintButtonEvent} once; the real reactive work is
- * {@link #onHintButton}, invoked by the bus whenever it dispatches. (The task-03 {@code EventBus}
- * stub does not dispatch yet — real dispatch arrives in task 17 — so {@link #onHintButton} is
- * also directly callable, which is how {@code AssistantAgentIT} exercises it today.)
+ * The "Hint" button plan (planning/10 §10.6). A {@link OneShotBehaviour} that subscribes to the
+ * {@link EventBus} ONCE for {@link HintButtonEvent} (INVARIANTS.md's established
+ * subscribe-once/public-handler pattern); the real reactive work is {@link #onHintButton}, invoked
+ * by the bus whenever it dispatches — {@code onHintButton} is also callable directly by tests,
+ * which {@code AssistantAgentIT} does today to drive it deterministically on the calling thread
+ * rather than relying on the real bus's ASYNC delivery timing.
  *
  * <p>Never blocks the agent thread: the LLM call is a {@link java.util.concurrent.CompletableFuture}
  * continuation, never {@code .get()}/{@code .join()}.
@@ -46,10 +48,23 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
         this.cache = cache;
     }
 
+    /** Held so AssistantAgent cancels on takedown (task 22): the bus outlives the agent,
+     * and a respawn would otherwise leave this handler subscribed alongside the new one,
+     * double-firing every reaction. */
+    private volatile Subscription<HintButtonEvent> subscription;
+
     @Override
     public void action() {
-        eventBus.subscribe(HintButtonEvent.class, this::onHintButton, DeliveryMode.ASYNC);
+        subscription = eventBus.subscribe(HintButtonEvent.class, this::onHintButton, DeliveryMode.ASYNC);
         log.debug("subscribed to HintButtonEvent");
+    }
+
+    /** Cancels the bus subscription; safe if {@link #action()} never ran. */
+    public void cancelSubscription() {
+        Subscription<HintButtonEvent> s = subscription;
+        if (s != null) {
+            s.cancel();
+        }
     }
 
     /** Run the algorithm, ask the LLM to polish it, validate, publish — falling back to the
@@ -61,8 +76,12 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
 
         String template = AssistantPromptBuilder.template(rec);
         PromptPayload prompt = AssistantPromptBuilder.prompt(rec);
+        // requiredFigures(), not allFigures(): the sidecar's own check 1 mirrors the Java one
+        // (task 13 parity), so both sides must narrow together — see Recommendation#requiredFigures.
+        // The sidecar's verdict is advisory anyway; HallucinationValidator below is what gates the
+        // fall back to the plain template.
         LLMRequest request = new LLMRequest(prompt.user(), prompt.system(),
-                rec.allFigures().stream().toList(), rec.namedEntities().stream().toList(), true);
+                rec.requiredFigures().stream().toList(), rec.namedEntities().stream().toList(), true);
 
         llmBridge.explain(request)
                 .thenAccept(response -> {

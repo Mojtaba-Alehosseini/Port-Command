@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "DOCUMENTATION ONLY (planning/23 Step 23.2): runtime validation is hand-coded in ScenarioLoader.validate — this file is the human-readable contract for course-mates authoring a scenario. Exactly 3 scenarios ship in v1: tutorial.json, busy_day.json, storm.json.",
+  "title": "Port Command Genova scenario",
+  "type": "object",
+  "required": ["key", "displayName", "description", "targetDailyRevenue", "initialState", "events"],
+  "properties": {
+    "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "Must equal the file stem." },
+    "displayName": { "type": "string" },
+    "description": { "type": "string" },
+    "targetDailyRevenue": { "type": "number", "exclusiveMinimum": 0 },
+    "randomSeed": {
+      "type": ["integer", "null"],
+      "description": "null (or omitted) = generate a fresh seed at scenario start and record it in the save. 0 is a VALID pinned seed, never a sentinel."
+    },
+    "settingsOverride": {
+      "type": ["object", "null"],
+      "properties": {
+        "difficulty": { "enum": ["EASY", "NORMAL", "HARD"] },
+        "autopilotEnabled": { "type": ["boolean", "null"] },
+        "realSecondsPerGameDay": {
+          "type": ["integer", "null"], "exclusiveMinimum": 0,
+          "description": "Scenario pacing override; an explicit --day-length CLI flag still wins."
+        }
+      }
+    },
+    "initialState": {
+      "type": "object",
+      "required": ["startDay", "startTimeOfDay", "wallet", "reputation", "weatherOverride", "berths", "tugs"],
+      "properties": {
+        "startDay": { "type": "integer", "minimum": 1 },
+        "startTimeOfDay": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+        "wallet": { "type": "number", "minimum": 0 },
+        "reputation": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "weatherOverride": {
+          "type": "object",
+          "required": ["windKn", "visibility", "swell", "state"],
+          "properties": {
+            "windKn": { "type": "integer", "minimum": 0 },
+            "visibility": { "enum": ["good", "fair", "poor"] },
+            "swell": { "type": "number", "minimum": 0 },
+            "state": { "enum": ["sunny", "cloudy", "stormy"] }
+          }
+        },
+        "berths": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "$comment": "Exactly one entry per berthId 1..4.",
+          "items": {
+            "type": "object",
+            "required": ["berthId", "occupied"],
+            "properties": {
+              "berthId": { "type": "integer", "minimum": 1, "maximum": 4 },
+              "occupied": { "type": "boolean" },
+              "vessel": {
+                "type": ["object", "null"],
+                "$comment": "Required iff occupied — becomes a DOCKED active vessel whose deal closed pre-scenario (no fee re-earned).",
+                "required": ["vesselId", "vesselType", "dealPrice", "dealHours"],
+                "properties": {
+                  "vesselId": { "type": "string" },
+                  "vesselType": { "enum": ["tanker", "container_vessel", "cargo_vessel", "ferry", "cruise_ship"] },
+                  "dealPrice": { "type": "number", "exclusiveMinimum": 0 },
+                  "dealHours": { "type": "integer", "minimum": 1, "maximum": 24 }
+                }
+              }
+            }
+          }
+        },
+        "tugs": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "$comment": "Exactly one entry per tugId 1..4. AVAILABLE maps to the engine's IDLE.",
+          "items": {
+            "type": "object",
+            "required": ["tugId", "status", "fuel"],
+            "properties": {
+              "tugId": { "type": "integer", "minimum": 1, "maximum": 4 },
+              "status": { "enum": ["AVAILABLE", "REFUELING"] },
+              "fuel": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        }
+      }
+    },
+    "contracts": {
+      "type": "array",
+      "$comment": "Scenario-local ServiceContracts (snake_case wire keys, same shape as data/contracts.json). Ids must not shadow global entries; these never recur daily.",
+      "items": {
+        "type": "object",
+        "required": ["contract_id", "vessel_id", "vessel_type", "berth_id", "contracted_fee", "contracted_hours", "expected_arrival_sim_millis"],
+        "properties": {
+          "contract_id": { "type": "string" },
+          "vessel_id": { "type": "string" },
+          "vessel_type": { "enum": ["tanker", "container_vessel", "cargo_vessel", "ferry", "cruise_ship"] },
+          "berth_id": { "enum": ["berth_1", "berth_2", "berth_3", "berth_4"] },
+          "contracted_fee": { "type": "number", "exclusiveMinimum": 0 },
+          "contracted_hours": { "type": "integer", "minimum": 1, "maximum": 24 },
+          "expected_arrival_sim_millis": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "events": {
+      "type": "array",
+      "$comment": "Sorted ascending by simTimeSeconds (sim-seconds since scenario start — never wall clock). Discriminator: type.",
+      "items": {
+        "type": "object",
+        "required": ["type", "simTimeSeconds"],
+        "properties": {
+          "type": { "enum": ["SpawnVessel", "WeatherChange", "TugRefuelComplete", "TutorialStepAdvance", "Notification", "BerthFlood"] },
+          "simTimeSeconds": { "type": "integer", "minimum": 0 }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "type": { "const": "SpawnVessel" },
+              "vesselType": { "enum": ["tanker", "container_vessel", "cargo_vessel", "ferry", "cruise_ship"] },
+              "channel": { "enum": ["contracted", "walk_in"] },
+              "vesselId": { "type": ["string", "null"], "$comment": "walk_in: required. contracted: null (the contract names the vessel)." },
+              "contractRef": { "type": ["string", "null"], "$comment": "contracted only — a scenario or contracts.json contract_id." },
+              "personality": { "enum": ["AGGRESSIVE", "NEUTRAL", "DESPERATE", null], "$comment": "walk_in hidden-belief pin (P-04: still never surfaced)." },
+              "minPrice": { "type": ["number", "null"] },
+              "targetPrice": { "type": ["number", "null"] },
+              "etaSimMillis": { "type": "null", "$comment": "Reserved for the engine's daily contracted stream — never authored." }
+            }
+          },
+          {
+            "properties": {
+              "type": { "const": "WeatherChange" },
+              "windKn": { "type": "integer", "minimum": 0 },
+              "visibility": { "enum": ["good", "fair", "poor"] },
+              "swell": { "type": "number", "minimum": 0 },
+              "state": { "enum": ["sunny", "cloudy", "stormy"] }
+            }
+          },
+          {
+            "properties": {
+              "type": { "const": "TugRefuelComplete" },
+              "tugId": { "type": "integer", "minimum": 1, "maximum": 4 }
+            }
+          },
+          {
+            "properties": {
+              "type": { "const": "TutorialStepAdvance" },
+              "step": { "type": "integer", "minimum": 1, "maximum": 5 },
+              "text": { "type": "string" }
+            }
+          },
+          {
+            "properties": {
+              "type": { "const": "Notification" },
+              "severity": { "enum": ["INFO", "WARN", "EMERGENCY"] },
+              "text": { "type": "string" }
+            }
+          },
+          {
+            "$comment": "Task 26 (2026-07-27): the live DISCONFIRM trigger. The HarbourMaster relays an INFORM {event:flood, berth_id} to every terminal; the owning terminal releases the berth and DISCONFIRMs. Canon (PROJECT_DEFINITION 13) always said DISCONFIRM comes from 'the scripted Busy-Day terminal-flood' — this is that script entry.",
+            "properties": {
+              "type": { "const": "BerthFlood" },
+              "berthId": { "enum": ["berth_1", "berth_2", "berth_3", "berth_4"] }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
