@@ -6,7 +6,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import it.unige.portcommand.gui.events.PolicyParsedEvent;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
+import it.unige.portcommand.nlp.PolicyParser;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
 
@@ -25,6 +27,95 @@ class SettingsFormTest {
     private static SettingsForm form(EventBus bus, List<SettingsChangedEvent> sink) {
         bus.subscribe(SettingsChangedEvent.class, sink::add, DeliveryMode.CALLER_THREAD);
         return new SettingsForm(bus, "NORMAL", 300L, false, "microsoft/Phi-4-mini-instruct", () -> { });
+    }
+
+    // ==================== Autopilot policy field (audit C-01/D-02, 2026-07-28) ====================
+    //
+    // Before this field existed, PolicyParser.parse(text, eventBus) — the method that publishes
+    // PolicyParsedEvent — had ZERO production call sites: the DSL, the event, the subscribing
+    // PolicyParseBehaviour, the registry and its save/load restore were all built and tested, and
+    // nothing in the shipped game could put a rule into any of them. DEMO_SCRIPT Beat 4 and
+    // DEMO_CHECKLIST Row 6 both said "open Settings, type a policy", and there was no field.
+
+    @Test
+    @Timeout(5)
+    void aParsedPolicyPublishesItAndEchoesWhatWasUnderstood() {
+        EventBus bus = new EventBus();
+        List<PolicyParsedEvent> parsed = new ArrayList<>();
+        bus.subscribe(PolicyParsedEvent.class, parsed::add, DeliveryMode.CALLER_THREAD);
+        SettingsForm form = form(bus, new ArrayList<>());
+
+        form.policyFieldForTest().setText(PolicyParser.GRAMMAR_EXAMPLE);
+        form.clickSetPolicyForTest();
+
+        assertEquals(1, parsed.size(), "a parsed policy must reach the Assistant's subscribed behaviour");
+        assertEquals(PolicyParser.GRAMMAR_EXAMPLE, parsed.get(0).rule().trigger());
+
+        // The echo must show what was UNDERSTOOD, not read the input back: the description is built
+        // by the parser from the parsed action, condition and canonical vessel type.
+        String feedback = form.policyFeedbackForTest();
+        assertTrue(feedback.contains("Policy set"), feedback);
+        assertTrue(feedback.contains("accept the vessel's offer"), "the parsed ACTION: " + feedback);
+        assertTrue(feedback.contains("price &gt; 2200"), "the parsed CONDITION: " + feedback);
+        assertTrue(feedback.contains("tankers only"), "the parsed canonical SCOPE: " + feedback);
+        assertTrue(form.policyFieldForTest().getText().isEmpty(), "an accepted policy clears the field");
+    }
+
+    @Test
+    @Timeout(5)
+    void anUnparseablePolicyShowsTheGrammarAndAnExampleAndRegistersNothing() {
+        EventBus bus = new EventBus();
+        List<PolicyParsedEvent> parsed = new ArrayList<>();
+        bus.subscribe(PolicyParsedEvent.class, parsed::add, DeliveryMode.CALLER_THREAD);
+        SettingsForm form = form(bus, new ArrayList<>());
+
+        // Straight out of the Rasa set_policy training corpus — audit D-03 measured that 0 of its
+        // 60 rows parse here, so this is what a player who improvises will actually type.
+        form.policyFieldForTest().setText("Auto-accept offers over 2000");
+        form.clickSetPolicyForTest();
+
+        assertTrue(parsed.isEmpty(), "nothing may be registered from input that did not parse");
+        String feedback = form.policyFeedbackForTest();
+        assertTrue(feedback.contains("Not understood"), feedback);
+        assertTrue(feedback.contains("fixed grammar"), "the player must be told it is a DSL: " + feedback);
+        assertTrue(feedback.contains("rounds_used"), "the grammar itself: " + feedback);
+        assertTrue(feedback.contains("auto accept if price &gt; 2200 for tankers"),
+                "a working example: " + feedback);
+        assertFalse(form.policyFieldForTest().getText().isEmpty(),
+                "a rejected policy keeps the text so it can be corrected, not retyped");
+    }
+
+    @Test
+    @Timeout(5)
+    void anEmptyPolicyFieldIsNeverASilentNoOp() {
+        EventBus bus = new EventBus();
+        List<PolicyParsedEvent> parsed = new ArrayList<>();
+        bus.subscribe(PolicyParsedEvent.class, parsed::add, DeliveryMode.CALLER_THREAD);
+        SettingsForm form = form(bus, new ArrayList<>());
+
+        form.policyFieldForTest().setText("   ");
+        form.clickSetPolicyForTest();
+
+        assertTrue(parsed.isEmpty());
+        assertTrue(form.policyFeedbackForTest().contains("Type a policy first"),
+                form.policyFeedbackForTest());
+    }
+
+    @Test
+    @Timeout(5)
+    void theOtherFourKnobsAreUnaffectedByAPolicySubmission() {
+        // A policy is an ACTION, not a knob: it must not ride the SettingsChangedEvent, and Apply
+        // must still publish exactly what the widgets say.
+        EventBus bus = new EventBus();
+        List<SettingsChangedEvent> settings = new ArrayList<>();
+        SettingsForm form = form(bus, settings);
+
+        form.policyFieldForTest().setText(PolicyParser.GRAMMAR_EXAMPLE);
+        form.clickSetPolicyForTest();
+
+        assertTrue(settings.isEmpty(), "setting a policy must not publish a SettingsChangedEvent");
+        form.clickApplyForTest();
+        assertEquals(1, settings.size());
     }
 
     @Test

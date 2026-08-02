@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
 
 import it.unige.portcommand.artifacts.PolicyRule;
 import it.unige.portcommand.artifacts.PolicyRule.PolicyAction;
+import it.unige.portcommand.assistant.RecommendationCandidate;
 import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.PolicyParsedEvent;
@@ -32,6 +33,25 @@ import it.unige.portcommand.util.EventBus;
  * </pre>
  */
 public final class PolicyParser {
+
+    /**
+     * The one-line shape, for the player (2026-07-28, C-01/D-02). Shown by the Settings field
+     * whenever a policy does not parse, so a rejected input is never a silent fail.
+     *
+     * <p>Deliberately terse and deliberately EXACT — this is a fixed grammar, not natural language,
+     * and saying so is the honest framing. Audit D-03 measured that the Rasa `set_policy` training
+     * corpus and this DSL are disjoint languages (0 of 60 corpus rows parse here), so a player who
+     * improvises will land outside it: the hint is what turns that from a dead end into a
+     * correction. Widening the DSL to meet the corpus is backlogged (D-03) — it needs a retrain and
+     * a re-gate of the F1, which a demo freeze does not get.
+     */
+    public static final String GRAMMAR_HINT =
+            "auto (accept | reject | counter +N%) if (price | duration | rounds_used) "
+                    + "(> | < | >= | <= | =) NUMBER [and ...] "
+                    + "[for (tankers | container_vessels | cargo_vessels | ferries | cruise_ships)]";
+
+    /** A policy that parses — the demo's own scripted sentence, and the example in the hint. */
+    public static final String GRAMMAR_EXAMPLE = "auto accept if price > 2200 for tankers";
 
     private static final Pattern TOP_LEVEL = Pattern.compile(
             "^auto\\s+(.+?)\\s+if\\s+(.+?)(?:\\s+for\\s+(\\S+))?$", Pattern.CASE_INSENSITIVE);
@@ -94,14 +114,39 @@ public final class PolicyParser {
         Predicate<WalkInDialogueSnapshot> predicate = condition.get();
 
         String vesselTypeWord = top.group(3);
+        String scope = null;
         if (vesselTypeWord != null) {
             Optional<String> canonical = canonicalVesselType(vesselTypeWord);
             if (canonical.isEmpty()) {
                 return Optional.empty();
             }
-            predicate = predicate.and(snap -> snap.vesselType().equals(canonical.get()));
+            scope = canonical.get();
+            String canonicalType = scope;
+            predicate = predicate.and(snap -> snap.vesselType().equals(canonicalType));
         }
-        return Optional.of(new PolicyRule(text, predicate, action.get()));
+        return Optional.of(new PolicyRule(text, predicate, action.get(),
+                describe(action.get(), top.group(2).trim(), scope)));
+    }
+
+    /**
+     * Renders what was UNDERSTOOD, from the parsed parts only (2026-07-28, C-01/D-02). Every piece
+     * here exists because it parsed: the action came out of {@link #parseAction}, the condition text
+     * is only reached once every {@code and}-separated clause matched {@link #CONDITION_CLAUSE}, and
+     * {@code scope} is the CANONICAL vessel type, not the plural the player typed. So an echo of
+     * this is evidence of the parse; an echo of {@code text} would only be evidence of typing.
+     */
+    private static String describe(PolicyAction action, String conditionText, String scope) {
+        String what = switch (action.kind()) {
+            case RecommendationCandidate.ACCEPT -> "accept the vessel's offer";
+            case RecommendationCandidate.REJECT_SILENT -> "reject silently";
+            case RecommendationCandidate.COUNTER ->
+                    String.format(Locale.ROOT, "counter at +%.0f%%", action.counterPct() * 100.0);
+            default -> action.kind();
+        };
+        return "Automatically " + what
+                + " when " + conditionText.replaceAll("(?i)\\s+and\\s+", " and ")
+                + (scope == null ? ", for any vessel type" : ", for " + scope + "s only")
+                + ".";
     }
 
     private static Optional<PolicyAction> parseAction(String actionText) {

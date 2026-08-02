@@ -3,10 +3,14 @@ package it.unige.portcommand.persistence;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 import it.unige.portcommand.agents.BaseVesselAgent;
 import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
+import it.unige.portcommand.artifacts.PolicyRule;
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
@@ -20,6 +24,7 @@ import it.unige.portcommand.harbourmaster.financial.IncomeRules;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
 import it.unige.portcommand.lifecycle.events.AutosaveRequestedEvent;
 import it.unige.portcommand.negotiation.RealNegotiationEngine;
+import it.unige.portcommand.nlp.PolicyParser;
 import it.unige.portcommand.ontology.Deal;
 import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.persistence.dto.VesselStateDTO;
@@ -180,6 +185,69 @@ class SaveLoadSessionIT {
      * publishes — here fired from the test thread ({@code CALLER_THREAD} subscription, so the
      * refresh is synchronous) against a freshly started game.
      */
+    /**
+     * Audit C-01/D-02, decision taken 2026-07-28 — the demo's own scripted policy sentence, end to
+     * end: typed → parsed → published → registered on the Assistant → persisted → still live after
+     * a load.
+     *
+     * <p>Every link existed before and the chain was <b>unreachable</b>, because nothing called
+     * {@code PolicyParser.parse(text, eventBus)} in production. DEMO_CHECKLIST Row 6 claimed this
+     * was "covered indirectly by {@code SaveLoadSessionIT} (policy triggers survive a save/load)" —
+     * it was not: before this test the string "polic" did not appear in this file at all. So the
+     * round-trip {@code GameState.policyTriggers} advertises had no test either.
+     *
+     * <p>Drives the real {@code PolicyParser} against the real bus so the Assistant's own
+     * {@code PolicyParseBehaviour} does the registering — the Settings field's exact code path,
+     * minus the Swing widget ({@code SettingsFormTest} covers that half headlessly).
+     */
+    @Test
+    void theScriptedDemoPolicyRegistersAndSurvivesASaveLoad() throws Exception {
+        boot = new JadeBootstrap();
+        GameSession session = new GameSession(boot,
+                new BootstrapConfig(TEST_PORT, false, "realtime", 300),
+                new SaveLoadManager(tempDir), new Leaderboard(tempDir.resolve("scores.json")));
+        session.startNewGame();
+
+        PolicyRegistryArtifact registry = boot.getPolicyRegistryArtifact();
+        assertTrue(registry.all().isEmpty(), "a fresh game starts with no policies");
+
+        // Exactly what DEMO_SCRIPT Beat 4 has the presenter type.
+        Optional<PolicyRule> parsed = new PolicyParser().parse(
+                PolicyParser.GRAMMAR_EXAMPLE, boot.getEventBus());
+        assertTrue(parsed.isPresent(), "the demo's scripted sentence must parse");
+
+        // PolicyParseBehaviour subscribes ASYNC, so wait for it rather than assuming.
+        assertTrue(waitUntil(() -> registry.all().size() == 1, 15_000),
+                "the Assistant's PolicyParseBehaviour must register the rule; registry="
+                        + registry.all());
+        assertEquals(PolicyParser.GRAMMAR_EXAMPLE, registry.all().get(0).trigger());
+
+        // It must actually MATCH the vessel it scopes to, and not the ones it does not — otherwise
+        // "registered" would be a claim about a lambda nobody ever calls.
+        assertTrue(registry.firstMatching(snapshot("tanker", 2_400.0)).isPresent(),
+                "a tanker asking 2400 is above the 2200 threshold");
+        assertTrue(registry.firstMatching(snapshot("tanker", 2_100.0)).isEmpty(),
+                "2100 is below the threshold — deferred to the player");
+        assertTrue(registry.firstMatching(snapshot("cargo_vessel", 2_400.0)).isEmpty(),
+                "the 'for tankers' scope must exclude other types");
+
+        Path saved = session.saveNow();
+        assertEquals(List.of(PolicyParser.GRAMMAR_EXAMPLE),
+                new SaveLoadManager(tempDir).load(saved).policyTriggers(),
+                "the trigger text is what the save carries — the predicate is a lambda");
+
+        session.loadGame(saved);
+        assertTrue(waitUntil(() -> boot.getPolicyRegistryArtifact().all().size() == 1, 15_000),
+                "restorePolicies must re-parse the persisted trigger into a live rule");
+        assertTrue(boot.getPolicyRegistryArtifact().firstMatching(snapshot("tanker", 2_400.0)).isPresent(),
+                "the RESTORED rule must be a working predicate, not just a remembered string");
+    }
+
+    private static WalkInDialogueSnapshot snapshot(String vesselType, double vesselAsk) {
+        VesselSpec spec = new VesselSpec("POL-1", vesselType, 9.0, 150.0, 30_000, "general_cargo", 0L);
+        return WalkInDialogueSnapshot.of("POL-1", spec, "berth_1", 6, vesselAsk, 0.0, 1, 0.0, false);
+    }
+
     @Test
     void guiReady_publishesLiveHudRefreshAtFreshBoot() throws Exception {
         boot = new JadeBootstrap();

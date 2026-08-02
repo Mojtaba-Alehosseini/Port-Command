@@ -13,15 +13,25 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
+import javax.swing.JTextField;
 
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
+import it.unige.portcommand.nlp.PolicyParser;
 import it.unige.portcommand.util.EventBus;
 
 /**
  * The settings form (task 21, planning/21 §21.1): the four user-editable knobs — difficulty,
  * real-seconds-per-game-day, autopilot, and LLM model — plus Reset / Apply / OK / Cancel.
  * Everything else in {@code defaults.json} stays fixed (not editable in v1).
+ *
+ * <p><b>Plus one action that is not a knob (2026-07-28, audit C-01/D-02): the autopilot policy
+ * field.</b> It does not ride the {@link SettingsChangedEvent} and is not undone by Cancel — it
+ * hands its text to {@code PolicyParser}, which publishes {@code PolicyParsedEvent} for the
+ * Assistant's already-subscribed {@code PolicyParseBehaviour} to register. It lives here because
+ * the demo script and the checklist both said "open Settings and type a policy", and because
+ * autopilot — the thing a policy modifies — is the checkbox directly above it. See
+ * {@link #submitPolicy()}.
  *
  * <p><b>A {@code JPanel}, not a {@code JDialog}, on purpose.</b> {@link SettingsDialog} wraps it in
  * a window; keeping the form itself a plain panel means it can be constructed and driven headless
@@ -46,6 +56,11 @@ final class SettingsForm extends JPanel {
     private static final String[] LLM_MODELS = {"microsoft/Phi-4-mini-instruct", "google/gemma-3-4b-it"};
 
     private final EventBus eventBus;
+    /** Stateless; constructed here rather than injected so no call site has to thread it through. */
+    private final transient PolicyParser policyParser = new PolicyParser();
+    private final JTextField policyField = new JTextField(28);
+    private final JButton policyButton = new JButton("Set policy");
+    private final JLabel policyFeedback = new JLabel(" ");
     private final JComboBox<String> difficultyCombo = new JComboBox<>(DIFFICULTIES);
     private final JSlider dayLengthSlider = new JSlider(DAY_MIN_SECONDS, DAY_MAX_SECONDS, DAY_MIN_SECONDS);
     private final JLabel dayLengthReadout = new JLabel();
@@ -98,11 +113,22 @@ final class SettingsForm extends JPanel {
         llmCombo.setSelectedItem(llmModel);
         llmCombo.setToolTipText("Consumed by the Flask LLM sidecar — takes effect on the next launch.");
 
+        policyField.setToolTipText("A fixed grammar, not free text: " + PolicyParser.GRAMMAR_HINT);
+        policyField.addActionListener(e -> submitPolicy()); // Enter submits
+        policyButton.addActionListener(e -> submitPolicy());
+        policyFeedback.setFont(policyFeedback.getFont().deriveFont(java.awt.Font.PLAIN));
+
+        JPanel policyRow = new JPanel(new java.awt.BorderLayout(6, 0));
+        policyRow.add(policyField, java.awt.BorderLayout.CENTER);
+        policyRow.add(policyButton, java.awt.BorderLayout.EAST);
+
         int row = 0;
         addRow(row++, "Difficulty:", difficultyCombo);
         addRow(row++, "Real seconds per game day:", dayLengthSlider);
         addRow(row++, "", dayLengthReadout);
         addRow(row++, "Autopilot:", autopilotCheck);
+        addRow(row++, "Autopilot policy:", policyRow);
+        addRow(row++, "", policyFeedback);
         addRow(row++, "LLM model:", llmCombo);
         addRow(row++, "", new JLabel("(LLM model takes effect on next launch)"));
 
@@ -129,6 +155,55 @@ final class SettingsForm extends JPanel {
         c.anchor = GridBagConstraints.EAST;
         c.insets = new Insets(12, 4, 0, 4);
         add(buttons, c);
+    }
+
+    /**
+     * The autopilot policy input (2026-07-28 — audit C-01/D-02, option (a)).
+     *
+     * <p>Before this, {@code PolicyParser.parse(text, eventBus)} — the method that publishes
+     * {@code PolicyParsedEvent} — had <b>zero production call sites</b>. The DSL, the event, the
+     * subscribing {@code PolicyParseBehaviour}, the registry and its save/load restore were all
+     * built and tested, and nothing in the shipped game could put a rule into them: DEMO_SCRIPT
+     * Beat 4 and DEMO_CHECKLIST Row 6 both said "open Settings, type a policy" and there was no
+     * field. This is that field, wired to the existing seam — no new mechanism.
+     *
+     * <p><b>Never a silent fail.</b> On success the feedback echoes the rule's
+     * {@code description} — built by the parser from the parsed action, condition and vessel-type
+     * scope, so it shows what was UNDERSTOOD rather than reading the player's own words back. On
+     * failure it shows the grammar and one working example, because {@code PolicyParser}'s
+     * language is a fixed DSL and a player who improvises needs to be told the shape (audit D-03:
+     * the Rasa training corpus and this DSL are disjoint languages). {@code PolicyParser.parse}
+     * also publishes its own {@code NotificationEvent} on both paths; this is the INLINE half, at
+     * the point of typing.
+     *
+     * <p>Applies immediately, not on Apply/OK — a policy is a discrete action with its own button,
+     * not one of the four knobs the {@code SettingsChangedEvent} carries. Cancel does not undo it,
+     * which the feedback says.
+     */
+    private void submitPolicy() {
+        String text = policyField.getText().trim();
+        if (text.isEmpty()) {
+            showPolicyHint("Type a policy first.");
+            return;
+        }
+        policyParser.parse(text, eventBus).ifPresentOrElse(rule -> {
+            policyFeedback.setForeground(new java.awt.Color(21, 101, 52));
+            policyFeedback.setText("<html><b>Policy set.</b> " + escape(rule.description())
+                    + " <i>(active now — Cancel will not undo it)</i></html>");
+            policyField.setText("");
+        }, () -> showPolicyHint("Not understood."));
+    }
+
+    private void showPolicyHint(String lead) {
+        policyFeedback.setForeground(new java.awt.Color(153, 27, 27));
+        policyFeedback.setText("<html><div style='width:420px'><b>" + escape(lead)
+                + "</b> Policies follow a fixed grammar:<br><tt>" + escape(PolicyParser.GRAMMAR_HINT)
+                + "</tt><br>Example: <tt>" + escape(PolicyParser.GRAMMAR_EXAMPLE)
+                + "</tt></div></html>");
+    }
+
+    private static String escape(String s) {
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private void addRow(int row, String label, Component control) {
@@ -221,5 +296,19 @@ final class SettingsForm extends JPanel {
      * publishing (a reset only takes effect once the player confirms with Apply/OK). */
     void resetToDefaultsForTest() {
         resetToDefaults();
+    }
+
+    JTextField policyFieldForTest() {
+        return policyField;
+    }
+
+    /** Drives the Set-policy button exactly as a click would. */
+    void clickSetPolicyForTest() {
+        policyButton.doClick();
+    }
+
+    /** The inline feedback line's current HTML (audit C-01/D-02: it must never be silent). */
+    String policyFeedbackForTest() {
+        return policyFeedback.getText();
     }
 }
