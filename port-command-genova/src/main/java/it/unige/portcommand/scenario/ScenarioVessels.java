@@ -42,11 +42,35 @@ import it.unige.portcommand.util.RandomSource;
  * nothing all game. R22–R24 and {@code CustomsClearedEvent} are exercised only by tests, which use
  * {@code hazmat_class_1}/{@code hazmat_class_3} — values the simulation never produces.
  *
- * <p>Turning it on is one map entry ({@code "tanker" -> "hazmat_class_3"}) and is NOT taken here:
- * it would start charging {@code ExpenseRules.customsClearance()} per scripted tanker and add a
- * comm-log leg to all three scenarios, i.e. it moves money and traffic during the demo freeze and
- * needs the §7.5 calibration re-checked. Filed for Moji's decision — see
- * {@code docs/audit/AUDIT_RESOLUTION.md} (D-04) and {@code POST_DEMO_BACKLOG.md}.
+ * <p><b>TAKEN 2026-07-28 (Moji's decision on the D-04 escalation): the tanker is now
+ * {@code hazmat_class_3}, and the customs leg is live.</b> What that actually turns on, measured
+ * rather than assumed:
+ * <ul>
+ *   <li><b>Exactly one vessel sends a customs REQUEST — but more than one carries the new cargo
+ *       class.</b> Stated precisely, because the first draft of this note got it wrong (adversarial
+ *       review, 2026-07-28): {@link #sampledWalkInSpec} and {@code GameStateBuilder.dockedVessel}
+ *       call {@link #cargoClassFor} too — only the DIMENSIONS come from
+ *       {@code vessel_templates.json} — so {@code busy_day}'s scripted WALK-IN tanker, and any
+ *       pre-docked or restored tanker, now carry {@code hazmat_class_3} in their
+ *       {@code VesselSpec} as well. What none of them do is trigger customs: {@code sendCustomsRequest}
+ *       has exactly one call site, inside the CONTRACTED grant (ADR-09 — a walk-in sends the
+ *       terminal and customs nothing). {@code contracts.json}'s two daily contracts are a
+ *       cargo_vessel and a ferry, and only {@code storm.json}'s ST-901 is a contracted tanker.
+ *       The cargo class is otherwise inert: berth compatibility keys on vessel TYPE (R5 via
+ *       {@code vessel_class_needs/2}), {@code ExpenseRules.marginalCost} takes a cargo class and
+ *       never reads it, and {@code IncomeRules.hazmatSurcharge} has no production call site. So the
+ *       observable change beyond storm is the literal string in a {@code BerthRequest}, a
+ *       {@code WalkInDialogueSnapshot} and the save DTO.</li>
+ *   <li><b>A deterministic CONFIRM, not a dice roll.</b> {@code HandleClearanceRequestBehaviour}
+ *       sends hazmat down {@code clearance_ok/2} (R21), which succeeds unless the
+ *       (type, cargo) pair is in the dynamic {@code blacklisted_combo/2} — and nothing asserts
+ *       into it. The RNG branch is the NON-hazmat one. So the storm's customs leg is reproducible.</li>
+ *   <li><b>€100 once</b>, guarded twice over: {@code HandleEmergencyBehaviour} consumes the
+ *       conversation from {@code pendingCustomsChecks} BEFORE publishing {@code CustomsClearedEvent},
+ *       and {@code LedgerCoordinator.chargedClearances} dedupes on vesselId.</li>
+ *   <li><b>The §7.5 calibration is untouched.</b> {@code DefaultDayCalibrationTest} models a default
+ *       day off {@code contracts.json}, which has no tanker and therefore no customs line.</li>
+ * </ul>
  */
 public final class ScenarioVessels {
 
@@ -61,7 +85,12 @@ public final class ScenarioVessels {
             "cruise_ship", new Dims(8.5, 280.0, 100_000));
 
     private static final Map<String, String> CARGO_CLASS = Map.of(
-            "tanker", "liquid_bulk",
+            // hazmat_class_3 (flammable liquids) — the ONE entry that makes the customs leg live.
+            // See the class javadoc: liquid_bulk is NOT hazmat under the shipped ontology, so with
+            // it here `is_hazmat/1` was false for every cargo class the simulation produces and the
+            // CustomsAgent received nothing all game. Class 3 rather than class 1 (explosives)
+            // because it is what a tanker actually carries.
+            "tanker", "hazmat_class_3",
             "container_vessel", "containerized_cargo",
             "cargo_vessel", "general_cargo",
             "ferry", "general_cargo",

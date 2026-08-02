@@ -13,6 +13,7 @@ import java.util.function.Predicate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.unige.portcommand.behaviours.coordination.DispatchPlayerCommandBehaviour;
+import it.unige.portcommand.behaviours.coordination.HandleEmergencyBehaviour;
 import it.unige.portcommand.behaviours.coordination.HandleWeatherAlertBehaviour;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
@@ -20,6 +21,7 @@ import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.CommLogEvent;
+import it.unige.portcommand.gui.events.CustomsClearedEvent;
 import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.EndOfDayEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
@@ -29,6 +31,7 @@ import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
 import it.unige.portcommand.gui.events.TugJobAwardedEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
+import it.unige.portcommand.harbourmaster.ExpenseEvent;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.harbourmaster.financial.ExpenseRules;
 import it.unige.portcommand.harbourmaster.financial.IncomeRules;
@@ -38,6 +41,7 @@ import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.prolog.PrologEngine;
 import it.unige.portcommand.prolog.PrologQueries;
 import it.unige.portcommand.prolog.TugBid;
+import it.unige.portcommand.scenario.ScenarioVessels;
 import it.unige.portcommand.util.Event;
 import it.unige.portcommand.util.EventBusProbe;
 import jade.lang.acl.ACLMessage;
@@ -1149,6 +1153,100 @@ class HarbourMasterAgentIT {
         assertEquals(ACLMessage.ACCEPT_PROPOSAL, award.getPerformative(), "setup: the lone bidder must win");
 
         return new InTransitFixture(hm, vessel, tug);
+    }
+
+    /**
+     * Audit D-04, decision taken 2026-07-28 — the customs leg is live for a scripted tanker.
+     *
+     * <p>Before the one-entry change in {@code ScenarioVessels.CARGO_CLASS} this whole leg was cold:
+     * {@code is_hazmat/1} is a ONE-HOP {@code subclass_of(C, hazmat_cargo)} test and the tanker's
+     * {@code liquid_bulk} edge goes to {@code cargo}, so no cargo class the simulation ever produced
+     * satisfied it. The CustomsAgent registered on the DF and received nothing all game; R22-R24 and
+     * {@code CustomsClearedEvent} were exercised only by tests using values the simulation never
+     * emitted. That directly undercut the Beat-7 answer "every customs flag goes through it".
+     *
+     * <p>This drives the REAL {@code ScenarioVessels.contractedSpec} and the REAL {@code CustomsAgent}
+     * — no hand-written cargo class, no probe standing in for the decision — so it fails the moment
+     * the map entry is reverted. It asserts the whole chain AND the money: the REQUEST carries the
+     * hazmat class, the agent CONFIRMs (hazmat takes {@code clearance_ok/2}, R21, which is
+     * deterministic — the RNG branch is the non-hazmat one), and the wallet is charged
+     * {@code customsClearance()} EXACTLY ONCE even when a duplicate CONFIRM arrives.
+     */
+    @Test
+    void scriptedHazmatTanker_clearsCustomsAndIsChargedExactlyOnce() throws Exception {
+        ServiceContract contract = new ServiceContract("ST-901-T", "T901T", "tanker", "berth_1", 9000.0, 10, 0L);
+        VesselSpec spec = ScenarioVessels.contractedSpec(contract, 0L);
+        assertTrue(PrologQueries.isHazmat(spec.cargoClass()),
+                "a scripted tanker's cargo class must be hazmat, or the whole customs leg is dead: "
+                        + spec.cargoClass());
+
+        HarbourMasterAgent hm = spawnHm(Map.of("ST-901-T", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe vessel = spawnProbe("t29_vessel", null);
+        // The REAL CustomsAgent, not a probe: the CONFIRM must be its decision, not the test's.
+        // args[0] is the RandomSource ITSELF (the agent takes its own sub-stream) — passing a
+        // forStream(...) here makes initArg's cast fail and the agent dies silently at setup.
+        boot.getSpawner().spawn("customs_agent", CustomsAgent.class,
+                new Object[] {boot.getRandomSource()});
+
+        vessel.outbox.put(contractRequest(hm, "ST-901-T", spec, "t29_vessel"));
+        assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "the berth grant still happens — the customs leg is fire-and-forget alongside it");
+
+        CommLogEvent request = awaitEvent(CommLogEvent.class,
+                e -> e.performative() == ACLMessage.REQUEST && e.receivers().contains("customs_agent"), 10_000);
+        assertNotNull(request, "a hazmat tanker must trigger a customs pre-clearance REQUEST");
+
+        CustomsClearedEvent cleared = awaitEvent(CustomsClearedEvent.class,
+                e -> "T901T".equals(e.vesselId()), 10_000);
+        assertNotNull(cleared, "the real CustomsAgent must CONFIRM a non-blacklisted hazmat combo");
+        assertTrue(cleared.clearanceRef().startsWith("CL-"), "clearance ref: " + cleared.clearanceRef());
+
+        // Exactly once, through BOTH guards, each driven at the level it actually protects
+        // (the first cut of this test drove only the second one and claimed both — adversarial
+        // review, 2026-07-28):
+        //
+        //  1. A genuine duplicate CONFIRM on the wire, i.e. a second ACL on the same
+        //     "cust-<vesselId>" conversation. HandleEmergencyBehaviour consumed that conversation
+        //     from pendingCustomsChecks BEFORE it published, so this one finds nothing and is
+        //     dropped as "untracked" — no second CustomsClearedEvent is ever published.
+        Probe replay = spawnProbe("t29_replay", null);
+        ACLMessage duplicateConfirm = MessageFactory.create(ACLMessage.CONFIRM);
+        duplicateConfirm.addReceiver(hm.getAID());
+        duplicateConfirm.setConversationId("cust-T901T");
+        duplicateConfirm.setProtocol(HandleEmergencyBehaviour.CUSTOMS_CLEARANCE_PROTOCOL);
+        duplicateConfirm.setContent(TerminalJson.write(Map.of("ref", cleared.clearanceRef())));
+        replay.outbox.put(duplicateConfirm);
+
+        //  2. A duplicate EVENT straight onto the bus, which bypasses the behaviour entirely and so
+        //     is the only thing that reaches LedgerCoordinator.chargedClearances.
+        hm.eventBus().publish(new CustomsClearedEvent("T901T", cleared.clearanceRef(), 0L));
+
+        List<ExpenseEvent> customsCharges = waitForCustomsCharges(hm, 1);
+        assertEquals(1, customsCharges.size(),
+                "exactly one customs charge, duplicate CONFIRM and duplicate event included: "
+                        + customsCharges);
+        assertEquals(ExpenseRules.customsClearance(), customsCharges.get(0).amount(), 1e-9);
+        assertEquals("T901T", customsCharges.get(0).vesselId());
+    }
+
+    /** Bounded poll for the customs expense lines (no untimed waits — design rule 5). */
+    private static List<ExpenseEvent> waitForCustomsCharges(HarbourMasterAgent hm, int atLeast)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + 10_000L * 1_000_000L;
+        List<ExpenseEvent> found = List.of();
+        while (System.nanoTime() < deadline) {
+            found = hm.walletLedger().expenseHistory().stream()
+                    .filter(e -> ExpenseRules.SOURCE_CUSTOMS.equals(e.source()))
+                    .toList();
+            if (found.size() >= atLeast) {
+                Thread.sleep(200); // let a second (duplicate) charge land if the guard were broken
+                return hm.walletLedger().expenseHistory().stream()
+                        .filter(e -> ExpenseRules.SOURCE_CUSTOMS.equals(e.source()))
+                        .toList();
+            }
+            Thread.sleep(50);
+        }
+        return found;
     }
 
     private HarbourMasterAgent spawnHm(Map<String, ServiceContract> contracts, long realSecondsPerGameDay)

@@ -66,8 +66,22 @@ class DefaultDayCalibrationTest {
      * The default day. Tug counts are PROJECT_DEFINITION §5.2's canonical outcomes — tanker 2,
      * container 2, cargo 1, cruise 2, ferry 0 (own propulsion) — the same table
      * {@code ExpenseRulesTest.marginalCostUsesTheCanonicalTugCountPerType} pins through the
-     * marginal-cost formula. Contracted fees/types are the real {@code contracts.json}: C001 a
-     * tanker at berth_1 for €5200, F001 a ferry at berth_4 for €1800.
+     * marginal-cost formula. Contracted FEES are the real {@code contracts.json}: €5200 and €1800.
+     *
+     * <p><b>The contracted TYPES are not</b> (corrected 2026-07-28 while checking that this
+     * calibration still read true after the D-04 customs decision). This javadoc used to say "C001 a
+     * tanker at berth_1"; {@code contracts.json} says C001 is a <b>cargo_vessel</b>. The mix models
+     * the demo transcript's Day 1, which is a documented KNOB — "modelled on the demo transcript's
+     * Day 1 and the real {@code contracts.json}" — so a modelled tanker is a legitimate knob choice;
+     * claiming it came from {@code contracts.json} was not. The pinned figures below are unchanged:
+     * they are what this mix arithmetically produces, and re-typing the mix to match
+     * {@code contracts.json} would be a recalibration, not a correction.
+     *
+     * <p><b>Why this suddenly matters:</b> since 2026-07-28 a contracted TANKER is hazmat and pulls
+     * a €100 customs clearance. This model has no customs line and needs none — the real
+     * {@code contracts.json} has no tanker, so a real default day fires no customs REQUEST at all.
+     * The §7.5 band and the recorded landing are therefore untouched by that change. If a tanker is
+     * ever added to {@code contracts.json}, this model gains a customs line and the landing moves.
      *
      * <p>A withdrawing walk-in earns nothing and consumes nothing — it withdraws during
      * negotiation, before any tug is dispatched. It is in the mix because a day where every vessel
