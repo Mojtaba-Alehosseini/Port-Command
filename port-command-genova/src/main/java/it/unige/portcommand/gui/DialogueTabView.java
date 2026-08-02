@@ -214,7 +214,7 @@ final class DialogueTabView extends JPanel {
     private void handleResult(String typingVesselId, PipelineResult result) {
         switch (result) {
             case PipelineResult.Routed routed -> dispatchRouted(typingVesselId, routed);
-            case PipelineResult.NeedsClarification nc -> showClarification(nc.buttons());
+            case PipelineResult.NeedsClarification nc -> showClarification(nc.buttons(), nc.message());
             case PipelineResult.Error e -> appendSystem("I couldn't parse that.");
         }
     }
@@ -384,12 +384,17 @@ final class DialogueTabView extends JPanel {
         };
     }
 
-    private void showClarification(List<ButtonOption> options) {
+    private void showClarification(List<ButtonOption> options, String message) {
         // The buttons are always visible on an open tab (see refresh()); what a low-confidence
         // parse adds is FEEDBACK — the play-test's "I wrote something and it doesn't reply"
         // was this branch silently doing nothing visible. The options parameter is kept as the
         // seam for a future context-aware button set (flagged in ClarificationButtons' javadoc).
-        appendSystem("I didn't get that — use the buttons below, or try 'how about 6500 for 10 hours'.");
+        //
+        // A SPECIFIC message wins over the generic line (2026-07-28, D-05's cross-tab guard):
+        // there, the pipeline understood the sentence perfectly and declined it on purpose, so
+        // "I didn't get that" would be an outright lie about what happened.
+        appendSystem(message != null && !message.isBlank() ? message
+                : "I didn't get that — use the buttons below, or try 'how about 6500 for 10 hours'.");
     }
 
     private void onClarificationClick(ButtonOption option) {

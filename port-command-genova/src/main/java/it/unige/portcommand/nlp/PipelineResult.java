@@ -27,9 +27,22 @@ public sealed interface PipelineResult {
         }
     }
 
-    /** The turn was too ambiguous (low confidence, DCG miss + Rasa miss/timeout, or a
-     * structural intent the DCG failed to parse); offer the fixed fallback buttons. */
-    record NeedsClarification(List<ButtonOption> buttons) implements PipelineResult {
+    /**
+     * The turn was too ambiguous (low confidence, DCG miss + Rasa miss/timeout, or a
+     * structural intent the DCG failed to parse); offer the fixed fallback buttons.
+     *
+     * @param message a specific reason to show INSTEAD of the generic "I didn't get that" line, or
+     *                {@code null} for the generic one. Added 2026-07-28 for the D-05 vocative guard,
+     *                which must name both vessels — "I didn't get that" would be actively
+     *                misleading there, because the pipeline understood the sentence perfectly and
+     *                declined it on purpose. Mirrors {@link Routed}'s optional-addressee shape.
+     */
+    record NeedsClarification(List<ButtonOption> buttons, String message) implements PipelineResult {
+
+        /** The generic clarification (no specific reason). */
+        public NeedsClarification(List<ButtonOption> buttons) {
+            this(buttons, null);
+        }
     }
 
     /** A service-layer failure (not a timeout — those resolve to {@code NeedsClarification})

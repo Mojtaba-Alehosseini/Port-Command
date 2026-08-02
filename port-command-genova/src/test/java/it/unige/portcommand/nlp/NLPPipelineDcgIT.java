@@ -27,6 +27,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -270,6 +271,112 @@ class NLPPipelineDcgIT {
         assertEquals(ACLMessage.ACCEPT_PROPOSAL, routed.msg().getPerformative());
         assertEquals("C001", routed.addressee(),
                 "the resolved addressee is surfaced so the caller can route between concurrent walk-ins");
+    }
+
+    // ===== Audit D-05: a vocative must not carry ANOTHER dialogue's terms (guard, 2026-07-28) =====
+    //
+    // buildCtx focuses the context on the tab being typed into, so ctx.standingOffer is THAT
+    // vessel's. vocative_move parses its inner move under that same context and then re-tags the
+    // frame with a different vessel. For context-free inner moves that is harmless; for the
+    // context-DEPENDENT blocks it silently transplanted terms — and the resulting PlayerCommandEvent
+    // was binding, money-carrying, and had no visible symptom. m2ctx() IS the audit's fixture:
+    // Genoa Star (C001) focused having asked 2000 for 5h at berth_3, Carthago (T001) the other tab.
+
+    /** The audit's exact reproduction. Pre-guard this routed a binding €2,200-for-5h-at-berth_3
+     * PROPOSE to Carthago — a price it never discussed, an duration and a berth borrowed wholesale
+     * from Genoa Star's negotiation. */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void aCrossTabEllipsisIsDeclinedAndNamesBothVessels() {
+        PipelineResult result = pipelineWithRasaDown.processChatInput("Carthago: make it 2200", m2ctx()).join();
+
+        PipelineResult.NeedsClarification nc = assertInstanceOf(PipelineResult.NeedsClarification.class,
+                result, "an ellipsis addressed to another tab must NOT route — it would borrow terms");
+        assertNotNull(nc.message(), "the guard must say why; the generic line would be a lie here");
+        assertTrue(nc.message().contains("Carthago"), "names the target: " + nc.message());
+        assertTrue(nc.message().contains("Genoa Star"), "names where the terms would come from: " + nc.message());
+    }
+
+    /** The delta block, same shape: "200 more" computed its base from GENOA STAR's negotiation.
+     * (Under {@code m2ctx()} that base is the PLAYER's last bid, 1500 — {@code reference_offer}
+     * prefers it over the vessel's ask — so the pre-guard frame carried €1700, not €2200. The
+     * number does not matter to the defect; whose negotiation it came from does.) */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void aCrossTabDeltaIsDeclined() {
+        PipelineResult result = pipelineWithRasaDown.processChatInput("Carthago: 200 more", m2ctx()).join();
+
+        assertInstanceOf(PipelineResult.NeedsClarification.class, result,
+                "a delta addressed to another tab computes from the wrong reference offer");
+    }
+
+    /**
+     * THE OTHER DIRECTION, and the reason this is a narrow guard rather than a ban on cross-tab
+     * vocatives: an utterance that carries all its own terms borrows nothing, so it still routes.
+     * This is the workaround the audit told the presenter to use, and it must keep working.
+     */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void aFullySpecifiedCrossTabVocativeStillRoutes() {
+        PipelineResult result = pipelineWithRasaDown
+                .processChatInput("Carthago: I will give you 2200 for 8 hours at berth 2", m2ctx()).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result,
+                "every term is in the sentence — nothing is borrowed, so this is safe to route");
+        assertEquals("T001", routed.addressee());
+        assertEquals(ACLMessage.PROPOSE, routed.msg().getPerformative());
+        assertTrue(routed.msg().getContent().contains("2200"), routed.msg().getContent());
+        assertTrue(routed.msg().getContent().contains("berth_2"),
+                "the berth the player TYPED, not the focused tab's: " + routed.msg().getContent());
+    }
+
+    /** A context-free inner move (accept) carries no slots, so it cannot transplant any. */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void aCrossTabAcceptStillRoutesBecauseItCarriesNoTerms() {
+        PipelineResult result = pipelineWithRasaDown.processChatInput("Carthago: deal", m2ctx()).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result,
+                "an acceptance has no price/hours/berth to borrow");
+        assertEquals("T001", routed.addressee());
+        assertEquals(ACLMessage.ACCEPT_PROPOSAL, routed.msg().getPerformative());
+    }
+
+    /**
+     * The false-positive class the first cut of this guard actually had (found by the adversarial
+     * review, 2026-07-28). An ANAPHORIC accept/reject carries no money, duration or berth — there is
+     * nothing to transplant — but it parses only WITH a standing offer, because
+     * {@code anaphora_move}'s pronoun clauses require {@code S \= standing(none,none)}. So the
+     * probe's second parse failed, and the guard declined a perfectly safe move while telling the
+     * player to "say it in full … (price, hours and berth)" for a sentence that has none of them.
+     * These routed before the guard existed and must keep routing.
+     */
+    @ParameterizedTest(name = "cross-tab anaphoric [{0}] still routes")
+    @ValueSource(strings = {"Carthago: accept it", "Carthago: reject it"})
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void aCrossTabAnaphoricAcceptOrRejectStillRoutes(String utterance) {
+        PipelineResult result = pipelineWithRasaDown.processChatInput(utterance, m2ctx()).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result,
+                "no price/hours/berth in the frame means nothing could be borrowed: " + utterance);
+        assertEquals("T001", routed.addressee());
+        String content = routed.msg().getContent();
+        assertFalse(content.contains("2000") || content.contains("1500") || content.contains("berth_3"),
+                "and it must not have picked up Genoa Star's terms either: " + content);
+    }
+
+    /** Non-vacuity: the SAME ellipsis aimed at the tab it was typed into is the ordinary case and
+     * must still complete from context. Without this the guard could pass by breaking ellipsis. */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void anEllipsisAddressedToItsOwnTabIsUnaffected() {
+        PipelineResult result = pipelineWithRasaDown.processChatInput("Genoa Star: make it 2200", m2ctx()).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result,
+                "same-tab vocative + ellipsis is exactly what the context is FOR");
+        assertEquals("C001", routed.addressee());
+        assertTrue(routed.msg().getContent().contains("berth_3"),
+                "it still completes from the focused standing offer: " + routed.msg().getContent());
     }
 
     @Test

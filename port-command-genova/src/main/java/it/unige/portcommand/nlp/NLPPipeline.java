@@ -79,7 +79,7 @@ public final class NLPPipeline {
 
             Optional<Frame> frame = dcgParser.parse(text, ctx);
             if (frame.isPresent()) {
-                return routeFrame(frame.get(), ctx);
+                return routeFrame(frame.get(), ctx, text);
             }
 
             Optional<RasaParseResult> parsed = callRasaWithTimeout(text);
@@ -97,7 +97,7 @@ public final class NLPPipeline {
      * neither is addressed or focused. A command / constraint / query is not tied to one dialogue. */
     private static final Set<String> PER_DIALOGUE_MOVES = Set.of("propose", "counter", "accept", "reject");
 
-    private PipelineResult routeFrame(Frame frame, DialogueCtx ctx) {
+    private PipelineResult routeFrame(Frame frame, DialogueCtx ctx, String text) {
         if (!frameValidator.test(frame)) {
             return clarification();
         }
@@ -112,8 +112,96 @@ public final class NLPPipeline {
                 && PER_DIALOGUE_MOVES.contains(frame.move())) {
             return clarification();
         }
+        PipelineResult crossTalk = crossTabContextGuard(frame, ctx, text, addressee);
+        if (crossTalk != null) {
+            return crossTalk;
+        }
         ACLMessage msg = FrameToAcl.build(frame, null, ctx.activeNegotiationId());
         return new PipelineResult.Routed(msg, addressee == null ? null : String.valueOf(addressee));
+    }
+
+    /**
+     * Audit D-05 — a vocative must not carry ANOTHER dialogue's terms (2026-07-28).
+     *
+     * <p>{@code NegotiationTabRegistry.buildCtx} focuses the context on the tab whose Send button
+     * fired, so {@code ctx.standingOffer} belongs to THAT vessel. {@code vocative_move} then parses
+     * its inner move under that same context and re-tags the frame with a DIFFERENT vessel via
+     * {@code add_addressee}. For context-free inner moves (accept / reject / an explicit propose)
+     * that is harmless — they carry no completed slots. For the context-DEPENDENT blocks it
+     * silently transplants terms: typing {@code Carthago: make it 2200} in Genoa Star's tab sent
+     * Carthago a binding €2,200-for-5h-at-berth_3 proposal it had never discussed, and
+     * {@code Carthago: 200 more} computed the delta from Genoa Star's number. No golden and no
+     * PLUnit case combines a vocative with ellipsis or delta, which is why 16-M2's review could not
+     * see it.
+     *
+     * <p><b>This is a routing guard, NOT the two-step re-parse the audit proposed.</b> It does not
+     * re-focus the context and re-complete the terms against the resolved vessel — that would touch
+     * the DCG and the goldens' semantics. It only detects the unsafe shape and declines it. The
+     * detector is a second parse of the SAME text against a context that is identical except it has
+     * nothing to complete FROM: same roster (so the vocative still resolves), but no standing offer
+     * and no last-mentioned berth. If the utterance still parses to the same move and the same
+     * terms, every term was explicit in the sentence and the move is safe to route across tabs. If
+     * it does not, the original frame borrowed at least one term from the focused dialogue, and
+     * that is exactly the D-05 shape.
+     *
+     * <p>Cost is one extra DCG goal, and only on a cross-tab vocative — a rare turn. Returns
+     * {@code null} when the turn is fine.
+     */
+    private PipelineResult crossTabContextGuard(Frame frame, DialogueCtx ctx, String text, Object addressee) {
+        if (addressee == null || frame.move() == null || !PER_DIALOGUE_MOVES.contains(frame.move())) {
+            return null; // not a binding per-dialogue move, or not addressed elsewhere
+        }
+        String target = String.valueOf(addressee);
+        if (target.equals(ctx.activeNegotiationId())) {
+            return null; // addressed to the tab it was typed into — the ordinary case
+        }
+        if (frame.element("money") == null && frame.element("duration") == null
+                && frame.element("berth") == null) {
+            // Nothing to transplant, so nothing to guard. This early return is load-bearing, not an
+            // optimisation (adversarial review, 2026-07-28): the probe below DECLINES whenever the
+            // second parse fails, and a cross-tab anaphoric accept/reject — "Carthago: accept it" —
+            // parses only WITH a standing offer, because anaphora_move's pronoun clauses require
+            // `S \= standing(none,none)`. Without this check the guard declined a move that carries
+            // no price, hours or berth at all, and told the player to "say it in full … (price,
+            // hours and berth)" for a sentence that has none. Those routed before the guard existed
+            // and must keep routing.
+            return null;
+        }
+        DialogueCtx nothingToBorrow = new DialogueCtx(
+                ctx.activeNegotiationId(), DialogueCtx.StandingOffer.NONE, ctx.roster(), null);
+        Optional<Frame> explicit = dcgParser.parse(text, nothingToBorrow);
+        if (explicit.isPresent() && sameBindingTerms(frame, explicit.get())) {
+            return null; // fully specified in the sentence itself — allowed across tabs
+        }
+        String from = displayName(ctx, ctx.activeNegotiationId());
+        String to = displayName(ctx, target);
+        log.info("cross-tab vocative declined: terms would come from {} but the move is addressed to {}",
+                from, to);
+        return new PipelineResult.NeedsClarification(ClarificationButtons.defaultOptions(),
+                "That was addressed to " + to + ", but it leaves out terms I would have to take from "
+                        + from + "'s offer — and those are different negotiations. Say it in full to "
+                        + to + " (price, hours and berth), or switch to " + to + "'s tab first.");
+    }
+
+    /** Same move and same binding slots — i.e. the second parse borrowed nothing. */
+    private static boolean sameBindingTerms(Frame withContext, Frame withoutContext) {
+        return Objects.equals(withContext.move(), withoutContext.move())
+                && Objects.equals(withContext.element("money"), withoutContext.element("money"))
+                && Objects.equals(withContext.element("duration"), withoutContext.element("duration"))
+                && Objects.equals(withContext.element("berth"), withoutContext.element("berth"));
+    }
+
+    /** The roster's display name for a vessel id, falling back to the id itself. */
+    private static String displayName(DialogueCtx ctx, String vesselId) {
+        if (vesselId == null) {
+            return "the current tab";
+        }
+        return ctx.roster().stream()
+                .filter(r -> vesselId.equals(r.id()))
+                .map(DialogueCtx.RosterEntry::vesselName)
+                .filter(n -> n != null && !n.isBlank())
+                .findFirst()
+                .orElse(vesselId);
     }
 
     /** Timeout -&gt; {@link Optional#empty()}, no exception propagated (planning/14 §Step 3).
