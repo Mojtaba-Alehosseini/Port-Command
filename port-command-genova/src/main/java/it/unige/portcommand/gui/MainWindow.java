@@ -2,6 +2,8 @@ package it.unige.portcommand.gui;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.GraphicsEnvironment;
+import java.awt.Rectangle;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
@@ -74,6 +76,10 @@ public final class MainWindow extends JFrame {
 
     private static final int DEFAULT_WIDTH = 1280;
     private static final int DEFAULT_HEIGHT = 800;
+
+    /** Below this the three-panel layout stops being usable; the clamp floors at it. */
+    private static final int MIN_WIDTH = 800;
+    private static final int MIN_HEIGHT = 600;
 
     /** Minimum widths (px) that stop the map (#8: the 1280×800 "map sliver" report) or either side
      * panel from being crushed to nothing by a splitter drag. */
@@ -223,9 +229,42 @@ public final class MainWindow extends JFrame {
                 onWindowShown();
             }
         });
-        setMinimumSize(new Dimension(800, 600));
-        setSize(DEFAULT_WIDTH, DEFAULT_HEIGHT);
-        setLocationRelativeTo(null);
+        setMinimumSize(new Dimension(MIN_WIDTH, MIN_HEIGHT));
+        // Clamp to the USABLE desktop, not the raw screen (2026-08-10, audit P1-13 / demo-laptop
+        // risk C-19). Two distinct failures, and 125% vs 150% scaling hits a different one each:
+        // at 150% the desktop reports 1280x720, so a flat setSize(1280, 800) simply does not FIT;
+        // at 125% it reports 1536x864 and 800 does fit, but setLocationRelativeTo(null) centres on
+        // the FULL screen rect, so the window straddles the ~48px taskbar and the NotificationStrip
+        // along its bottom edge lands behind it. Clamping without re-centring would fix only the
+        // first, which is why this computes both. getMaximumWindowBounds()
+        // already excludes the taskbar. It throws under -Djava.awt.headless=true (both Gradle test
+        // lanes set it), so the call stays HERE and only the arithmetic is extracted, mirroring
+        // makePopupsHeavyweight/MenuPopupWeightTest.
+        setBounds(clampToUsableBounds(
+                GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds(),
+                DEFAULT_WIDTH, DEFAULT_HEIGHT, MIN_WIDTH, MIN_HEIGHT));
+    }
+
+    /**
+     * The preferred window rectangle for a desktop whose usable area is {@code usable}: the
+     * preferred size capped to what actually fits, floored at the minimum, then centred WITHIN
+     * {@code usable} (never within the full screen — see the call site).
+     *
+     * <p>The minimum deliberately wins over the cap on a desktop too small for it: a window
+     * smaller than {@link #MIN_WIDTH}x{@link #MIN_HEIGHT} crushes the three-panel layout into
+     * unusability, so overflowing a very small screen is the better failure — the user can still
+     * move the window, and {@code setMinimumSize} would override us anyway.
+     *
+     * <p>Pure arithmetic on a caller-supplied rectangle so it is unit-testable headless;
+     * {@code WindowSizingTest} pins it.
+     */
+    static Rectangle clampToUsableBounds(Rectangle usable, int preferredWidth, int preferredHeight,
+                                         int minWidth, int minHeight) {
+        int width = Math.max(minWidth, Math.min(preferredWidth, usable.width));
+        int height = Math.max(minHeight, Math.min(preferredHeight, usable.height));
+        int x = usable.x + Math.max(0, (usable.width - width) / 2);
+        int y = usable.y + Math.max(0, (usable.height - height) / 2);
+        return new Rectangle(x, y, width, height);
     }
 
     private void layOutPanels(EventBus eventBus, PortStateArtifact portStateArtifact,
