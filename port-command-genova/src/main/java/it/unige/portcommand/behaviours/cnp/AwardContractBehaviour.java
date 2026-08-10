@@ -35,6 +35,11 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(AwardContractBehaviour.class);
 
+    /** No tug answered the CFP at all. */
+    static final String NO_BIDS = "no_bids";
+    /** Tugs answered, but Prolog's R13 selected none of them (audit P1-5). */
+    static final String NO_WINNING_BID = "no_winning_bid";
+
     private final CnpRequest req;
     private final List<ACLMessage> proposals;
 
@@ -61,7 +66,7 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
             bidsByTugId.put(tugId, p);
         }
         if (bids.isEmpty()) {
-            holdVessel(hm, "no_bids");
+            holdVessel(hm, NO_BIDS);
             // Terminal path (the retry, if scheduled, re-enters through the queue) — release
             // the serialized-CNP queue (B2).
             hm.cnpCoordinator().completed();
@@ -72,6 +77,26 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
         bids.forEach(b -> costByTugId.put(b.tugId(), b.cost()));
 
         List<String> winners = PrologQueries.selectBestBids(bids, req.tugsRequired());
+        if (winners.isEmpty()) {
+            // Audit P1-5. Without this the loop below REJECTs every bidder and the vessel is
+            // still set withTugs([]).withStage(IN_TRANSIT) — under way with no escort at all, no
+            // hold, no retry, and the retry counter cleared. Route it to the same hold+retry the
+            // zero-bid branch above uses instead.
+            //
+            // Honest reachability note: this is a DEFENSIVE guard, not a live bug. CnpRequest
+            // validates tugsRequired >= 1, and R13 (best_n_bids) returns at least one winner for
+            // any non-empty, well-formed bid list, so reaching here needs the Prolog goal itself
+            // to fail — e.g. a non-finite cost rendering as an unbound variable in the term.
+            // PrologQueries.selectBestBids collapses exactly that failure to an empty list with no
+            // log line, which is why it deserves a guard rather than a comment. The genuinely
+            // reachable sibling — winners.size() < tugsRequired, an under-strength escort — is
+            // backlog A-08 and is deliberately NOT changed here.
+            log.warn("CNP for {}: {} bid(s) collected but Prolog selected no winner — holding "
+                    + "rather than sending the vessel out unescorted", req.vesselId(), bids.size());
+            holdVessel(hm, NO_WINNING_BID);
+            hm.cnpCoordinator().completed();
+            return;
+        }
         for (Map.Entry<String, ACLMessage> entry : bidsByTugId.entrySet()) {
             ACLMessage bid = entry.getValue();
             AID tugAid = bid.getSender();
@@ -111,7 +136,11 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
         inform.setContent(TerminalJson.write(Map.of("event", "tug_hold", "reason", reason)));
         hm.sendLogged(inform);
         log.info("CNP for {} held: {}", req.vesselId(), reason);
-        if ("no_bids".equals(reason)) {
+        // Both no-escort-available outcomes retry: no tug answered, or tugs answered but none was
+        // selectable. The reasons stay DISTINCT on the wire (audit P1-5) — saying "no_bids" when
+        // bids were collected would misreport the situation in the vessel's INFORM and the comm
+        // log — but they warrant the same bounded recovery.
+        if (NO_BIDS.equals(reason) || NO_WINNING_BID.equals(reason)) {
             scheduleRetryIfWithinCap(hm);
         }
     }
