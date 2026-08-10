@@ -91,9 +91,10 @@ class SaveLoadMidTransitIT {
         // runs BOTH background streams, and either can transiently refuse a manual save at this
         // instant — a task-23 daily contracted arrival mid-grant, or a task-24 Poisson walk-in with
         // an open, unanswered negotiation ("Finish the current negotiation with WALKIN-1 before
-        // saving", seen once in a full-suite run). Both clear on their own in well under a sim
-        // minute, so a bounded retry is the deterministic fix; a single-shot save here is a race.
-        Path saved = saveNowRetrying(session, 15_000);
+        // saving"). The contracted grant clears in well under a sim minute; the walk-in does NOT —
+        // nothing here answers it, so it blocks until its patience runs out. See
+        // WALK_IN_PATIENCE_HEADROOM_MS for the arithmetic and why the old 15 s budget was wrong.
+        Path saved = saveNowRetrying(session, WALK_IN_PATIENCE_HEADROOM_MS);
         GameState savedState = new SaveLoadManager(tempDir).load(saved);
         double walletAtSave = savedState.wallet();
         assertEquals(1, savedState.agents().activeVessels().size(), "C001 is in the save");
@@ -141,7 +142,7 @@ class SaveLoadMidTransitIT {
                 + ", tracking: " + hm.activeVessels().get("C001"));
         // Task 23: the daily contracted stream is live background traffic now — a D1 arrival
         // can be mid-grant at this instant, transiently refusing the manual save. Retry.
-        Path dockedSave = saveNowRetrying(session, 15_000);
+        Path dockedSave = saveNowRetrying(session, WALK_IN_PATIENCE_HEADROOM_MS);
         VesselStateDTO dockedDto = new SaveLoadManager(tempDir).load(dockedSave)
                 .agents().activeVessels().stream()
                 .filter(v -> "C001".equals(v.id()))
@@ -212,12 +213,26 @@ class SaveLoadMidTransitIT {
                         + hm.walletLedger().balance());
     }
 
-    /** Bounded retry past a transient {@link SaveNotAllowedException}. Two background streams can
+    /**
+     * Bounded retry past a transient {@link SaveNotAllowedException}. Two background streams can
      * refuse a manual save at any instant: a task-23 daily contracted arrival mid-grant, and a
-     * task-24 Poisson walk-in holding an open negotiation. Both resolve themselves within a sim
-     * minute (well under a wall second at the test's 300 s/game-day rate), so the refusal is
-     * transient by construction — but a single-shot save is still a race, which is why both saves
-     * in this test go through here. */
+     * task-24 Poisson walk-in holding an open negotiation.
+     *
+     * <p><b>Budget corrected 2026-08-10.</b> This said both refusals "resolve themselves within a
+     * sim minute (well under a wall second)" and allowed 15 s. That is true of the contracted
+     * grant and FALSE of the walk-in: nothing in this test answers a Poisson walk-in, so its
+     * negotiation stays open for its full patience — 140-480 sim-MINUTES per
+     * {@code vessel_templates.json}, which at this test's 300 s/game-day is 29-100 wall-seconds,
+     * six times the old budget at the low end. The test passed only while no walk-in happened to
+     * spawn in the window; once one did it failed on a clean tree as readily as on a modified one
+     * (reproduced both ways, 2026-08-10). {@link #WALK_IN_PATIENCE_HEADROOM_MS} covers the top of
+     * that range with margin. The wait stays bounded with an explicit deadline (design rule 5).
+     */
+    /** Long enough to outlast an unanswered walk-in's full patience at this test's pacing:
+     * the widest template range is 480 sim-minutes, which is 100 wall-seconds at 300 s/game-day.
+     * Only ever waited out when a Poisson walk-in actually spawns into the save window. */
+    private static final long WALK_IN_PATIENCE_HEADROOM_MS = 150_000L;
+
     private Path saveNowRetrying(GameSession session, long timeoutMs) throws Exception {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (true) {
