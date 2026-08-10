@@ -15,6 +15,7 @@ import it.unige.portcommand.persistence.GameSession;
 import it.unige.portcommand.persistence.GameState;
 import it.unige.portcommand.persistence.SaveLoadManager;
 import it.unige.portcommand.persistence.SaveNotAllowedException;
+import it.unige.portcommand.persistence.events.GameLoadedEvent;
 import it.unige.portcommand.util.Event;
 import it.unige.portcommand.util.EventBusProbe;
 import jade.lang.acl.ACLMessage;
@@ -104,7 +105,6 @@ class ScenarioSessionIT {
 
         // Reload: the engine re-arms from firedEventIds — nothing replays.
         session.loadGame(saved);
-        int loadMarker = EventBusProbe.published(boot.getEventBus()).size();
         HarbourMasterAgent hmReloaded = (HarbourMasterAgent) session.directory()
                 .byName("harbour_master").orElseThrow();
         assertTrue(!hmReloaded.scriptedWaveActive(),
@@ -112,13 +112,11 @@ class ScenarioSessionIT {
         // Grace window measured in SIM PROGRESS, not wall sleep: wait until the reloaded
         // world has visibly ticked well past every tutorial event time — if the script were
         // going to replay, it would have by then.
-        assertTrue(waitUntil(() -> EventBusProbe.published(boot.getEventBus()).stream()
-                        .skip(loadMarker)
+        assertTrue(waitUntil(() -> publishedAfterLoad().stream()
                         .filter(it.unige.portcommand.gui.events.SimClockTickEvent.class::isInstance)
                         .count() >= 20, 15_000),
                 "the reloaded world is running (sim ticks observed)");
-        List<Event> postLoad = EventBusProbe.published(boot.getEventBus());
-        postLoad = postLoad.subList(loadMarker, postLoad.size());
+        List<Event> postLoad = publishedAfterLoad();
         assertTrue(postLoad.stream()
                         .filter(ContractedFeeEarnedEvent.class::isInstance)
                         .map(ContractedFeeEarnedEvent.class::cast)
@@ -218,6 +216,31 @@ class ScenarioSessionIT {
     }
 
     // ---- helpers (the committed task-22 IT pattern: bounded polls, explicit timeouts) ----
+
+    /**
+     * The audit-log slice published AFTER the most recent load, boundary re-derived against the
+     * SAME snapshot it slices.
+     *
+     * <p>This used to cache {@code published().size()} as an index and {@code skip}/{@code subList}
+     * from it. Since audit P1-2 the audit log is a bounded drop-oldest ring, so a cached index
+     * silently shifts as older events are evicted — and {@code subList} throws outright once the
+     * log has wrapped past it. Re-deriving from the {@code GameLoadedEvent} marker is stable under
+     * eviction; if the marker itself has aged out, that is stated rather than guessed at, because
+     * either alternative (empty slice, or whole log) would quietly make the no-replay assertions
+     * vacuous or falsely red.
+     */
+    private List<Event> publishedAfterLoad() {
+        List<Event> all = EventBusProbe.published(boot.getEventBus());
+        for (int i = all.size() - 1; i >= 0; i--) {
+            if (all.get(i) instanceof GameLoadedEvent) {
+                return all.subList(i + 1, all.size());
+            }
+        }
+        throw new AssertionError("no GameLoadedEvent left in the " + all.size()
+                + "-event audit log: the bounded ring evicted the post-load boundary, so this "
+                + "test can no longer identify its window (raise EventBus.AUDIT_LOG_CAPACITY or "
+                + "collect by subscription instead)");
+    }
 
     private Path awaitSave(GameSession session, long timeoutMs) throws Exception {
         long deadline = System.currentTimeMillis() + timeoutMs;

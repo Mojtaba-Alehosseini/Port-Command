@@ -2,7 +2,6 @@ package it.unige.portcommand.util;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -51,7 +50,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p><b>Isolation.</b> A subscriber that throws is caught and logged; it never
  * breaks the publisher or any other subscriber. Every publish is also kept in
- * an append-only audit log (unbounded — this list is a test/diagnostic seam,
+ * an audit log (bounded, drop-oldest — this list is a test/diagnostic seam,
  * see {@link EventBusProbe}, not consulted by production code) so tests that
  * predate real dispatch (several task-10/11 integration tests poll this list
  * instead of subscribing) keep working unmodified.
@@ -83,7 +82,30 @@ public final class EventBus {
         return t;
     });
 
-    private final Queue<Event> published = new ConcurrentLinkedQueue<>();
+    /**
+     * Audit-log capacity (2026-08-10, audit P1-2). The log used to be an unbounded
+     * {@link ConcurrentLinkedQueue} that was added to on every publish and never drained, so a
+     * running game retained every event for the life of the JVM — at the ~5 Hz sim-tick rate of a
+     * real session that is a genuine leak, and integration tests that poll {@link #publishedEvents()}
+     * in 20-50 ms loops paid an O(N) copy per poll against a list that only ever grew.
+     *
+     * <p>16,384 is chosen to bound the leak without changing what any existing observer sees in
+     * practice: at a real game's ~4.8 ticks/second (1440 sim-minutes over the default 300 s day)
+     * that is ~57 minutes of history, comfortably past the 15-minute session the acceptance
+     * criteria are written around. Integration tests run at compressed day lengths where the tick
+     * rate is far higher, so THEY can evict — which is why the two that slice the log by index
+     * re-derive their marker instead of caching one.
+     */
+    static final int AUDIT_LOG_CAPACITY = 16_384;
+
+    /**
+     * Drop-OLDEST ring, the same discipline (and the same reason) as the per-subscriber ASYNC
+     * queue below: newest history is the useful history, and a full log must never block or fail a
+     * publish. {@link LinkedBlockingQueue} rather than {@link ConcurrentLinkedQueue} because its
+     * {@code size()}/capacity check is O(1) — the obvious "add then trim while size > cap" on a
+     * ConcurrentLinkedQueue is O(N) per publish.
+     */
+    private final BlockingQueue<Event> published = new LinkedBlockingQueue<>(AUDIT_LOG_CAPACITY);
     private final ConcurrentHashMap<Class<? extends Event>, CopyOnWriteArrayList<SubscriberEntry<?>>> subscribers =
             new ConcurrentHashMap<>();
 
@@ -95,7 +117,13 @@ public final class EventBus {
      */
     public void publish(Event event) {
         Objects.requireNonNull(event, "event");
-        published.add(event);
+        // Bounded, non-blocking: a full log drops its oldest entry to admit the new one. No WARN
+        // here, unlike the ASYNC queue's own overflow — dropping ASYNC-queued events loses
+        // DELIVERY, while this log is a diagnostic seam no production code reads, so eviction is
+        // routine rather than a symptom.
+        while (!published.offer(event)) {
+            published.poll();
+        }
         List<SubscriberEntry<?>> entries = subscribers.get(event.getClass());
         if (entries == null || entries.isEmpty()) {
             log.debug("EventBus.publish {} (0 subscribers)", event.getClass().getSimpleName());
@@ -128,7 +156,14 @@ public final class EventBus {
         return new Subscription<>(() -> list.remove(entry));
     }
 
-    /** Test-only (package-private): every event ever published, in order. See {@link EventBusProbe}. */
+    /**
+     * Test-only (package-private): the most recent {@link #AUDIT_LOG_CAPACITY} events, in publish
+     * order. See {@link EventBusProbe}.
+     *
+     * <p>Was "every event ever published" until 2026-08-10 (audit P1-2). A caller that slices this
+     * list by a cached index must re-derive that index against the SAME snapshot it slices, since
+     * eviction shifts every position down.
+     */
     List<Event> publishedEvents() {
         return List.copyOf(published);
     }

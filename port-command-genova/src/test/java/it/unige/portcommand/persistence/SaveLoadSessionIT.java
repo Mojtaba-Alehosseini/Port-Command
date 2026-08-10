@@ -122,7 +122,6 @@ class SaveLoadSessionIT {
         VesselStateDTO afterFirstLoad = awaitVesselWithPhase("vessel_walkin_t1", session).snapshotDto();
         session.loadGame(saved);
         VesselStateDTO afterSecondLoad = awaitVesselWithPhase("vessel_walkin_t1", session).snapshotDto();
-        int loadMarker = lastIndexOf(GameLoadedEvent.class);
 
         // --- Hidden beliefs: persisted and restored VERBATIM, identically on every load. ---
         for (VesselStateDTO restored : List.of(afterFirstLoad, afterSecondLoad)) {
@@ -164,8 +163,7 @@ class SaveLoadSessionIT {
 
         // --- Privacy across the round trip: nothing negotiation-shaped resurrects for the
         // RESTORED vessel (a fresh live-spawned walk-in opening its own negotiation is fine). ---
-        List<Event> postLoad = EventBusProbe.published(boot.getEventBus());
-        postLoad = postLoad.subList(loadMarker + 1, postLoad.size());
+        List<Event> postLoad = publishedAfterLast(GameLoadedEvent.class);
         assertTrue(postLoad.stream()
                         .filter(NegotiationOpenedEvent.class::isInstance)
                         .map(NegotiationOpenedEvent.class::cast)
@@ -294,14 +292,26 @@ class SaveLoadSessionIT {
         throw new AssertionError(localName + " never reported a flow phase");
     }
 
-    private int lastIndexOf(Class<? extends Event> type) {
+    /**
+     * The audit-log slice published after the last event of {@code markerType}, boundary re-derived
+     * against the SAME snapshot it slices.
+     *
+     * <p>Replaces a {@code lastIndexOf} whose result was cached and then applied to a list fetched
+     * seconds later. Since audit P1-2 the audit log is a bounded drop-oldest ring: a stale index
+     * points past the real boundary once eviction shifts the list, and a marker that has itself
+     * aged out used to return {@code -1}, whose {@code subList(0, size)} silently yielded the WHOLE
+     * history — turning the "nothing resurrects after the load" assertions into pre-load noise.
+     * Now it fails loudly instead of guessing.
+     */
+    private List<Event> publishedAfterLast(Class<? extends Event> markerType) {
         List<Event> events = EventBusProbe.published(boot.getEventBus());
         for (int i = events.size() - 1; i >= 0; i--) {
-            if (type.isInstance(events.get(i))) {
-                return i;
+            if (markerType.isInstance(events.get(i))) {
+                return events.subList(i + 1, events.size());
             }
         }
-        return -1;
+        throw new AssertionError("no " + markerType.getSimpleName() + " left in the " + events.size()
+                + "-event audit log: the bounded ring evicted the boundary this test slices on");
     }
 
     private <E extends Event> E awaitEvent(Class<E> type, Predicate<E> matcher, long timeoutMs)

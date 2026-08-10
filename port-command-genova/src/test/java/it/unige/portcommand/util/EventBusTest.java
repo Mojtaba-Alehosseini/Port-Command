@@ -37,6 +37,44 @@ class EventBusTest {
         assertSame(e, bus.publishedEvents().get(0));
     }
 
+    /**
+     * Audit P1-2: the audit log is a bounded drop-oldest ring, not an unbounded list. It used to
+     * retain every event for the life of the JVM, which at a real session's ~5 Hz sim-tick rate is
+     * a genuine leak (and made every {@code publishedEvents()} poll an ever-growing O(N) copy).
+     */
+    @Test
+    void auditLogIsBoundedAndEvictsTheOldestEvents() {
+        EventBus bus = new EventBus();
+        int cap = EventBus.AUDIT_LOG_CAPACITY;
+        int overflowBy = 7;
+
+        // Each event's simTime encodes its publish order, so eviction is identifiable by value.
+        for (int i = 0; i < cap + overflowBy; i++) {
+            bus.publish(new SimClockTickEvent(i, 1, 0, 0));
+        }
+
+        List<Event> log = bus.publishedEvents();
+        assertEquals(cap, log.size(), "the log must stop growing at the cap, not keep every event");
+
+        // The OLDEST are the ones gone: the first surviving entry is the (overflowBy)-th published.
+        assertEquals(overflowBy, ((SimClockTickEvent) log.get(0)).simMillis(),
+                "the first " + overflowBy + " events must have been evicted, oldest first");
+        assertEquals(cap + overflowBy - 1L, ((SimClockTickEvent) log.get(log.size() - 1)).simMillis(),
+                "the newest event must always survive");
+    }
+
+    @Test
+    void anUnfilledAuditLogKeepsEverything() {
+        // Non-vacuity guard for the test above: below the cap nothing is dropped, so a failure
+        // there really is about eviction and not about publish() losing events outright.
+        EventBus bus = new EventBus();
+        for (int i = 0; i < 50; i++) {
+            bus.publish(new SimClockTickEvent(i, 1, 0, 0));
+        }
+        assertEquals(50, bus.publishedEvents().size());
+        assertEquals(0, ((SimClockTickEvent) bus.publishedEvents().get(0)).simMillis());
+    }
+
     @Test
     void subscribeRegistersAndCancelRemoves() {
         EventBus bus = new EventBus();
