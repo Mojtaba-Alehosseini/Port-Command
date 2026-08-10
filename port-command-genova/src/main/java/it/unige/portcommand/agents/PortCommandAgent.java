@@ -34,7 +34,10 @@ public abstract class PortCommandAgent extends Agent {
     protected final Logger log = LoggerFactory.getLogger(getClass());
     private ServiceLocator serviceLocator;
     private AgentDirectory agentDirectory;
-    private UnhandledMessageLogBehaviour unhandledMessages;
+    /** Volatile: assigned on the agent thread AFTER {@code onSetup()}, but read from test threads
+     * that were unblocked by a self-ref future completed INSIDE {@code onSetup()} — so the
+     * publication is not covered by that future's happens-before edge. */
+    private volatile UnhandledMessageLogBehaviour unhandledMessages;
 
     @Override
     protected final void setup() {

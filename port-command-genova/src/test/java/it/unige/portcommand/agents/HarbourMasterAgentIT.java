@@ -8,6 +8,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -304,6 +305,93 @@ class HarbourMasterAgentIT {
         assertEquals("tug_hold", content(hold).get("event").asText());
 
         assertNeverArrives(tug.inbox, ACLMessage.ACCEPT_PROPOSAL, 2000);
+        // Boundary for the 2026-08-10 rejectAll fix: with NO bidders there is nobody to reject,
+        // so the new loop must be a no-op here rather than emitting a stray REJECT.
+        //
+        // The sibling arm it was written for — bids collected but Prolog selecting no winner —
+        // has no end-to-end driver: CnpRequest validates tugsRequired >= 1 and R13 returns at
+        // least one winner for any non-empty well-formed bid list, so reaching it needs the
+        // Prolog goal itself to fail. It sends the same REJECT SHAPE the ordinary loser path
+        // sends (AwardContractBehaviour's award loop, covered end to end by
+        // contractedVesselCompatible_acceptsAndDispatchesDownstream), but rejectAll itself has
+        // no driver and is stated here as untested rather than implied to be covered.
+        assertNeverArrives(tug.inbox, ACLMessage.REJECT_PROPOSAL, 1000);
+    }
+
+    /**
+     * A bid that arrives AFTER the CFP window closes still gets an answer (2026-08-10).
+     *
+     * <p>{@code BidInCNPBehaviour} warns about a late CFP but replies anyway, and the collector's
+     * per-cfpId template is the only one that matches that reply — so before the drain the late
+     * PROPOSE sat in the HarbourMaster's queue for the life of the JVM, and the tug that sent it
+     * never learned the session had ended. Deliberately NOT solved by the per-agent catch-all:
+     * that would mean letting it see the CNP protocol, where it could win a scheduler pass against
+     * a live in-window bid.
+     */
+    @Test
+    void cnpLateBid_isRejectedRatherThanLeftInTheQueue() throws Exception {
+        ServiceContract contract = new ServiceContract("CONTRACT-L1", "L001", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
+        VesselSpec spec = new VesselSpec("L001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-L1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe vessel = spawnProbe("t31_vessel", null);
+        Probe tug = spawnProbe("t31_tug", "tug-escort");
+
+        vessel.outbox.put(contractRequest(hm, "CONTRACT-L1", spec, "t31_vessel"));
+        assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000));
+
+        ACLMessage cfp = pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
+        assertNotNull(cfp, "fixture: the tug must receive the CFP");
+
+        // Stay silent until the window has demonstrably shut — the zero-bid hold INFORM to the
+        // vessel is that signal, and it is sent from the same closeAndAward() call.
+        ACLMessage hold = pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.INFORM, 10_000);
+        assertNotNull(hold, "fixture: the window must close with no bids");
+        assertEquals("tug_hold", content(hold).get("event").asText());
+
+        // NOW bid, exactly as a slow tug would.
+        tug.outbox.put(bidReply(cfp, 100.0, 5.0, 0.9));
+
+        ACLMessage reply = pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.REJECT_PROPOSAL, 10_000);
+        assertNotNull(reply, "a late bid must be answered with a REJECT, not silently swallowed");
+        assertEquals(cfp.getConversationId(), reply.getConversationId(),
+                "the rejection must close the tug's own CFP conversation");
+    }
+
+    /**
+     * The per-agent catch-all, driven end to end against a real agent (2026-08-10 — S3 shipped the
+     * behaviour with three public test seams and no caller for any of them).
+     *
+     * <p>Uses the HarbourMaster deliberately: its union is the most complex of the nine (five arms
+     * including the Contract Net protocol exclusion), so it is the one where a gap would matter
+     * most. A QUERY_REF carrying the game ontology and no protocol dodges every arm — AutoFlow
+     * needs REQUEST, ForwardWalkIn's five performatives exclude QUERY_REF, weather and customs need
+     * their tags, CNP needs its tag. (P1-6 made QUERY_REF handled on the VESSEL, not here.)
+     */
+    @Test
+    void unhandledMessage_isConsumedAndReportedOncePerShape() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe sender = spawnProbe("t32_sender", null);
+
+        // Baseline, not absolute: a live HarbourMaster has other traffic in flight.
+        int consumedBefore = hm.unhandledMessages().consumedCount();
+        int shapesBefore = hm.unhandledMessages().distinctShapeCount();
+
+        for (int i = 0; i < 2; i++) {
+            ACLMessage garbage = MessageFactory.create(ACLMessage.QUERY_REF);
+            garbage.addReceiver(hm.getAID());
+            garbage.setConversationId("not-a-real-conversation");
+            garbage.setContent(TerminalJson.write(Map.of("intent", "nonsense")));
+            sender.outbox.put(garbage);
+        }
+
+        assertTrue(pollUntilTrue(() -> hm.unhandledMessages().consumedCount() >= consumedBefore + 2, 10_000),
+                "both unmatched messages must be consumed by the catch-all, not left in the queue");
+        assertEquals(shapesBefore + 1, hm.unhandledMessages().distinctShapeCount(),
+                "identical messages are one SHAPE — the WARN de-duplicates so a storm cannot flood "
+                        + "the log with the same line");
+        assertTrue(pollUntilTrue(() -> hm.getCurQueueSize() == 0, 10_000),
+                "the agent's queue must drain: an unmatched message used to sit there for the "
+                        + "life of the JVM, got " + hm.getCurQueueSize());
     }
 
     @Test
@@ -1491,6 +1579,19 @@ class HarbourMasterAgentIT {
             }
         }
         return null;
+    }
+
+    /** Bounded poll on a plain condition — the established no-Awaitility pattern in this file. */
+    private static boolean pollUntilTrue(BooleanSupplier condition, long totalMillis)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + totalMillis;
+        while (System.currentTimeMillis() < deadline) {
+            if (condition.getAsBoolean()) {
+                return true;
+            }
+            Thread.sleep(20);
+        }
+        return condition.getAsBoolean();
     }
 
     /** Drains {@code q} for {@code millis}, failing if a message with {@code performative} ever appears. */
