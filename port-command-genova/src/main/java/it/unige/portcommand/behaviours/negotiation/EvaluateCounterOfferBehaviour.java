@@ -61,8 +61,15 @@ public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
                                 MessageTemplate.MatchPerformative(ACLMessage.PROPOSE),
                                 MessageTemplate.MatchPerformative(ACLMessage.ACCEPT_PROPOSAL)),
                         MessageTemplate.or(
-                                MessageTemplate.MatchPerformative(ACLMessage.REJECT_PROPOSAL),
-                                MessageTemplate.MatchPerformative(ACLMessage.CANCEL))));
+                                MessageTemplate.or(
+                                        MessageTemplate.MatchPerformative(ACLMessage.REJECT_PROPOSAL),
+                                        MessageTemplate.MatchPerformative(ACLMessage.CANCEL)),
+                                // QUERY_REF: the player's "ask" (audit P1-6). The HarbourMaster has
+                                // sent this on this very conversation since task 11 and NOTHING
+                                // matched it — dead air on the wire and an unanswered question in
+                                // the chat. Widening this existing per-conversation template is
+                                // enough; no other agent matches QUERY_REF, so nothing is stolen.
+                                MessageTemplate.MatchPerformative(ACLMessage.QUERY_REF))));
     }
 
     @Override
@@ -84,6 +91,27 @@ public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
         if (msg.getPerformative() == ACLMessage.ACCEPT_PROPOSAL) {
             WalkInState s = stateRef.get();
             closeDeal(vessel, msg, "", s.lastOwnOffer(), s.lastOwnHours()); // berth granted later (task 11)
+            return;
+        }
+
+        // Player asked for status (audit P1-6). Answers with this vessel's OWN observable state —
+        // the offer it has on the table, the stay it is asking for, and how many rounds have run.
+        // Nothing from WalkInState's hidden beliefs crosses (P-04): not minAcceptablePrice, not
+        // targetPrice, not maxWaitMinutes, not personality, not minDurationHours — every outbound
+        // message on this path is gated by WalkInVesselAgentIT.assertNoHiddenBeliefs. Burns no
+        // round: asking a question is not a negotiating move.
+        if (msg.getPerformative() == ACLMessage.QUERY_REF) {
+            WalkInState s = stateRef.get();
+            ACLMessage reply = MessageFactory.reply(msg, ACLMessage.INFORM);
+            reply.setContent(TerminalJson.write(Map.of(
+                    "intent", "status_report",
+                    "vessel_id", vessel.spec().vesselId(),
+                    "price", s.lastOwnOffer(),
+                    "hours", s.lastOwnHours(),
+                    "rounds_used", s.round())));
+            myAgent.send(reply);
+            log.info("{}: answered a status query (standing offer {} for {}h)",
+                    myAgent.getLocalName(), s.lastOwnOffer(), s.lastOwnHours());
             return;
         }
 

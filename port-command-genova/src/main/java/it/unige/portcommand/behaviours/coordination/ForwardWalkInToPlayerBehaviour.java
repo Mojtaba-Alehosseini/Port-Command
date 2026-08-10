@@ -14,6 +14,7 @@ import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.behaviours.cnp.InitiateCNPBehaviour;
 import it.unige.portcommand.behaviours.negotiation.WithdrawalBehaviour;
 import it.unige.portcommand.core.MessageFactory;
+import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.DealClosedEvent;
@@ -109,6 +110,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             // VesselStateDTO.stage contradicted the vessel's own currentPhase.
             case "service_complete" -> advanceStage(hm, text(content, "vessel_id"), Stage.DEPARTING);
             case "departed" -> handleDeparted(hm, content);
+            case "status_report" -> handleStatusReport(hm, msg, content);
             default -> log.debug("unrecognised walk-in intent '{}' from {}", intent, msg.getSender().getLocalName());
         }
     }
@@ -235,18 +237,24 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         double timeUsedSec = hm.simClock()
                 .realSecondsForSimMillis(Math.max(0L, hm.simClock().nowSimMillis() - openedAt));
         double lastPlayerOffer = hm.negotiationPlayerOffers().getOrDefault(dialogueId, 0.0);
-        // threatenedWithdrawal stays false: there is no observable signal for it anywhere. No
-        // threaten_leave intent exists in the frozen set, a vessel's counter carries no reason on
-        // the wire, and the vessel-side equivalent (roundsRemaining against its hidden ceiling) is
-        // exactly a P-04 belief. Inventing a wire flag is a design change, not a bug fix — left
-        // for whoever owns that decision rather than silently faked from hidden state.
+        // threatenedWithdrawal, live since 2026-08-10 (audit P1-9 follow-up), DERIVED rather than
+        // taken off the wire: the dialogue is on its last round when roundLimit + 1 - roundsUsed
+        // <= 1. Both terms are public — roundLimit is a Settings value and roundsUsed is the same
+        // counter the offer strip already renders to the player as "Round N of M" — so this reads
+        // nothing the player cannot see, and P-04 holds without the vessel sending anything new.
+        // It replaces the S2 note that no observable signal existed; that was true of a signal ON
+        // THE WIRE, but the round budget was observable all along.
+        // Scope, stated rather than implied: this captures the ROUND-LIMIT half only. A vessel
+        // that is about to walk away for a personality-driven reason is not detectable here, and
+        // must not be — that lives in WalkInState and is a hidden belief.
+        boolean finalRound = Settings.load().roundLimit() + 1 - roundsUsed <= 1;
 
         // task 10's AutopilotExecuteBehaviour subscribes to this SAME event type
         // (INVARIANTS.md "Assistant (task 10)") — no separate INFORM needed; real
         // dispatch arrives with task 17, matching every other EventBus consumer today.
         WalkInDialogueSnapshot snapshot = WalkInDialogueSnapshot.of(
                 spec.vesselId(), spec, berthId, hours, price, lastPlayerOffer, roundsUsed,
-                timeUsedSec, false);
+                timeUsedSec, finalRound);
         hm.eventBus().publish(new NegotiationOpenedEvent(dialogueId, snapshot));
         log.info("{}: {} forwarded (round {}, berth {}, price {})",
                 spec.vesselId(), roundsUsed == 1 ? "opening offer" : "counter", roundsUsed, berthId, price);
@@ -388,11 +396,52 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             // when every compatible berth is held we fall back to the old pick, which reproduces the
             // original collision. Logging it is one line and turns "two vessels in one berth, map
             // still FREE" from invisible into greppable.
+            //
+            // AUDIT P1-12 WAS ATTEMPTED HERE AND REVERTED (2026-08-10). Refusing instead of falling
+            // back looks obviously right and is not: `held` is every TRACKED vessel's assignedBerth,
+            // contracted ones included, for their whole stay — while R8 gives four of the five
+            // vessel types exactly ONE compatible berth (ferry->berth_4, tanker->berth_1,
+            // container->berth_2, cruise->berth_2; only cargo_vessel has three). So "all compatible
+            // berths held" is the COMMON case, not the exceptional one, and refusing there deleted
+            // two of busy_day's three scripted walk-ins and the storm's only one, and hung
+            // SaveLoadMidTransitIT on a walk-in left permanently NEGOTIATING.
+            //
+            // The real fix needs actual berth OCCUPANCY, not "someone was once granted this berth":
+            // the HarbourMaster has no PortStateArtifact reference, and a walk-in never sends the
+            // terminal a berth REQUEST at all (ADR-09), so nothing here can currently tell a berth
+            // that is genuinely busy from one whose vessel is long gone. That is the same gap ADR-09
+            // already tracks; P1-12 is blocked behind it rather than fixable in this method.
             log.warn("{}: every compatible berth {} is already held — falling back to {}; "
                             + "this vessel may collide with an existing one (audit A-02 residual)",
                     spec.vesselId(), compatible, compatible.get(0));
         }
         return free.orElse(compatible.get(0));
+    }
+
+    /**
+     * The vessel's answer to the player's "ask" (audit P1-6), rendered into the tab that asked.
+     *
+     * <p>Completes a round trip that used to stop dead at the vessel: the HarbourMaster relayed
+     * the player's ASK as a QUERY_REF and no template on any agent matched it, so the question
+     * produced silence in the chat. Routed as an {@code AssistantChatEvent} for the same reason
+     * the REFUSE relay above is — {@code ChatPanel} dispatches it by exact {@code dialogueId}, and
+     * the conversation id the vessel replied on IS that dialogue id.
+     *
+     * <p>Everything here is observable: the vessel's standing offer and hours are already on the
+     * offer strip, and the round count is already rendered as "Round N of M".
+     */
+    private void handleStatusReport(HarbourMasterAgent hm, ACLMessage msg, JsonNode content) {
+        String dialogueId = msg.getConversationId();
+        VesselTracking tracking = findByAid(hm, msg.getSender());
+        String berth = tracking != null && tracking.assignedBerth() != null
+                ? tracking.assignedBerth() : hm.negotiationBerths().get(dialogueId);
+        String text = String.format(java.util.Locale.ROOT,
+                "%s: standing offer EUR%.0f for %dh, round %d%s.",
+                text(content, "vessel_id"), num(content, "price"), (int) num(content, "hours"),
+                (int) num(content, "rounds_used"),
+                berth == null ? "" : ", berth under discussion " + berth);
+        hm.eventBus().publish(new AssistantChatEvent(dialogueId, text));
+        log.info("status query answered for {}", dialogueId);
     }
 
     private static VesselTracking findByAid(HarbourMasterAgent hm, AID aid) {
@@ -425,7 +474,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
      * enumerating every {@code ACLMessage.REFUSE}/{@code ACCEPT_PROPOSAL} construction in
      * {@code src/main}: the walk-in vessel's three are the only untagged ones aimed here.
      */
-    private static final MessageTemplate TEMPLATE = MessageTemplate.and(
+    public static final MessageTemplate TEMPLATE = MessageTemplate.and(
             MessageTemplate.and(MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY),
                     MessageTemplate.or(
                             MessageTemplate.or(MessageTemplate.or(MessageTemplate.MatchPerformative(ACLMessage.PROPOSE),
