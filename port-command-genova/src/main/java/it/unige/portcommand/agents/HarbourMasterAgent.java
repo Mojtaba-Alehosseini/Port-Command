@@ -496,9 +496,13 @@ public final class HarbourMasterAgent extends PortCommandAgent
      * Audit catch-all union. The four permanently-registered inbound templates, PLUS the whole
      * Contract Net protocol: {@code BidCollectorBehaviour} builds its template per-cfpId at
      * runtime, so it cannot be named here, and without this exclusion the catch-all could win a
-     * scheduler pass against a live bid. The cost is that a genuinely late post-close bid is
-     * consumed silently by the CNP exclusion rather than reported — still better than the leak it
-     * replaces, where it sat in the queue for the life of the JVM.
+     * scheduler pass against a live bid.
+     *
+     * <p>The exclusion means CNP traffic is invisible to the catch-all entirely — it neither
+     * reports nor consumes it. A post-close late bid is therefore NOT handled here; it is drained
+     * and REJECTed by {@code BidCollectorBehaviour}'s own grace-window reaper, which is the right
+     * owner because it holds the session's per-cfpId template. Only a straggler arriving after
+     * that grace window still leaks.
      */
     @Override
     protected MessageTemplate handledTemplate() {
