@@ -55,7 +55,8 @@ import jade.lang.acl.MessageTemplate;
  * alongside every message this hub sends or receives.
  *
  * <p>{@code activeVessels}/{@code pendingCustomsChecks}/{@code negotiationBerths}/
- * {@code negotiationRounds} are {@link ConcurrentHashMap}s shared read/write across
+ * {@code negotiationRounds}/{@code negotiationOpenedAt}/{@code negotiationPlayerOffers}
+ * are {@link ConcurrentHashMap}s shared read/write across
  * several behaviours (planning/11's Risks section calls out {@code activeVessels}
  * concurrency explicitly). {@code customsAid} is resolved lazily (never eagerly at
  * {@link #onSetup()}) because DF registration across the 10-agent fleet is async —
@@ -72,6 +73,8 @@ public final class HarbourMasterAgent extends PortCommandAgent
     private final ConcurrentHashMap<String, String> pendingCustomsChecks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> negotiationBerths = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> negotiationRounds = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> negotiationOpenedAt = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Double> negotiationPlayerOffers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> cnpRetryAttempts = new ConcurrentHashMap<>();
 
     private WalletLedger walletLedger;
@@ -325,6 +328,30 @@ public final class HarbourMasterAgent extends PortCommandAgent
 
     public ConcurrentHashMap<String, AtomicInteger> negotiationRounds() {
         return negotiationRounds;
+    }
+
+    /**
+     * Sim instant each open walk-in dialogue began, keyed by conversationId (2026-08-10, audit
+     * P1-9). The zero point for {@code WalkInDialogueSnapshot.timeUsedSec}, which had no source
+     * before this and was published as a hard-coded 0.0, leaving the urgency heuristic's
+     * time-progress term permanently dead. Stamped once by {@code ForwardWalkInToPlayerBehaviour}
+     * on a dialogue's first offer, and removed on every terminal path alongside
+     * {@code negotiationBerths}/{@code negotiationRounds}.
+     */
+    public ConcurrentHashMap<String, Long> negotiationOpenedAt() {
+        return negotiationOpenedAt;
+    }
+
+    /**
+     * The player's last counter price per open dialogue, keyed by conversationId (2026-08-10,
+     * audit P1-9). Observable by construction — it is the player's own typed number, seen by
+     * {@code DispatchPlayerCommandBehaviour} as it forwards the PROPOSE — so carrying it costs
+     * no P-04 privacy. It is NOT on the wire back from the vessel: a vessel's counter carries
+     * only {@code {intent, price, hours, vessel_spec}}, which is why the HarbourMaster could not
+     * fill this field before and published 0.0 instead.
+     */
+    public ConcurrentHashMap<String, Double> negotiationPlayerOffers() {
+        return negotiationPlayerOffers;
     }
 
     /** Zero-bid CNP retry counter per vessel (task 15's {@code CnpRetryBehaviour} seam). */

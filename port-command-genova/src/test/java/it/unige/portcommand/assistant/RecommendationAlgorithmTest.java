@@ -1,6 +1,7 @@
 package it.unige.portcommand.assistant;
 
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.prolog.PrologEngine;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,41 @@ class RecommendationAlgorithmTest {
         assertTrue(rec.ev() > 0.0, "counter's EV must beat reject_silent's 0.0 thanks to the urgency floor");
     }
 
+    /**
+     * Audit P1-9: the urgency time budget is the LIVE {@code Settings.timeLimitSeconds}, not a
+     * constant. Pins the behaviour that actually changed on the Assistant side — the pure
+     * {@code UrgencyCalculator} cases cannot, since that function was never edited.
+     */
+    @Test
+    void theConfiguredTimeWindowChangesTheRecommendationsUrgency() {
+        // 15 elapsed real seconds is half of a 30s window but a twelfth of a 180s one, so the same
+        // dialogue is materially more urgent under the tighter deadline. Urgency scales p_accept,
+        // which scales a counter candidate's EV.
+        WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 1, 15.0);
+        double tightEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 30).run(snapshot).ev();
+        double looseEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 180).run(snapshot).ev();
+
+        assertTrue(tightEv > looseEv,
+                "a 30s window must price this counter above a 180s one (" + tightEv + " vs "
+                        + looseEv + ") - if these are equal the time term is dead again");
+    }
+
+    @Test
+    void theDefaultConstructorUsesTheLiveSettingsWindow() {
+        // Honest limit: on its own this cannot separate "reads Settings" from "hard-codes a number
+        // that happens to equal defaults.json". What makes the pair meaningful is the sibling test
+        // above, which proves the constructor argument is genuinely live — given that, this pins
+        // the production path to the same window the player's countdown uses.
+        WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 1, 15.0);
+        Recommendation viaSettings = new RecommendationAlgorithm(new MarketHistoryArtifact()).run(snapshot);
+        Recommendation viaExplicit = new RecommendationAlgorithm(new MarketHistoryArtifact(),
+                Settings.load().timeLimitSeconds()).run(snapshot);
+
+        assertEquals(viaExplicit.ev(), viaSettings.ev(), 1e-9,
+                "the production constructor must behave exactly as the live Settings window");
+        assertEquals(viaExplicit.pAccept(), viaSettings.pAccept(), 1e-9);
+    }
+
     @Test
     void deterministicGivenSameInputs() {
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
@@ -82,9 +118,12 @@ class RecommendationAlgorithmTest {
         // counter(+20%) clamps to the band edge 2200 with p_accept~0.12 -> ev ~ -262. Even at
         // max urgency, gambling on a counter is dominated by the -500 withdrawal-penalty risk.
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
+        // "fully elapsed" = timeUsedSec at the shipped 60-real-second window the one-arg
+        // RecommendationAlgorithm constructor reads from Settings (audit P1-9 rescaled this from
+        // the deleted 600-sim-second constant; the resulting urgency is 1.0 either way).
         WalkInDialogueSnapshot snapshot = new WalkInDialogueSnapshot("cargo_1", "cargo_vessel", 8.0, 150.0, 30000,
                 "general_cargo", "berth_3", 5, 1900.0, 0.0,
-                UrgencyCalculator.DEFAULT_ROUND_LIMIT, UrgencyCalculator.DEFAULT_TIME_LIMIT_SEC, true);
+                UrgencyCalculator.DEFAULT_ROUND_LIMIT, Settings.load().timeLimitSeconds(), true);
         Recommendation rec = algorithm.run(snapshot);
         assertEquals(RecommendationCandidate.ACCEPT, rec.action());
         assertEquals(1900.0, rec.price(), 1e-9);

@@ -4,6 +4,10 @@ package it.unige.portcommand.assistant;
  * Pure urgency heuristic for {@link RecommendationAlgorithm} (planning/10 §10.1, v1.1 fix).
  * Blends round-progress, time-progress, and an observed withdrawal threat into a single
  * [0.4, 1.0] factor that scales each counter candidate's acceptance probability.
+ *
+ * <p><b>Units (settled 2026-08-10, audit P1-9):</b> {@code timeUsedSec} and {@code timeLimitSec}
+ * are both REAL seconds — the same pacing-invariant scale the negotiation tab's "~Ns remaining"
+ * countdown uses. See the note where the old sim-second constant used to live.
  */
 public final class UrgencyCalculator {
 
@@ -15,16 +19,23 @@ public final class UrgencyCalculator {
      */
     public static final int DEFAULT_ROUND_LIMIT = 4;
 
-    /**
-     * Nominal negotiation time budget (10 sim-minutes), used ONLY to normalise the urgency
-     * heuristic's time-progress term. This is a fixed, vessel-type-agnostic design constant —
-     * NOT any specific vessel's hidden {@code maxWaitMinutes} patience (that field is a hidden
-     * belief per INVARIANTS.md and must never be read here, v1.1 P-04). Chosen as roughly the
-     * midpoint of the observed {@code max_wait_minutes_range} spread across
-     * {@code vessel_templates.json} (5-40 minutes) and the ~4-round cadence (TimeoutWithdrawal
-     * re-checks every 5 sim-seconds; 4 rounds at a couple of minutes each lands near 10 minutes).
-     */
-    public static final double DEFAULT_TIME_LIMIT_SEC = 600.0;
+    // DEFAULT_TIME_LIMIT_SEC (600.0, "10 sim-minutes") was REMOVED 2026-08-10 (audit P1-9,
+    // resolving the scale conflict INVARIANTS and ADR-14 D13 both flagged as open).
+    //
+    // It could not be made to work. Its own javadoc called it sim-seconds, but at the default
+    // 300 real-s/day mapping 600 sim-seconds is ~2.1 REAL seconds, so once timeUsedSec carried a
+    // real elapsed figure the term saturated almost immediately — swapping a permanently-dead
+    // term (it was fed a hard-coded 0.0) for a permanently-maxed one. Meanwhile the vessel's
+    // actual patience is 140-480 sim-MINUTES and the countdown the player watches is
+    // Settings.timeLimitSeconds REAL seconds: three different scales for one quantity.
+    //
+    // Resolved in favour of the player-visible one: the caller passes the LIVE
+    // Settings.timeLimitSeconds (30..180, default 60) and timeUsedSec is elapsed REAL seconds off
+    // the shared SimClock conversion, so the urgency term and the on-screen countdown measure the
+    // same thing. That window is PUBLIC — it is deliberately not the vessel's hidden
+    // maxWaitMinutes (P-04), so the Assistant reasons from what the player can see, not from
+    // privileged state. No fallback constant survives: Settings.load() falls back to
+    // Settings.defaults() internally, so a "Settings unavailable" case does not exist.
 
     private UrgencyCalculator() {
     }

@@ -52,6 +52,31 @@ public final class SimClock {
         return realMillisElapsed * MILLIS_PER_DAY / (realSecondsPerGameDay * 1_000L);
     }
 
+    /**
+     * The inverse of {@link #simMillisDelta}: how many REAL seconds a sim-millisecond interval
+     * corresponds to under this clock's current mapping.
+     *
+     * <p>Single-sourced here (2026-08-10, audit P1-9) because two consumers must agree exactly:
+     * the negotiation tab's "~Ns remaining" countdown and the HarbourMaster-side
+     * {@code WalkInDialogueSnapshot.timeUsedSec} that feeds {@code UrgencyCalculator}. Both
+     * measure the same dialogue against the same PUBLIC nominal window
+     * ({@code Settings.timeLimitSeconds}), so a second open-coded copy of this arithmetic would
+     * let the number the player watches and the number the Assistant reasons from drift apart.
+     *
+     * <p>Real seconds, not sim seconds, on purpose: the nominal window is pacing-invariant, so
+     * this is the one scale that means the same thing at 300 s/day and at the tutorial's
+     * 1800 s/day.
+     */
+    public double realSecondsForSimMillis(long simMillisElapsed) {
+        return simMillisElapsed * (double) realSecondsPerGameDay / MILLIS_PER_DAY;
+    }
+
+    /** The reverse of {@link #realSecondsForSimMillis}, for callers that need to reconstruct a
+     * dialogue's sim-time origin from an elapsed real-seconds figure. */
+    public long simMillisForRealSeconds(double realSeconds) {
+        return Math.round(realSeconds * MILLIS_PER_DAY / (double) realSecondsPerGameDay);
+    }
+
     /** Advances sim time by the sim-equivalent of {@code realMillisElapsed}; no-op while paused. */
     public void advance(long realMillisElapsed) {
         if (paused) {

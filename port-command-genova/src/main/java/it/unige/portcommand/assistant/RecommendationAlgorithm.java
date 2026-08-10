@@ -6,6 +6,7 @@ import java.util.Objects;
 
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.artifacts.MarketStats;
+import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.harbourmaster.financial.ExpenseRules;
 import it.unige.portcommand.harbourmaster.financial.IncomeRules;
 import it.unige.portcommand.prolog.PrologQueries;
@@ -27,9 +28,23 @@ public final class RecommendationAlgorithm {
     private static final double COUNTER_20_PCT = 0.20;
 
     private final MarketHistoryArtifact marketHistory;
+    private final double timeLimitSec;
 
+    /** Production: the urgency time budget is the LIVE {@code Settings.timeLimitSeconds} (30..180,
+     * default 60) — the same public nominal window the negotiation tab counts down. */
     public RecommendationAlgorithm(MarketHistoryArtifact marketHistory) {
+        this(marketHistory, Settings.load().timeLimitSeconds());
+    }
+
+    /**
+     * Explicit-budget overload, so the urgency time term is testable across the configured range
+     * without mutating {@code Settings}' JVM-lifetime cache. Settings stays a static classpath
+     * read (INVARIANTS: never threaded through the bootstrap constructor chain) — the one-arg
+     * constructor above self-reads it.
+     */
+    public RecommendationAlgorithm(MarketHistoryArtifact marketHistory, int timeLimitSeconds) {
         this.marketHistory = Objects.requireNonNull(marketHistory, "marketHistory");
+        this.timeLimitSec = timeLimitSeconds;
     }
 
     public Recommendation run(WalkInDialogueSnapshot snapshot) {
@@ -40,7 +55,7 @@ public final class RecommendationAlgorithm {
         MarketStats stats = marketHistory.queryStats(snapshot.vesselType(), snapshot.durationHours());
         ScoringBand band = bandFor(snapshot, stats);
         double urgency = UrgencyCalculator.compute(snapshot.roundsUsed(), UrgencyCalculator.DEFAULT_ROUND_LIMIT,
-                snapshot.timeUsedSec(), UrgencyCalculator.DEFAULT_TIME_LIMIT_SEC, snapshot.threatenedWithdrawal());
+                snapshot.timeUsedSec(), timeLimitSec, snapshot.threatenedWithdrawal());
         double marginalCost = ExpenseRules.marginalCost(snapshot.vesselType(), snapshot.cargoClass(),
                 snapshot.durationHours(), snapshot.tonnage());
 

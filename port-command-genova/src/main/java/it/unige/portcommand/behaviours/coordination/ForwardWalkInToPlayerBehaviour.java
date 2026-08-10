@@ -207,7 +207,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             ACLMessage refuse = MessageFactory.reply(msg, ACLMessage.REFUSE);
             refuse.setContent(TerminalJson.write(Map.of("intent", "refuse", "reason", "no_compatible_berth")));
             hm.sendLogged(refuse);
-            hm.negotiationBerths().remove(dialogueId);
+            forgetDialogue(hm, dialogueId);
             log.info("{}: REFUSE opening offer (no compatible berth)", spec.vesselId());
             return;
         }
@@ -221,11 +221,32 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
                 .computeIfAbsent(dialogueId, id -> new AtomicInteger(0))
                 .incrementAndGet();
 
+        // Real urgency inputs since 2026-08-10 (audit P1-9); all three used to be hard-coded.
+        //
+        // timeUsedSec: elapsed REAL seconds since this dialogue opened, measured off the shared
+        // SimClock conversion the tab's "~Ns remaining" countdown uses, against the same PUBLIC
+        // nominal window (Settings.timeLimitSeconds). One clock, two consumers. Real seconds, not
+        // sim: the term is normalised by a pacing-invariant window, and elapsed SIM seconds
+        // against the old 600-sim-second constant saturated ~2 wall-seconds in at 300 s/day,
+        // which would have swapped a dead term for a permanently-maxed one. This deliberately
+        // tracks the OBSERVABLE window and never the vessel's hidden maxWaitMinutes (P-04).
+        long openedAt = hm.negotiationOpenedAt()
+                .computeIfAbsent(dialogueId, id -> hm.simClock().nowSimMillis());
+        double timeUsedSec = hm.simClock()
+                .realSecondsForSimMillis(Math.max(0L, hm.simClock().nowSimMillis() - openedAt));
+        double lastPlayerOffer = hm.negotiationPlayerOffers().getOrDefault(dialogueId, 0.0);
+        // threatenedWithdrawal stays false: there is no observable signal for it anywhere. No
+        // threaten_leave intent exists in the frozen set, a vessel's counter carries no reason on
+        // the wire, and the vessel-side equivalent (roundsRemaining against its hidden ceiling) is
+        // exactly a P-04 belief. Inventing a wire flag is a design change, not a bug fix — left
+        // for whoever owns that decision rather than silently faked from hidden state.
+
         // task 10's AutopilotExecuteBehaviour subscribes to this SAME event type
         // (INVARIANTS.md "Assistant (task 10)") — no separate INFORM needed; real
         // dispatch arrives with task 17, matching every other EventBus consumer today.
         WalkInDialogueSnapshot snapshot = WalkInDialogueSnapshot.of(
-                spec.vesselId(), spec, berthId, hours, price, 0.0, roundsUsed, 0.0, false);
+                spec.vesselId(), spec, berthId, hours, price, lastPlayerOffer, roundsUsed,
+                timeUsedSec, false);
         hm.eventBus().publish(new NegotiationOpenedEvent(dialogueId, snapshot));
         log.info("{}: {} forwarded (round {}, berth {}, price {})",
                 spec.vesselId(), roundsUsed == 1 ? "opening offer" : "counter", roundsUsed, berthId, price);
@@ -271,8 +292,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());
         Stage grantStage = tugsRequired > 0 ? Stage.AWAITING_TUG : Stage.IN_TRANSIT;
         hm.activeVessels().put(spec.vesselId(), tracking.withStage(grantStage).withBerth(berthId));
-        hm.negotiationBerths().remove(dialogueId);
-        hm.negotiationRounds().remove(dialogueId);
+        forgetDialogue(hm, dialogueId);
         log.info("{}: berth GRANTED {} (price {}, {}h)", spec.vesselId(), berthId, price, hours);
 
         // Task 19: closes a real gap — DealClosedEvent/NegotiationClosedEvent existed since
@@ -291,14 +311,26 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         }
     }
 
+    /**
+     * Drops every per-dialogue entry the HarbourMaster holds for {@code dialogueId}, on every
+     * terminal path (grant, withdraw, no-compatible-berth). Centralised 2026-08-10 (audit P1-9)
+     * when the P1-9 fix added two more maps to the set: four separate {@code remove} sites is
+     * exactly the shape where the next map gets added to three of them and leaks in the fourth.
+     */
+    private static void forgetDialogue(HarbourMasterAgent hm, String dialogueId) {
+        hm.negotiationBerths().remove(dialogueId);
+        hm.negotiationRounds().remove(dialogueId);
+        hm.negotiationOpenedAt().remove(dialogueId);
+        hm.negotiationPlayerOffers().remove(dialogueId);
+    }
+
     private void handleWithdraw(HarbourMasterAgent hm, ACLMessage msg, JsonNode content) {
         VesselTracking tracking = findByAid(hm, msg.getSender());
         if (tracking != null) {
             hm.activeVessels().remove(tracking.vesselId());
         }
         String dialogueId = msg.getConversationId();
-        hm.negotiationBerths().remove(dialogueId);
-        hm.negotiationRounds().remove(dialogueId);
+        forgetDialogue(hm, dialogueId);
         String reason = text(content, "reason");
         log.info("{}: walk-in withdrew ({})", msg.getSender().getLocalName(), reason);
 

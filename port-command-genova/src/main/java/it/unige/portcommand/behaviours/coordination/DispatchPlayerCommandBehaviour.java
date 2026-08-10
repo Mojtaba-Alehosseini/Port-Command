@@ -107,6 +107,21 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
     private ACLMessage proposeMessage(HarbourMasterAgent hm, PlayerCommand cmd, String conversationId) {
         Map<String, Object> content = new LinkedHashMap<>(cmd.content());
         content.computeIfAbsent("berth_id", k -> hm.negotiationBerths().get(conversationId));
+        // Remember the player's own price for this dialogue (2026-08-10, audit P1-9). This is the
+        // ONLY point in the HarbourMaster where it is visible: the vessel's reply carries just
+        // {intent, price, hours, vessel_spec}, so without stashing it here the snapshot handed to
+        // the Assistant reported lastPlayerOffer=0.0 forever. Same conversationId key as the berth
+        // lookup one line above.
+        // Gated on a LIVE walk-in dialogue (negotiationBerths is stamped when one opens and
+        // dropped on every terminal path). Without the gate this also fires for a PROPOSE aimed at
+        // a CONTRACTED vessel — which never opens a dialogue and terminates through handleDeparted,
+        // so nothing would ever remove the entry — and it could re-add a key just after a grant or
+        // withdraw cleaned up, since this runs on the EventBus ASYNC pool while the cleanup runs on
+        // the HarbourMaster's JADE thread. (2026-08-10 adversarial review.)
+        if (content.get("price") instanceof Number playerPrice
+                && hm.negotiationBerths().containsKey(conversationId)) {
+            hm.negotiationPlayerOffers().put(conversationId, playerPrice.doubleValue());
+        }
         ACLMessage m = MessageFactory.create(ACLMessage.PROPOSE);
         m.setContent(TerminalJson.write(content));
         return m;

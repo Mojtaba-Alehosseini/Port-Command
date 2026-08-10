@@ -65,10 +65,13 @@ public final class NegotiationTabRegistry {
                     + "Counter with your fee (e.g. 'how about 6500 for 10 hours'), type 'deal' to accept "
                     + "their offer, 'reject' to turn them away, or press Hint for advice.");
         } else {
-            // The HM builds EVERY snapshot with lastPlayerOffer=0.0 (it does not track the player's
-            // side of the dialogue) — the GUI is the only place that knows the player's standing
-            // offer, so carry it across rounds or the offer strip and the DialogueCtx standing
-            // offer would reset to "no offer" on every vessel counter.
+            // Fallback since 2026-08-10 (audit P1-9): the HM now DOES track the player's standing
+            // offer and stamps it into the snapshot, so on the ordinary priced-counter path this
+            // branch no longer fires. It still guards the cases where the HM cannot know and the
+            // GUI can — chiefly a dialogue whose HM-side entry did not survive (a reload, or a
+            // command that reached the tab without passing DispatchPlayerCommandBehaviour) —
+            // where dropping to "no offer" would blank the offer strip and the DialogueCtx
+            // standing offer on the next vessel counter.
             if (snapshot.lastPlayerOffer() == 0.0 && tab.snapshot().lastPlayerOffer() > 0.0) {
                 snapshot = withPlayerOffer(snapshot, tab.snapshot().lastPlayerOffer());
             }

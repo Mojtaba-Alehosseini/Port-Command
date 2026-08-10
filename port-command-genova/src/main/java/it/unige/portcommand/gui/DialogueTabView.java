@@ -55,8 +55,20 @@ final class DialogueTabView extends JPanel {
      * Read live rather than off the static {@code Settings.load()} so the toggle takes effect at
      * once instead of only reflecting the {@code defaults.json} value. */
     private final BooleanSupplier autopilotEnabled;
-    /** Sim instant this dialogue's tab opened — the countdown's zero point (task 24). */
-    private final long openedAtSimMillis;
+    /**
+     * Sim instant this dialogue opened — the countdown's zero point (task 24).
+     *
+     * <p>Seeded from this tab's own construction, then pulled back MONOTONICALLY towards the
+     * HarbourMaster's origin on every snapshot refresh (2026-08-10, audit P1-9): the snapshot's
+     * {@code timeUsedSec} is elapsed real seconds since the HM stamped the dialogue, so
+     * {@code now - that} reconstructs the HM's own zero point. Before this the tab stamped its own
+     * instant and the Assistant's urgency used a hard-coded 0.0 — two notions of "how long has
+     * this run". One clock, two consumers: what the player watches tick down and what the
+     * Assistant reasons from are now the same quantity. The clock ticks it forward continuously
+     * via {@code refreshStrip()}; see {@link #resyncCountdownOrigin} for why the re-derivation
+     * must only ever move this earlier.
+     */
+    private long openedAtSimMillis;
 
     private final JTextPane transcriptPane = new JTextPane();
     private final JLabel offerStripLabel = new JLabel();
@@ -111,6 +123,7 @@ final class DialogueTabView extends JPanel {
         if (tab == null) {
             return;
         }
+        resyncCountdownOrigin(tab);
         transcriptPane.setText(ChatMessageRenderer.renderTranscript(tab.transcript()));
         // Audit C-28 (2026-07-27): JEditorPane.setText replaces the document and leaves the caret
         // at offset 0, and the default DefaultCaret update policy then scrolls the viewport TO the
@@ -166,8 +179,9 @@ final class DialogueTabView extends JPanel {
 
     /**
      * The "~Ns remaining" countdown (task 24, live for the first time — the pre-task-24 value
-     * was a static stub off {@code WalkInDialogueSnapshot.timeUsedSec}, which is still published
-     * as {@code 0.0}). Counts down {@code Settings.timeLimitSeconds} — the PUBLIC nominal
+     * was a static stub off {@code WalkInDialogueSnapshot.timeUsedSec}, which was published as
+     * {@code 0.0} until audit P1-9 made it real; the two now share one origin, see
+     * {@link #openedAtSimMillis}). Counts down {@code Settings.timeLimitSeconds} — the PUBLIC nominal
      * negotiation window, deliberately approximate — in REAL seconds, converting the elapsed sim
      * time since this tab opened through the clock's own day-length mapping. The true per-vessel
      * deadline is the hidden {@code maxWaitMinutes} belief (P-04: never shown), whose
@@ -175,8 +189,32 @@ final class DialogueTabView extends JPanel {
      */
     private long remainingSeconds() {
         long elapsedSimMs = Math.max(0L, simClock.nowSimMillis() - openedAtSimMillis);
-        double elapsedRealSec = elapsedSimMs * (double) simClock.realSecondsPerGameDay() / 86_400_000.0;
+        double elapsedRealSec = simClock.realSecondsForSimMillis(elapsedSimMs);
         return Math.max(0L, Settings.load().timeLimitSeconds() - Math.round(elapsedRealSec));
+    }
+
+    /**
+     * Re-anchors {@link #openedAtSimMillis} on the HarbourMaster's dialogue origin, reconstructed
+     * from the snapshot's elapsed-real-seconds figure (audit P1-9 — see that field's javadoc).
+     * Only moves the anchor when the HM has actually reported elapsed time, so a snapshot from
+     * before that field was live cannot slam the countdown back to full.
+     */
+    private void resyncCountdownOrigin(DialogueTabModel tab) {
+        WalkInDialogueSnapshot snapshot = tab.snapshot();
+        if (snapshot == null || snapshot.timeUsedSec() <= 0.0) {
+            return;
+        }
+        // MONOTONE (2026-08-10 adversarial review): take the EARLIER origin, never assign
+        // outright. refresh() runs on many paths that carry no NEW snapshot — every player send,
+        // every system line, an assistant reply, a settings change — and re-deriving the origin
+        // from a stale timeUsedSec while `now` keeps moving rewinds the countdown and then pins
+        // it (measured: 60 -> 35 -> 20, then back to 35 and frozen there the moment the player
+        // typed). An origin can only ever be discovered to be EARLIER than assumed: the tab's own
+        // construction stamp is by definition no earlier than the HarbourMaster's, and a later
+        // snapshot's elapsed figure only ever grows. So min() converges on the HM's true origin
+        // and a stale re-derivation is a no-op.
+        openedAtSimMillis = Math.min(openedAtSimMillis,
+                simClock.nowSimMillis() - simClock.simMillisForRealSeconds(snapshot.timeUsedSec()));
     }
 
     private void onSend() {
