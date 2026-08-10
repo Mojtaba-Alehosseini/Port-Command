@@ -199,9 +199,10 @@ public final class Paraphraser {
      * INFORM shapes discriminate on whichever of three top-level keys is present —
      * {@code intent} (withdraw/departed/service_complete — vessel-originated),
      * {@code event} (tug_hold/escort_complete/flagged/routine_inspection/weather_hold/
-     * weather_threshold/weather_clear/weather_resume), or {@code notice} (handling_complete)
-     * — plus the routine weather
-     * broadcast, which has none of the three. {@code priority=high} is an ACL envelope
+     * weather_threshold/weather_clear/weather_resume/weather_periodic), or {@code notice}
+     * (handling_complete) — plus a keys-only conditions shape carrying none of the three, which
+     * is the pre-P1-4 weather broadcast and has had no producer since that broadcast gained its
+     * {@code weather_periodic} discriminator. {@code priority=high} is an ACL envelope
      * parameter (weather threshold + customs flagged), never JSON content, so it is read off
      * {@code msg} directly.
      */
@@ -235,6 +236,14 @@ public final class Paraphraser {
                 case "weather_clear" ->
                         "weather clearing (wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state") + ")";
                 case "weather_resume" -> "weather cleared — resuming escort for " + orVessel(content);
+                // Audit P1-4 follow-up: the 15-sim-minute snapshot the WeatherAgent now sends the
+                // hub. Without its own case it fell to humanize() below and read "weather
+                // periodic" roughly 96 times a game day — the single noisiest line in the comm
+                // log. Worded as an observation, not an alert: it reports conditions whether they
+                // are good or bad, carries no priority=high, and unlike weather_threshold it
+                // signals no transition.
+                case "weather_periodic" ->
+                        "weather check (wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state") + ")";
                 default -> humanize(event);
             };
         }

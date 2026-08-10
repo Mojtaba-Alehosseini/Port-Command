@@ -105,7 +105,18 @@ class ParaphraserTest {
                 Arguments.of("INFORM cargo handling complete (ProcessCargoHandlingBehaviour:71)",
                         inform(Map.of("notice", "handling_complete", "vessel", "V1", "berth", "berth_1"), false),
                         "Notifying: cargo handling complete at berth berth_1"),
-                Arguments.of("INFORM routine weather broadcast, no intent/event/notice key (PeriodicWeatherBroadcastBehaviour:64)",
+                // The shape PeriodicWeatherBroadcastBehaviour actually sends since audit P1-4:
+                // routed to the hub with an event discriminator. Before this case existed it read
+                // "Notifying: weather periodic" via humanize(), ~96x a game day.
+                Arguments.of("INFORM weather_periodic snapshot (PeriodicWeatherBroadcastBehaviour.broadcast)",
+                        inform(Map.of("event", "weather_periodic", "wind_knots", 22, "visibility", "good",
+                                "swell", 1.5, "state", "cloudy", "sim_time", 1000L), false),
+                        "Notifying: weather check (wind 22kn, cloudy)"),
+                // The pre-P1-4 keyless broadcast. Production no longer sends this shape — kept
+                // because the keys-only fallback it exercises is still reachable for any INFORM
+                // carrying conditions without a discriminator, and removing the golden would leave
+                // that branch untested.
+                Arguments.of("INFORM conditions with no intent/event/notice key (pre-P1-4 broadcast shape)",
                         inform(Map.of("wind_knots", 10, "visibility", "good", "swell", 1.0,
                                 "state", "sunny", "sim_time", 1000L), false),
                         "Notifying: conditions: wind 10kn, sunny"),
