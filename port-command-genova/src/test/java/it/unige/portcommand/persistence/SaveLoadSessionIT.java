@@ -179,13 +179,6 @@ class SaveLoadSessionIT {
     }
 
     /**
-     * Checkpoint-#6 F3 (fixed 2026-07-18): the ledgers publish only on mutation, so a fresh
-     * boot rendered "Wallet: —" until the first money event. The window's one-time
-     * {@code GuiReadyEvent} now triggers the same synthetic absolute refresh the load path
-     * publishes — here fired from the test thread ({@code CALLER_THREAD} subscription, so the
-     * refresh is synchronous) against a freshly started game.
-     */
-    /**
      * Audit C-01/D-02, decision taken 2026-07-28 — the demo's own scripted policy sentence, end to
      * end: typed → parsed → published → registered on the Assistant → persisted → still live after
      * a load.
@@ -248,6 +241,18 @@ class SaveLoadSessionIT {
         return WalkInDialogueSnapshot.of("POL-1", spec, "berth_1", 6, vesselAsk, 0.0, 1, 0.0, false);
     }
 
+    /**
+     * Checkpoint-#6 F3 (fixed 2026-07-18): the ledgers publish only on mutation, so a fresh boot
+     * rendered "Wallet: —" until the first money event. The window's one-time
+     * {@code GuiReadyEvent} triggers the same synthetic absolute refresh the load path publishes —
+     * here fired from the test thread against a freshly started game.
+     *
+     * <p>The refresh is delivered {@code ASYNC} since 2026-08-10 (audit P1-14: the real publisher
+     * is {@code MainWindow.windowOpened}, on the EDT, and the handler reads live agent state), so
+     * these assertions MUST poll. Before that change the subscription was {@code CALLER_THREAD}
+     * and this test read the audit log immediately after {@code publish} returned — correct then,
+     * a race now.
+     */
     @Test
     void guiReady_publishesLiveHudRefreshAtFreshBoot() throws Exception {
         boot = new JadeBootstrap();
@@ -258,19 +263,18 @@ class SaveLoadSessionIT {
 
         boot.getEventBus().publish(new it.unige.portcommand.gui.events.GuiReadyEvent());
 
-        List<Event> published = EventBusProbe.published(boot.getEventBus());
-        assertTrue(published.stream()
+        assertTrue(waitUntil(() -> EventBusProbe.published(boot.getEventBus()).stream()
                         .filter(it.unige.portcommand.gui.events.WalletChangedEvent.class::isInstance)
                         .map(it.unige.portcommand.gui.events.WalletChangedEvent.class::cast)
                         .anyMatch(e -> "gui_ready".equals(e.source())
-                                && e.balance() == AgentRoster.STARTING_WALLET && e.delta() == 0.0),
+                                && e.balance() == AgentRoster.STARTING_WALLET && e.delta() == 0.0), 10_000),
                 "GuiReadyEvent must publish a synthetic absolute wallet refresh with the "
                         + "starting balance — the HUD must never boot to the \"—\" placeholder");
-        assertTrue(published.stream()
+        assertTrue(waitUntil(() -> EventBusProbe.published(boot.getEventBus()).stream()
                         .filter(it.unige.portcommand.gui.events.ReputationChangedEvent.class::isInstance)
                         .map(it.unige.portcommand.gui.events.ReputationChangedEvent.class::cast)
                         .anyMatch(e -> "gui_ready".equals(e.reason())
-                                && e.score() == AgentRoster.STARTING_REPUTATION),
+                                && e.score() == AgentRoster.STARTING_REPUTATION), 10_000),
                 "GuiReadyEvent must publish the matching reputation refresh");
     }
 

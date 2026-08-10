@@ -363,8 +363,20 @@ public final class GameSession {
             // uniform hook: it fires after startNewGame on a fresh `--gui` boot AND after a cold
             // `--load` boot (whose publishRestoredState ran before the window existed and was
             // lost), and this session-scoped subscription is registered before either.
+            // ASYNC, not CALLER_THREAD (2026-08-10, audit P1-14). GuiReadyEvent is published from
+            // MainWindow.windowOpened, i.e. ON THE EDT, so a CALLER_THREAD subscriber ran
+            // publishLiveHudState's directory.byName + ledger reads on the EDT — the one place GUI
+            // code reached into live agent state instead of going through the bus, which is the
+            // direction INVARIANTS' "GUI <-> agents only through EventBus" rule exists to prevent.
+            // Harmless today (all three reads are lock-free), but a ledger that ever took a lock on
+            // read would turn it into an EDT stall behind the HarbourMaster thread.
+            // ASYNC is safe here: the handler is a handful of volatile reads plus three publishes,
+            // fires exactly once per window open, and returns promptly — the shared 2-thread pool's
+            // contract. The three events still reach HUDPanel on the EDT exactly as before; the only
+            // consequence is that the seed figures can land a few ms later, and HUDModel assigns
+            // absolutes rather than accumulating deltas, so that self-corrects on the next event.
             boot.getEventBus().subscribe(it.unige.portcommand.gui.events.GuiReadyEvent.class,
-                    e -> publishLiveHudState("gui_ready"), it.unige.portcommand.util.DeliveryMode.CALLER_THREAD);
+                    e -> publishLiveHudState("gui_ready"), it.unige.portcommand.util.DeliveryMode.ASYNC);
             guiRefreshSubscribed = true;
         }
     }
