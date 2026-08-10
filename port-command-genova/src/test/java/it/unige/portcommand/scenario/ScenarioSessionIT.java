@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Predicate;
 
+import it.unige.portcommand.agents.BerthOccupancy;
 import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
@@ -128,6 +129,55 @@ class ScenarioSessionIT {
                         .noneMatch(e -> e.performative() == ACLMessage.REQUEST
                                 && "vessel_c501".equals(e.sender())),
                 "no resurrected C501 announces a berth request post-load");
+    }
+
+    /**
+     * FIND-2 / audit P1-1, end-to-end on the real tutorial: the contracted berth booking must
+     * span its whole contracted stay instead of evaporating.
+     *
+     * <p>Before the fix the berth REQUEST carried the contract's time-of-day OFFSET (300 000)
+     * where {@code TerminalState} wanted an absolute instant, so {@code expectedFreeAtSim} came
+     * out as 21 900 000 — <em>before</em> the 08:00 boot instant this scenario starts at
+     * (28 800 000). {@code ProcessCargoHandlingBehaviour} therefore docked the vessel on its
+     * first sim-minute tick and freed the berth on the second: the sub-2-second "berth fill
+     * flash" the 2026-08-04 live walk reported.
+     *
+     * <p>Runs at 20 s/day rather than the 5 s/day the other cases use, so C-501's six contracted
+     * hours are ~5 real seconds of observable window against a ~28 ms flash — a 180x margin, so
+     * the assertion is about the booking's VALUES, not about winning a race.
+     */
+    @Test
+    void tutorialContractedBerthHoldsItsFullStayInsteadOfFlashing() throws Exception {
+        boot = new JadeBootstrap();
+        GameSession session = new GameSession(boot,
+                new BootstrapConfig(TEST_PORT, false, "realtime", 20),
+                new SaveLoadManager(tempDir), new Leaderboard(tempDir.resolve("scores.json")));
+
+        session.startScenario("tutorial");
+
+        assertNotNull(awaitEvent(ContractedFeeEarnedEvent.class, e -> "C-501".equals(e.contractId()), 20_000),
+                "the tutorial's C-501 scripted spawn must earn its contracted fee");
+
+        // The grant sends the berth REQUEST; the terminal books it on receipt.
+        assertTrue(waitUntil(() -> boot.getPortStateArtifact().getBerth("berth_1")
+                        .filter(b -> "C501".equals(b.vesselId())).isPresent(), 15_000),
+                "berth_1 must be booked for C501 and still be booked - if this times out the "
+                        + "booking already evaporated, which IS the FIND-2 flash");
+
+        BerthOccupancy booking = boot.getPortStateArtifact().getBerth("berth_1").orElseThrow();
+        long bootInstant = 28_800_000L; // tutorial: startDay 1, startTimeOfDay 08:00
+        assertTrue(booking.dockedAtSim() >= bootInstant,
+                "dockedAtSim must be an absolute instant at/after the 08:00 boot, got "
+                        + booking.dockedAtSim());
+        assertTrue(booking.expectedFreeAtSim() > bootInstant,
+                "expectedFreeAtSim must lie in the future, not " + booking.expectedFreeAtSim()
+                        + " (before the fix it was 21_900_000, i.e. already expired at boot)");
+        // Consistency check, NOT the regression gate: TerminalState derives expectedFreeAtSim as
+        // etaSim + hours and stores etaSim as dockedAtSim, so this identity also held pre-fix
+        // (300_000 + 21_600_000). The two "> bootInstant" assertions above are what actually fail
+        // on the unfixed code. Kept because it documents the contracted-hours contract.
+        assertEquals(booking.dockedAtSim() + 6L * 3_600_000L, booking.expectedFreeAtSim(),
+                "the booking must span C-501's full 6 contracted hours");
     }
 
     @Test

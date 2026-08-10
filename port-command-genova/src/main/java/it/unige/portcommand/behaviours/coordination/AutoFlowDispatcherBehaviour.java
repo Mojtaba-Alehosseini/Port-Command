@@ -202,8 +202,19 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
             });
             return;
         }
+        // eta_sim MUST be the spec's ABSOLUTE arrival instant, never the contract's
+        // expectedArrivalSimMillis (2026-08-10, audit P1-1 / the live walk's FIND-2). A contract's
+        // ETA is a time-of-day OFFSET because the schedule recurs daily (ServiceContract's own
+        // javadoc); TerminalState.requestBerth adds contractedHours to whatever it is handed and
+        // ProcessCargoHandlingBehaviour sweeps the result against the ABSOLUTE sim clock. Every
+        // scenario boots at 08:00 (28_800_000), so an offset-valued eta_sim expires before the
+        // clock has even started: the tutorial's berth_1 went PROVISIONAL -> DOCKED -> FREE on two
+        // consecutive ticks (the sub-2-second "berth fill flash"), and storm's ST-901 (eta 0, 10 h,
+        // granted at ~29_760_000) freed at 36_000_000 - about 1.7 sim-hours into a 10-hour stay,
+        // i.e. some 8.3 hours EARLY. This is a strict no-op for the DAILY contract stream,
+        // whose SpawnVesselEvent already builds the spec from the same already-absolute value.
         BerthRequest req = new BerthRequest(spec.vesselId(), spec.vesselType(), spec.draft(), spec.length(),
-                spec.tonnage(), contract.berthId(), contract.expectedArrivalSimMillis(),
+                spec.tonnage(), contract.berthId(), spec.etaArrivalSimMillis(),
                 contract.contractedHours(), spec.cargoClass());
         ACLMessage request = MessageFactory.create(ACLMessage.REQUEST);
         terminals.forEach(request::addReceiver);

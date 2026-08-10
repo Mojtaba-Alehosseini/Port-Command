@@ -96,8 +96,14 @@ class HarbourMasterAgentIT {
 
     @Test
     void contractedVesselCompatible_acceptsAndDispatchesDownstream() throws Exception {
-        ServiceContract contract = new ServiceContract("CONTRACT-1", "C001", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
-        VesselSpec spec = new VesselSpec("C001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        // FIND-2 / audit P1-1 regression fixture: the two ETAs are DELIBERATELY different. The
+        // contract's is a time-of-day OFFSET (09:00, recurs daily - ServiceContract's own javadoc);
+        // the spec's is the ABSOLUTE instant the vessel actually arrives. Before the fix the berth
+        // REQUEST carried the contract's offset, which TerminalState adds hours to as if it were
+        // absolute. Giving both the same value (as this fixture used to) hides the bug entirely.
+        ServiceContract contract =
+                new ServiceContract("CONTRACT-1", "C001", "cargo_vessel", "berth_1", 5200.0, 8, 32_400_000L);
+        VesselSpec spec = new VesselSpec("C001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 28_830_000L);
         HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         Probe vessel = spawnProbe("t1_vessel", null);
         Probe terminal = spawnProbe("t1_terminal", "terminal");
@@ -126,6 +132,10 @@ class HarbourMasterAgentIT {
         assertEquals(30000, termContent.get("tonnage").asInt());
         assertEquals(8, termContent.get("duration_hours").asInt());
         assertEquals("general_cargo", termContent.get("cargo_class").asText());
+        assertEquals(28_830_000L, termContent.get("eta_sim").asLong(),
+                "eta_sim must be the spec's ABSOLUTE arrival instant, not the contract's "
+                        + "time-of-day offset - TerminalState computes expectedFreeAtSim = eta_sim + hours "
+                        + "and ProcessCargoHandlingBehaviour sweeps it against the absolute sim clock (FIND-2)");
 
         ACLMessage cfp1 = pollUntil(tug1.inbox, m -> true, 5000);
         ACLMessage cfp2 = pollUntil(tug2.inbox, m -> true, 5000);
@@ -375,6 +385,60 @@ class HarbourMasterAgentIT {
         assertEquals(1, event.snapshot().roundsUsed());
         assertTrue(PrologQueries.isCompatible(event.snapshot().berthId(), "cargo_vessel", 9.0, 150.0, 30000),
                 "the berth HM picked must itself be Prolog-compatible");
+    }
+
+    /**
+     * Audit P1-9: the snapshot handed to the Assistant must carry the dialogue's REAL observable
+     * state. {@code lastPlayerOffer} and {@code timeUsedSec} used to be hard-coded 0.0, which left
+     * two of {@code UrgencyCalculator}'s three terms permanently dead.
+     */
+    @Test
+    void walkInSnapshot_carriesTheRealPlayerOfferAndElapsedTime() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W030", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vessel = spawnProbe("t30_vessel", null);
+
+        vessel.outbox.put(openingOffer(hm, spec, 4800.0, 6, "nego-W030"));
+        NegotiationOpenedEvent opening = awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-W030".equals(e.dialogueId()), 10_000);
+        assertNotNull(opening, "fixture: the opening offer must reach the player");
+        assertEquals(0.0, opening.snapshot().lastPlayerOffer(),
+                "round 1: the player has not countered yet, so there is genuinely no offer to report");
+        assertNotNull(hm.negotiationOpenedAt().get("nego-W030"),
+                "the dialogue's sim-time origin must be stamped on the first offer");
+
+        // The player counters. DispatchPlayerCommandBehaviour is the ONLY point the HarbourMaster
+        // ever sees their price (the vessel's reply carries no player terms). Driven directly, the
+        // established pattern in this file's player-command cases.
+        new DispatchPlayerCommandBehaviour(hm).onPlayerCommand(new PlayerCommandEvent(
+                PlayerCommandKind.PROPOSE, "W030",
+                Map.of("price", 3900.0, "hours", 6, "conversation_id", "nego-W030")));
+        assertEquals(3900.0, hm.negotiationPlayerOffers().get("nego-W030"),
+                "the player's PROPOSE price must be recorded against its dialogue");
+
+        // Advance sim time so the elapsed-time term has something to report, then have the vessel
+        // counter — which is what rebuilds the snapshot.
+        boot.getSimClock().advance(2_000);
+        vessel.outbox.put(openingOffer(hm, spec, 4400.0, 6, "nego-W030"));
+
+        NegotiationOpenedEvent counter = awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-W030".equals(e.dialogueId()) && e.snapshot().roundsUsed() == 2, 10_000);
+        assertNotNull(counter, "the vessel's counter must republish the dialogue snapshot");
+        assertEquals(3900.0, counter.snapshot().lastPlayerOffer(),
+                "the snapshot must carry the player's real standing offer, not a hard-coded 0.0");
+        assertTrue(counter.snapshot().timeUsedSec() > 0.0,
+                "elapsed real seconds must be reported once the clock has moved, got "
+                        + counter.snapshot().timeUsedSec());
+
+        // Terminal paths must not leak the two new per-dialogue entries. handleWithdraw clears
+        // them before it publishes, so the event is a sufficient barrier.
+        vessel.outbox.put(withdrawMessage(hm, "over_priced", "nego-W030"));
+        assertNotNull(awaitEvent(WithdrawalEvent.class, e -> "W030".equals(e.vesselId()), 10_000),
+                "fixture: the withdraw must be processed");
+        assertFalse(hm.negotiationOpenedAt().containsKey("nego-W030"),
+                "a closed dialogue must forget its sim-time origin");
+        assertFalse(hm.negotiationPlayerOffers().containsKey("nego-W030"),
+                "a closed dialogue must forget the player's offer");
     }
 
     @Test
@@ -738,6 +802,13 @@ class HarbourMasterAgentIT {
 
         vessel.outbox.put(contractRequest(hm, "CONTRACT-P1", spec, "t9_vessel"));
         assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "setup: the grant must reach the vessel");
+        // The ACCEPT is NOT the tracking barrier: AutoFlowDispatcherBehaviour sends it and writes
+        // activeVessels as separate steps, so dispatching a PlayerCommandEvent the instant the
+        // ACCEPT lands can beat that write and be dropped as "untracked vessel" (observed
+        // 2026-08-10, WARN and grant log on the same millisecond; reproducible on an unmodified
+        // tree by running this case alone). Wait for the write itself.
+        assertNotNull(pollTracking(hm, "P001", t -> true, 10_000),
                 "setup: establishes activeVessels tracking with a real sender AID");
 
         // Call the public handler directly rather than publishing through the (now real, ASYNC)
@@ -800,6 +871,9 @@ class HarbourMasterAgentIT {
 
         vessel.outbox.put(contractRequest(hm, "CONTRACT-D1", spec, "t20_vessel"));
         assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "setup: the grant must reach the vessel");
+        // Same grant/tracking race as the case above — wait for the activeVessels write itself.
+        assertNotNull(pollTracking(hm, "D001", t -> true, 10_000),
                 "setup: establishes activeVessels tracking with a real sender AID");
 
         // action() registers the real subscription exactly as JADE's scheduler would (this class
