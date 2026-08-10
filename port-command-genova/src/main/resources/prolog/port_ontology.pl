@@ -77,7 +77,8 @@ cargo_class(hazmat_class_3).
 cargo_class(liquid_bulk).
 
 % --- Hazmat predicate (single owner; task 09 must NOT redefine it) ---
-is_hazmat(C) :- subclass_of(C, hazmat_cargo).
+is_hazmat(hazmat_cargo).
+is_hazmat(C) :- subclass_of(C, P), is_hazmat(P).
 
 % --- Property domains ---
 property_domain(has_cargo_class, vessel).

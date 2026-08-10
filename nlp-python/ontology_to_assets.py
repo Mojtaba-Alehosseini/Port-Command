@@ -198,7 +198,15 @@ def render_prolog(model: dict) -> str:
 
     out.append("")
     out.append("% --- Hazmat predicate (single owner; task 09 must NOT redefine it) ---")
-    out.append("is_hazmat(C) :- subclass_of(C, hazmat_cargo).")
+    # Reflexive-transitive over the subclass chain (2026-08-10, audit P1-7). The old
+    # single clause `is_hazmat(C) :- subclass_of(C, hazmat_cargo).` was ONE HOP, so the
+    # parent class hazmat_cargo itself failed its own predicate: R22 needs_inspection
+    # rejected it, R23 inspection_probability returned 0.2 instead of 0.8 and R24
+    # high_risk failed. The shipped ontology is only two levels deep, so the REFLEXIVE
+    # base clause is the leg that changes behaviour today; the recursive clause is
+    # future-proofing for any deeper hazmat subtype the OWL later gains.
+    out.append("is_hazmat(hazmat_cargo).")
+    out.append("is_hazmat(C) :- subclass_of(C, P), is_hazmat(P).")
 
     out.append("")
     out.append("% --- Property domains ---")

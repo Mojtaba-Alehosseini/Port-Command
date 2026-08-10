@@ -122,7 +122,12 @@ def test_cargo_root_not_a_cargo_class(pl_text):
 # --- is_hazmat clause (single owner) -----------------------------------------
 
 def test_is_hazmat_clause(pl_text):
-    assert "is_hazmat(C) :- subclass_of(C, hazmat_cargo)." in pl_text
+    # Reflexive-transitive since audit P1-7: the parent class hazmat_cargo must satisfy its
+    # own predicate (the old one-hop clause made it fail), and any deeper hazmat subtype the
+    # OWL gains later must inherit without another edit here.
+    assert "is_hazmat(hazmat_cargo)." in pl_text
+    assert "is_hazmat(C) :- subclass_of(C, P), is_hazmat(P)." in pl_text
+    assert "is_hazmat(C) :- subclass_of(C, hazmat_cargo)." not in pl_text
 
 
 # --- berth defaults + beams + instances --------------------------------------
