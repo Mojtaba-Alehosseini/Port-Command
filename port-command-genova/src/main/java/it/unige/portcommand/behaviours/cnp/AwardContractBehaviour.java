@@ -93,6 +93,11 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
             // backlog A-08 and is deliberately NOT changed here.
             log.warn("CNP for {}: {} bid(s) collected but Prolog selected no winner — holding "
                     + "rather than sending the vessel out unescorted", req.vesselId(), bids.size());
+            // Answer every bidder before leaving (2026-08-10). Holding the vessel without
+            // replying left each tug that bid waiting on a Contract Net that never concluded —
+            // its own CFP conversation simply went quiet. Same contentless REJECT the ordinary
+            // loser path below sends, so the tugs see a normal end to the session.
+            rejectAll(hm, bidsByTugId);
             holdVessel(hm, NO_WINNING_BID);
             hm.cnpCoordinator().completed();
             return;
@@ -128,6 +133,14 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
         // set currentJob before they see the next session's CFP, which is what makes their
         // busy-REFUSE guard effective. Release the serialized-CNP queue (B2).
         hm.cnpCoordinator().completed();
+    }
+
+    /** Contentless REJECT to every bidder — the shape the ordinary loser path sends. */
+    private void rejectAll(HarbourMasterAgent hm, Map<String, ACLMessage> bidsByTugId) {
+        for (Map.Entry<String, ACLMessage> entry : bidsByTugId.entrySet()) {
+            hm.sendLogged(MessageFactory.reply(entry.getValue(), ACLMessage.REJECT_PROPOSAL));
+            log.info("CNP for {}: REJECT -> {} (no winner selected)", req.vesselId(), entry.getKey());
+        }
     }
 
     private void holdVessel(HarbourMasterAgent hm, String reason) {
