@@ -40,6 +40,7 @@ import it.unige.portcommand.util.SimClock;
 import jade.core.AID;
 import jade.lang.acl.ACLMessage;
 import jade.lang.acl.MessageTemplate;
+import it.unige.portcommand.behaviours.cnp.InitiateCNPBehaviour;
 
 /**
  * Central coordinator and the player's proxy (there is no {@code PlayerAgent},
@@ -490,4 +491,22 @@ public final class HarbourMasterAgent extends PortCommandAgent
         eventBus.publish(new CommLogEvent(simClock.nowSimMillis(), sender, receivers,
                 message.getPerformative(), Paraphraser.paraphrase(message, sender), message.getConversationId()));
     }
+
+    /**
+     * Audit catch-all union. The four permanently-registered inbound templates, PLUS the whole
+     * Contract Net protocol: {@code BidCollectorBehaviour} builds its template per-cfpId at
+     * runtime, so it cannot be named here, and without this exclusion the catch-all could win a
+     * scheduler pass against a live bid. The cost is that a genuinely late post-close bid is
+     * consumed silently by the CNP exclusion rather than reported — still better than the leak it
+     * replaces, where it sat in the queue for the life of the JVM.
+     */
+    @Override
+    protected MessageTemplate handledTemplate() {
+        return MessageTemplate.or(
+                MessageTemplate.or(AutoFlowDispatcherBehaviour.TEMPLATE, ForwardWalkInToPlayerBehaviour.TEMPLATE),
+                MessageTemplate.or(
+                        MessageTemplate.or(HandleWeatherAlertBehaviour.TEMPLATE, HandleEmergencyBehaviour.TEMPLATE),
+                        MessageTemplate.MatchProtocol(InitiateCNPBehaviour.CNP_PROTOCOL)));
+    }
+
 }

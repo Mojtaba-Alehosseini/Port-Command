@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
 public final class RetractIfFloodBehaviour extends CyclicBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(RetractIfFloodBehaviour.class);
-    private static final MessageTemplate TEMPLATE = MessageTemplate.and(
+    public static final MessageTemplate TEMPLATE = MessageTemplate.and(
             MessageTemplate.MatchPerformative(ACLMessage.INFORM),
             MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));
 

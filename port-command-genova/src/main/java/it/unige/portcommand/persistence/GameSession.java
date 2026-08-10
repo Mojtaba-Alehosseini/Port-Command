@@ -381,11 +381,31 @@ public final class GameSession {
         }
     }
 
-    /** The load-path synthetic refresh (same event shapes), sourced from the LIVE ledgers. */
+    /**
+     * The load-path synthetic refresh (same event shapes), sourced from the LIVE ledgers.
+     *
+     * <p>Guarded on the ledgers being built (2026-08-10): {@code AgentDirectory.register} runs in
+     * {@code PortCommandAgent.setup()} BEFORE {@code onSetup()}, so a HarbourMaster is discoverable
+     * by name for a window in which its ledger fields are still null. That was latent while this
+     * ran {@code CALLER_THREAD} from the EDT — by then setup had always finished — and became
+     * reachable once audit P1-14 moved it onto the ASYNC pool, where it can land inside the
+     * window. It surfaced as an NPE swallowed by the bus's subscriber isolation, i.e. a silently
+     * missing HUD seed rather than a crash. Skipping is the right response: the HUD keeps task
+     * 18's "—" placeholder and self-corrects on the first real money event, which is exactly the
+     * documented behaviour for "no figure published yet".
+     */
     private void publishLiveHudState(String source) {
         directory.byName("harbour_master")
                 .filter(HarbourMasterAgent.class::isInstance)
                 .map(HarbourMasterAgent.class::cast)
+                .filter(hm -> {
+                    boolean ready = hm.walletLedger() != null && hm.reputationLedger() != null;
+                    if (!ready) {
+                        log.debug("{} refresh skipped: the HarbourMaster is registered but still "
+                                + "mid-setup (no ledgers yet)", source);
+                    }
+                    return ready;
+                })
                 .ifPresent(hm -> {
                     long simMillis = boot.getSimClock().nowSimMillis();
                     boot.getEventBus().publish(new WalletChangedEvent(

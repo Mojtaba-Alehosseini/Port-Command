@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 public final class HandleAcceptRejectBehaviour extends CyclicBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(HandleAcceptRejectBehaviour.class);
-    private static final MessageTemplate TEMPLATE = MessageTemplate.and(
+    public static final MessageTemplate TEMPLATE = MessageTemplate.and(
             MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY),
             MessageTemplate.or(
                     MessageTemplate.MatchPerformative(ACLMessage.ACCEPT_PROPOSAL),

@@ -8,6 +8,7 @@ import it.unige.portcommand.behaviours.coordination.HandleClearanceRequestBehavi
 import it.unige.portcommand.persistence.Mementoable;
 import it.unige.portcommand.persistence.dto.CustomsStateDTO;
 import it.unige.portcommand.util.RandomSource;
+import jade.lang.acl.MessageTemplate;
 
 /**
  * Customs pre-clearance. Handles clearance REQUESTs from the HarbourMaster: hazmat
@@ -57,4 +58,11 @@ public final class CustomsAgent extends PortCommandAgent implements Mementoable 
     public void restore(JsonNode node) {
         refSeq.set(persistenceMapper().convertValue(node, CustomsStateDTO.class).nextClearanceRef());
     }
+
+    /** Audit catch-all union: the single clearance REQUEST template. */
+    @Override
+    protected MessageTemplate handledTemplate() {
+        return HandleClearanceRequestBehaviour.TEMPLATE;
+    }
+
 }

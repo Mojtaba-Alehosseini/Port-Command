@@ -15,6 +15,8 @@ import it.unige.portcommand.negotiation.VesselTemplates;
 import it.unige.portcommand.negotiation.WalkInState;
 import it.unige.portcommand.persistence.dto.VesselStateDTO;
 import it.unige.portcommand.util.RandomSource;
+import jade.lang.acl.MessageTemplate;
+import it.unige.portcommand.ontology.VesselSpec;
 
 /**
  * Vessel arriving without a contract (Channel B); negotiates price/duration with the
@@ -177,4 +179,12 @@ public final class WalkInVesselAgent extends BaseVesselAgent {
         WalkInState s = stateRef.get();
         return s == null ? null : s.personality().name();
     }
+
+    /** Adds the negotiation conversation to {@link BaseVesselAgent}'s berth-grant one. */
+    @Override
+    protected MessageTemplate handledTemplate() {
+        return MessageTemplate.or(super.handledTemplate(),
+                MessageTemplate.MatchConversationId("nego-" + initArg(VesselSpec.class).vesselId()));
+    }
+
 }

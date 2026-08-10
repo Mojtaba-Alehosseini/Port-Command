@@ -36,7 +36,7 @@ public final class HandleEmergencyBehaviour extends CyclicBehaviour {
 
     /** Set on the customs pre-clearance REQUEST by {@code AutoFlowDispatcherBehaviour}. */
     public static final String CUSTOMS_CLEARANCE_PROTOCOL = "port-command-customs-clearance";
-    private static final MessageTemplate TEMPLATE = MessageTemplate.and(
+    public static final MessageTemplate TEMPLATE = MessageTemplate.and(
             MessageTemplate.MatchProtocol(CUSTOMS_CLEARANCE_PROTOCOL),
             MessageTemplate.or(MessageTemplate.MatchPerformative(ACLMessage.CONFIRM),
                     MessageTemplate.MatchPerformative(ACLMessage.INFORM)));

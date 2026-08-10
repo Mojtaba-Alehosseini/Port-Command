@@ -83,7 +83,7 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
             MessageTemplate.and(
                     MessageTemplate.MatchPerformative(ACLMessage.DISCONFIRM),
                     MessageTemplate.MatchProtocol(FLOOD_RETRACT_PROTOCOL)));
-    private static final MessageTemplate TEMPLATE = MessageTemplate.or(REQUEST_TEMPLATE, TERMINAL_REPLY_TEMPLATE);
+    public static final MessageTemplate TEMPLATE = MessageTemplate.or(REQUEST_TEMPLATE, TERMINAL_REPLY_TEMPLATE);
     private static final int DF_RETRY_ATTEMPTS = 3;
     // Must exceed ServiceLocator's 1 s DF-search cache TTL, or a retry inside that
     // window just replays the SAME stale "not found yet" result instead of a fresh

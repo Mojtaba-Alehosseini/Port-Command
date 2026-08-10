@@ -15,6 +15,7 @@ import it.unige.portcommand.ontology.Position;
 import it.unige.portcommand.persistence.dto.TugStateDTO;
 import it.unige.portcommand.util.SimClock;
 import jade.core.behaviours.Behaviour;
+import jade.lang.acl.MessageTemplate;
 
 /**
  * Tug escort agent (four instances, {@code tug_1}..{@code tug_4}, DF service
@@ -344,4 +345,12 @@ public final class TugAgent extends PortCommandAgent implements it.unige.portcom
     public double fuelState() {
         return fuelState;
     }
+
+    /** Audit catch-all union: the three permanent cyclic receivers, all registered at setup. */
+    @Override
+    protected MessageTemplate handledTemplate() {
+        return MessageTemplate.or(BidInCNPBehaviour.TEMPLATE,
+                MessageTemplate.or(HandleAcceptRejectBehaviour.TEMPLATE, HandleCancelBehaviour.TEMPLATE));
+    }
+
 }

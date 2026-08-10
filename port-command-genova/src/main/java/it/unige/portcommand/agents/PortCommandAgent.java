@@ -1,9 +1,11 @@
 package it.unige.portcommand.agents;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import it.unige.portcommand.behaviours.UnhandledMessageLogBehaviour;
 import it.unige.portcommand.bootstrap.ServiceLocator;
 import it.unige.portcommand.persistence.AgentDirectory;
 import jade.core.Agent;
+import jade.lang.acl.MessageTemplate;
 import jade.domain.DFService;
 import jade.domain.FIPAException;
 import jade.domain.FIPAService;
@@ -32,6 +34,7 @@ public abstract class PortCommandAgent extends Agent {
     protected final Logger log = LoggerFactory.getLogger(getClass());
     private ServiceLocator serviceLocator;
     private AgentDirectory agentDirectory;
+    private UnhandledMessageLogBehaviour unhandledMessages;
 
     @Override
     protected final void setup() {
@@ -53,6 +56,34 @@ public abstract class PortCommandAgent extends Agent {
         }
         registerServices();
         onSetup();
+        // LAST, after every subclass behaviour exists. Registration order buys no priority in
+        // JADE (the scheduler round-robins), so this is for readability, not correctness — the
+        // safety of the catch-all rests entirely on handledTemplate() below being complete.
+        this.unhandledMessages = new UnhandledMessageLogBehaviour(this, handledTemplate());
+        addBehaviour(unhandledMessages);
+    }
+
+    /**
+     * Every {@link MessageTemplate} this agent's behaviours can EVER match, unioned — the input to
+     * the catch-all that consumes and reports everything else (2026-08-10, the backlog's per-agent
+     * {@code not(...)} guard).
+     *
+     * <p>Default {@code null} means "this agent receives nothing", which is literally true of the
+     * Weather and Assistant agents; every game message addressed to them is unhandled by
+     * definition.
+     *
+     * <p><b>Completeness is a correctness requirement, not a nicety.</b> A template omitted here is
+     * a message the catch-all may swallow before its real handler runs — JADE gives no way to make
+     * a behaviour run last. Templates built at RUNTIME (per conversation id, per CNP session) must
+     * still be represented, by conversation id or by protocol tag; see the overrides for how.
+     */
+    protected MessageTemplate handledTemplate() {
+        return null;
+    }
+
+    /** Test seam: this agent's catch-all, for asserting what it swallowed. */
+    public UnhandledMessageLogBehaviour unhandledMessages() {
+        return unhandledMessages;
     }
 
     @Override

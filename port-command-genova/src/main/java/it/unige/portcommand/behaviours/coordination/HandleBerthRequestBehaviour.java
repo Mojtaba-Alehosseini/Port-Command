@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
 public final class HandleBerthRequestBehaviour extends CyclicBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(HandleBerthRequestBehaviour.class);
-    private static final MessageTemplate TEMPLATE = MessageTemplate.and(
+    public static final MessageTemplate TEMPLATE = MessageTemplate.and(
             MessageTemplate.MatchPerformative(ACLMessage.REQUEST),
             MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));
 

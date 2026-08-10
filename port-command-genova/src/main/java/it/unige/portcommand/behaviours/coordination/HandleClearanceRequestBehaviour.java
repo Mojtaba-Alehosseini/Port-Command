@@ -26,7 +26,7 @@ public final class HandleClearanceRequestBehaviour extends CyclicBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(HandleClearanceRequestBehaviour.class);
     private static final int CLEARANCE_YEAR = 2026; // fixed (no wall clock); scenarios may override later
-    private static final MessageTemplate TEMPLATE = MessageTemplate.and(
+    public static final MessageTemplate TEMPLATE = MessageTemplate.and(
             MessageTemplate.MatchPerformative(ACLMessage.REQUEST),
             MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));
 

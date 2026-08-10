@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
 public final class BidInCNPBehaviour extends CyclicBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(BidInCNPBehaviour.class);
-    private static final MessageTemplate TEMPLATE = MessageTemplate.and(
+    public static final MessageTemplate TEMPLATE = MessageTemplate.and(
             MessageTemplate.MatchPerformative(ACLMessage.CFP),
             MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));
 

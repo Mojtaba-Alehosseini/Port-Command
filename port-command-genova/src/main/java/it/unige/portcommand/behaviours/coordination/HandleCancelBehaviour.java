@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
 public final class HandleCancelBehaviour extends CyclicBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(HandleCancelBehaviour.class);
-    private static final MessageTemplate TEMPLATE = MessageTemplate.and(
+    public static final MessageTemplate TEMPLATE = MessageTemplate.and(
             MessageTemplate.MatchPerformative(ACLMessage.CANCEL),
             MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));
 

@@ -10,6 +10,7 @@ import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.persistence.dto.VesselStateDTO;
 import it.unige.portcommand.util.SimClock;
 import jade.core.behaviours.WakerBehaviour;
+import jade.lang.acl.MessageTemplate;
 
 /**
  * Abstract base for the two vessel subtypes (Contracted, Walk-in). Registers DF
@@ -197,4 +198,18 @@ public abstract class BaseVesselAgent extends PortCommandAgent
     public long phaseDeadlineSimMillis() {
         return phaseDeadlineSimMillis;
     }
+
+    /**
+     * Audit catch-all union, by CONVERSATION ID rather than by template object: a vessel's
+     * receivers ({@code AwaitBerthBehaviour}, and on the walk-in path
+     * {@code EvaluateCounterOfferBehaviour}) build their templates at runtime from a conversation
+     * id, so they cannot be named statically — but the ids themselves are derivable from the
+     * agent's own identity, which is what makes this safe. The berth grant conversation is
+     * {@code "berth-"+localName} on BOTH channels.
+     */
+    @Override
+    protected MessageTemplate handledTemplate() {
+        return MessageTemplate.MatchConversationId("berth-" + getLocalName());
+    }
+
 }

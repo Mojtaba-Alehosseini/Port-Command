@@ -9,6 +9,7 @@ import it.unige.portcommand.behaviours.coordination.RetractIfFloodBehaviour;
 import it.unige.portcommand.persistence.Mementoable;
 import it.unige.portcommand.persistence.dto.TerminalStateDTO;
 import it.unige.portcommand.util.SimClock;
+import jade.lang.acl.MessageTemplate;
 
 /**
  * Terminal (two instances: container, general cargo). Owns berth occupancy +
@@ -92,4 +93,11 @@ public final class TerminalAgent extends PortCommandAgent implements Mementoable
     TerminalState state() {
         return state;
     }
+
+    /** Audit catch-all union: the berth REQUEST and the flood INFORM. */
+    @Override
+    protected MessageTemplate handledTemplate() {
+        return MessageTemplate.or(HandleBerthRequestBehaviour.TEMPLATE, RetractIfFloodBehaviour.TEMPLATE);
+    }
+
 }
