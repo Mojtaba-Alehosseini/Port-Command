@@ -5,6 +5,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import it.unige.portcommand.behaviours.negotiation.EvaluateCounterOfferBehaviour;
+import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.behaviours.negotiation.OpeningProposalBehaviour;
 import it.unige.portcommand.behaviours.negotiation.TimeoutWithdrawalBehaviour;
 import it.unige.portcommand.negotiation.NegotiationEngine;
@@ -28,8 +29,6 @@ import it.unige.portcommand.util.RandomSource;
  * the {@code RandomSource} at args[4].
  */
 public final class WalkInVesselAgent extends BaseVesselAgent {
-
-    private static final int MAX_ROUNDS = 4;
 
     private NegotiationEngine engine;
     private RandomSource randomSource;
@@ -148,14 +147,30 @@ public final class WalkInVesselAgent extends BaseVesselAgent {
         return s == null ? 0 : s.maxWaitMinutes();
     }
 
-    // TODO(2026-07-17, adversarial review L4): MAX_ROUNDS is hardcoded 4 while
-    // RealNegotiationEngine derives roundsRemaining from Settings.roundLimit() (valid 2..8).
-    // These disagree if roundLimit != 4. No correctness impact today — this accessor feeds only
-    // display/urgency, never control flow — but source the limit from Settings when task 20/21
-    // wire a live Settings control.
+    /**
+     * Rounds this vessel has left, on the SAME formula {@link
+     * it.unige.portcommand.negotiation.RealNegotiationEngine} uses ({@code roundLimit + 1 - round},
+     * because {@code WalkInState.recordPlayerCounter} owns the increment and runs before the engine
+     * is consulted — ADR-09 decision 1; do not "simplify" the offset away).
+     *
+     * <p>Sourced from {@code Settings.roundLimit()} since 2026-08-10 (audit P1-10, closing the
+     * 2026-07-17 TODO): it was hardcoded 4 while the engine took the limit from Settings at both
+     * spawn sites, so the two disagreed for any configured limit other than 4. Read statically per
+     * the house pattern — {@code Settings} is a cached classpath record, never threaded through the
+     * constructor chain (INVARIANTS "Negotiation engine").
+     *
+     * <p>Honest scope note: this accessor currently has no callers, and the offer strip's
+     * "Round n of m" reads {@code Settings.roundLimit()} directly, so the fix removes a latent
+     * disagreement rather than a visible one.
+     */
     int roundsRemaining() {
-        WalkInState s = stateRef.get();
-        return s == null ? MAX_ROUNDS : Math.max(0, MAX_ROUNDS + 1 - s.round());
+        return roundsRemaining(Settings.load().roundLimit(), stateRef.get());
+    }
+
+    /** The pure arithmetic, so it is testable across the configured 2..8 range without reaching
+     * into {@code Settings}' JVM-lifetime cache. */
+    static int roundsRemaining(int roundLimit, WalkInState state) {
+        return state == null ? roundLimit : Math.max(0, roundLimit + 1 - state.round());
     }
 
     String personality() {
