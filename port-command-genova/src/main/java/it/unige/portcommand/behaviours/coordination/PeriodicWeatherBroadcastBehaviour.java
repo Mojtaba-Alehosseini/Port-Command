@@ -24,8 +24,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Broadcasts the current weather to all {@code weather-subscriber} agents every 15
- * sim-minutes, publishes the GUI's {@link WeatherChangeEvent} (task 24 — the map's
+ * Sends the HarbourMaster a weather snapshot every 15 sim-minutes (audit P1-4 — it used to
+ * address a {@code weather-subscriber} DF type nothing registers, so the channel was dead;
+ * see {@link #broadcast}), publishes the GUI's {@link WeatherChangeEvent} (task 24 — the map's
  * weather chip goes live), and — when {@link WeatherAlertPolicy} reports a genuine
  * severity transition — sends the HarbourMaster an alert on the
  * {@code WEATHER_ALERT_PROTOCOL}, in BOTH directions:
@@ -107,21 +108,48 @@ public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour 
         lastObserved = w;
     }
 
+    /**
+     * The 15-sim-minute weather snapshot, sent to the HarbourMaster hub (2026-08-10, audit P1-4).
+     *
+     * <p>It used to be addressed to a DF service type {@code "weather-subscriber"} that <b>no agent
+     * has ever registered</b>, so {@code findAll} always came back empty and the INFORM was never
+     * built, let alone sent — the whole periodic channel was dead, and only the transition-driven
+     * alert path below did anything.
+     *
+     * <p>Routed to the hub rather than to vessels or tugs because nothing on those agents can
+     * consume weather cheaply and honestly: a tug's {@code topSpeedKnots} is fixed at setup and
+     * scaling only one of the bid-ETA/transit pair would break the agreement {@code TugMathTest}
+     * pins, while vessel transit is duration-driven off a {@code final} arrival instant the
+     * save/resume contract reads. The hub, by contrast, has a real use for it — see below — and
+     * the HarbourMaster's send/receive is the comm log's single instrumentation point, so a
+     * Weather-to-vessel message would have been invisible there anyway.
+     *
+     * <p><b>What it actually does:</b> alerts fire only on {@link WeatherAlertPolicy} TRANSITIONS,
+     * so a vessel that enters transit while the weather is <em>already</em> bad is never held —
+     * the storm began before it arrived and no further transition is coming. This periodic
+     * snapshot re-runs the hub's existing hold gate over every tracked vessel, which is exactly
+     * the set the transition path misses. It carries the {@code weather_periodic} discriminator so
+     * the handler can tell it from a real alert, and rides the SAME protocol tag, so no new
+     * template, protocol or behaviour is needed to receive it.
+     */
     private void broadcast(WeatherSnapshot w) {
-        List<AID> subscribers = locator.findAll("weather-subscriber");
-        if (subscribers.isEmpty()) {
+        Optional<AID> hub = locator.findUnique("harbour-master");
+        if (hub.isEmpty()) {
+            log.debug("no harbour-master in DF yet; skipping the periodic weather snapshot");
             return;
         }
         ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);
-        subscribers.forEach(inform::addReceiver);
+        inform.addReceiver(hub.get());
         inform.setContent(TerminalJson.write(Map.of(
+                "event", "weather_periodic",
                 "wind_knots", w.wind(),
                 "visibility", w.visibility(),
                 "swell", w.swell(),
                 "state", w.state(),
                 "sim_time", w.simTime())));
+        inform.setProtocol(HandleWeatherAlertBehaviour.WEATHER_ALERT_PROTOCOL);
         myAgent.send(inform);
-        log.debug("weather broadcast wind={} state={} -> {} subscriber(s)", w.wind(), w.state(), subscribers.size());
+        log.debug("periodic weather snapshot wind={} state={} -> harbour-master", w.wind(), w.state());
     }
 
     private void alertHarbourMaster(WeatherSnapshot w, Direction direction) {

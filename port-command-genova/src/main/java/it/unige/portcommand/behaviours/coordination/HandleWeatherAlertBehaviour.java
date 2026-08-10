@@ -60,7 +60,7 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
 
     /** Set on both alert directions' INFORMs by {@code PeriodicWeatherBroadcastBehaviour}. */
     public static final String WEATHER_ALERT_PROTOCOL = "port-command-weather-alert";
-    private static final MessageTemplate TEMPLATE = MessageTemplate.and(
+    public static final MessageTemplate TEMPLATE = MessageTemplate.and(
             MessageTemplate.MatchProtocol(WEATHER_ALERT_PROTOCOL), MessageTemplate.MatchPerformative(ACLMessage.INFORM));
 
     public HandleWeatherAlertBehaviour(Agent agent) {
@@ -86,8 +86,20 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
         double windKnots = num(content, "wind_knots");
         double swell = num(content, "swell");
         // Absent event field = the pre-task-24 alert shape, which was always a worsening.
-        boolean clearing = "weather_clear".equals(text(content, "event"));
+        String event = text(content, "event");
+        boolean clearing = "weather_clear".equals(event);
+        // "weather_periodic" (audit P1-4) is the 15-sim-minute snapshot, not a transition. It runs
+        // the SAME hold sweep the worsening branch runs — deliberately, because that sweep is
+        // precisely what a vessel entering transit into already-bad weather never gets: alerts
+        // fire on transitions, and its storm had already begun. It must NOT take the clearing
+        // branch (that would re-dispatch held vessels every tick regardless of conditions), and it
+        // must not be mistaken for the legacy absent-event shape either — hence the explicit name.
+        boolean periodic = "weather_periodic".equals(event);
 
+        if (periodic) {
+            log.debug("periodic weather snapshot: sweeping {} tracked vessel(s) (wind={} state={})",
+                    hm.activeVessels().size(), windKnots, state);
+        }
         for (VesselTracking tracking : hm.activeVessels().values()) {
             if (clearing) {
                 // weatherHeld AND still genuinely waiting (checkpoint-#5 B1): a held vessel can
