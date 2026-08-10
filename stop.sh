@@ -17,11 +17,26 @@ killed=0
 
 for f in "$PIDDIR"/*.pid; do
   [ -e "$f" ] || continue
-  pid="$(cat "$f" 2>/dev/null || true)"
+  # start.sh writes "<pid> <comm>", so the whole line is not a pid - parse BOTH fields exactly as
+  # start.sh's own reap_stale does (2026-08-10, audit P1-11). Reading the line whole made
+  # `kill -0 "$pid"` fail on every entry, so pass 1 silently never killed anything and the pkill
+  # net below was doing all the work. stop.ps1 already parsed it correctly.
+  #
+  # The command-name check is NOT optional now that pass 1 actually fires: this kills a process
+  # GROUP off a recorded number, and stale PID files only outlive a `kill -9` or a reboot - which
+  # is exactly when the OS has recycled that pid onto something else. Same guard, same reason, as
+  # start.sh's reap_stale and stop.ps1's three-field identity match.
+  pid="$(cut -d' ' -f1 "$f" 2>/dev/null || true)"
+  oldcomm="$(cut -d' ' -f2 "$f" 2>/dev/null || true)"
   if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-    echo "[stop] killing $(basename "$f" .pid) (pid $pid)"
-    kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
-    killed=$((killed + 1))
+    nowcomm="$(ps -p "$pid" -o comm= 2>/dev/null | tr -d ' ')"
+    if [ -z "$oldcomm" ] || [ "$nowcomm" = "$oldcomm" ]; then
+      echo "[stop] killing $(basename "$f" .pid) (pid $pid)"
+      kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+      killed=$((killed + 1))
+    else
+      echo "[stop] pid $pid has been recycled by '$nowcomm' - not killing it"
+    fi
   fi
   rm -f "$f"
 done

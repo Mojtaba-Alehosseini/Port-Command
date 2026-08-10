@@ -176,8 +176,13 @@ try {
         $rasa = Start-Service-Process 'rasa' $RasaPy `
             @('run', '--enable-api', '--port', '5005', '--model', 'models\portcmd_nlu.tar.gz') `
             (Join-Path $Nlp 'rasa')
-        # Cold start loads DIET + the featurizers; 120 s is generous on a cold page cache.
-        Wait-ForHealth 'rasa' 'http://localhost:5005/status' 120 $rasa
+        # Cold start loads DIET + the featurizers. 120 s was NOT generous enough: the 2026-08-04
+        # walk measured the session's FIRST boot exceeding it on 3 of 4 attempts (a warm re-run
+        # then passed, which is what hid it). A miss here aborts the whole launch - the finally
+        # block stops the Rasa we just started and the sidecar below never runs - so the demo gets
+        # no game at all. The only cost of a longer ceiling is how long a genuinely dead Rasa takes
+        # to report itself, so 180 s. See backlog R-06.
+        Wait-ForHealth 'rasa' 'http://localhost:5005/status' 180 $rasa
 
         # 2) The Flask LLM sidecar, from the OTHER (3.11) venv, on the fast ONNX-INT4 backend.
         #    LLM_QUANT=onnx is what makes an explanation ~17 s instead of ~9 min (BUILD_LOG task

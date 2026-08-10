@@ -141,7 +141,12 @@ if [ "$NO_SERVICES" -eq 0 ]; then
       > "$LOGDIR/rasa.log" 2>&1 &
   RASA_PID=$!
   STARTED_PIDS+=("$RASA_PID"); echo "$RASA_PID $(ps -p "$RASA_PID" -o comm= 2>/dev/null | tr -d ' ')" > "$PIDDIR/rasa.pid"
-  wait_for_health rasa "http://localhost:5005/status" 120 "$RASA_PID"
+  # 180 s, not 120: the 2026-08-04 walk measured the session's FIRST Rasa boot exceeding 120 s on
+  # 3 of 4 attempts (a warm re-run passed, which is what hid it). A miss here aborts the whole
+  # launch - the EXIT trap kills the Rasa we just started and the sidecar below never runs - so
+  # the demo gets no game at all. The only cost of a longer ceiling is how long a genuinely dead
+  # Rasa takes to report itself. See backlog R-06.
+  wait_for_health rasa "http://localhost:5005/status" 180 "$RASA_PID"
 
   # 2) The Flask LLM sidecar, from the OTHER (3.11) venv, on the fast ONNX-INT4 backend.
   #    LLM_QUANT=onnx is what makes an explanation ~17 s instead of ~9 min (BUILD_LOG task 13b),
