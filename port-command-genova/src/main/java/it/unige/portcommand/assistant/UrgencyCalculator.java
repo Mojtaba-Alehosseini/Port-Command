@@ -11,13 +11,16 @@ package it.unige.portcommand.assistant;
  */
 public final class UrgencyCalculator {
 
-    /**
-     * PROJECT_DEFINITION §7.3 — walk-in negotiations run up to 4 rounds. This is a fixed game
-     * rule applied identically to every negotiation, never a per-vessel hidden belief, so using
-     * it does not violate the observable-inputs rule (unlike {@code WalkInState.maxWaitMinutes},
-     * which IS hidden and must never be read here).
-     */
-    public static final int DEFAULT_ROUND_LIMIT = 4;
+    // DEFAULT_ROUND_LIMIT (4) was REMOVED 2026-08-10, for the same reason and by the same
+    // reasoning as DEFAULT_TIME_LIMIT_SEC one session earlier: production stopped reading it.
+    //
+    // It described PROJECT_DEFINITION §7.3's round cap as a fixed constant, but the cap is a
+    // configurable Settings value (2..8) that RealNegotiationEngine, the offer strip's
+    // "Round N of M" and the HarbourMaster's final-round flag all already took from Settings.
+    // Only this calculator's caller still passed the constant, so the Assistant could reason
+    // from a budget of 4 while the player was shown a budget of 8. RecommendationAlgorithm now
+    // injects Settings.roundLimit(); both of compute()'s budgets are caller-supplied, and there
+    // is no "default" left that production honours.
 
     // DEFAULT_TIME_LIMIT_SEC (600.0, "10 sim-minutes") was REMOVED 2026-08-10 (audit P1-9,
     // resolving the scale conflict INVARIANTS and ADR-14 D13 both flagged as open).

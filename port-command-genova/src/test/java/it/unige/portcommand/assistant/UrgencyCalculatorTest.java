@@ -21,12 +21,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class UrgencyCalculatorTest {
 
-    /** The shipped default; the range ends are exercised separately below. */
+    /** The shipped defaults; the configured ranges are exercised separately below. */
+    private static final int ROUND_LIMIT = 4;
     private static final double DEFAULT_WINDOW_SEC = 60.0;
 
     @Test
     void openingOfferFloorsAtPointFour() {
-        double urgency = UrgencyCalculator.compute(0, UrgencyCalculator.DEFAULT_ROUND_LIMIT,
+        double urgency = UrgencyCalculator.compute(0, ROUND_LIMIT,
                 0.0, DEFAULT_WINDOW_SEC, false);
         assertEquals(0.4, urgency, 1e-9, "round 1 / no elapsed time / no threat must floor at 0.4, not 0.0");
     }
@@ -34,7 +35,7 @@ class UrgencyCalculatorTest {
     @ParameterizedTest(name = "an unstarted dialogue floors at 0.4 for a {0}s window")
     @ValueSource(doubles = {30.0, 60.0, 180.0})
     void anUnstartedDialogueFloorsAtPointFourAtEveryConfigurableWindow(double windowSec) {
-        assertEquals(0.4, UrgencyCalculator.compute(0, UrgencyCalculator.DEFAULT_ROUND_LIMIT,
+        assertEquals(0.4, UrgencyCalculator.compute(0, ROUND_LIMIT,
                 0.0, windowSec, false), 1e-9, "t=0 must floor regardless of the configured window");
     }
 
@@ -42,14 +43,14 @@ class UrgencyCalculatorTest {
     @ValueSource(doubles = {30.0, 60.0, 180.0})
     void aFullyElapsedWindowContributesItsWholeTermAtEveryConfigurableLimit(double windowSec) {
         // Time term alone: 0.4 + 0.6 * (0.4 * 1.0) = 0.64, at round 0 with no threat.
-        double atLimit = UrgencyCalculator.compute(0, UrgencyCalculator.DEFAULT_ROUND_LIMIT,
+        double atLimit = UrgencyCalculator.compute(0, ROUND_LIMIT,
                 windowSec, windowSec, false);
         assertEquals(0.64, atLimit, 1e-9,
                 "a fully-spent window must contribute its whole 0.4 weight, window=" + windowSec);
 
         // And with rounds and a threat on top, the same instant reaches the cap.
-        double saturated = UrgencyCalculator.compute(UrgencyCalculator.DEFAULT_ROUND_LIMIT,
-                UrgencyCalculator.DEFAULT_ROUND_LIMIT, windowSec, windowSec, true);
+        double saturated = UrgencyCalculator.compute(ROUND_LIMIT,
+                ROUND_LIMIT, windowSec, windowSec, true);
         assertEquals(1.0, saturated, 1e-9, "window=" + windowSec);
     }
 
@@ -59,7 +60,7 @@ class UrgencyCalculatorTest {
         double previous = -1.0;
         for (int step = 0; step <= 10; step++) {
             double elapsed = windowSec * step / 10.0;
-            double urgency = UrgencyCalculator.compute(1, UrgencyCalculator.DEFAULT_ROUND_LIMIT,
+            double urgency = UrgencyCalculator.compute(1, ROUND_LIMIT,
                     elapsed, windowSec, false);
             assertTrue(urgency > previous,
                     "urgency must strictly rise with elapsed time (window=" + windowSec
@@ -81,15 +82,15 @@ class UrgencyCalculatorTest {
 
     @Test
     void fullyExhaustedAndThreatenedCapsAtOne() {
-        double urgency = UrgencyCalculator.compute(UrgencyCalculator.DEFAULT_ROUND_LIMIT,
-                UrgencyCalculator.DEFAULT_ROUND_LIMIT, DEFAULT_WINDOW_SEC, DEFAULT_WINDOW_SEC, true);
+        double urgency = UrgencyCalculator.compute(ROUND_LIMIT,
+                ROUND_LIMIT, DEFAULT_WINDOW_SEC, DEFAULT_WINDOW_SEC, true);
         assertEquals(1.0, urgency, 1e-9);
     }
 
     @Test
     void overrunInputsStillClampToOne() {
         // rounds/time far past the limit, e.g. a stale snapshot — must not exceed 1.0.
-        double urgency = UrgencyCalculator.compute(50, UrgencyCalculator.DEFAULT_ROUND_LIMIT,
+        double urgency = UrgencyCalculator.compute(50, ROUND_LIMIT,
                 50_000.0, DEFAULT_WINDOW_SEC, true);
         assertEquals(1.0, urgency, 1e-9);
     }
@@ -97,7 +98,7 @@ class UrgencyCalculatorTest {
     @ParameterizedTest(name = "roundsUsed={0} -> urgency in [0.4, 1.0]")
     @CsvSource({"0", "1", "2", "3", "4"})
     void everyRoundStaysInRange(int roundsUsed) {
-        double urgency = UrgencyCalculator.compute(roundsUsed, UrgencyCalculator.DEFAULT_ROUND_LIMIT,
+        double urgency = UrgencyCalculator.compute(roundsUsed, ROUND_LIMIT,
                 0.0, DEFAULT_WINDOW_SEC, false);
         assertTrue(urgency >= 0.4 && urgency <= 1.0, "urgency=" + urgency + " out of [0.4, 1.0]");
     }

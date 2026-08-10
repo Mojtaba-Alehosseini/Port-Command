@@ -18,6 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RecommendationAlgorithmTest {
 
+    /** The shipped defaults, so a test varying one budget holds the other steady. */
+    private static final int ROUNDS = 4;
+    private static final int WINDOW = 60;
+
     @BeforeAll
     static void initEngine() {
         PrologEngine.getInstance().init();
@@ -60,27 +64,69 @@ class RecommendationAlgorithmTest {
         // dialogue is materially more urgent under the tighter deadline. Urgency scales p_accept,
         // which scales a counter candidate's EV.
         WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 1, 15.0);
-        double tightEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 30).run(snapshot).ev();
-        double looseEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 180).run(snapshot).ev();
+        double tightEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS, 30).run(snapshot).ev();
+        double looseEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS, 180).run(snapshot).ev();
 
         assertTrue(tightEv > looseEv,
                 "a 30s window must price this counter above a 180s one (" + tightEv + " vs "
                         + looseEv + ") - if these are equal the time term is dead again");
     }
 
+    /**
+     * The round-limit twin (2026-08-10). Until now the algorithm passed a hardcoded
+     * round limit while the HarbourMaster derived its final-round flag from
+     * {@code Settings.roundLimit()} — one figure, two sources.
+     */
     @Test
-    void theDefaultConstructorUsesTheLiveSettingsWindow() {
-        // Honest limit: on its own this cannot separate "reads Settings" from "hard-codes a number
-        // that happens to equal defaults.json". What makes the pair meaningful is the sibling test
-        // above, which proves the constructor argument is genuinely live — given that, this pins
-        // the production path to the same window the player's countdown uses.
+    void theConfiguredRoundLimitChangesTheRecommendationsUrgency() {
+        // Round 2 of a 2-round budget is the last round; round 2 of an 8-round budget has six
+        // left. The tighter budget must price the same counter higher, exactly as the tighter
+        // deadline does above — if these are equal, the injected limit is not being read.
+        WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 2, 0.0);
+        double tightEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 2, WINDOW).run(snapshot).ev();
+        double looseEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 8, WINDOW).run(snapshot).ev();
+
+        assertTrue(tightEv > looseEv,
+                "a 2-round budget must price this counter above an 8-round one (" + tightEv
+                        + " vs " + looseEv + ") - if these are equal the round term is hardcoded");
+    }
+
+    /**
+     * The Assistant's budget must be the same number the player is shown. {@code finalRound} in
+     * {@code ForwardWalkInToPlayerBehaviour} is {@code roundLimit + 1 - roundsUsed <= 1}, so the
+     * final round is {@code roundsUsed == roundLimit} — where the round-progress term is exactly
+     * 1.0, a fully spent budget, at EVERY configured limit. Two dialogues each on their own last
+     * round must therefore be priced identically no matter how long their budgets were.
+     *
+     * <p>That equality is what makes this non-vacuous: with the limit hardcoded to 4 the two sides
+     * are round 2 of 4 and round 8 of 4, which are nowhere near equal.
+     */
+    @Test
+    void theFinalRoundIsEquallyUrgentAtEveryConfiguredLimit() {
+        double atFinalOfTwo = new RecommendationAlgorithm(new MarketHistoryArtifact(), 2, WINDOW)
+                .run(tankerAtBerth1(1000.0, 2, 0.0)).ev();
+        double atFinalOfEight = new RecommendationAlgorithm(new MarketHistoryArtifact(), 8, WINDOW)
+                .run(tankerAtBerth1(1000.0, 8, 0.0)).ev();
+
+        assertEquals(atFinalOfTwo, atFinalOfEight, 1e-9,
+                "round 2 of 2 and round 8 of 8 are both a spent budget, so they must price the "
+                        + "same (" + atFinalOfTwo + " vs " + atFinalOfEight + ") - if they differ, "
+                        + "the algorithm is not reading the limit the player is shown");
+    }
+
+    @Test
+    void theDefaultConstructorUsesTheLiveSettingsBudgets() {
+        // Honest limit: on its own this cannot separate "reads Settings" from "hard-codes numbers
+        // that happen to equal defaults.json". What makes the group meaningful is the two siblings
+        // above, which prove both constructor arguments are genuinely live — given that, this pins
+        // the production path to the same budgets the player sees.
         WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 1, 15.0);
         Recommendation viaSettings = new RecommendationAlgorithm(new MarketHistoryArtifact()).run(snapshot);
         Recommendation viaExplicit = new RecommendationAlgorithm(new MarketHistoryArtifact(),
-                Settings.load().timeLimitSeconds()).run(snapshot);
+                Settings.load().roundLimit(), Settings.load().timeLimitSeconds()).run(snapshot);
 
         assertEquals(viaExplicit.ev(), viaSettings.ev(), 1e-9,
-                "the production constructor must behave exactly as the live Settings window");
+                "the production constructor must behave exactly as the live Settings budgets");
         assertEquals(viaExplicit.pAccept(), viaSettings.pAccept(), 1e-9);
     }
 
@@ -123,7 +169,7 @@ class RecommendationAlgorithmTest {
         // the deleted 600-sim-second constant; the resulting urgency is 1.0 either way).
         WalkInDialogueSnapshot snapshot = new WalkInDialogueSnapshot("cargo_1", "cargo_vessel", 8.0, 150.0, 30000,
                 "general_cargo", "berth_3", 5, 1900.0, 0.0,
-                UrgencyCalculator.DEFAULT_ROUND_LIMIT, Settings.load().timeLimitSeconds(), true);
+                ROUNDS, Settings.load().timeLimitSeconds(), true);
         Recommendation rec = algorithm.run(snapshot);
         assertEquals(RecommendationCandidate.ACCEPT, rec.action());
         assertEquals(1900.0, rec.price(), 1e-9);
