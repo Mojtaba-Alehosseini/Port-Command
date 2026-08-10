@@ -191,19 +191,44 @@ try {
         #    below is config.onnx_model_available(), the same single source of truth start_llm
         #    uses. Without weights the sidecar is skipped entirely and the Assistant falls back
         #    to its plain template, which is a supported mode, not a degraded one.
+        #    The probe must run FROM $Nlp, exactly as the sidecar itself is launched below
+        #    (-WorkingDirectory $Nlp): `import llm_sidecar` resolves via the current directory
+        #    (the package is not pip-installed), so from any other CWD - e.g. the repo root
+        #    start.bat normally runs in - the import died, the catch below swallowed the throw,
+        #    and the sidecar was silently skipped WITH the weights on disk (found live
+        #    2026-08-04: the demo boot would have lost the LLM fast path).
+        #    EAP drops to Continue around the probe (2026-08-10 review): under Stop, ANY stderr
+        #    line from a redirected native command throws in PS 5.1 (the same hazard the
+        #    taskkill comment above documents), so one benign Python warning on a SUCCESSFUL
+        #    probe would read as probe-failure and skip the sidecar with the weights on disk -
+        #    FIND-1's outcome by another route. stdout is the only discriminator, exactly like
+        #    start.sh's 2>/dev/null probe.
         $haveOnnx = $false
+        $probeAnswer = ''
         if (-not $NoLlm) {
+            Push-Location $Nlp
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
             try {
-                $probe = & $SidecarPy -c "import llm_sidecar.config as c; print('yes' if c.onnx_model_available() else 'no')" 2>$null
-                $haveOnnx = ("$probe".Trim() -eq 'yes')
-            } catch { $haveOnnx = $false }
+                $raw = & $SidecarPy -c "import llm_sidecar.config as c; print('yes' if c.onnx_model_available() else 'no')" 2>$null
+                $probeAnswer = ("$raw").Trim()
+            } catch { $probeAnswer = '' } finally {
+                $ErrorActionPreference = $prevEap
+                Pop-Location
+            }
+            $haveOnnx = ($probeAnswer -eq 'yes')
         }
         if ($NoLlm) {
             Write-Warn '-NoLlm: skipping the sidecar. Assistant explanations use the plain template.'
         } elseif (-not $haveOnnx) {
-            Write-Warn 'no local ONNX model found - skipping the LLM sidecar. The game runs fine:'
-            Write-Warn '  Assistant explanations fall back to the plain template (same figures).'
-            Write-Warn '  See docs/TROUBLESHOOTING.md to install the weights and get the fast path.'
+            if ($probeAnswer -eq 'no') {
+                Write-Warn 'no local ONNX model found - skipping the LLM sidecar. The game runs fine:'
+                Write-Warn '  Assistant explanations fall back to the plain template (same figures).'
+                Write-Warn '  See docs/TROUBLESHOOTING.md to install the weights and get the fast path.'
+            } else {
+                Write-Warn "sidecar probe FAILED (import/venv error, not 'weights absent') - skipping the sidecar."
+                Write-Warn '  The game still runs (plain-template explanations). Check nlp-python\.venv against requirements-llm.txt.'
+            }
         } else {
             $env:LLM_QUANT = 'onnx'
             $sidecar = Start-Service-Process 'llm-sidecar' $SidecarPy `

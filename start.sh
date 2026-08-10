@@ -153,17 +153,29 @@ if [ "$NO_SERVICES" -eq 0 ]; then
   #    whose README correctly says the game runs fine without the LLM. That is the
   #    20-minute-quickstart criterion broken by a fast-path optimisation. Probe first, using the
   #    same single source of truth start_llm uses.
+  #    The probe must run FROM "$NLP", exactly as the sidecar itself is launched below
+  #    (`cd "$NLP" && ... -m llm_sidecar.server`): `import llm_sidecar` resolves via the current
+  #    directory (the package is not pip-installed), so from any other CWD - e.g. the repo root
+  #    this script normally runs in - the import dies, 2>/dev/null hides the traceback, the blank
+  #    answer read as "no", and the sidecar was silently skipped WITH the weights on disk
+  #    (found live 2026-08-04 on the Windows twin; both launchers had it).
   HAVE_ONNX=0
-  if [ "$NO_LLM" -eq 0 ] \
-     && [ "$("$SIDECAR_PY" -c 'import llm_sidecar.config as c; print("yes" if c.onnx_model_available() else "no")' 2>/dev/null)" = "yes" ]; then
-    HAVE_ONNX=1
+  PROBE_ANSWER=""
+  if [ "$NO_LLM" -eq 0 ]; then
+    PROBE_ANSWER="$(cd "$NLP" && "$SIDECAR_PY" -c 'import llm_sidecar.config as c; print("yes" if c.onnx_model_available() else "no")' 2>/dev/null || true)"
+    if [ "$PROBE_ANSWER" = "yes" ]; then HAVE_ONNX=1; fi
   fi
   if [ "$NO_LLM" -eq 1 ]; then
     step "--no-llm: skipping the sidecar. Assistant explanations use the plain template."
   elif [ "$HAVE_ONNX" -eq 0 ]; then
-    step "no local ONNX model found -- skipping the LLM sidecar. The game runs fine:"
-    step "  Assistant explanations fall back to the plain template (same figures)."
-    step "  See docs/TROUBLESHOOTING.md to install the weights and get the fast path."
+    if [ "$PROBE_ANSWER" = "no" ]; then
+      step "no local ONNX model found -- skipping the LLM sidecar. The game runs fine:"
+      step "  Assistant explanations fall back to the plain template (same figures)."
+      step "  See docs/TROUBLESHOOTING.md to install the weights and get the fast path."
+    else
+      step "sidecar probe FAILED (import/venv error, not 'weights absent') -- skipping the sidecar."
+      step "  The game still runs (plain-template explanations). Check nlp-python/.venv against requirements-llm.txt."
+    fi
   else
     step "booting the Flask LLM sidecar on :5006 (.venv, LLM_QUANT=onnx)..."
     ( cd "$NLP" && LLM_QUANT=onnx exec "$SIDECAR_PY" -m llm_sidecar.server ) \
