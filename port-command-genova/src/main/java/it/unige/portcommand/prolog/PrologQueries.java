@@ -155,6 +155,26 @@ public final class PrologQueries {
         return engine().hasSolutionCached("visibility_ok(" + quoteAtom(visibility) + ")");
     }
 
+    /**
+     * Every wind threshold (knots) that {@code windKnots} has crossed, ascending — the
+     * enumeration of RULE R18's {@code threshold_crossed/2}. Empty below the lowest band (30).
+     *
+     * <p>Since S5 this is the SINGLE source of the alert bands: {@code WeatherAlertPolicy}
+     * derives its band index from this list's size instead of a duplicated Java array, so
+     * "alert-worthy wind" cannot drift from the rule the report cites.
+     *
+     * <p><b>Deliberately NOT cached:</b> the input is a continuous double, so a cache would grow
+     * without bound and hit only on exact repeats — the same reasoning {@code berthExists}
+     * documents, and the same latent bug {@code swellWithinLimit}'s cache already has. No
+     * transient facts → no {@code inLock} needed (the {@code selectBestBids} precedent).
+     */
+    public static List<Integer> windThresholdsCrossed(double windKnots) {
+        return engine().oneSolution("findall(T, threshold_crossed(" + windKnots + ", T), Ts)")
+                .map(m -> PrologTerms.toStringList(m.get("Ts")).stream()
+                        .map(Integer::parseInt).toList())
+                .orElse(List.of());
+    }
+
     // --- Customs (R21–R24) -------------------------------------------------
 
     /**
@@ -173,6 +193,24 @@ public final class PrologQueries {
      */
     public static boolean isHazmat(String cargoClass) {
         return engine().hasSolutionCached("is_hazmat(" + quoteAtom(cargoClass) + ")");
+    }
+
+    /**
+     * True iff {@code cargoClass} requires a customs inspection (RULE R22) — i.e. it is a valid
+     * cargo class and hazmat under the reflexive-transitive {@code is_hazmat/1}. Pure static
+     * ontology walk → cached, same as {@link #isHazmat}.
+     */
+    public static boolean needsInspection(String cargoClass) {
+        return engine().hasSolutionCached("needs_inspection(" + quoteAtom(cargoClass) + ")");
+    }
+
+    /**
+     * True iff the {@code vesselType}/{@code cargoClass} pair is high-risk — inspection
+     * probability at or above even odds (RULE R24, composing R23). Pure → cached.
+     */
+    public static boolean highRisk(String vesselType, String cargoClass) {
+        return engine().hasSolutionCached(
+                "high_risk(" + quoteAtom(vesselType) + ", " + quoteAtom(cargoClass) + ")");
     }
 
     /** Inspection probability for the pair: 0.8 hazmat, 0.2 otherwise (RULE R23). Pure → cached. */
@@ -222,6 +260,68 @@ public final class PrologQueries {
                 .map(m -> PrologTerms.toInt(m.get("N")))
                 .orElseThrow(() -> new PrologException(
                         "priority_rank undefined for class " + vesselClassAtom));
+    }
+
+    /**
+     * A vessel's effective priority — the class atom and its rank — through the R26 bridge and
+     * R30's rank join ({@code priority_class_of/2} + {@code effective_priority/2}).
+     *
+     * <p>{@code overrideClassOrNull} is the caller's runtime escalation ({@code emergency} /
+     * {@code medical}); the HarbourMaster owns those in a plain Java map and passes one per
+     * query, so the dynamic {@code vessel_priority_override/2} fact exists only transiently
+     * inside this call's {@code inLock} window, under the disjoint {@code tmp_v_} namespace —
+     * never a persistent write, never a real vessel id in the fact base (the {@code berthExists}
+     * coincidence stays a coincidence).
+     *
+     * <p>Fails loudly on an unknown type: R26 has no fallback clause — {@code priority_class_of}
+     * simply has no solution — and a silent default rank would mask a real wiring bug.
+     */
+    public static VesselPriority effectivePriority(String vesselType, String overrideClassOrNull) {
+        PrologEngine e = engine();
+        String v = tempVesselId();
+        return e.inLock(() -> {
+            try {
+                e.assertFact("instance_of(" + v + ", " + quoteAtom(vesselType) + ")");
+                if (overrideClassOrNull != null) {
+                    e.assertFact("vessel_priority_override(" + v + ", "
+                            + quoteAtom(overrideClassOrNull) + ")");
+                }
+                return e.oneSolution(
+                                "( priority_class_of(" + v + ", C), effective_priority(" + v + ", R) )")
+                        .map(m -> new VesselPriority(m.get("C").name(), PrologTerms.toInt(m.get("R"))))
+                        .orElseThrow(() -> new PrologException(
+                                "effective_priority produced no solution for type " + vesselType
+                                        + " (override " + overrideClassOrNull + ")"));
+            } finally {
+                e.retractAllMatching("instance_of(" + v + ", _)");
+                e.retractAllMatching("vessel_priority_override(" + v + ", _)");
+            }
+        });
+    }
+
+    /** The R26/R30 answer: the priority class atom and its R25 rank (1 highest … 6 lowest). */
+    public record VesselPriority(String priorityClass, int rank) {
+    }
+
+    /** True iff class {@code a} outranks class {@code b} (RULE R27). Pure over R25's table → cached. */
+    public static boolean higherPriority(String classA, String classB) {
+        return engine().hasSolutionCached(
+                "higher_priority(" + quoteAtom(classA) + ", " + quoteAtom(classB) + ")");
+    }
+
+    /** True iff class {@code a} preempts class {@code b} (RULE R28). Pure → cached. */
+    public static boolean preempts(String classA, String classB) {
+        return engine().hasSolutionCached(
+                "preempts(" + quoteAtom(classA) + ", " + quoteAtom(classB) + ")");
+    }
+
+    /**
+     * True iff the emergency class overrides {@code priorityClass} (RULE R29) — i.e. the class is
+     * a valid non-emergency class. Pure → cached.
+     */
+    public static boolean emergencyOverridesAll(String priorityClass) {
+        return engine().hasSolutionCached(
+                "emergency_overrides_all(" + quoteAtom(priorityClass) + ")");
     }
 
     // --- Shared transient-fact helpers -------------------------------------

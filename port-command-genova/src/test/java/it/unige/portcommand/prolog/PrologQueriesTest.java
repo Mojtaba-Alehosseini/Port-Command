@@ -124,6 +124,82 @@ class PrologQueriesTest {
 
     // --- Priority ----------------------------------------------------------
 
+    // --- S5 facade additions (R18, R22, R24, R26-R30) ----------------------
+
+    @ParameterizedTest(name = "windThresholdsCrossed({0}) = [{1}]")
+    @CsvSource({
+            "28,   ''",
+            "30,   '30'",
+            "36,   '30;35'",
+            "41,   '30;35;40'",
+            "50.0, '30;35;40;45'"})
+    void windThresholdsCrossedEnumeratesAscending(double wind, String expectedJoined) {
+        List<Integer> expected = expectedJoined.isEmpty() ? List.of()
+                : java.util.Arrays.stream(expectedJoined.split(";")).map(Integer::parseInt).toList();
+        assertEquals(expected, PrologQueries.windThresholdsCrossed(wind),
+                "R18 threshold_crossed must enumerate every crossed band, ascending");
+    }
+
+    @Test
+    void needsInspectionCoversTheWholeHazmatSubtree() {
+        // R22 over the reflexive-transitive is_hazmat (S3): the PARENT class passes too.
+        assertTrue(PrologQueries.needsInspection("hazmat_cargo"), "R22: the parent class itself");
+        assertTrue(PrologQueries.needsInspection("hazmat_class_3"), "R22: a leaf");
+        assertFalse(PrologQueries.needsInspection("general_cargo"), "R22 control");
+        assertFalse(PrologQueries.needsInspection("not_a_cargo_class"),
+                "R22 guards on cargo_class/1 — an unknown atom must fail, not throw");
+    }
+
+    @Test
+    void highRiskTracksInspectionProbabilityAtEvenOdds() {
+        // R24 = R23 >= 0.5: hazmat 0.8 -> true, otherwise 0.2 -> false.
+        assertTrue(PrologQueries.highRisk("tanker", "hazmat_class_3"));
+        assertFalse(PrologQueries.highRisk("cargo_vessel", "general_cargo"));
+    }
+
+    @Test
+    void effectivePriorityBridgesEveryTypeThroughR26() {
+        // R26 clause 2: only ferries get scheduled_ferry (rank 3); everything else rank 4.
+        PrologQueries.VesselPriority ferry = PrologQueries.effectivePriority("ferry", null);
+        assertEquals("scheduled_ferry", ferry.priorityClass(), "R26 ferry clause");
+        assertEquals(3, ferry.rank());
+        for (String type : List.of("tanker", "container_vessel", "cargo_vessel", "cruise_ship")) {
+            PrologQueries.VesselPriority p = PrologQueries.effectivePriority(type, null);
+            assertEquals("scheduled_arrival", p.priorityClass(), type);
+            assertEquals(4, p.rank(), type);
+        }
+    }
+
+    @Test
+    void anOverrideOutranksTheTypeClassAndLeavesNoResidue() {
+        PrologQueries.VesselPriority emergency = PrologQueries.effectivePriority("ferry", "emergency");
+        assertEquals("emergency", emergency.priorityClass(), "R26 clause 1: the override wins");
+        assertEquals(1, emergency.rank());
+        // Residue check: the override was transient — a follow-up query with no override must
+        // see the plain ferry class again (a leaked vessel_priority_override would break this).
+        assertEquals("scheduled_ferry",
+                PrologQueries.effectivePriority("ferry", null).priorityClass(),
+                "the transient override fact must not survive its own query");
+    }
+
+    @Test
+    void effectivePriorityFailsLoudlyOnAnUnknownType() {
+        // R26 has NO fallback clause — a silent default would mask a wiring bug.
+        assertThrows(PrologException.class,
+                () -> PrologQueries.effectivePriority("submarine", null));
+    }
+
+    @Test
+    void pairwisePriorityPredicatesAgreeWithTheRankTable() {
+        assertTrue(PrologQueries.higherPriority("emergency", "maintenance"), "R27");
+        assertFalse(PrologQueries.higherPriority("maintenance", "emergency"), "R27 asymmetry");
+        assertTrue(PrologQueries.preempts("scheduled_ferry", "scheduled_arrival"), "R28");
+        assertFalse(PrologQueries.preempts("scheduled_arrival", "scheduled_ferry"), "R28 asymmetry");
+        assertTrue(PrologQueries.emergencyOverridesAll("scheduled_ferry"), "R29");
+        assertFalse(PrologQueries.emergencyOverridesAll("emergency"),
+                "R29 guard: emergency does not override itself");
+    }
+
     @ParameterizedTest(name = "priorityRank({0}) = {1}")
     @CsvSource({
             "emergency,         1",
