@@ -182,7 +182,12 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.60".toBigDecimal()
+                // S7 (audit P3-4): 0.60 could never fire — measured coverage has sat at
+                // 88.95..89.69% since task 25. 0.85 is a gate that can actually catch a
+                // regression (~4.7pp of headroom at the 2026-08-16 measurement, 6220/6935)
+                // while surviving normal churn. Measured figure transcribed with its date
+                // into docs/PERFORMANCE_BASELINE.md.
+                minimum = "0.85".toBigDecimal()
             }
         }
     }
