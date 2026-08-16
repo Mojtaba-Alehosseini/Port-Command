@@ -156,3 +156,5 @@
 {"block":"command","ctx":"none","utterance":"cancel the tug","frame":null,"note":"the command block must not change M1 cancel routing"}
 {"block":"command","ctx":"focus","utterance":"hold tankers","frame":null,"note":"no quantifier"}
 {"block":"command","ctx":"focus","utterance":"send two tugs to the Ferrari","frame":null,"note":"unknown target name -> refuse"}
+{"block":"vocative","ctx":"focus","utterance":"Genoa Sttar: deal","frame":"commerce_sell","elements":{"move":"accept","addressee":"C001"},"note":"S6 MED (P2-1): distance-1 typo fuzz-matches the roster name; exact matches stay untouched"}
+{"block":"command","ctx":"focus","utterance":"send two tugs to the Carthagoo","frame":"command","elements":{"action":"send","quantifier":2,"patient":"tug","target":"T001"},"note":"S6 MED (P2-1): distance-1 typo on the command target resolves via the fuzzy layer"}

@@ -52,6 +52,10 @@ public final class PrologDcgParser implements DCGParser {
         if (tokens.isEmpty()) {
             return Optional.empty();
         }
+        // S6 (audit P2-1): the MED fuzzy layer sits exactly where tokens and roster meet —
+        // a typo'd vessel name is rewritten to its canonical roster form so the grammar's
+        // identity-matching resolve_name/3 stays untouched. Exact matches are a no-op.
+        tokens = RosterNameResolver.resolve(tokens, ctx);
         String goal = "parse_move(" + tokenizer.toPrologList(tokens) + ", "
                 + DialogueCtxTerm.toPrologTerm(ctx) + ", Frame)";
         try {
