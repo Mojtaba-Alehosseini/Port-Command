@@ -27,6 +27,7 @@ import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.EndOfDayEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
@@ -497,12 +498,16 @@ class HarbourMasterAgentIT {
 
         // The player counters. DispatchPlayerCommandBehaviour is the ONLY point the HarbourMaster
         // ever sees their price (the vessel's reply carries no player terms). Driven directly, the
-        // established pattern in this file's player-command cases.
+        // established pattern in this file's player-command cases. S5: a binding PROPOSE at
+        // NEGOTIATING now hops through the Prolog gate on the HM thread, so the offer stash is
+        // asynchronous from here — bounded poll, not a synchronous read.
         new DispatchPlayerCommandBehaviour(hm).onPlayerCommand(new PlayerCommandEvent(
                 PlayerCommandKind.PROPOSE, "W030",
                 Map.of("price", 3900.0, "hours", 6, "conversation_id", "nego-W030")));
-        assertEquals(3900.0, hm.negotiationPlayerOffers().get("nego-W030"),
-                "the player's PROPOSE price must be recorded against its dialogue");
+        assertTrue(pollUntilTrue(() ->
+                        Double.valueOf(3900.0).equals(hm.negotiationPlayerOffers().get("nego-W030")), 10_000),
+                "the player's PROPOSE price must be recorded against its dialogue (gate passed), got "
+                        + hm.negotiationPlayerOffers().get("nego-W030"));
 
         // Advance sim time so the elapsed-time term has something to report, then have the vessel
         // counter — which is what rebuilds the snapshot.
@@ -986,6 +991,90 @@ class HarbourMasterAgentIT {
                 + "must still reach the vessel -- this is exactly what failed in the manual play-test");
     }
 
+    /**
+     * S5 (audit P1-3), the Goal-B gate's compatibility leg. A BINDING player command aimed at a
+     * live negotiation must clear Prolog before anything reaches the wire: a PROPOSE naming an
+     * incompatible berth is refused with the failing rule id where the player reads (dialogue
+     * tab), and the vessel never sees a message. The same command against the compatible berth
+     * passes through unchanged. The autopilot is covered by construction — it publishes the
+     * SAME PlayerCommandEvent into this dispatcher.
+     */
+    @Test
+    void bindingPlayerCommand_incompatibleBerth_isRefusedByThePrologGate() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W050", "tanker", 11.0, 200.0, 60000, "crude_oil", 0L);
+        assertTrue(PrologQueries.isCompatible("berth_1", "tanker", 11.0, 200.0, 60000),
+                "fixture sanity: this tanker must fit berth_1");
+        assertFalse(PrologQueries.isCompatible("berth_2", "tanker", 11.0, 200.0, 60000),
+                "fixture sanity: berth_2 (container quay) must reject a tanker (R5 cargo handling)");
+        Probe vessel = spawnProbe("t50_vessel", null);
+
+        vessel.outbox.put(openingOffer(hm, spec, 5200.0, 8, "nego-W050"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class,
+                        e -> "nego-W050".equals(e.dialogueId()), 10_000),
+                "fixture: the dialogue must open");
+        assertNotNull(pollTracking(hm, "W050",
+                        t -> t.stage() == VesselTracking.Stage.NEGOTIATING, 10_000),
+                "fixture: the walk-in must be tracked at NEGOTIATING");
+
+        DispatchPlayerCommandBehaviour dispatch = new DispatchPlayerCommandBehaviour(hm);
+        dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.PROPOSE, "W050",
+                Map.of("price", 5000.0, "hours", 8, "berth_id", "berth_2")));
+
+        AssistantChatEvent refusal = awaitEvent(AssistantChatEvent.class,
+                e -> "nego-W050".equals(e.dialogueId()) && e.text().contains("[R7]"), 10_000);
+        assertNotNull(refusal, "the gate must refuse with the failing rule id in the dialogue tab");
+        assertNeverArrives(vessel.inbox, ACLMessage.PROPOSE, 1_500);
+
+        dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.PROPOSE, "W050",
+                Map.of("price", 5000.0, "hours", 8, "berth_id", "berth_1")));
+        ACLMessage propose = pollUntil(vessel.inbox,
+                m -> m.getPerformative() == ACLMessage.PROPOSE, 10_000);
+        assertNotNull(propose, "a compatible binding command must pass the gate unchanged");
+        assertEquals("nego-W050", propose.getConversationId());
+    }
+
+    /**
+     * S5 (audit P1-3), the Goal-B gate's weather leg — the genuinely NEW capability (the
+     * compatibility half was belt-and-braces over the vessel's own R7 self-check). An ACCEPT
+     * under an over-limit swell is refused citing R17 and nothing binds; when the sky clears,
+     * the SAME command passes. {@code lastWeather} is written by the real alert path — a
+     * weather probe's threshold message through HandleWeatherAlertBehaviour — not seeded.
+     */
+    @Test
+    void bindingPlayerCommand_unsafeWeather_isRefusedUntilItClears() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W051", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vessel = spawnProbe("t51_vessel", null);
+        Probe weather = spawnProbe("t51_weather", "weather");
+
+        vessel.outbox.put(openingOffer(hm, spec, 4800.0, 6, "nego-W051"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class,
+                        e -> "nego-W051".equals(e.dialogueId()), 10_000),
+                "fixture: the dialogue must open");
+
+        assertFalse(PrologQueries.swellWithinLimit(6.0),
+                "fixture sanity: 6.0 m must violate the R17 4.0 m limit");
+        weather.outbox.put(thresholdAlert(hm, 10, "good", 6.0, "cloudy"));
+        assertTrue(pollUntilTrue(() -> hm.lastWeather() != null && hm.lastWeather().swell() == 6.0, 10_000),
+                "fixture: the HM must record the unsafe reading off the alert path");
+
+        DispatchPlayerCommandBehaviour dispatch = new DispatchPlayerCommandBehaviour(hm);
+        dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.ACCEPT, "W051", Map.of()));
+        AssistantChatEvent refusal = awaitEvent(AssistantChatEvent.class,
+                e -> "nego-W051".equals(e.dialogueId()) && e.text().contains("[R17]"), 10_000);
+        assertNotNull(refusal, "an ACCEPT under an over-limit swell must be refused citing R17");
+        assertNeverArrives(vessel.inbox, ACLMessage.ACCEPT_PROPOSAL, 1_500);
+
+        weather.outbox.put(thresholdAlert(hm, 10, "good", 1.0, "sunny"));
+        assertTrue(pollUntilTrue(() -> hm.lastWeather() != null && hm.lastWeather().swell() == 1.0, 10_000),
+                "fixture: the clear reading must land");
+        dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.ACCEPT, "W051", Map.of()));
+        assertNotNull(pollUntil(vessel.inbox,
+                        m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "once the reading is safe again the same ACCEPT must pass the gate");
+    }
+
     // ==================== Weather safety gate (v1.1: R15/16 + R17 + R19) ====================
 
     @Test
@@ -1005,6 +1094,12 @@ class HarbourMasterAgentIT {
         assertNotNull(hold, "vessel must be INFORMed of the weather hold");
         assertEnvelope(hold, ACLMessage.INFORM);
         assertEquals("weather_hold", content(hold).get("event").asText());
+
+        // S5 (D9, R26/R29 producer): a vessel the storm caught IS the emergency — the hold must
+        // escalate its priority class, driven by the same R15-R19 verdict that held it.
+        assertTrue(pollUntilTrue(() -> "emergency".equals(scene.hm.priorityOverrides().get("V-t10")), 10_000),
+                "the weather hold must escalate the vessel to the emergency class, got "
+                        + scene.hm.priorityOverrides().get("V-t10"));
     }
 
     @Test
@@ -1223,6 +1318,266 @@ class HarbourMasterAgentIT {
                 "charges match the two real assignments (100 + 200), nothing doubled");
     }
 
+    // ==================== Berth wait queue (S5, ADR-16, R25-R30) ====================
+
+    /**
+     * S5 Goal C, the core queue contract: a walk-in deal whose ONLY compatible berth is held by
+     * a granted vessel must QUEUE (stage AWAITING_BERTH, player-visible with rule ids, nothing
+     * on the wire) instead of double-booking (the A-02 ghost) or refusing (S3's reverted
+     * mistake), and the holder's departure must release the grant with the queued deal's own
+     * terms and the R25-R30 rationale rendered into the ACCEPT.
+     */
+    @Test
+    void walkInDeal_queuesWhenOnlyBerthHeld_grantedOnDeparture() throws Exception {
+        ServiceContract contract = new ServiceContract("CT-Q1", "TQ1", "tanker", "berth_1", 9000.0, 10, 0L);
+        HarbourMasterAgent hm = spawnHm(Map.of("CT-Q1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe contracted = spawnProbe("q1_contracted", null);
+        Probe walkIn = spawnProbe("q1_walkin", null);
+
+        VesselSpec contractedSpec = ScenarioVessels.contractedSpec(contract, 0L);
+        contracted.outbox.put(contractRequest(hm, "CT-Q1", contractedSpec, "q1_contracted"));
+        assertNotNull(pollUntil(contracted.inbox,
+                        m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "fixture: the contracted tanker must be granted");
+        assertNotNull(pollTracking(hm, "TQ1", t -> "berth_1".equals(t.assignedBerth()), 10_000),
+                "fixture: the contracted tanker must hold berth_1");
+
+        VesselSpec walkInSpec = new VesselSpec("WQ1", "tanker", 11.0, 200.0, 60000, "crude_oil", 0L);
+        assertEquals(List.of("berth_1"), PrologQueries.findCompatibleBerths("tanker", 11.0, 200.0, 60000),
+                "fixture sanity: a tanker's only compatible berth is berth_1 (R8)");
+        walkIn.outbox.put(openingOffer(hm, walkInSpec, 6000.0, 8, "nego-WQ1"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-WQ1".equals(e.dialogueId()), 10_000), "fixture: the dialogue must open");
+        walkIn.outbox.put(dealConfirmed(hm, 6100.0, 8, "nego-WQ1"));
+
+        NotificationEvent queued = awaitEvent(NotificationEvent.class,
+                e -> e.text().contains("WQ1") && e.text().contains("[R7,R30]"), 10_000);
+        assertNotNull(queued, "the deferred grant must be player-visible with its rule ids");
+        assertNotNull(pollTracking(hm, "WQ1",
+                        t -> t.stage() == VesselTracking.Stage.AWAITING_BERTH, 10_000),
+                "the queued walk-in must persist as AWAITING_BERTH");
+        assertNeverArrives(walkIn.inbox, ACLMessage.ACCEPT_PROPOSAL, 1_000);
+
+        ACLMessage departed = MessageFactory.create(ACLMessage.INFORM);
+        departed.addReceiver(hm.getAID());
+        departed.setContent(TerminalJson.write(Map.of("intent", "departed", "vessel_id", "TQ1")));
+        contracted.outbox.put(departed);
+
+        ACLMessage grant = pollUntil(walkIn.inbox,
+                m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000);
+        assertNotNull(grant, "the departure must release the queued grant");
+        JsonNode c = content(grant);
+        assertEquals("berth_1", c.get("berth_id").asText());
+        assertEquals(6100.0, c.get("price").asDouble(), "the queued deal's terms must survive the wait");
+        assertEquals("after_queue scheduled_arrival rank 4 [R25,R26,R27,R30]", c.get("reason").asText(),
+                "the release must cite the priority-module verdict");
+    }
+
+    /**
+     * S5, R26's ferry clause on the busy_day shape: WALKIN-B2 is a ferry contending berth_4
+     * (the only ferry berth, R8) with CONTRACT-2's contracted ferry. The queued grant's release
+     * must carry {@code scheduled_ferry rank 3} — the R26 class bridge visibly deciding, not a
+     * name-drop. Ferries need zero tugs, so no CNP scaffolding is involved.
+     */
+    @Test
+    void queuedFerry_releaseCitesTheScheduledFerryClass() throws Exception {
+        ServiceContract contract = new ServiceContract("CT-Q2", "FQ2", "ferry", "berth_4", 2500.0, 4, 0L);
+        HarbourMasterAgent hm = spawnHm(Map.of("CT-Q2", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe contracted = spawnProbe("q2_contracted", null);
+        Probe walkIn = spawnProbe("q2_walkin", null);
+
+        contracted.outbox.put(contractRequest(hm, "CT-Q2",
+                ScenarioVessels.contractedSpec(contract, 0L), "q2_contracted"));
+        assertNotNull(pollUntil(contracted.inbox,
+                m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000));
+        assertNotNull(pollTracking(hm, "FQ2", t -> "berth_4".equals(t.assignedBerth()), 10_000),
+                "fixture: the contracted ferry must hold berth_4");
+
+        VesselSpec walkInSpec = new VesselSpec("WF2", "ferry", 6.5, 120.0, 15000, "vehicles", 0L);
+        assertEquals(List.of("berth_4"), PrologQueries.findCompatibleBerths("ferry", 6.5, 120.0, 15000),
+                "fixture sanity: a ferry's only compatible berth is berth_4 (R8)");
+        walkIn.outbox.put(openingOffer(hm, walkInSpec, 2000.0, 4, "nego-WF2"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-WF2".equals(e.dialogueId()), 10_000));
+        walkIn.outbox.put(dealConfirmed(hm, 2100.0, 4, "nego-WF2"));
+        assertNotNull(pollTracking(hm, "WF2",
+                        t -> t.stage() == VesselTracking.Stage.AWAITING_BERTH, 10_000),
+                "the ferry must queue behind the contracted holder");
+
+        ACLMessage departed = MessageFactory.create(ACLMessage.INFORM);
+        departed.addReceiver(hm.getAID());
+        departed.setContent(TerminalJson.write(Map.of("intent", "departed", "vessel_id", "FQ2")));
+        contracted.outbox.put(departed);
+
+        ACLMessage grant = pollUntil(walkIn.inbox,
+                m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000);
+        assertNotNull(grant, "berth_4 freeing must release the queued ferry");
+        assertEquals("after_queue scheduled_ferry rank 3 [R25,R26,R27,R30]",
+                content(grant).get("reason").asText(),
+                "R26's ferry clause must decide the class in the rendered rationale");
+    }
+
+    /**
+     * S5, the release ORDER: with two walk-ins queued for the same berth pool, a freed berth
+     * goes to the HIGHER effective-priority waiter (R27 {@code higher_priority} as comparator
+     * over R30/R25 classes), not the older one. The emergency override is seeded directly —
+     * its honest producer (the storm hold) is pinned by
+     * {@link #weatherUnsafeSwell_cancelsInTransitTugAndHoldsVessel} — so this test isolates
+     * the queue comparator itself.
+     */
+    @Test
+    void queueRelease_prefersHigherPriorityOverArrivalOrder() throws Exception {
+        ServiceContract c1 = new ServiceContract("CT-Q3A", "V3A", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
+        ServiceContract c2 = new ServiceContract("CT-Q3B", "V3B", "cargo_vessel", "berth_2", 5200.0, 8, 0L);
+        ServiceContract c3 = new ServiceContract("CT-Q3C", "V3C", "cargo_vessel", "berth_3", 5200.0, 8, 0L);
+        HarbourMasterAgent hm = spawnHm(
+                Map.of("CT-Q3A", c1, "CT-Q3B", c2, "CT-Q3C", c3), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe pa = spawnProbe("q3_a", null);
+        Probe pb = spawnProbe("q3_b", null);
+        Probe pc = spawnProbe("q3_c", null);
+        Map<String, Map.Entry<Probe, ServiceContract>> fixtures = Map.of(
+                "q3_a", Map.entry(pa, c1), "q3_b", Map.entry(pb, c2), "q3_c", Map.entry(pc, c3));
+        for (var e : fixtures.entrySet()) {
+            e.getValue().getKey().outbox.put(contractRequest(hm, e.getValue().getValue().contractId(),
+                    ScenarioVessels.contractedSpec(e.getValue().getValue(), 0L), e.getKey()));
+            assertNotNull(pollUntil(e.getValue().getKey().inbox,
+                            m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                    "fixture: every contracted cargo vessel must be granted");
+        }
+        assertNotNull(pollTracking(hm, "V3C", t -> t.assignedBerth() != null, 10_000),
+                "fixture: all three cargo berths must be held");
+
+        VesselSpec specA = new VesselSpec("WA3", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        VesselSpec specB = new VesselSpec("WB3", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe walkInA = spawnProbe("q3_wa", null);
+        Probe walkInB = spawnProbe("q3_wb", null);
+
+        walkInA.outbox.put(openingOffer(hm, specA, 4800.0, 6, "nego-WA3"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class, e -> "nego-WA3".equals(e.dialogueId()), 10_000));
+        walkInA.outbox.put(dealConfirmed(hm, 4900.0, 6, "nego-WA3"));
+        assertNotNull(pollTracking(hm, "WA3", t -> t.stage() == VesselTracking.Stage.AWAITING_BERTH, 10_000),
+                "WA3 must queue first");
+
+        walkInB.outbox.put(openingOffer(hm, specB, 4800.0, 6, "nego-WB3"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class, e -> "nego-WB3".equals(e.dialogueId()), 10_000));
+        walkInB.outbox.put(dealConfirmed(hm, 4950.0, 6, "nego-WB3"));
+        assertNotNull(pollTracking(hm, "WB3", t -> t.stage() == VesselTracking.Stage.AWAITING_BERTH, 10_000),
+                "WB3 must queue second");
+
+        hm.priorityOverrides().put("WB3", "emergency");
+
+        ACLMessage departedA = MessageFactory.create(ACLMessage.INFORM);
+        departedA.addReceiver(hm.getAID());
+        departedA.setContent(TerminalJson.write(Map.of("intent", "departed", "vessel_id", "V3A")));
+        pa.outbox.put(departedA);
+
+        ACLMessage grantB = pollUntil(walkInB.inbox,
+                m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000);
+        assertNotNull(grantB, "the freed berth must go to the emergency-class waiter, not the older one");
+        assertEquals("after_queue emergency rank 1 [R25,R26,R27,R30]",
+                content(grantB).get("reason").asText());
+        assertNeverArrives(walkInA.inbox, ACLMessage.ACCEPT_PROPOSAL, 1_000);
+        assertEquals(VesselTracking.Stage.AWAITING_BERTH, hm.activeVessels().get("WA3").stage(),
+                "the ordinary waiter must still be queued");
+
+        ACLMessage departedB = MessageFactory.create(ACLMessage.INFORM);
+        departedB.addReceiver(hm.getAID());
+        departedB.setContent(TerminalJson.write(Map.of("intent", "departed", "vessel_id", "V3B")));
+        pb.outbox.put(departedB);
+        ACLMessage grantA = pollUntil(walkInA.inbox,
+                m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000);
+        assertNotNull(grantA, "the next departure must reach the ordinary waiter (nobody starves)");
+        assertEquals("after_queue scheduled_arrival rank 4 [R25,R26,R27,R30]",
+                content(grantA).get("reason").asText());
+    }
+
+    /**
+     * S5, the storm cascade end to end (R27 order, R29 partition, D9 lifecycle): with one
+     * vessel pre-escalated, the worsening cascade CANCELs it first (R27 as comparator); the
+     * clearing re-dispatch processes the emergency partition first with {@code [R29]} rendered
+     * into its resume notice; and the escalation survives until DEPARTURE (clearing it at
+     * re-dispatch would demote the vessel before the CNP it was escalated for — the R28
+     * dequeue — ever ran). The differential class at clearing is staged by removing the
+     * other vessel's override: in-game every same-storm vessel escalates alike, and the
+     * partition's job is exactly to order mixed states when they occur.
+     */
+    @Test
+    void stormCascade_emergencyClassHeldFirstAndRedispatchedFirst() throws Exception {
+        ServiceContract cA = new ServiceContract("CT-Q4A", "VQA", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
+        ServiceContract cB = new ServiceContract("CT-Q4B", "VQB", "cargo_vessel", "berth_3", 5200.0, 8, 0L);
+        HarbourMasterAgent hm = spawnHm(Map.of("CT-Q4A", cA, "CT-Q4B", cB), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe vesselA = spawnProbe("q4a_vessel", null);
+        Probe vesselB = spawnProbe("q4b_vessel", null);
+        Probe tug = spawnProbe("q4_tug", "tug-escort");
+
+        // Two serialized CNP sessions; the single probe tug wins both (no busy guard in a probe).
+        vesselA.outbox.put(contractRequest(hm, "CT-Q4A", ScenarioVessels.contractedSpec(cA, 0L), "q4a_vessel"));
+        assertNotNull(pollUntil(vesselA.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000));
+        ACLMessage cfpA = pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
+        assertNotNull(cfpA, "fixture: session A's CFP");
+        tug.outbox.put(bidReply(cfpA, 100.0, 5.0, 0.9));
+        assertNotNull(pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "fixture: session A's award");
+
+        vesselB.outbox.put(contractRequest(hm, "CT-Q4B", ScenarioVessels.contractedSpec(cB, 0L), "q4b_vessel"));
+        assertNotNull(pollUntil(vesselB.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000));
+        ACLMessage cfpB = pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
+        assertNotNull(cfpB, "fixture: session B's CFP");
+        tug.outbox.put(bidReply(cfpB, 100.0, 5.0, 0.9));
+        assertNotNull(pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "fixture: session B's award");
+        assertNotNull(pollTracking(hm, "VQB", t -> t.stage() == VesselTracking.Stage.IN_TRANSIT, 10_000),
+                "fixture: both vessels in transit with tugs");
+
+        // VQB is the emergency BEFORE the storm (a prior escalation) -> the cascade must hold it first.
+        hm.priorityOverrides().put("VQB", "emergency");
+        Probe weather = spawnProbe("q4_weather", "weather");
+        weather.outbox.put(thresholdAlert(hm, 10, "good", 6.0, "cloudy"));
+
+        CommLogEvent holdB = awaitEvent(CommLogEvent.class,
+                e -> e.performative() == ACLMessage.INFORM && e.receivers().contains("q4b_vessel")
+                        && e.paraphrase().contains("weather hold"), 10_000);
+        CommLogEvent holdA = awaitEvent(CommLogEvent.class,
+                e -> e.performative() == ACLMessage.INFORM && e.receivers().contains("q4a_vessel")
+                        && e.paraphrase().contains("weather hold"), 10_000);
+        assertNotNull(holdB, "the cascade must hold the emergency-class vessel");
+        assertNotNull(holdA, "the cascade must hold the ordinary vessel too");
+        List<Event> published = EventBusProbe.published(boot.getEventBus());
+        assertTrue(published.indexOf(holdB) < published.indexOf(holdA),
+                "R27: the cancel cascade must run in priority order (emergency first)");
+
+        // Stage the differential clearing state: the hold escalated BOTH (D9's producer);
+        // strip VQA's so the R29 partition has one emergency and one ordinary eligible.
+        assertTrue(pollUntilTrue(() -> "emergency".equals(hm.priorityOverrides().get("VQA")), 10_000),
+                "fixture: the hold itself must have escalated VQA");
+        hm.priorityOverrides().remove("VQA");
+
+        weather.outbox.put(clearAlert(hm, 10, "good", 1.0, "sunny"));
+        CommLogEvent resumeB = awaitEvent(CommLogEvent.class,
+                e -> e.performative() == ACLMessage.INFORM && e.receivers().contains("q4b_vessel")
+                        && e.paraphrase().contains("[R29]"), 10_000);
+        assertNotNull(resumeB, "the emergency re-dispatch must render its R29 rationale");
+        CommLogEvent resumeA = awaitEvent(CommLogEvent.class,
+                e -> e.performative() == ACLMessage.INFORM && e.receivers().contains("q4a_vessel")
+                        && e.paraphrase().contains("resuming escort"), 10_000);
+        assertNotNull(resumeA, "the ordinary vessel must re-dispatch too");
+        assertFalse(resumeA.paraphrase().contains("[R29]"),
+                "an ordinary resume must NOT claim the emergency partition");
+        published = EventBusProbe.published(boot.getEventBus());
+        assertTrue(published.indexOf(resumeB) < published.indexOf(resumeA),
+                "R29: the emergency partition must re-dispatch first");
+
+        // The escalation ends at departure, not at re-dispatch (the R28 dequeue needs it live).
+        assertEquals("emergency", hm.priorityOverrides().get("VQB"),
+                "the override must survive the re-dispatch");
+        ACLMessage departedB = MessageFactory.create(ACLMessage.INFORM);
+        departedB.addReceiver(hm.getAID());
+        departedB.setContent(TerminalJson.write(Map.of("intent", "departed", "vessel_id", "VQB")));
+        vesselB.outbox.put(departedB);
+        assertTrue(pollUntilTrue(() -> hm.priorityOverrides().get("VQB") == null, 10_000),
+                "departure must clear the escalation");
+    }
+
     // ==================== Customs (task-09's deferred note) ====================
 
     @Test
@@ -1347,8 +1702,9 @@ class HarbourMasterAgentIT {
         // The REAL CustomsAgent, not a probe: the CONFIRM must be its decision, not the test's.
         // args[0] is the RandomSource ITSELF (the agent takes its own sub-stream) — passing a
         // forStream(...) here makes initArg's cast fail and the agent dies silently at setup.
+        // S5: the SimClock drives the inspection delay's wall clamp.
         boot.getSpawner().spawn("customs_agent", CustomsAgent.class,
-                new Object[] {boot.getRandomSource()});
+                new Object[] {boot.getRandomSource(), boot.getSimClock()});
 
         vessel.outbox.put(contractRequest(hm, "ST-901-T", spec, "t29_vessel"));
         assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
@@ -1362,6 +1718,15 @@ class HarbourMasterAgentIT {
                 e -> "T901T".equals(e.vesselId()), 10_000);
         assertNotNull(cleared, "the real CustomsAgent must CONFIRM a non-blacklisted hazmat combo");
         assertTrue(cleared.clearanceRef().startsWith("CL-"), "clearance ref: " + cleared.clearanceRef());
+
+        // S5 (audit P2-4): the deciding rules must be PLAYER-VISIBLE — the inbound CONFIRM's
+        // comm-log line renders the inspection rationale with its rule ids. This is the
+        // demonstrability contract for R22/R24, not an implementation detail.
+        CommLogEvent clearedLine = awaitEvent(CommLogEvent.class,
+                e -> e.performative() == ACLMessage.CONFIRM && "customs_agent".equals(e.sender())
+                        && e.paraphrase().contains("[R22,R24]"), 10_000);
+        assertNotNull(clearedLine,
+                "the comm log must render the customs CONFIRM with its 'inspected [R22,R24]' rationale");
 
         // Exactly once, through BOTH guards, each driven at the level it actually protects
         // (the first cut of this test drove only the second one and claimed both — adversarial

@@ -79,13 +79,13 @@ public final class AutopilotExecuteBehaviour extends OneShotBehaviour {
         WalkInDialogueSnapshot snapshot = event.snapshot();
         Optional<PolicyRule> matched = policyRegistry.firstMatching(snapshot);
 
-        // TODO(task 11): a matched policy dispatches straight to HM with no
-        // PrologQueries.isCompatible check (the EV path enforces it — see
-        // RecommendationAlgorithm.run — the policy path does not). Defensible for now: this
-        // dispatches as a player-equivalent PlayerCommandEvent, and design rule 4 already
-        // requires HM to query Prolog before any binding decision, exactly as it must for a
-        // human typing "accept" against an incompatible berth. Flagging so task 11 confirms
-        // that gate actually fires on this path too.
+        // Closed 2026-08-16 (S5, audit P1-3): the gate this TODO demanded now exists downstream.
+        // Both the policy path and the EV path dispatch as a player-equivalent PlayerCommandEvent,
+        // and DispatchPlayerCommandBehaviour runs every binding ACCEPT/PROPOSE through the Prolog
+        // gate (R7 compatibility + the R15-R19 weather trio) on the HM thread BEFORE anything
+        // goes on the wire — an autopilot "accept" against an incompatible berth or an unsafe sea
+        // is refused with the failing rule id in the dialogue tab, exactly as for a human typing
+        // it. Nothing to check here: this class stays a translator.
         String action;
         double price;
         if (matched.isPresent()) {

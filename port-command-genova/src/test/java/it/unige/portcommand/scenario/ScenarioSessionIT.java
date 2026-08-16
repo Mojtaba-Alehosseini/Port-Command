@@ -178,6 +178,109 @@ class ScenarioSessionIT {
                 "the booking must span C-501's full 6 contracted hours");
     }
 
+    /**
+     * S5 Goal C acceptance, busy_day: ALL THREE scripted walk-ins complete their full flow —
+     * deal, berth, dock, service, departure — with a player stand-in that just accepts. Two of
+     * them can only get there through the S5 berth wait queue: WALKIN-B2 is a ferry whose ONLY
+     * berth (berth_4, R8) is held by CONTRACT-2's contracted ferry, and WALKIN-B3 is a tanker
+     * whose ONLY berth (berth_1) is held by CONTRACT-1's cargo vessel — under S3's reverted
+     * refuse-on-held BOTH were turned away, and pre-S5 they double-booked (A-02). Departure
+     * lines in the comm log are the durable completion witness.
+     */
+    @Test
+    void busyDayWalkIns_allThreeCompleteThroughTheQueue() throws Exception {
+        boot = new JadeBootstrap();
+        GameSession session = new GameSession(boot,
+                new BootstrapConfig(TEST_PORT, false, "realtime", 5),
+                new SaveLoadManager(tempDir), new Leaderboard(tempDir.resolve("scores.json")));
+        session.startScenario("busy_day");
+        HarbourMasterAgent hm = (HarbourMasterAgent) session.directory().byName("harbour_master")
+                .orElseThrow();
+
+        assertTrue(driveWalkInsToDeparture(hm,
+                        List.of("WALKIN-B1", "WALKIN-B2", "WALKIN-B3"), 120_000),
+                "every scripted busy_day walk-in must complete its full flow; states: "
+                        + walkInStates(hm, List.of("WALKIN-B1", "WALKIN-B2", "WALKIN-B3")));
+    }
+
+    /**
+     * S5 Goal C acceptance, storm: STORM-W1 spawns DURING the storm window, so the player
+     * stand-in's early accepts are refused by the Goal-B weather gate (R15-R19) — the retry
+     * after the scripted clear is exactly what a human at the chat would do — and the vessel
+     * still completes: deal after clearing, berth, dock, departure. T901's contracted flow
+     * (hold → re-dispatch) shares the same day.
+     */
+    @Test
+    void stormWalkIn_completesAfterTheClearing() throws Exception {
+        boot = new JadeBootstrap();
+        GameSession session = new GameSession(boot,
+                new BootstrapConfig(TEST_PORT, false, "realtime", 5),
+                new SaveLoadManager(tempDir), new Leaderboard(tempDir.resolve("scores.json")));
+        session.startScenario("storm");
+        HarbourMasterAgent hm = (HarbourMasterAgent) session.directory().byName("harbour_master")
+                .orElseThrow();
+
+        assertTrue(driveWalkInsToDeparture(hm, List.of("STORM-W1"), 120_000),
+                "the storm walk-in must complete once the sky clears; state: "
+                        + walkInStates(hm, List.of("STORM-W1")));
+    }
+
+    /**
+     * The player stand-in (S5): keep ACCEPTing every listed walk-in while its dialogue is open
+     * — a gate refusal (storm weather) simply retries on the next pass, a queued or granted
+     * vessel is left alone — until each one's DEPARTURE line is in the comm log. Bounded
+     * (design rule 5); 100 ms cadence keeps the ACCEPT spam trivial at IT pacing.
+     */
+    private boolean driveWalkInsToDeparture(HarbourMasterAgent hm, List<String> vesselIds,
+                                            long timeoutMs) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            boolean allDeparted = true;
+            for (String id : vesselIds) {
+                if (departedLineExists(id)) {
+                    continue;
+                }
+                allDeparted = false;
+                it.unige.portcommand.harbourmaster.VesselTracking t = hm.activeVessels().get(id);
+                if (t != null && t.stage()
+                        == it.unige.portcommand.harbourmaster.VesselTracking.Stage.NEGOTIATING) {
+                    boot.getEventBus().publish(new it.unige.portcommand.gui.events.PlayerCommandEvent(
+                            it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind.ACCEPT,
+                            id, java.util.Map.of()));
+                }
+            }
+            if (allDeparted) {
+                return true;
+            }
+            Thread.sleep(100);
+        }
+        return false;
+    }
+
+    /** The durable completion witness: the vessel's own departed INFORM rendered in the log. */
+    private boolean departedLineExists(String vesselId) {
+        return EventBusProbe.published(boot.getEventBus()).stream()
+                .filter(CommLogEvent.class::isInstance).map(CommLogEvent.class::cast)
+                .anyMatch(e -> e.performative() == ACLMessage.INFORM
+                        && e.paraphrase().contains(vesselId)
+                        && e.paraphrase().contains("has departed"));
+    }
+
+    /** Diagnostic for the timeout message: where each walk-in actually got stuck. */
+    private String walkInStates(HarbourMasterAgent hm, List<String> vesselIds) {
+        StringBuilder sb = new StringBuilder();
+        for (String id : vesselIds) {
+            sb.append(id).append('=');
+            if (departedLineExists(id)) {
+                sb.append("DEPARTED");
+            } else {
+                sb.append(hm.activeVessels().get(id));
+            }
+            sb.append(' ');
+        }
+        return sb.toString().trim();
+    }
+
     @Test
     void sandboxEarnsTheContractedFeesDailyExactlyOnce() throws Exception {
         boot = new JadeBootstrap();

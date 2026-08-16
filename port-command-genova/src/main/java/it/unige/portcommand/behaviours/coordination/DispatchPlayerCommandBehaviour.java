@@ -9,6 +9,8 @@ import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.harbourmaster.PlayerCommand;
 import it.unige.portcommand.harbourmaster.VesselTracking;
+import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.prolog.PrologQueries;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.Subscription;
 import jade.core.AID;
@@ -24,7 +26,9 @@ import org.slf4j.LoggerFactory;
  * into outbound ACL messages to the target vessel, preserving the negotiation
  * conversation id ({@code "nego-"+vesselId}, deterministic — matches
  * {@code WalkInVesselAgent}'s own construction) so the vessel's frozen task-07
- * negotiation behaviours pick them up. Subscribes to the EventBus ONCE
+ * negotiation behaviours pick them up. S5 (audit P1-3): binding kinds aimed at a live
+ * negotiation pass the Prolog gate first — see {@link #onPlayerCommand} — which is what makes
+ * design rule 4 hold on the player/autopilot path, not just the agent-internal ones. Subscribes to the EventBus ONCE
  * (INVARIANTS.md's established subscribe-once/public-handler pattern —
  * {@code onPlayerCommand} is also callable directly by tests, which several
  * existing ITs still do to drive it deterministically on the calling thread
@@ -81,6 +85,117 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
             log.warn("PlayerCommand {} for untracked vessel {} — dropped", cmd.kind(), cmd.targetVesselId());
             return;
         }
+        // S5 (audit P1-3, design rule 4): a BINDING command aimed at a live negotiation —
+        // ACCEPT closes the deal, PROPOSE puts a berth-carrying counter the vessel may accept —
+        // must pass the Prolog gate BEFORE anything goes on the wire. This handler runs on the
+        // EventBus's shared ASYNC pool, where JPL under the global engine lock could starve every
+        // other async subscriber (INVARIANTS' own contract), so the gate+send hop to the HM's own
+        // thread via an anonymous OneShotBehaviour — which also closes the TOCTOU against
+        // forgetDialogue/stage advance: the stage is re-read after the hop. Non-binding kinds and
+        // post-negotiation commands (a granted contracted vessel, a queued grant) keep today's
+        // synchronous path — the gate exists for the moment the player can still bind the port.
+        boolean binding = cmd.kind() == PlayerCommandEvent.PlayerCommandKind.PROPOSE
+                || cmd.kind() == PlayerCommandEvent.PlayerCommandKind.ACCEPT;
+        if (binding && tracking.stage() == VesselTracking.Stage.NEGOTIATING) {
+            hm.addBehaviour(new OneShotBehaviour(hm) {
+                @Override
+                public void action() {
+                    gateAndDispatch(cmd);
+                }
+            });
+            return;
+        }
+        dispatch(cmd, tracking);
+    }
+
+    /**
+     * HM-thread half of the binding path. Re-reads the tracking (the hop is the barrier): a
+     * dialogue that advanced or closed in between falls through to the plain dispatch, whose
+     * downstream paths already handle post-negotiation commands — never a false refusal at
+     * deal close.
+     */
+    private void gateAndDispatch(PlayerCommand cmd) {
+        VesselTracking tracking = hm.activeVessels().get(cmd.targetVesselId());
+        if (tracking == null) {
+            log.warn("PlayerCommand {} for {} — vessel left before the gate ran, dropped",
+                    cmd.kind(), cmd.targetVesselId());
+            return;
+        }
+        if (tracking.stage() == VesselTracking.Stage.NEGOTIATING) {
+            String refusal = gateRefusal(cmd, tracking);
+            if (refusal != null) {
+                refuse(cmd, refusal);
+                return;
+            }
+        }
+        dispatch(cmd, tracking);
+    }
+
+    /**
+     * The binding gate itself — Prolog first, always (design rule 4). Null = pass. The
+     * compatibility leg is belt-and-braces over the vessel's own R7 self-check (a walk-in
+     * REFUSEs an incompatible berth too — this catches it BEFORE the wire, and catches the
+     * autopilot the same as a human typing "accept"); the weather leg is the new capability:
+     * the R15-R19 verdict over the latest reading, the same trio the storm cascade binds on.
+     * A null {@code lastWeather} is the bootstrap grace — no reading exists before the first
+     * broadcast (≤15 sim-minutes), so the gate is compatibility-only until one lands.
+     */
+    private String gateRefusal(PlayerCommand cmd, VesselTracking tracking) {
+        VesselSpec spec = tracking.spec();
+        String conversationId = "nego-" + cmd.targetVesselId();
+        // String.valueOf, not instanceof-String (S5 adversarial finding 6): a numeric berth_id
+        // would otherwise skip the explicit check here yet still SHIP via proposeMessage's
+        // computeIfAbsent — the gate must judge exactly the value that goes on the wire.
+        Object explicit = cmd.content().get("berth_id");
+        String berthId = explicit != null ? String.valueOf(explicit)
+                : hm.negotiationBerths().get(conversationId);
+        if (berthId != null) {
+            if (!PrologQueries.isCompatible(berthId, spec.vesselType(),
+                    spec.draft(), spec.length(), spec.tonnage())) {
+                return berthId + " is incompatible with a " + spec.vesselType() + " [R7]";
+            }
+        } else if (PrologQueries.findCompatibleBerths(spec.vesselType(),
+                spec.draft(), spec.length(), spec.tonnage()).isEmpty()) {
+            return "no compatible berth exists for a " + spec.vesselType() + " [R8]";
+        }
+        HarbourMasterAgent.WeatherReading w = hm.lastWeather();
+        if (w == null) {
+            return null;
+        }
+        // Weather refusals tell the player what to DO, not just why (adversarial finding 14):
+        // the command is dropped, not queued, so without the hint the storm walk-in reads as
+        // permanently unservable when one retry after the clearing would land it.
+        if (!PrologQueries.operationSafe(spec.vesselType(), w.windKnots(), w.visibility())) {
+            return "operations unsafe for a " + spec.vesselType() + " at " + w.windKnots()
+                    + " kn / " + w.visibility() + " visibility [R15,R16] — retry when conditions improve";
+        }
+        if (!PrologQueries.swellWithinLimit(w.swell())) {
+            return "swell " + w.swell() + " m over the harbour limit [R17] — retry when conditions improve";
+        }
+        if (PrologQueries.weatherStateUnsafe(w.state())) {
+            return "sea state '" + w.state() + "' forbids movements [R19] — retry when conditions improve";
+        }
+        return null;
+    }
+
+    /**
+     * Refusal = player-visible, wire-silent (stated deviation, ADR-16): the comm log renders the
+     * HM's send/receive instrumentation and nothing was sent — the rule id lands where the player
+     * actually reads, the dialogue tab and the HUD, exactly like the queue notice.
+     */
+    private void refuse(PlayerCommand cmd, String reason) {
+        String note = "Command " + cmd.kind() + " for " + cmd.targetVesselId()
+                + " refused: " + reason;
+        hm.eventBus().publish(new it.unige.portcommand.gui.events.NotificationEvent(note,
+                it.unige.portcommand.gui.events.NotificationEvent.Severity.WARNING,
+                hm.simClock().nowSimMillis()));
+        hm.eventBus().publish(new it.unige.portcommand.gui.events.AssistantChatEvent(
+                "nego-" + cmd.targetVesselId(), note));
+        log.warn("binding PlayerCommand refused by the Prolog gate — {}", note);
+    }
+
+    /** The pre-S5 dispatch, unchanged: translate and send on whatever thread we hold. */
+    private void dispatch(PlayerCommand cmd, VesselTracking tracking) {
         AID target = tracking.aid();
         String conversationId = "nego-" + cmd.targetVesselId();
 
@@ -116,8 +231,11 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
         // dropped on every terminal path). Without the gate this also fires for a PROPOSE aimed at
         // a CONTRACTED vessel — which never opens a dialogue and terminates through handleDeparted,
         // so nothing would ever remove the entry — and it could re-add a key just after a grant or
-        // withdraw cleaned up, since this runs on the EventBus ASYNC pool while the cleanup runs on
-        // the HarbourMaster's JADE thread. (2026-08-10 adversarial review.)
+        // withdraw cleaned up, since this can run on the EventBus ASYNC pool while the cleanup
+        // runs on the HarbourMaster's JADE thread. (2026-08-10 adversarial review. S5: a PROPOSE
+        // aimed at a LIVE dialogue now arrives here via the gate's HM-thread hop — same thread as
+        // the cleanup, race dead — but the contracted-vessel case above still comes in ASYNC, so
+        // the gate stays.)
         if (content.get("price") instanceof Number playerPrice
                 && hm.negotiationBerths().containsKey(conversationId)) {
             hm.negotiationPlayerOffers().put(conversationId, playerPrice.doubleValue());
