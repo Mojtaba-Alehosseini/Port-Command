@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * &rarr; 10 ({@code out_of_scope}), so the anchor gained its 5 rows like every other intent. The
  * pre-existing 45 are untouched and still expect the same intents — the retrain must not move them.
  *
- * <p><b>Not the acceptance gate.</b> The F1 ≥ 0.85 gate is `rasa test nlu` on the 96-row holdout
+ * <p><b>Not the acceptance gate.</b> The F1 ≥ 0.85 gate is `rasa test nlu` on the 100-row holdout (S6)
  * ({@code nlp-python/test_rasa.sh}); that is the number the report cites. This suite is the
  * REGRESSION anchor: 50 utterances that appear in neither the training nor the holdout split
  * (verified disjoint, including a &le;1-token near-duplicate scan), so a pipeline change,

@@ -4,8 +4,8 @@ Two layers:
   * unit — synthetic CSVs in tmp_path exercise split routing, the duplicate +
     train/holdout leakage guard (it must FAIL LOUDLY), unknown-intent/column
     rejection, and round-trip counts.
-  * corpus — the committed nlu_authoring.csv must validate, split 484/96 at
-    50/10 per in-domain intent (out_of_scope is 34/6), and annotate entities
+  * corpus — the committed nlu_authoring.csv must validate, split 500/100 at
+    50/10 per intent (out_of_scope included since S6, 2026-08-16), and annotate entities
     using ONLY the canonical vocab
     (ontology_vocab.yml values + the tug ids from AgentRoster). This is the
     guard against entity-name drift across the 8 entities.

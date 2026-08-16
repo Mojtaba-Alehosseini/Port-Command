@@ -96,6 +96,11 @@ class DemoUtteranceIT {
      * wrong, so "the demo script's string doesn't parse" cannot quietly become folklore.
      */
     @Test
+    @org.junit.jupiter.api.Disabled("S7 (audit P3-12): a test that turns the build RED when the "
+            + "grammar IMPROVES is backwards. Ticket: D-05/grammar session — add optional_berth "
+            + "to ellipsis_move clause 1; on that fix, restore the shorter Beat-3 line in "
+            + "DEMO_SCRIPT.md and DELETE this test (its own javadoc already says so). Kept "
+            + "disabled rather than deleted so the defect record survives until the fix lands.")
     void theOriginalBeat3StringStillDoesNotParseWhichIsWhyTheScriptChanged() {
         assertTrue(parser.parse(THE_STRING_THAT_DID_NOT_PARSE, FOCUS).isEmpty(),
                 "if this now parses, restore the shorter sentence in DEMO_SCRIPT.md Beat 3 and "

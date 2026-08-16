@@ -146,7 +146,10 @@ class HarbourMasterAgentIT {
         assertEquals(ACLMessage.CFP, cfp1.getPerformative());
         assertEquals(cfp1.getConversationId(), cfp2.getConversationId(), "both tugs bid on the SAME CNP session");
 
-        int tugsRequired = PrologQueries.tugsRequired("cargo_vessel", 30000, 150.0);
+        // Fixture-sanity (stays a Prolog call BY DESIGN): proves the rule still says 2 for
+        // this spec — the literal in the assertion below is where the oracle was removed.
+        assertEquals(2, PrologQueries.tugsRequired("cargo_vessel", 30000, 150.0),
+                "fixture sanity: R9 gives a 30,000 t cargo vessel exactly 2 tugs");
         tug1.outbox.put(bidReply(cfp1, 100.0, 5.0, 0.9));
         tug2.outbox.put(bidReply(cfp2, 200.0, 10.0, 0.5));
 
@@ -155,7 +158,10 @@ class HarbourMasterAgentIT {
         assertNotNull(r1);
         assertNotNull(r2);
         long acceptCount = List.of(r1, r2).stream().filter(m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL).count();
-        assertEquals(Math.min(tugsRequired, 2), acceptCount, "exactly tugsRequired winner(s) among the 2 bids");
+        // S7 (audit P3-3): LITERAL oracle — R9: 30,000 t >= 20,000 -> base 2 tugs; the
+        // PROJECT_DEFINITION §5.2 cargo cap is also 2. Computing this from
+        // PrologQueries.tugsRequired proved wiring, not policy.
+        assertEquals(2, acceptCount, "R9/§5.2: a 30,000 t cargo vessel takes exactly 2 tugs");
     }
 
     /**
@@ -240,11 +246,9 @@ class HarbourMasterAgentIT {
                 .filter(e -> e.performative() == ACLMessage.ACCEPT_PROPOSAL || e.performative() == ACLMessage.REJECT_PROPOSAL)
                 .count();
         assertEquals(2, awardsSent, "events 7-8 must both be award decisions: " + tail);
-        // Same fixture as contractedVesselCompatible_acceptsAndDispatchesDownstream — reuse its
-        // own computed (not guessed) expectation rather than hardcoding a rule-kernel value here.
-        int tugsRequired = PrologQueries.tugsRequired("cargo_vessel", 30000, 150.0);
         long acceptsSent = tail.subList(2, 4).stream().filter(e -> e.performative() == ACLMessage.ACCEPT_PROPOSAL).count();
-        assertEquals(Math.min(tugsRequired, 2), acceptsSent, "award count must match Prolog's tugsRequired");
+        // S7 (audit P3-3): literal for the same fixture — R9: 30,000 t -> 2 tugs (§5.2 cap 2).
+        assertEquals(2, acceptsSent, "R9/§5.2: 30,000 t cargo vessel -> exactly 2 awards");
     }
 
     @Test
@@ -435,8 +439,11 @@ class HarbourMasterAgentIT {
         for (TugBid bid : bids) {
             tugs.get(bid.tugId()).outbox.put(bidReply(cfps.get(bid.tugId()), bid.cost(), bid.etaMinutes(), bid.fuelState()));
         }
-        List<String> expectedWinners = PrologQueries.selectBestBids(bids, 2);
-        assertEquals(2, expectedWinners.size());
+        // S7 (audit P3-3): the winner list is a LITERAL, independently derived from R12/R13
+        // (score = fuel*100 - cost*0.1 - eta: tuga 95-10-5=80, tugb 80-15-8=57, tugd -20,
+        // tugc -70) and confirmed with the swipl CLI on 2026-08-16 — no longer computed by
+        // the same PrologQueries.selectBestBids call the test exists to check.
+        List<String> expectedWinners = List.of("t5_tuga", "t5_tugb");
 
         int acceptCount = 0;
         int rejectCount = 0;
@@ -1635,7 +1642,10 @@ class HarbourMasterAgentIT {
         // DayRolloverCoordinator settles the day synchronously (the ONE €5,200 fixed charge).
         // Detect-only still holds for the BEHAVIOUR (INVARIANTS, tasks 11/20): the only
         // mutations after a zero-deal day are the coordinator's five fixed lines.
-        assertEquals(startingBalance - ExpenseRules.dailyFixed(), hm.walletLedger().balance(), 0.0001,
+        // S7 (audit P3-3): 5200.0 literal — design rule 7: 150*4 + 1200 + 1600 + 1500 + 300.
+        // Never 5050. Asking ExpenseRules.dailyFixed() for the expectation could not catch the
+        // one regression this figure has actually had.
+        assertEquals(startingBalance - 5200.0, hm.walletLedger().balance(), 0.0001,
                 "an empty day settles at exactly the fixed daily cost, nothing else");
         assertEquals(5, hm.walletLedger().expenseHistory().size(),
                 "exactly the five fixed lines — no behaviour-attributed ledger writes");
@@ -1752,7 +1762,8 @@ class HarbourMasterAgentIT {
         assertEquals(1, customsCharges.size(),
                 "exactly one customs charge, duplicate CONFIRM and duplicate event included: "
                         + customsCharges);
-        assertEquals(ExpenseRules.customsClearance(), customsCharges.get(0).amount(), 1e-9);
+        // S7 (audit P3-3): literal — planning/20's customs clearance fee is EUR 100.
+        assertEquals(100.0, customsCharges.get(0).amount(), 1e-9);
         assertEquals("T901T", customsCharges.get(0).vesselId());
     }
 
