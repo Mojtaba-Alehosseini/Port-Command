@@ -164,8 +164,13 @@ public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour 
         // v1.1: visibility + swell ride along so the HarbourMaster can evaluate
         // operationSafe/swellWithinLimit/weatherStateUnsafe from this SAME reading,
         // instead of risking a second, possibly-stale query (task 11).
+        // S5 (R18 wired): the alert names the rule that produced it. The band comparison that
+        // decided this transition IS threshold_crossed/2's enumeration (WeatherAlertPolicy.windBand
+        // delegates to PrologQueries.windThresholdsCrossed), so the citation is the rule actually
+        // consulted, and the Paraphraser renders it into the comm log line.
         alert.setContent(TerminalJson.write(Map.of(
                 "event", worsened ? "weather_threshold" : "weather_clear",
+                "reason", worsened ? "threshold_crossed [R18]" : "threshold_cleared [R18]",
                 "wind_knots", w.wind(), "visibility", w.visibility(),
                 "swell", w.swell(), "state", w.state())));
         if (worsened) {

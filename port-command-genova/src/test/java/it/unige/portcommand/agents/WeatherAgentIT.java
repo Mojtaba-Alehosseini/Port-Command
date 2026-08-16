@@ -103,6 +103,28 @@ class WeatherAgentIT {
         return null;
     }
 
+    /**
+     * S5 (audit P2-4), R18 isolated: a WIND-ONLY crossing — visibility/swell/state all stay at
+     * their calm initial values — so the worsening verdict can come from nothing but
+     * {@code threshold_crossed/2}'s solution count (the Java threshold array is deleted). The
+     * scripted-storm case below cannot pin this: its "stormy"/"poor" override crosses on three
+     * dimensions at once, so R18 could go dead and that alert would still fire.
+     */
+    @Test
+    void windOnlyCrossing_isDecidedByR18Alone() throws Exception {
+        bootWeather(List.of(new ScriptedWeather(8, new WeatherSnapshot(32, "good", 0.5, "sunny", 0L))));
+        BlockingQueue<ACLMessage> hmInbox = new LinkedBlockingQueue<>();
+        boot.getSpawner().spawn("fake_hm", SubscriberProbe.class, new Object[] {"harbour-master", hmInbox});
+        boot.getSimClock().advance(5_000);
+
+        ACLMessage alert = pollFor(hmInbox, "weather_threshold", 15);
+        assertNotNull(alert,
+                "an 18→32 kn rise with everything else calm must alert — R18 is the only judge");
+        JsonNode c = MAPPER.readTree(alert.getContent());
+        assertEquals(32, c.get("wind_knots").asInt());
+        assertEquals("threshold_crossed [R18]", c.get("reason").asText());
+    }
+
     @Test
     void scriptedStormTripsTankerThresholdToHarbourMaster() throws Exception {
         // scripted storm at sim-minute 8: wind 32 kn, stormy
@@ -129,5 +151,10 @@ class WeatherAgentIT {
         // reaching 32 from cloudy [15,32] would carry state "cloudy", not "stormy".
         assertEquals(32, c.get("wind_knots").asInt(), "the scripted 32-kn storm tripped it (not a Markov fluke)");
         assertEquals("stormy", c.get("state").asText(), "scripted storm state");
+        // S5 (audit P2-4): the crossing verdict is R18's — WeatherAlertPolicy counts
+        // threshold_crossed/2 solutions (the Java threshold array is deleted) and the alert
+        // says so where the Paraphraser renders it.
+        assertEquals("threshold_crossed [R18]", c.get("reason").asText(),
+                "a worsening alert must carry the R18 crossing rationale");
     }
 }

@@ -31,8 +31,11 @@ import it.unige.portcommand.prolog.PrologQueries;
  */
 public final class WeatherAlertPolicy {
 
-    /** The canonical alert thresholds (kn) — mirrors {@code rules_weather.pl} wind_limit values. */
-    static final int[] WIND_THRESHOLDS = {30, 35, 40, 45};
+    // WIND_THRESHOLDS ({30, 35, 40, 45}) was REMOVED in S5 (audit P2-4, wiring R18): it was a
+    // Java DUPLICATE of rules_weather.pl's threshold set, exactly the drift the "single source of
+    // truth in Prolog" rule exists to prevent. The band is now derived from R18's own
+    // threshold_crossed/2 enumeration via PrologQueries.windThresholdsCrossed — same numbers,
+    // now the RULE'S numbers.
 
     public enum Direction { WORSENED, CLEARED }
 
@@ -48,8 +51,12 @@ public final class WeatherAlertPolicy {
         if (prev == null) {
             return Optional.empty();
         }
-        boolean windUp = windBand(current.wind()) > windBand(prev.wind());
-        boolean windDown = windBand(current.wind()) < windBand(prev.wind());
+        // Two engine round-trips, not four (S5 adversarial finding 7): each windBand call is
+        // an uncached JPL query under the global engine lock, so evaluate once per snapshot.
+        int currentBand = windBand(current.wind());
+        int prevBand = windBand(prev.wind());
+        boolean windUp = currentBand > prevBand;
+        boolean windDown = currentBand < prevBand;
         boolean visUp = visUnsafe(current.visibility()) && !visUnsafe(prev.visibility());
         boolean visDown = !visUnsafe(current.visibility()) && visUnsafe(prev.visibility());
         boolean swellUp = swellUnsafe(current.swell()) && !swellUnsafe(prev.swell());
@@ -66,15 +73,14 @@ public final class WeatherAlertPolicy {
         return Optional.empty();
     }
 
-    /** How many alert thresholds {@code wind} sits at or above (0..4). */
+    /**
+     * How many alert thresholds {@code wind} sits at or above (0..4) — RULE R18, called: the
+     * band IS the size of {@code threshold_crossed/2}'s enumeration for this wind. Uncached on
+     * the facade side (continuous input); {@code transition} evaluates it once per snapshot —
+     * two engine round-trips per evolution tick — negligible.
+     */
     static int windBand(double wind) {
-        int band = 0;
-        for (int threshold : WIND_THRESHOLDS) {
-            if (wind >= threshold) {
-                band++;
-            }
-        }
-        return band;
+        return PrologQueries.windThresholdsCrossed(wind).size();
     }
 
     private static boolean visUnsafe(String visibility) {
