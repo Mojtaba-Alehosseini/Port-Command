@@ -49,8 +49,8 @@ regenerate the Rasa YAML — never hand-edit the generated files:
 `train` and `test` splits (leakage), is duplicated within a split, or carries an
 unknown intent — keeping the held-out set honest. Covered by `test_csv_to_nlu.py`.
 
-Corpus size (S6; supersedes the PROJECT_DEFINITION § 6.3 figures, which still carry the
-pre-S6 484/96 — flagged for the docs pass): **10 intents × (50 train + 10 holdout) = 600
+Corpus size (PROJECT_DEFINITION § 6.3, v1.2 — synced in the S7 docs pass): **10 intents ×
+(50 train + 10 holdout) = 600
 utterances** (500 train, 100 holdout), ≈ 34 standard / 8 informal / 5 typo /
 3 fragment-vocative per in-domain intent in the training split.
 
