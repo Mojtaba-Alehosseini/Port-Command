@@ -47,15 +47,12 @@ class SmokeRunIT {
         assertEquals(0, SmokeRunner.runAll(),
                 "--smoke reported failures; its printed table above names the missing performative(s) "
                         + "and the scenario(s) searched.\n"
-                        + "IF THE ONLY MISS IS **CANCEL**, RE-RUN BEFORE CONCLUDING ANYTHING IS BROKEN. "
-                        + "The storm's escort-cancel needs the alert to land while the tanker is in "
-                        + "transit with tugs, and at 900 real-seconds per game day that whole window is "
-                        + "about ONE WALL SECOND. It is green on this machine, repeatedly, with roughly "
-                        + "a second of margin — but it is a sub-second window and a full GC, a loaded "
-                        + "CPU or a slower machine can close it. A repeatable miss means the cascade "
-                        + "really did break; a single miss means the machine was busy. Measured "
-                        + "numbers and the reasoning: docs/BUGS_FOUND.md BUG-02.\n"
-                        + "DISCONFIRM comes from busy_day's scripted BerthFlood and has no such window "
-                        + "— a miss there is a real regression.");
+                        + "The runner ALREADY retried the storm once if CANCEL was the sole miss "
+                        + "(S7 — the sub-second window is mechanized inside SmokeRunner, counted in "
+                        + "its output; docs/BUGS_FOUND.md BUG-02 has the measured margins). So a "
+                        + "failure here is repeatable and means the cascade genuinely broke — do NOT "
+                        + "re-run by hand and call it green.\n"
+                        + "DISCONFIRM comes from busy_day's scripted BerthFlood and has no timing "
+                        + "window — a miss there is a real regression.");
     }
 }

@@ -160,6 +160,39 @@ public final class SmokeRunner {
         List<String> missing = PerformativeCounter.canonicalNames().stream()
                 .filter(name -> !union.contains(name))
                 .toList();
+
+        // S7 (audit P3-7): the CANCEL window is ~1.25 wall-seconds BY DESIGN — the storm's
+        // escort-cancel needs the alert to land while the tanker is in transit with tugs, and
+        // at the storm's own 900 s/day pacing that transit is 120 sim-seconds (measured margins
+        // in docs/BUGS_FOUND.md BUG-02). The old convention was a human instruction to "re-run
+        // before concluding", which violates testing.md's own 9/10-is-broken rule. Mechanized
+        // instead: when CANCEL is the SOLE miss and the run is otherwise clean, re-run the
+        // STORM scenario exactly once, loudly counted here. A repeatable miss still fails —
+        // that means the cascade genuinely broke, not that the machine was busy.
+        if (missing.equals(List.of("CANCEL")) && failures.isEmpty()) {
+            System.out.println("\nstorm re-run 1/1 — sub-second CANCEL window (~1.25 wall-s at "
+                    + "900 s/day, measured; docs/BUGS_FOUND.md BUG-02) missed under load; "
+                    + "re-running the storm scenario once before concluding.");
+            log.warn("--smoke: CANCEL was the sole miss — bounded storm re-run 1/1");
+            try {
+                Set<String> retried = runScenario("storm", failures);
+                Set<String> merged = new LinkedHashSet<>(seenByScenario.get("storm"));
+                merged.addAll(retried);
+                // The printed table must not present two runs as one (adversarial finding 12):
+                // the column is relabelled so the evidence table shows the retry happened.
+                seenByScenario.remove("storm");
+                seenByScenario.put("storm (2 runs, CANCEL retry)", merged);
+            } catch (Exception e) {
+                log.error("storm re-run blew up", e);
+                failures.add("storm re-run failed to run: " + e);
+            }
+            union.clear();
+            seenByScenario.values().forEach(union::addAll);
+            missing = PerformativeCounter.canonicalNames().stream()
+                    .filter(name -> !union.contains(name))
+                    .toList();
+        }
+
         if (!missing.isEmpty()) {
             failures.add("DEMO_CHECKLIST row 10 FAILS: " + missing
                     + " never appeared across " + SCENARIOS + ". This is the "
