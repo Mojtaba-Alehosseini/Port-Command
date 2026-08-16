@@ -25,6 +25,8 @@ import it.unige.portcommand.testsupport.Goldens;
 import jade.lang.acl.ACLMessage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assumptions;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -35,10 +37,18 @@ import org.junit.jupiter.api.Test;
  * over ~130 utterances that were NOT written against the grammar or the Rasa corpus, and writes a
  * coverage / precision / end-to-end-accuracy report to {@code build/reports/nlp-wild/}.
  *
- * <p><b>REPORTED, NEVER GATED.</b> This class makes no assertion about the RESULT, by design:
+ * <p><b>REPORTED, with ONE ratchet (S6, 2026-08-16).</b> The metrics stay reported-never-gated:
  * §13.11 makes the wild set an honest measurement for the two course reports, not an acceptance
- * gate. A low score is a finding to write up, not a broken build, and every per-utterance failure
- * is caught into an outcome row rather than thrown. The only control-flow it does exercise is an
+ * gate, and a low coverage/precision score is a finding to write up, not a broken build — every
+ * per-utterance failure is caught into an outcome row rather than thrown. The one exception is
+ * the FALSE-BIND COUNT: a should-ask turn that emits a binding ACL is strictly a defect, never a
+ * measurement (a "goodbye" that closes a deal moves money), so it alone is ratcheted at
+ * {@code <= 8} — which IS the S6 measurement itself (task-26 baseline was 7/19; S6's floors
+ * traded one new false bind for precision and capped it here). ZERO headroom by choice: the
+ * budget is a hard pin at the recorded number, and raising it requires a re-measured
+ * justification in docs/measurements/, never a bump to green a build. Behind it, a floor
+ * asserts the 19 should-ask rows still exist at all. Note the ratchet is
+ * enforced only when Rasa answers — a service-less {@code gradlew check} skips this class. The only control-flow it does exercise is an
  * {@link Assumptions#assumeTrue} on the Rasa server: a run without the cascade's middle stage is
  * not a measurement of the cascade, and letting it write the report anyway would overwrite a real
  * result with an outage (which is exactly what happened before that check existed).
@@ -179,6 +189,18 @@ class WildSetEvaluationIT {
         Path written = Goldens.writeReport("nlp-wild", "wild-set.md", report);
         System.out.println(report);
         System.out.println("Wild-set report written to " + written.toAbsolutePath());
+
+        // S6: the ratchet — LAST, so a regressing run still writes the report that explains it.
+        // The floor first: falseBinds trivially reaches 0 if the corpus's clarification rows are
+        // ever deleted, and a vacuous ratchet is worse than none (DcgRegressionIT's own pattern).
+        final int wantedClarificationFinal = wantedClarification;
+        assertTrue(wantedClarification >= 19, () ->
+                "the wild set's should-ask rows shrank to " + wantedClarificationFinal
+                        + " (< 19) — the false-bind ratchet below would be vacuous");
+        assertTrue(falseBinds.size() <= 8, () ->
+                "false-bind ratchet: " + falseBinds.size() + " should-ask turns emitted a binding "
+                        + "ACL (budget 8 = the S6 measurement, a hard pin — see docs/measurements/; task-26 baseline 7). Report: " + written.toAbsolutePath()
+                        + "\n  " + String.join("\n  ", falseBinds));
     }
 
     /** The observable outcome of one chat turn, as a comparable label. Never throws. */
