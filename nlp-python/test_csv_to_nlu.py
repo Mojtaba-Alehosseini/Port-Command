@@ -37,11 +37,12 @@ _SIMPLE = re.compile(r"\]\((\w+)\)")
 
 
 # --- helpers -----------------------------------------------------------------
-def write_csv(path: Path, rows: list[tuple[str, str, str, str]]) -> Path:
+def write_csv(path: Path, rows: list[tuple[str, ...]]) -> Path:
+    """Fixture rows may be 4-tuples (dsl_valid defaults empty) or 5-tuples (S6 schema)."""
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["intent", "text", "annotated_text", "split"])
-        w.writerows(rows)
+        w.writerow(["intent", "text", "annotated_text", "split", "dsl_valid"])
+        w.writerows(tuple(r) + ("",) * (5 - len(r)) for r in rows)
     return path
 
 
@@ -153,7 +154,10 @@ def test_unknown_intent_raises(tmp_path):
 
 def test_unknown_split_raises(tmp_path):
     csv_path = write_csv(tmp_path / "f.csv", [("accept_deal", "Deal", "Deal", "dev")])
-    with pytest.raises(c2n.CorpusError, match="split"):
+    # match="not in": a bare "split" also matches the COLUMNS error message (the header
+    # names contain the literal string "split"), which made this test vacuously green when
+    # the schema changed (S6 design review). Pin the message that only the split guard emits.
+    with pytest.raises(c2n.CorpusError, match="not in"):
         c2n.generate(csv_path)
 
 
@@ -187,26 +191,23 @@ def test_committed_csv_validates():
     c2n.generate(CSV)  # must not raise (no dupes, no leakage, all intents valid)
 
 
-def test_corpus_counts_484_96(rows):
-    """450/90 until 2026-07-27 (task 26): +34/+6 for the 10th intent, out_of_scope."""
+def test_corpus_counts_500_100(rows):
+    """450/90 until 2026-07-27 (task 26); 484/96 until 2026-08-16 (S6): out_of_scope grew to
+    the full 50/10 shape (P2-6) and every other count held via replacement, not growth."""
     by_split = Counter(r["split"] for r in rows)
-    assert by_split == {"train": 484, "test": 96}
+    assert by_split == {"train": 500, "test": 100}
 
 
-def test_corpus_50_10_per_in_domain_intent(rows):
-    """The nine port-move intents keep the 50/10 shape exactly.
+def test_corpus_50_10_per_intent(rows):
+    """Every intent — out_of_scope now included — keeps the 50/10 shape exactly.
 
-    out_of_scope is deliberately NOT 50/10. It is a routing label for "none of these", not a
-    move the player makes, and its 34/6 is what the wild-set re-measurement was run against
-    (false-bind 73.7% -> 36.8%). Pinning it here at its real size keeps the asymmetry a stated
-    decision rather than something a later edit could quietly regularise.
+    out_of_scope was deliberately 34/6 until S6 (2026-08-16): the asymmetry was a stated
+    decision, but its holdout recall measured 0.167 with 'goodbye' classifying as accept_deal
+    (audit P2-6 — a money action), so S6 grew the class to full parity with distinct surface
+    forms (Italian, goodbye-family, fresh mash, off-domain requests) instead of templates.
     """
     per = Counter((r["intent"], r["split"]) for r in rows)
     for intent in c2n.INTENTS:
-        if intent == "out_of_scope":
-            assert per[(intent, "train")] == 34, intent
-            assert per[(intent, "test")] == 6, intent
-            continue
         assert per[(intent, "train")] == 50, intent
         assert per[(intent, "test")] == 10, intent
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Convert the authoring spreadsheet into Rasa NLU YAML (task 12).
 
-``nlu_authoring.csv`` (columns: ``intent, text, annotated_text, split``) is the
+``nlu_authoring.csv`` (columns: ``intent, text, annotated_text, split, dsl_valid``) is the
 committed source of truth for the training corpus. This converter regenerates
 two Rasa NLU files from it — never hand-edit those:
 
@@ -70,7 +70,7 @@ def normalise(text: str) -> str:
 def read_rows(csv_path: Path) -> list[dict]:
     with csv_path.open(encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
-        expected = {"intent", "text", "annotated_text", "split"}
+        expected = {"intent", "text", "annotated_text", "split", "dsl_valid"}
         if set(reader.fieldnames or []) != expected:
             raise CorpusError(f"{csv_path.name}: columns {reader.fieldnames} != {sorted(expected)}")
         rows = [dict(r) for r in reader]
@@ -92,6 +92,14 @@ def validate(rows: list[dict]) -> None:
             raise CorpusError(f"row {n}: split {split!r} not in {sorted(SPLITS)}")
         if not text or not ann:
             raise CorpusError(f"row {n}: empty text/annotated_text")
+        # S6 (audit D-03): dsl_valid marks whether a set_policy row is a valid PolicyParser
+        # DSL utterance; test_policy_corpus.py cross-checks the marks against the (ported)
+        # grammar. The column is set_policy-only and never rendered into the YAML.
+        dsl = (r.get("dsl_valid") or "").strip()
+        if intent == "set_policy" and dsl not in ("y", "n"):
+            raise CorpusError(f"row {n}: set_policy rows need dsl_valid y|n, got {dsl!r}")
+        if intent != "set_policy" and dsl:
+            raise CorpusError(f"row {n}: dsl_valid is set_policy-only, got {dsl!r} on {intent}")
         key = normalise(text)
         if key in seen[split]:
             raise CorpusError(

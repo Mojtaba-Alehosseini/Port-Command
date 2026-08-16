@@ -32,5 +32,8 @@ PYEOF
 
 echo ""
 echo "== 5-fold cross-validation (in-dev noise floor; informational) =="
-"$PY" -m rasa test nlu --nlu data/nlu.yml --cross-validation --folds 5 --out results/cv
+# S6: the whole data/ directory, not just nlu.yml — the CV folds must train with the same
+# nlu_tables.yml (regex/lookup/synonym) the real `rasa train` sees; ontology_vocab.yml is
+# skipped automatically (no top-level `nlu:` key). The holdout gate above stays file-scoped.
+"$PY" -m rasa test nlu --nlu data/ --cross-validation --folds 5 --out results/cv
 echo "Confusion matrices + reports written under rasa/results/ (gitignored)."

@@ -1,0 +1,76 @@
+# S6 (audit P2-5) — the tables RegexFeaturizer consumes, plus the out-of-corpus synonyms.
+# HAND-AUTHORED (unlike nlu.yml, which csv_to_nlu.py generates): Rasa's training-data loader
+# auto-discovers any sibling .yml carrying a top-level `nlu:` key, and TrainingData.merge
+# concatenates regex_features/lookup_tables/entity_synonyms across files — so these tables
+# train WITHOUT touching the generated file or the holdout (ontology_vocab.yml is skipped by
+# the same rule: no `nlu:` key).
+#
+# Before S6, RegexFeaturizer ran with zero patterns (an all-zero sparse feature block —
+# audit P2-5); EntitySynonymMapper was NEVER inert: every dict-form annotation whose value
+# differs from its span registers an implicit synonym (rasa_yaml.py -> synonyms_parser.py,
+# and again in EntitySynonymMapper.train), 106 live entries from the corpus. The explicit
+# synonym blocks below therefore add ONLY the surfaces the corpus never annotates, byte-matching
+# WordNetResolver.HANDCRAFTED so the Java and Rasa vocabularies agree. The Java table's
+# berth-word entries (slip/dock/loading -> berth) have no Rasa counterpart on purpose:
+# berth_id values are berth_N, and "dock 3"-style surfaces are already implicit synonyms.
+#
+# Regex shapes mirror PreprocessRegex.java (the Java pre-pass) so the two regex layers of
+# PROJECT_DEFINITION §6.1 describe the same surface language.
+version: "3.1"
+
+nlu:
+- regex: price_shape
+  examples: |
+    - €\s?\d{3,5}
+    - \b\d{3,5}\s?(?:euro|euros|eur)\b
+    - \b\d+(?:k|K)\b
+- regex: duration_shape
+  examples: |
+    - \b\d{1,2}\s?(?:h|hrs?|hours?)\b
+# NO berth_shape regex, deliberately (S6 wild-set re-measurement): the berth surface is
+# already DIET's single strongest lexical cue for set_constraint, and featurizing it AGAIN
+# double-counted it — elliptical fragments ("berth 9 then") jumped to confident binds.
+# Price/duration keep their patterns: those surfaces are genuinely varied (symbols,
+# suffixes, unit words) and under-modelled by word features alone.
+- lookup: vessel_class
+  examples: |
+    - tanker
+    - tankers
+    - cargo vessel
+    - cargo ship
+    - freighter
+    - merchantman
+    - merchant ship
+    - container vessel
+    - container ship
+    - cruise ship
+    - cruise vessel
+    - liner
+    - ferry
+    - ferries
+- lookup: tug_name
+  examples: |
+    - tug 1
+    - tug 2
+    - tug 3
+    - tug 4
+- synonym: cargo_vessel
+  examples: |
+    - freighter
+    - merchantman
+    - merchant ship
+# Span-variant completions (S6 golden re-measurement): DIET sometimes tags the bare adjective
+# or a wider span than the corpus annotates ("containerized" for containerized cargo,
+# "class 3 cargo" around the class number). The mapper already knows the corpus spans
+# implicitly; these make the observed variants land on the same canonical values.
+- synonym: containerized_cargo
+  examples: |
+    - containerized
+- synonym: hazmat_class_3
+  examples: |
+    - class 3 cargo
+- synonym: cruise_ship
+  examples: |
+    - liner
+    - ocean liner
+    - cruise liner

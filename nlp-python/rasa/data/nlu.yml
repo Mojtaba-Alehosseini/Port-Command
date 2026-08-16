@@ -215,15 +215,15 @@ nlu:
     - What's your draft
     - How long do you need
     - What's your cargo
-    - What's the IMO
+    - Is [tug 3]{"entity": "tug_name", "value": "tug_3"} in service
     - Status of [CMA Lupo](vessel_name)
     - What's the ETA
     - Where is [Costa Liguria](vessel_name)
     - How big is the [tankers]{"entity": "vessel_class", "value": "tanker"}
     - What berth is [Grimaldi Palermo](vessel_name) at
     - Is [Ever Ligure](vessel_name) cleared
-    - What's the tonnage
-    - How deep is your draft
+    - Where is [tug 4]{"entity": "tug_name", "value": "tug_4"} right now
+    - Status of [tug 1]{"entity": "tug_name", "value": "tug_1"} please
     - When do you arrive
     - What are you carrying
     - Give me the status of [Aida Sole](vessel_name)
@@ -237,7 +237,7 @@ nlu:
     - What's the current weather
     - Is [berth 1]{"entity": "berth_id", "value": "berth_1"} occupied
     - What's the draft of [Maersk Genova](vessel_name)
-    - Any hazmat on [Genoa Star](vessel_name)
+    - Any [hazmat]{"entity": "cargo_class", "value": "hazmat_cargo"} on [Genoa Star](vessel_name)
     - How many berths are open
     - Is [tug 1]{"entity": "tug_name", "value": "tug_1"} free
     - Where's [tug 2]{"entity": "tug_name", "value": "tug_2"}
@@ -271,13 +271,13 @@ nlu:
     - Don't allow [ferry]{"entity": "vessel_class", "value": "ferry"} at [dock 1]{"entity": "berth_id", "value": "berth_1"}
     - Restrict [ferries]{"entity": "vessel_class", "value": "ferry"} to [dock 2]{"entity": "berth_id", "value": "berth_2"}
     - No [class 3]{"entity": "hazmat_code", "value": "hazmat_class_3"} at [dock 3]{"entity": "berth_id", "value": "berth_3"}
-    - Limit [quay 2]{"entity": "berth_id", "value": "berth_2"} to vessels under 200m
+    - Keep [tug 4]{"entity": "tug_name", "value": "tug_4"} in reserve [today](time_expression)
     - Hold all [cruise ship]{"entity": "vessel_class", "value": "cruise_ship"} at anchor
     - No [general cargo]{"entity": "cargo_class", "value": "general_cargo"} at [slip 3]{"entity": "berth_id", "value": "berth_3"}
     - Segregate [liquid bulk]{"entity": "cargo_class", "value": "liquid_bulk"} from [pier 4]{"entity": "berth_id", "value": "berth_4"}
     - Ban [hazmat cargo]{"entity": "cargo_class", "value": "hazmat_cargo"} from [berth one]{"entity": "berth_id", "value": "berth_1"}
     - Only [cruise vessel]{"entity": "vessel_class", "value": "cruise_ship"} allowed at [berth two]{"entity": "berth_id", "value": "berth_2"}
-    - No berthing for [tanker]{"entity": "vessel_class", "value": "tanker"} today
+    - No berthing for [tanker]{"entity": "vessel_class", "value": "tanker"} [today](time_expression)
     - Reserve [berth 1]{"entity": "berth_id", "value": "berth_1"} for [tankers]{"entity": "vessel_class", "value": "tanker"}
     - Hold [Grimaldi Palermo](vessel_name) offshore
     - Block anything over 300m from [berth 2]{"entity": "berth_id", "value": "berth_2"}
@@ -285,8 +285,8 @@ nlu:
     - Don't berth [hazmat class 3]{"entity": "hazmat_code", "value": "hazmat_class_3"} cargo
     - No [container vessel]{"entity": "vessel_class", "value": "container_vessel"} until the storm passes
     - Quarantine [hazmat class 1]{"entity": "hazmat_code", "value": "hazmat_class_1"} shipments
-    - Cap draft at [berth 4]{"entity": "berth_id", "value": "berth_4"} to 12m
-    - Prohibit [container ship]{"entity": "vessel_class", "value": "container_vessel"} at night
+    - Don't assign [tug 3]{"entity": "tug_name", "value": "tug_3"} to [tanker]{"entity": "vessel_class", "value": "tanker"} escorts
+    - Prohibit [container ship]{"entity": "vessel_class", "value": "container_vessel"} [at night](time_expression)
     - Stop routing [cargo vessel]{"entity": "vessel_class", "value": "cargo_vessel"} to [dock 1]{"entity": "berth_id", "value": "berth_1"}
     - Hold [cargo ship]{"entity": "vessel_class", "value": "cargo_vessel"} until customs clears
     - No wide vessels at [dock 2]{"entity": "berth_id", "value": "berth_2"}
@@ -302,7 +302,7 @@ nlu:
     - no [tanker]{"entity": "vessel_class", "value": "tanker"} at [slip 3]{"entity": "berth_id", "value": "berth_3"}
     - block [class 1]{"entity": "hazmat_code", "value": "hazmat_class_1"}
     - keep [tankers]{"entity": "vessel_class", "value": "tanker"} out
-    - no hazmat at [pier 4]{"entity": "berth_id", "value": "berth_4"}
+    - no [hazmat]{"entity": "cargo_class", "value": "hazmat_cargo"} at [pier 4]{"entity": "berth_id", "value": "berth_4"}
     - dont berth [container vessel]{"entity": "vessel_class", "value": "container_vessel"}
     - reserve [berth one]{"entity": "berth_id", "value": "berth_1"} for [container ship]{"entity": "vessel_class", "value": "container_vessel"}
     - hold [Aida Sole](vessel_name) outside
@@ -316,56 +316,56 @@ nlu:
     - block [hazmat class 3]{"entity": "hazmat_code", "value": "hazmat_class_3"}
 - intent: set_policy
   examples: |
-    - Auto accept [container ship]{"entity": "vessel_class", "value": "container_vessel"} above [2k](price_expression)
+    - auto accept if price > [2200](price_expression) for tankers
+    - auto accept if price >= [2400](price_expression)
+    - auto accept if price > [1850](price_expression) for cargo_vessels
+    - auto accept if price > [2000](price_expression) and rounds_used >= 2
+    - auto accept if price >= [3100](price_expression) for container_vessels
+    - auto accept if duration < 6
+    - auto accept if price > [2650](price_expression) and duration <= 12
+    - auto accept if price = [1500](price_expression)
+    - auto reject if price < [1200](price_expression)
+    - auto reject if price < [1750](price_expression) for ferries
+    - auto reject if duration > 18
+    - auto reject if price <= [900](price_expression)
+    - auto reject if price < [1400](price_expression) and rounds_used > 3
+    - auto reject if price < [2050](price_expression) for cruise_ships
+    - auto reject if duration >= 20 for tankers
+    - auto reject if price < [1650](price_expression) and duration > 16
+    - auto counter +10% if price < [1900](price_expression)
+    - auto counter +15% if price < [2100](price_expression) for tankers
+    - auto counter 20% if price < [1600](price_expression)
+    - auto counter +5% if price <= [2300](price_expression) for cargo_vessels
+    - auto counter +12% if rounds_used < 2
+    - auto counter 8% if price < [1450](price_expression) and rounds_used = 1
+    - auto counter +25% if price < [1050](price_expression)
+    - auto accept if rounds_used >= 4
+    - auto accept if price > [2750](price_expression) for ferries
+    - auto reject if price < [1150](price_expression) for container_vessels
+    - auto counter +18% if price < [2450](price_expression) for cruise_ships
+    - auto accept if duration <= 8 for ferries
+    - auto reject if duration < 2
+    - auto accept if price >= [2900](price_expression) and duration >= 4
+    - auto counter +7% if duration > 10
+    - auto accept if price > [3300](price_expression) for cruise_ships
+    - auto reject if price <= [1350](price_expression) and duration < 3
+    - auto counter +30% if price < [800](price_expression)
+    - auto accept if price > [2150](price_expression) and rounds_used <= 1
+    - auto reject if rounds_used >= 6 for cargo_vessels
+    - auto reject if price < [950](price_expression) for tankers
+    - auto counter +9% if price < [2500](price_expression) and duration <= 10
     - Always counter the first offer
+    - Never counter more than once
     - Reject anything under [1800 euros](price_expression)
     - Auto-accept offers over [2000](price_expression)
-    - Never accept below [1800](price_expression)
-    - Automatically reject [cargo vessel]{"entity": "vessel_class", "value": "cargo_vessel"} under [1500](price_expression)
-    - By default counter every offer
-    - Always accept [cargo ship]{"entity": "vessel_class", "value": "cargo_vessel"} over [2200](price_expression)
-    - Auto reject offers below [2500](price_expression)
-    - Accept [ferry]{"entity": "vessel_class", "value": "ferry"} automatically above [1900](price_expression)
-    - Never counter more than once
-    - Always reject under [1600](price_expression)
-    - Auto-accept [Blue Marlin](vessel_name) above [2400](price_expression)
     - Set a floor of [1750](price_expression) for [containers]{"entity": "cargo_class", "value": "containerized_cargo"}
-    - Always reject [containerized cargo]{"entity": "cargo_class", "value": "containerized_cargo"} under [2100](price_expression)
-    - Always hold out for [1450](price_expression)
-    - Auto-approve [ferries]{"entity": "vessel_class", "value": "ferry"} at [2800](price_expression) or more
-    - Never go below [3000](price_expression)
-    - Counter automatically if under [2600](price_expression)
-    - Accept anything over [1200](price_expression) without asking
     - Make it policy to reject under [5000](price_expression)
-    - Auto-accept the [cruise ship]{"entity": "vessel_class", "value": "cruise_ship"} if above [4500](price_expression)
-    - Always ask for at least [3500](price_expression)
-    - Reject [cruise vessel]{"entity": "vessel_class", "value": "cruise_ship"} offers under [2300](price_expression) automatically
     - Standing rule, accept over [1950](price_expression)
     - Default policy, counter first offers
-    - Auto-decline below [2050 euros](price_expression)
-    - Always counter [tanker]{"entity": "vessel_class", "value": "tanker"} below [1850 euros](price_expression)
-    - Set auto-accept threshold to [2k](price_expression)
     - Never accept a first offer
-    - Auto-accept [general cargo]{"entity": "cargo_class", "value": "general_cargo"} shipments over [1800 euros](price_expression)
-    - Always reject [tankers]{"entity": "vessel_class", "value": "tanker"} under [2000](price_expression)
-    - By default reject anything below [1800](price_expression)
-    - Auto-accept above [1500](price_expression) for [container vessel]{"entity": "vessel_class", "value": "container_vessel"}
-    - auto accept [container ship]{"entity": "vessel_class", "value": "container_vessel"} over [2200](price_expression)
-    - always counter first offer
-    - reject under [2500](price_expression)
-    - auto reject below [1900](price_expression)
-    - never accept below [1600](price_expression)
-    - auto accept over [2400](price_expression)
-    - always ask [1750](price_expression) min
-    - auto decline under [2100](price_expression)
-    - Auto acept [cargo vessel]{"entity": "vessel_class", "value": "cargo_vessel"} above [1450](price_expression)
-    - Allways counter first offer
-    - Reject anythign under [2800](price_expression)
-    - Nevar accept below [3000](price_expression)
-    - Auto-rejcet offers below [2600](price_expression)
-    - auto-accept over [1200](price_expression)
-    - always counter
-    - reject under [5000](price_expression)
+    - Counter every lowball automatically
+    - Auto-approve premium offers without asking
+    - Reject cheap offers on principle
 - intent: request_help
   examples: |
     - Help
@@ -427,7 +427,7 @@ nlu:
     - Abort
     - Call it off
     - Withdraw
-    - Cancel that
+    - Recall [tug 2]{"entity": "tug_name", "value": "tug_2"} to base
     - Stop
     - Forget the deal
     - Abort the negotiation
@@ -437,11 +437,11 @@ nlu:
     - Scrap it
     - Drop it
     - Cancel the request
-    - Nevermind that
+    - Cancel [tug 4]{"entity": "tug_name", "value": "tug_4"}'s escort job
     - Stop the negotiation
     - Withdraw my offer
     - Call the whole thing off
-    - Undo that
+    - Stand down [tug 1]{"entity": "tug_name", "value": "tug_1"}
     - Cancel the booking
     - I withdraw
     - End the negotiation
@@ -506,3 +506,19 @@ nlu:
     - how do I reset my password
     - order me a pizza
     - what is your favourite colour
+    - buongiorno capitano
+    - che ore sono
+    - non ho capito niente
+    - quanto costa un caffe al porto
+    - il festival di sanremo inizia stasera
+    - andiamo a pranzo dopo
+    - bye now
+    - gotta go, catch you tomorrow
+    - good night everyone
+    - ciao ciao devo scappare
+    - qwopasdzxc
+    - nfgkjdfhg dfkjg
+    - translate this sentence into german
+    - set a timer for ten minutes
+    - tell me about the roman empire
+    - convert one hundred dollars to yen

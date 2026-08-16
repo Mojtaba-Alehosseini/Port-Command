@@ -59,14 +59,14 @@ nlu:
     - Which berths are available
     - What's the ETA of [CMA Lupo](vessel_name)
     - Current position of [tug 3]{"entity": "tug_name", "value": "tug_3"}
-    - How many berths are free
+    - Is [tug 4]{"entity": "tug_name", "value": "tug_4"} still out with an escort
     - How long until [Costa Liguria](vessel_name) arrives
     - Give me a status report
 - intent: set_constraint
   examples: |
     - Prevent [cruise vessel]{"entity": "vessel_class", "value": "cruise_ship"} from docking
     - Keep the [hazmat class 1]{"entity": "hazmat_code", "value": "hazmat_class_1"} cargo offshore
-    - No arrivals at [berth 4]{"entity": "berth_id", "value": "berth_4"} tonight
+    - No arrivals at [berth 4]{"entity": "berth_id", "value": "berth_4"} [tonight](time_expression)
     - Bar [tanker]{"entity": "vessel_class", "value": "tanker"} from the inner harbour
     - Hold [Ponte Vecchio](vessel_name) until further notice
     - Seal off [dock 1]{"entity": "berth_id", "value": "berth_1"}
@@ -76,16 +76,16 @@ nlu:
     - No oversized vessels at [dock 3]{"entity": "berth_id", "value": "berth_3"}
 - intent: set_policy
   examples: |
-    - Auto-approve any offer above [4500](price_expression)
+    - auto accept if price > [2600](price_expression) for tankers
+    - auto reject if price < [1300](price_expression) and duration < 5
+    - auto counter +11% if price < [1980](price_expression)
+    - auto accept if rounds_used >= 3 for ferries
+    - auto reject if duration > 22
+    - auto counter 16% if price <= [1070](price_expression)
+    - auto accept if price >= [3500](price_expression) and rounds_used <= 2
     - Make counter-first the default
-    - Decline everything under [3500](price_expression)
-    - Set the auto-accept line at [2300](price_expression)
-    - Never settle below [1950](price_expression)
-    - Always auto-accept [liquid bulk]{"entity": "cargo_class", "value": "liquid_bulk"} past [2050 euros](price_expression)
     - Standing order, reject under [1850 euros](price_expression)
-    - Automatically counter low offers
     - Keep a hard floor at [2k](price_expression)
-    - Auto-accept [Nordic Breeze](vessel_name) over [1800 euros](price_expression)
 - intent: request_help
   examples: |
     - Can you explain the commands
@@ -118,3 +118,7 @@ nlu:
     - what is the meaning of life
     - sing me a song
     - book me a flight to rome
+    - arrivederci e grazie
+    - dove si trova la stazione di genova
+    - plmoknijb uhbygv
+    - recommend me a good pizzeria nearby

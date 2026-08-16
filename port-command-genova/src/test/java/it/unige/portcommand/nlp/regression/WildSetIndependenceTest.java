@@ -69,6 +69,17 @@ class WildSetIndependenceTest {
         Path csv = Path.of("..", "nlp-python", "rasa", "data", "nlu_authoring.csv");
         assertTrue(Files.exists(csv), () -> "authoring corpus not found at " + csv.toAbsolutePath()
                 + " — fix this path rather than letting the independence check pass vacuously");
+        // S6: the reader is POSITIONAL (cells.get(1) = text), so the header order is a
+        // load-bearing contract — a column inserted BEFORE text would silently feed this
+        // guard the wrong column and make the whole independence check vacuous (the exact
+        // D-07 failure mode). dsl_valid was appended LAST for this reason; pin it.
+        try (var lines = Files.lines(csv, StandardCharsets.UTF_8)) {
+            assertEquals("intent,text,annotated_text,split,dsl_valid",
+                    lines.findFirst().orElse(""),
+                    "the authoring CSV's column ORDER is what keeps cells.get(1) == text");
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
         List<String> out = new ArrayList<>();
         try (var lines = Files.lines(csv, StandardCharsets.UTF_8)) {
             lines.skip(1).forEach(line -> {
@@ -134,7 +145,7 @@ class WildSetIndependenceTest {
     @Test
     void theAuthoringCorpusIsReadWithItsQuotedFieldsIntact() {
         List<String> corpus = rasaCorpus();
-        assertEquals(580, corpus.size(), "every authoring row must yield a text column");
+        assertEquals(600, corpus.size(), "every authoring row must yield a text column (S6: 580 -> 600, out_of_scope at full 50/10)");
 
         List<String> truncated = corpus.stream().filter(s -> s.startsWith("\"") || s.endsWith("\"")).toList();
         assertEquals(List.of(), truncated,
