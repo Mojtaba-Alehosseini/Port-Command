@@ -38,52 +38,67 @@ public final class WordNetResolver {
     private static final Logger log = LoggerFactory.getLogger(WordNetResolver.class);
 
     /**
-     * The negotiation vocabulary, source of truth (planning/16 Step 16.5's table). Checked before
-     * WordNet so these mappings cannot drift with the dictionary version.
+     * The negotiation vocabulary, source of truth (planning/16 Step 16.5's table, S6 adds
+     * {@code liner}). Checked before WordNet so these mappings cannot drift with the dictionary
+     * version. Package-visible for the structural invariant test only.
      */
-    private static final Map<String, String> HANDCRAFTED = Map.of(
+    static final Map<String, String> HANDCRAFTED = Map.of(
             "freighter", "cargo_vessel",
             "merchantman", "cargo_vessel",
             "merchant ship", "cargo_vessel",
             "cargo ship", "cargo_vessel",
+            "liner", "cruise_ship",
             "slip", "berth",
             "dock", "berth",
             "loading", "berth");
 
     /**
-     * Words whose port meaning is NOT their dominant WordNet sense, so a bare lookup would resolve
-     * them wrongly and the table's mapping needs defending with real disambiguation.
-     *
-     * <p>Only {@code dock} qualifies, which deviates from planning/16's table — it flags
-     * {@code loading} as context-sensitive too. Recorded in ADR-10: {@code loading}'s WordNet
-     * senses are all cargo-sense ({@code [cargo, lading, freight, load, loading, payload, ...]}),
-     * never berth-sense, so running Lesk on it could only ever DELETE the {@code loading -> berth}
-     * mapping the table deliberately makes. That inverts the table-has-precedence rule, so
-     * {@code loading} keeps its unconditional table mapping. {@code dock} is the genuine case: its
-     * first WordNet sense is a courtroom enclosure and its harbour sense is #5.
-     */
-    private static final Set<String> CONTEXT_SENSITIVE = Set.of("dock");
-
-    /**
-     * Lemmas that DISCRIMINATE the berth/quay sense of an ambiguous word. Used to ask "which
-     * sense won?" after Lesk — the only way to tell dock-the-harbour from dock-the-courtroom.
-     * Drawn from the actual WordNet 3.1 synsets (verified by running):
+     * Lemmas that DISCRIMINATE the berth/quay sense of an ambiguous word — the way to ask
+     * "which sense won?" after Lesk. Drawn from the actual WordNet 3.1 synsets (verified):
      * <pre>
      *   berth-sense: [pier, wharf, wharfage, dock] · [dock, dockage, docking facility]
      *                [dock, loading dock]          · [mooring, moorage, berth, slip]
      *   other:       [dock] (courtroom) · [dock, sorrel, sour grass] · [bobtail, bob, dock]
      * </pre>
      *
-     * <p><b>The ambiguous word itself must NEVER appear here.</b> "dock" is a member of the
-     * courtroom synset AND the harbour synsets, so listing it would match every sense and the
-     * disambiguation would be a no-op — the exact circularity this set exists to break. A
-     * discriminator has to be a lemma the OTHER senses lack ({@code dockage}, {@code wharfage},
-     * {@code moorage}, …). {@code WordNetResolverTest.leskRefusesTheBerthMappingInACourtroomContext}
-     * is the regression guard: it fails the moment "dock" is added back.
+     * <p><b>No ambiguous word may appear in its own discriminator set</b> — it is a member of
+     * EVERY one of its synsets, so listing it matches every sense and the disambiguation
+     * becomes a no-op. That is why {@code slip} was REMOVED here when it became
+     * context-sensitive (S6 design review): with it listed, Lesk for "slip" was vacuously
+     * always-berth (pillowcase, faux pas and potter's clay included). Removal is safe for
+     * {@code dock} — none of dock's berth synsets carries "slip" — and sufficient for
+     * {@code slip} — its marine sense retains {@code mooring}/{@code moorage}/{@code berth}.
+     * {@code WordNetResolverTest.noContextSensitiveWordDiscriminatesItsOwnSenses} is the
+     * structural guard; the courtroom/tongue tests are the behavioural ones.
      */
     private static final Set<String> BERTH_SENSE_LEMMAS = Set.of(
             "dockage", "docking facility", "loading dock",
-            "pier", "wharf", "wharfage", "mooring", "moorage", "berth", "slip");
+            "pier", "wharf", "wharfage", "mooring", "moorage", "berth");
+
+    /**
+     * Words whose port meaning is NOT their dominant WordNet sense, each mapped to the lemma
+     * set that discriminates its DOMAIN sense (S6, audit P2-2 — was {@code Set.of("dock")}).
+     * Package-visible for the structural invariant test only.
+     *
+     * <ul>
+     *   <li>{@code dock} — first WordNet sense is the courtroom enclosure; the harbour sense
+     *       is #5. The original and still the clearest case.</li>
+     *   <li>{@code slip} — 15 noun senses (a mistake, an undergarment, a piece of paper,
+     *       potter's clay …); the marine sense is [mooring, moorage, berth, slip]. Without
+     *       disambiguation, "a slip of the tongue" maps to a berth.</li>
+     *   <li>{@code liner} — 4 noun senses (baseball line drive, protective lining, garment
+     *       lining, ocean liner); only #4 is a vessel. Its synset is [liner, ocean liner], so
+     *       the discriminator is the single lemma {@code "ocean liner"} — thin but the only
+     *       non-circular choice.</li>
+     * </ul>
+     *
+     * <p>{@code loading} stays OUT, per ADR-10: all its WordNet senses are cargo-sense, so
+     * Lesk could only ever DELETE the deliberate {@code loading -> berth} table mapping.
+     */
+    static final Map<String, Set<String>> CONTEXT_SENSITIVE = Map.of(
+            "dock", BERTH_SENSE_LEMMAS,
+            "slip", BERTH_SENSE_LEMMAS,
+            "liner", Set.of("ocean liner"));
 
     private final boolean autoLoad;
     private volatile Dictionary dictionary;
@@ -165,7 +180,7 @@ public final class WordNetResolver {
             return word;
         }
 
-        if (!context.isEmpty() && CONTEXT_SENSITIVE.contains(normalised) && lesk() != null) {
+        if (!context.isEmpty() && CONTEXT_SENSITIVE.containsKey(normalised) && lesk() != null) {
             return resolveContextSensitive(word, normalised, context);
         }
 
@@ -176,25 +191,25 @@ public final class WordNetResolver {
         return lookupLemma(word);
     }
 
-    /** Lesk decides which SENSE is meant; only a berth-sense win earns the table's mapping. */
+    /** Lesk decides which SENSE is meant; only a domain-sense win earns the table's mapping. */
     private String resolveContextSensitive(String original, String normalised, List<String> context) {
         Optional<Synset> sense = lesk().disambiguate(normalised, context);
         if (sense.isEmpty()) {
             // No signal either way — keep the negotiation-domain default rather than inventing one.
             return HANDCRAFTED.get(normalised);
         }
-        if (isBerthSense(sense.get())) {
+        if (isDomainSense(sense.get(), CONTEXT_SENSITIVE.get(normalised))) {
             return HANDCRAFTED.get(normalised);
         }
-        // A confidently non-port sense (dock-the-courtroom): do NOT map it into the ontology.
+        // A confidently non-port sense (dock-the-courtroom, slip-the-mistake): do NOT map it.
         log.debug("Lesk resolved '{}' to a non-port sense ({}) — leaving it unmapped",
                 normalised, sense.get().getGloss());
         return lookupLemma(original);
     }
 
-    private static boolean isBerthSense(Synset synset) {
+    private static boolean isDomainSense(Synset synset, Set<String> discriminators) {
         for (Word word : synset.getWords()) {
-            if (BERTH_SENSE_LEMMAS.contains(word.getLemma().toLowerCase(Locale.ROOT))) {
+            if (discriminators.contains(word.getLemma().toLowerCase(Locale.ROOT))) {
                 return true;
             }
         }

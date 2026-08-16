@@ -79,4 +79,36 @@ class OntologyValidatorWordNetIT {
         assertFalse(validator.validate(vesselClass(word)),
                 "WordNet must widen what is understood, never what is accepted into the ontology");
     }
+
+    // --- S6 (audit P2-2): the utterance IS the Lesk context at the production seam -------------
+
+    /**
+     * The two-contexts-two-answers contract, at the validator's own seam rather than the
+     * resolver's: the SAME frame ("liner" as the vessel class) validates under a voyage
+     * utterance — Lesk picks the ocean-liner sense, the table maps it to {@code cruise_ship} —
+     * and is rejected under a garment utterance, where the winning sense is a lining and the
+     * word falls through unmapped. Before S6 this call site passed NO context, so both
+     * utterances produced the same (table-blind) answer and the Lesk branch was dead code.
+     */
+    @Test
+    void theSameFrameValidatesOrNotDependingOnTheUtterance() {
+        Frame liner = vesselClass("liner");
+        assertTrue(validator.validate(liner,
+                        "book the liner in for the passengers on the commercial voyage schedule"),
+                "a voyage context must resolve 'liner' to the ocean-liner sense -> cruise_ship");
+        assertFalse(validator.validate(liner,
+                        "the cloth liner inside the garment surface of my jacket"),
+                "a garment context must NOT map 'liner' into the ontology");
+    }
+
+    /** The Rasa-only shape: no utterance context — the table default holds and nothing throws. */
+    @Test
+    void theContextFreeFacesStayTableDefaultForRasaOnlyTurns() {
+        Frame liner = vesselClass("liner");
+        assertTrue(validator.validate(liner),
+                "the 1-arg face keeps the pre-S6 behaviour: table default, no Lesk");
+        assertTrue(validator.test(liner), "test(frame) must agree with validate(frame)");
+        assertTrue(validator.validate(liner, ""),
+                "a blank utterance is pinned equivalent to the context-free face");
+    }
 }

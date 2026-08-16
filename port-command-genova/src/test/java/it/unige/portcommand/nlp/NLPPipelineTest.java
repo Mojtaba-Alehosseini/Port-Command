@@ -13,7 +13,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -76,13 +76,13 @@ class NLPPipelineTest {
         }
     }
 
-    private NLPPipeline pipeline(RasaBridge rasa, DCGParser dcgParser, Predicate<Frame> frameValidator) {
+    private NLPPipeline pipeline(RasaBridge rasa, DCGParser dcgParser, BiPredicate<Frame, String> frameValidator) {
         executor = Executors.newFixedThreadPool(2);
         return new NLPPipeline(new PreprocessRegex(), rasa, new ConfidenceGate(), dcgParser, frameValidator, executor);
     }
 
     private NLPPipeline pipeline(RasaBridge rasa) {
-        return pipeline(rasa, new NoOpDCGParser(), f -> true);
+        return pipeline(rasa, new NoOpDCGParser(), (f, t) -> true);
     }
 
     private static PipelineResult await(CompletableFuture<PipelineResult> future) {
@@ -103,7 +103,7 @@ class NLPPipelineTest {
         DCGParser dcg = (text, ctx) ->
                 Optional.of(new Frame("commerce_sell", Map.of(Frame.MOVE, "propose", "price", 2000)));
 
-        PipelineResult result = await(pipeline(rasa, dcg, f -> true).processChatInput(
+        PipelineResult result = await(pipeline(rasa, dcg, (f, t) -> true).processChatInput(
                 "I will give you 2000 for 5 hours at berth 3", DialogueCtx.NONE));
 
         PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result);
@@ -120,7 +120,7 @@ class NLPPipelineTest {
         });
         DCGParser dcg = (text, ctx) -> Optional.of(new Frame("commerce_sell", Map.of(Frame.MOVE, "propose")));
 
-        PipelineResult result = await(pipeline(rasa, dcg, f -> false).processChatInput("anything", DialogueCtx.NONE));
+        PipelineResult result = await(pipeline(rasa, dcg, (f, t) -> false).processChatInput("anything", DialogueCtx.NONE));
 
         assertInstanceOf(PipelineResult.NeedsClarification.class, result);
         assertEquals(0, rasaCalls.get());
@@ -139,29 +139,43 @@ class NLPPipelineTest {
     }
 
     @Test
-    void aBindingAcceptBelowPointEightIntentConfidenceFallsToClarificationNotAnAutoClose() throws IOException {
-        // Task 19 play-test: a throwaway "so?" that Rasa reads as accept_deal above the 0.60 gate
-        // but below near-certainty must NOT silently close a deal — it asks (clarification) so the
-        // player confirms via the explicit Accept button.
-        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200,
-                "{\"intent\": {\"name\": \"accept_deal\", \"confidence\": 0.70}, \"entities\": []}"));
-
-        PipelineResult result = await(pipeline(rasa).processChatInput("so?", DialogueCtx.NONE));
-
-        assertInstanceOf(PipelineResult.NeedsClarification.class, result,
-                "a 0.70-confidence accept must never bind — the deal-closing exploit the play-test found");
-    }
-
-    @Test
-    void aBindingAcceptAtPointEightyOrAboveStillRoutes() throws IOException {
+    void aBindingAcceptAtPointNinetyFiveOrAboveStillRoutes() throws IOException {
         // The guard is a floor, not a ban: a genuinely confident accept still closes.
+        // S6 raised it 0.80 -> 0.95 after the holdout measured "goodbye" -> accept_deal@0.91
+        // (audit P2-6's money-action wound) — a farewell must never close a deal.
         RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200,
-                "{\"intent\": {\"name\": \"accept_deal\", \"confidence\": 0.80}, \"entities\": []}"));
+                "{\"intent\": {\"name\": \"accept_deal\", \"confidence\": 0.95}, \"entities\": []}"));
 
         PipelineResult result = await(pipeline(rasa).processChatInput("yes I accept", DialogueCtx.NONE));
 
         assertEquals(ACLMessage.ACCEPT_PROPOSAL,
                 assertInstanceOf(PipelineResult.Routed.class, result).msg().getPerformative());
+    }
+
+    @Test
+    void anAcceptInTheGoodbyeBandFallsToClarification() throws IOException {
+        // 0.91 is exactly where the measured misclassified farewell sat — below the S6
+        // accept floor (0.95), above the general wire floor (0.85). This is also the task-19
+        // "so?" exploit's modern pin: a sub-floor accept must clarify, never auto-close (the
+        // old 0.70-case test was deleted as vacuous once ROUTE_MIN subsumed it — adversarial
+        // finding 11; sub-0.85 accepts are covered by anyRouteBelowTheWireFloor...).
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200,
+                "{\"intent\": {\"name\": \"accept_deal\", \"confidence\": 0.91}, \"entities\": []}"));
+
+        assertInstanceOf(PipelineResult.NeedsClarification.class,
+                await(pipeline(rasa).processChatInput("goodbye", DialogueCtx.NONE)));
+    }
+
+    @Test
+    void anyRouteBelowTheWireFloorFallsToClarification() throws IOException {
+        // S6 (audit P2-6): ROUTE_MIN_CONFIDENCE = 0.85 for EVERY wire-emitting intent — the
+        // measured false-bind band at 0.80-0.85 ("what would you do in my position" ->
+        // request_help@0.817) clarifies instead of emitting a REQUEST.
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200,
+                "{\"intent\": {\"name\": \"request_help\", \"confidence\": 0.82}, \"entities\": []}"));
+
+        assertInstanceOf(PipelineResult.NeedsClarification.class,
+                await(pipeline(rasa).processChatInput("what would you do in my position", DialogueCtx.NONE)));
     }
 
     @Test
@@ -197,6 +211,47 @@ class NLPPipelineTest {
         assertEquals(ACLMessage.REQUEST, msg.getPerformative());
         assertTrue(msg.getContent().contains(rawText), "content must carry the raw text verbatim: " + msg.getContent());
         assertFalse(msg.getContent().contains("price_expression"), "entities must be ignored on the set_policy path");
+    }
+
+    // --- S6 (audit P2-3): the regex pre-pass FILLS missing Rasa entities, never overrides ------
+
+    /**
+     * The rescue case: Rasa gets the intent right and the entities WRONG (misses them
+     * entirely) — before S6 the PreprocessRegex extraction was computed at the top of the
+     * pipeline and thrown away, so this REQUEST went out with empty content. Now the pre-pass
+     * backfills the price and the berth from the utterance's own surface.
+     */
+    @Test
+    void regexPrePassRescuesEntitiesRasaMissed() throws IOException {
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200,
+                "{\"intent\": {\"name\": \"set_constraint\", \"confidence\": 0.9}, \"entities\": []}"));
+
+        PipelineResult result = await(pipeline(rasa).processChatInput(
+                "no tankers over 2500 at berth 2", DialogueCtx.NONE));
+
+        ACLMessage msg = assertInstanceOf(PipelineResult.Routed.class, result).msg();
+        assertEquals(ACLMessage.REQUEST, msg.getPerformative());
+        assertTrue(msg.getContent().contains("\"price_expression\":\"2500\""),
+                "the regex pre-pass must supply the price Rasa missed: " + msg.getContent());
+        assertTrue(msg.getContent().contains("\"berth_id\":\"berth_2\""),
+                "the regex pre-pass must supply the berth (already canonical): " + msg.getContent());
+    }
+
+    /** The other half of the contract: a value Rasa DID extract is never overridden. */
+    @Test
+    void regexPrePassNeverOverridesARasaValue() throws IOException {
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200, """
+                {"intent": {"name": "set_constraint", "confidence": 0.9},
+                 "entities": [{"entity": "price_expression", "value": "1800", "start": 0, "end": 4}]}"""));
+
+        PipelineResult result = await(pipeline(rasa).processChatInput(
+                "cap it at 1800 not 2500 at berth 2", DialogueCtx.NONE));
+
+        ACLMessage msg = assertInstanceOf(PipelineResult.Routed.class, result).msg();
+        assertTrue(msg.getContent().contains("\"price_expression\":\"1800\""),
+                "Rasa's own extraction must survive untouched: " + msg.getContent());
+        assertFalse(msg.getContent().contains("2500"),
+                "the regex hit must not replace a parsed value: " + msg.getContent());
     }
 
     @Test

@@ -12,7 +12,9 @@ public final class ConfidenceGate {
     public static final double MEDIUM_THRESHOLD = 0.40;
 
     public enum Branch {
-        /** confidence &ge; 0.60 — map straight to an action/ACL. */
+        /** confidence &ge; 0.60 — hand to the action mapper. S6 note: the WIRE additionally
+         * demands {@code NLPPipeline.ROUTE_MIN_CONFIDENCE} (0.85); this gate keeps naming the
+         * DISPLAY semantics (high/medium/low), not the routing floor. */
         A_HIGH_CONFIDENCE,
         /** 0.40 &le; confidence &lt; 0.60 — DCG-only territory; not confident enough for Rasa alone. */
         B_MEDIUM_DCG_ONLY,

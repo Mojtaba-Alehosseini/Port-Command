@@ -192,6 +192,38 @@ class NLPPipelineDcgIT {
                 pipeline.processChatInput("anything", DialogueCtx.NONE).join());
     }
 
+    /**
+     * S6 (audit P2-2): the pipeline passes the PLAYER'S OWN UTTERANCE into the validator as
+     * Lesk context. The stub parser returns the identical liner-classed frame for ANY input, so
+     * the only variable between the two calls is the text — a voyage sentence routes (Lesk
+     * picks the ocean-liner sense, the table maps {@code cruise_ship}), a garment sentence
+     * clarifies. Before S6 the validator was called with no text at all and both answers were
+     * identical, which is exactly the dead-Lesk defect this pins shut.
+     */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void theUtteranceItselfIsTheLeskContextAtTheValidatorSeam() {
+        NLPPipeline pipeline = new NLPPipeline(
+                new PreprocessRegex(),
+                new RasaBridge(deadRasaUri, HttpClient.newHttpClient(), new ObjectMapper()),
+                new ConfidenceGate(),
+                (text, ctx) -> java.util.Optional.of(new Frame("commerce_sell",
+                        java.util.Map.of(Frame.MOVE, "constrain", "vessel_class", "liner"))),
+                new OntologyValidator(),
+                executor);
+
+        assertInstanceOf(PipelineResult.Routed.class,
+                pipeline.processChatInput(
+                        "book the liner in for the passengers on the commercial voyage schedule",
+                        DialogueCtx.NONE).join(),
+                "a voyage utterance must earn the cruise_ship resolution and route");
+        assertInstanceOf(PipelineResult.NeedsClarification.class,
+                pipeline.processChatInput(
+                        "the cloth liner inside the garment surface of my jacket",
+                        DialogueCtx.NONE).join(),
+                "a garment utterance must fail vessel-class validation and clarify");
+    }
+
     // --- the DCG is not merely FIRST, it is EXCLUSIVE on a hit -----------------------------------
 
     /**
@@ -328,6 +360,25 @@ class NLPPipelineDcgIT {
         assertTrue(routed.msg().getContent().contains("2200"), routed.msg().getContent());
         assertTrue(routed.msg().getContent().contains("berth_2"),
                 "the berth the player TYPED, not the focused tab's: " + routed.msg().getContent());
+    }
+
+    /**
+     * S6 (P2-1) parity pin: the pipeline parses TWICE on the vocative path — once with the
+     * live ctx, once with the D-05 probe ctx — and both share the same roster, so the MED
+     * rewrite of a TYPO'D cross-tab vocative must be identical on both parses and the
+     * ellipsis guard must fire exactly as it does for the exact spelling. If a future change
+     * strips the roster from the probe ctx, the probe would parse the unrewritten tokens and
+     * the guard would compare two different frames — this test is the tripwire.
+     */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void aTypodCrossTabEllipsisIsStillDeclinedViaTheSameRewrite() {
+        PipelineResult result = pipelineWithRasaDown.processChatInput("Carthagoo: make it 2200", m2ctx()).join();
+
+        PipelineResult.NeedsClarification nc = assertInstanceOf(PipelineResult.NeedsClarification.class,
+                result, "the MED-resolved vocative must reach the SAME cross-tab guard as the exact form");
+        assertNotNull(nc.message(), "the guard's named-vessels message, not the generic line");
+        assertTrue(nc.message().contains("Carthago"), "resolved to the real name: " + nc.message());
     }
 
     /** A context-free inner move (accept) carries no slots, so it cannot transplant any. */

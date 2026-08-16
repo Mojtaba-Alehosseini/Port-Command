@@ -178,7 +178,9 @@ class OntologyValidatorTest {
         assertFalse(validator.validate(null));
     }
 
-    /** It is wired into NLPPipeline as the Predicate<Frame> seam, so test() must agree. */
+    /** S6: production goes through test(frame, text) now; the single-arg faces survive for
+     * context-free callers and must stay pinned equivalent to an empty context — otherwise
+     * the two faces silently diverge (adversarial finding 13). */
     @Test
     void testDelegatesToValidate() {
         assertTrue(validator.test(frame("berth", "berth_1")));

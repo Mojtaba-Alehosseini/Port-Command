@@ -1,8 +1,10 @@
 package it.unige.portcommand.nlp;
 
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 import it.unige.portcommand.prolog.PrologQueries;
 import org.slf4j.Logger;
@@ -23,8 +25,17 @@ import org.slf4j.LoggerFactory;
  * {@code dcg_negotiation.pl}'s mention-guards). This validator is the second, semantic line:
  * it answers "does {@code berth_3} exist in THIS ontology", which the grammar cannot know, and
  * it keeps guarding the frame surface even as 16-M2 adds rules. Belt and braces, deliberately.
+ *
+ * <p><b>S6 (audit P2-2).</b> Now a {@link BiPredicate} over (frame, utterance): the pipeline
+ * passes the raw text so the WordNet stage can run LESK over the surrounding words instead of
+ * trusting the table blind — the {@code resolveToOntology} call below was the production site
+ * that always passed an empty context, which left the Lesk branch dead. The old
+ * {@code Predicate<Frame>} face survives as a plain {@link #test(Frame)} method (pinned
+ * equivalent to an empty context) — it cannot stay an {@code implements}: {@code
+ * Predicate.negate()} and {@code BiPredicate.negate()} share an erased signature with
+ * incompatible return types, so Java forbids implementing both.
  */
-public final class OntologyValidator implements Predicate<Frame> {
+public final class OntologyValidator implements BiPredicate<Frame, String> {
 
     private static final Logger log = LoggerFactory.getLogger(OntologyValidator.class);
 
@@ -44,20 +55,41 @@ public final class OntologyValidator implements Predicate<Frame> {
         this.wordNet = Objects.requireNonNull(wordNet, "wordNet");
     }
 
-    @Override
+    /** The pre-S6 single-arg face — context-free, for callers with no utterance at hand. */
     public boolean test(Frame frame) {
-        return validate(frame);
+        return validate(frame, "");
+    }
+
+    /** The S6 face: same checks, with the utterance as Lesk context for the WordNet stage. */
+    @Override
+    public boolean test(Frame frame, String utterance) {
+        return validate(frame, utterance);
     }
 
     /** @return true iff every ontology-bound element of {@code frame} names a real entity. */
     public boolean validate(Frame frame) {
+        return validate(frame, "");
+    }
+
+    /** @return true iff every ontology-bound element of {@code frame} names a real entity,
+     * with {@code utterance}'s words as the Lesk disambiguation context (blank = context-free,
+     * byte-identical to the pre-S6 behaviour). */
+    public boolean validate(Frame frame, String utterance) {
         if (frame == null) {
             return false;
         }
         return validBerth(frame)
-                && validVesselClass(frame)
+                && validVesselClass(frame, contextTokens(utterance))
                 && validMoney(frame)
                 && validDuration(frame);
+    }
+
+    /** A plain lowercase word split — Lesk wants gloss-overlap words, not grammar tokens. */
+    private static List<String> contextTokens(String utterance) {
+        if (utterance == null || utterance.isBlank()) {
+            return List.of();
+        }
+        return List.of(utterance.toLowerCase(Locale.ROOT).split("\\W+"));
     }
 
     private static boolean validBerth(Frame frame) {
@@ -82,7 +114,7 @@ public final class OntologyValidator implements Predicate<Frame> {
      * canonical form ({@code tanker}) needs no lexical work, which is what keeps the WordNet
      * dictionary from loading on the common path.
      */
-    private boolean validVesselClass(Frame frame) {
+    private boolean validVesselClass(Frame frame, List<String> context) {
         Object vesselClass = frame.element("vessel_class");
         if (vesselClass == null) {
             return true;
@@ -91,7 +123,10 @@ public final class OntologyValidator implements Predicate<Frame> {
         if (PrologQueries.vesselTypeExists(raw)) {
             return true;
         }
-        String resolved = wordNet.resolveToOntology(raw, "noun");
+        // S6 (audit P2-2): the 3-arg call — this used to be the 2-arg overload, which pinned
+        // the context empty and left Lesk unreachable from production. With the utterance's
+        // words along, an ambiguous surface ("liner") is disambiguated by sense, not table-blind.
+        String resolved = wordNet.resolveToOntology(raw, "noun", context);
         boolean exists = PrologQueries.vesselTypeExists(resolved);
         if (!exists) {
             log.debug("frame rejected: '{}' (WordNet -> '{}') is not one of the five vessel types",

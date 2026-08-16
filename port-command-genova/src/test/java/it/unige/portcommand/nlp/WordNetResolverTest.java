@@ -10,6 +10,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -149,6 +150,67 @@ class WordNetResolverTest {
     void aNonContextSensitiveWordIgnoresTheContextEntirely() {
         assertEquals("cargo_vessel",
                 resolver.resolveToOntology("freighter", "noun", List.of("court", "law", "trial")));
+    }
+
+    // --- S6 (audit P2-2): the widened ambiguous-word set ---------------------------------------
+
+    /**
+     * "slip" — 15 WordNet noun senses (a mistake, an undergarment, a piece of paper, potter's
+     * clay …); the marine sense is [mooring, moorage, berth, slip]. In a harbour context the
+     * table's {@code slip -> berth} mapping holds; in a "slip of the tongue" context it must
+     * NOT — the same two-contexts-two-answers contract as dock.
+     */
+    @Test
+    void leskDisambiguatesSlipToBerthInAHarbourContext() {
+        assertEquals("berth", resolver.resolveToOntology(
+                "slip", "noun", List.of("boat", "mooring", "berth", "harbour", "craft")));
+    }
+
+    @Test
+    void leskRefusesTheBerthMappingForASlipOfTheTongue() {
+        String resolved = resolver.resolveToOntology(
+                "slip", "noun", List.of("tongue", "mistake", "awkward", "embarrassing", "blunder"));
+
+        assertNotEquals("berth", resolved,
+                "slip-the-mistake must not be mapped into the port ontology as a berth");
+        assertEquals("slip", resolved);
+    }
+
+    /**
+     * "liner" — 4 WordNet noun senses (a baseball line drive, a protective lining, a garment
+     * lining, an ocean liner). Only the 4th is a vessel; its synset is [liner, ocean liner],
+     * so the domain discriminator is the single lemma "ocean liner" (the ambiguous word itself
+     * can never discriminate — it is a member of all four synsets).
+     */
+    @Test
+    void leskDisambiguatesLinerToCruiseShipInAVoyageContext() {
+        assertEquals("cruise_ship", resolver.resolveToOntology(
+                "liner", "noun", List.of("ship", "passengers", "voyage", "commercial", "schedule")));
+    }
+
+    @Test
+    void leskRefusesTheCruiseShipMappingForAGarmentLiner() {
+        String resolved = resolver.resolveToOntology(
+                "liner", "noun", List.of("cloth", "garment", "inside", "surface", "jacket"));
+
+        assertNotEquals("cruise_ship", resolved,
+                "liner-the-garment-lining must not become a cruise ship");
+    }
+
+    /**
+     * The structural invariant behind all of the above (S6 design review): a context-sensitive
+     * word must never appear in its own discriminator set — it is a lemma of EVERY one of its
+     * synsets, so listing it makes the disambiguation vacuously always-domain. This is exactly
+     * the trap "slip" fell into when the berth discriminators still contained "slip".
+     */
+    @Test
+    void noContextSensitiveWordDiscriminatesItsOwnSenses() {
+        WordNetResolver.CONTEXT_SENSITIVE.forEach((word, discriminators) -> {
+            assertFalse(discriminators.contains(word),
+                    "'" + word + "' appears in its own discriminator set — Lesk for it is vacuous");
+            assertTrue(WordNetResolver.HANDCRAFTED.containsKey(word),
+                    "'" + word + "' is context-sensitive but has no table mapping to defend");
+        });
     }
 
     // --- degradation --------------------------------------------------------------------------

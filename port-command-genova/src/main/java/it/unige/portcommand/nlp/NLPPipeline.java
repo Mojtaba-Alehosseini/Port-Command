@@ -7,10 +7,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.function.Predicate;
+import java.util.function.BiPredicate;
 
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.prolog.PrologQueries;
 import jade.lang.acl.ACLMessage;
 
 import org.slf4j.Logger;
@@ -41,7 +42,7 @@ public final class NLPPipeline {
     private final RasaBridge rasa;
     private final ConfidenceGate gate;
     private final DCGParser dcgParser;
-    private final Predicate<Frame> frameValidator;
+    private final BiPredicate<Frame, String> frameValidator;
     private final ExecutorService executor;
 
     /**
@@ -49,10 +50,14 @@ public final class NLPPipeline {
      *                       DCG returns, this predicate gates whether {@link FrameToAcl} runs.
      *                       Production wires {@link OntologyValidator} here (task 16), so a frame
      *                       naming an entity outside the ontology becomes a clarification rather
-     *                       than a malformed ACL.
+     *                       than a malformed ACL. S6 (audit P2-2): a {@code BiPredicate} over
+     *                       (frame, utterance) so the validator's WordNet stage can run Lesk over
+     *                       the player's actual words — the old {@code Predicate<Frame>} shape is
+     *                       exactly what kept the Lesk branch dead in production.
      */
     public NLPPipeline(PreprocessRegex preprocess, RasaBridge rasa, ConfidenceGate gate,
-                        DCGParser dcgParser, Predicate<Frame> frameValidator, ExecutorService executor) {
+                        DCGParser dcgParser, BiPredicate<Frame, String> frameValidator,
+                        ExecutorService executor) {
         this.preprocess = Objects.requireNonNull(preprocess, "preprocess");
         this.rasa = Objects.requireNonNull(rasa, "rasa");
         this.gate = Objects.requireNonNull(gate, "gate");
@@ -74,6 +79,12 @@ public final class NLPPipeline {
     private PipelineResult processSync(String text, DialogueCtx ctx) {
         try {
             Objects.requireNonNull(text, "text");
+            // S6 (audit P2-3): the pre-pass is a PRE-ANNOTATION LAYER, no longer computed and
+            // discarded. Its hits ride to the Rasa path, where they FILL entities the classifier
+            // missed (entitiesContent) — never overriding a parsed value. The DCG path takes
+            // nothing from it on purpose: a frame's absent slot is MEANINGFUL (ellipsis resolves
+            // from the dialogue ctx; an accept deliberately carries no terms), so backfilling
+            // there would change what the player said.
             PreprocessRegex.Extracted extracted = preprocess.extract(text);
             log.debug("preprocess extracted: {}", extracted);
 
@@ -86,7 +97,7 @@ public final class NLPPipeline {
             if (parsed.isEmpty()) {
                 return clarification();
             }
-            return routeRasaResult(text, parsed.get(), ctx);
+            return routeRasaResult(text, parsed.get(), ctx, extracted);
         } catch (RuntimeException e) {
             log.warn("pipeline failed to route chat input", e);
             return new PipelineResult.Error(String.valueOf(e.getMessage()));
@@ -98,7 +109,7 @@ public final class NLPPipeline {
     private static final Set<String> PER_DIALOGUE_MOVES = Set.of("propose", "counter", "accept", "reject");
 
     private PipelineResult routeFrame(Frame frame, DialogueCtx ctx, String text) {
-        if (!frameValidator.test(frame)) {
+        if (!frameValidator.test(frame, text)) {
             return clarification();
         }
         // 16-M2 vocative: a "Genoa Star: …" binds an addressee; surface it so the caller can route
@@ -216,43 +227,69 @@ public final class NLPPipeline {
         }
     }
 
-    private PipelineResult routeRasaResult(String text, RasaParseResult r, DialogueCtx ctx) {
+    private PipelineResult routeRasaResult(String text, RasaParseResult r, DialogueCtx ctx,
+                                           PreprocessRegex.Extracted extracted) {
         ConfidenceGate.Branch branch = gate.route(r.confidence());
         if (branch != ConfidenceGate.Branch.A_HIGH_CONFIDENCE) {
             return clarification();
         }
-        return routeHighConfidence(text, r, ctx);
+        return routeHighConfidence(text, r, ctx, extracted);
     }
+
+    /**
+     * S6 (audit P2-6 "consider confidence floor for binding intents", calibrated by
+     * measurement): NOTHING goes on the wire below this. The wild-set probe on the retrained
+     * model showed the false-bind confidence distribution is bimodal — the incorrigible binds
+     * sit at &ge;0.98 (a floor cannot touch them without destroying coverage) while a second
+     * band sits at 0.80–0.85 ("what would you do in my position" &rarr; request_help@0.817).
+     * 0.85 cuts under the healthy mass (correct routes measured overwhelmingly at &ge;0.9)
+     * and above that band. ConfidenceGate's 0.60 tri-branch is UNCHANGED — it still names the
+     * display semantics (high/medium/low); this floor is the wire's own stricter demand.
+     */
+    private static final double ROUTE_MIN_CONFIDENCE = 0.85;
 
     /**
      * A Rasa-classified {@code accept_deal} BINDS a negotiation, so it demands near-certainty:
      * a throwaway {@code "so?"} that the DCG misses and Rasa reads as {@code accept_deal} must
      * never silently close a deal (task 19 play-test — a bare "so?" classified above the 0.60
-     * gate closed a €6263 deal with no visible cause). Below this the turn falls to
-     * clarification — the player confirms via the explicit "Accept the current offer" button.
-     * The DCG accept path ({@code routeFrame}) and the Accept button (a direct
-     * {@code PlayerCommandEvent}) both bypass Rasa entirely and are unaffected.
+     * gate closed a €6263 deal with no visible cause; it was 0.80 from task 19 to S6).
+     * S6 raised it to 0.95 after the holdout measured {@code "goodbye"} &rarr;
+     * {@code accept_deal} at 0.91 — the audit P2-6 money-action wound — so THAT farewell can
+     * never close a deal even when the classifier is confidently wrong. Honesty note
+     * (adversarial finding 12): "so?" itself still measures at 0.9997 and remains a documented
+     * live false-bind in the wild set — the floor caps the 0.85–0.95 band, it cannot touch the
+     * incorrigible &ge;0.98 cluster; the explicit Accept button and the DCG path are the safe
+     * routes for those. Below this the turn
+     * falls to clarification — the player confirms via the explicit "Accept the current
+     * offer" button, one click for the game's only irreversible move. The DCG accept path
+     * ({@code routeFrame}) and the Accept button (a direct {@code PlayerCommandEvent}) both
+     * bypass Rasa entirely and are unaffected.
      */
-    private static final double BINDING_ACCEPT_MIN_CONFIDENCE = 0.80;
+    private static final double BINDING_ACCEPT_MIN_CONFIDENCE = 0.95;
 
-    /** Branch A (&ge;0.60): map a non-structural intent straight to an action/ACL. A
-     * structural intent ({@code propose_offer}/{@code counter_offer}) that the DCG already
-     * failed to parse still needs clarification — Rasa's confidence alone is not enough
-     * structure to build a valid offer/counter frame from. */
-    private PipelineResult routeHighConfidence(String text, RasaParseResult r, DialogueCtx ctx) {
+    /** Branch A (&ge;0.60) hands intents here, but since S6 the WIRE demands more: everything
+     * below {@link #ROUTE_MIN_CONFIDENCE} clarifies before the switch. A structural intent
+     * ({@code propose_offer}/{@code counter_offer}) that the DCG already failed to parse still
+     * needs clarification — Rasa's confidence alone is not enough structure to build a valid
+     * offer/counter frame from. */
+    private PipelineResult routeHighConfidence(String text, RasaParseResult r, DialogueCtx ctx,
+                                               PreprocessRegex.Extracted extracted) {
         String intent = r.intentName();
         if (intent == null) {
+            return clarification();
+        }
+        if (r.confidence() < ROUTE_MIN_CONFIDENCE) {
             return clarification();
         }
         return switch (intent) {
             case "propose_offer", "counter_offer" -> clarification();
             case "accept_deal" -> r.confidence() >= BINDING_ACCEPT_MIN_CONFIDENCE
-                    ? routed(ACLMessage.ACCEPT_PROPOSAL, entitiesContent(r), ctx)
+                    ? routed(ACLMessage.ACCEPT_PROPOSAL, entitiesContent(text, r, extracted), ctx)
                     : clarification();
-            case "reject_deal" -> routed(ACLMessage.REJECT_PROPOSAL, entitiesContent(r), ctx);
+            case "reject_deal" -> routed(ACLMessage.REJECT_PROPOSAL, entitiesContent(text, r, extracted), ctx);
             // An 11th performative beyond the committed 10 (report note, per session brief).
-            case "query_status" -> routed(ACLMessage.QUERY_REF, entitiesContent(r), ctx);
-            case "set_constraint" -> routed(ACLMessage.REQUEST, entitiesContent(r), ctx);
+            case "query_status" -> routed(ACLMessage.QUERY_REF, entitiesContent(text, r, extracted), ctx);
+            case "set_constraint" -> routed(ACLMessage.REQUEST, entitiesContent(text, r, extracted), ctx);
             // Audit D-06 (2026-07-27): carries an explicit marker instead of Rasa's entities (which
             // for a bare "help" is an empty object, indistinguishable from set_constraint's). The
             // GUI needs to tell a HELP request apart from a fleet-wide instruction so it can route
@@ -310,10 +347,81 @@ public final class NLPPipeline {
         return new PipelineResult.Routed(msg);
     }
 
-    private static String entitiesContent(RasaParseResult r) {
+    /**
+     * S6: the resolver behind the Rasa path's vessel-class normalisation — the half of audit
+     * P2-2 that makes WordNet/Lesk REACHABLE at runtime. The DCG grammar never emits a
+     * {@code vessel_class} element (it only parses canonical type words), so the validator's
+     * WordNet stage alone would still never see a raw surface; a Rasa entity is the one place
+     * one actually arrives. Lazy dictionary: never loaded until a non-canonical surface shows up.
+     */
+    private final WordNetResolver wordNet = new WordNetResolver();
+
+    private String entitiesContent(String text, RasaParseResult r, PreprocessRegex.Extracted extracted) {
         Map<String, String> values = new LinkedHashMap<>();
         r.entities().forEach((name, hit) -> values.put(name, hit.value()));
+        mergeRegexBackfill(values, extracted);
+        normaliseVesselClass(values, text);
         return TerminalJson.write(values);
+    }
+
+    /**
+     * S6 (audit P2-3): regex hits FILL entities Rasa missed — {@code putIfAbsent} only, so a
+     * classifier-extracted value always wins and the pre-pass can add but never change.
+     * Applies to the four entity-carrying intents (this method's callers); set_policy, help
+     * and cancel keep their dedicated content shapes by design. The duration is rendered back
+     * to the corpus's own surface convention ("6 hours"); a deadline or clock time fills
+     * time_expression only when no duration did (a duration is the negotiation-relevant one).
+     */
+    private static void mergeRegexBackfill(Map<String, String> values, PreprocessRegex.Extracted extracted) {
+        // Value-space note, honest (adversarial finding 9): a backfilled key does not carry the
+        // corpus's raw-surface convention — price is the normalised bare number, a clock time is
+        // HH:MM — and consumers of this content read values loosely by design. Non-finite
+        // prices are dropped outright rather than serialised as NaN/overflow artifacts.
+        extracted.price().ifPresent(p -> {
+            if (!p.isNaN() && !p.isInfinite()) {
+                values.putIfAbsent("price_expression",
+                        p == Math.floor(p) ? String.valueOf(p.longValue()) : String.valueOf(p));
+            }
+        });
+        extracted.berthId().ifPresent(b -> values.putIfAbsent("berth_id", b));
+        extracted.vesselName().ifPresent(v -> values.putIfAbsent("vessel_name", v));
+        extracted.duration().ifPresent(d -> values.putIfAbsent("time_expression",
+                d + (d == 1 ? " hour" : " hours")));
+        if (!values.containsKey("time_expression")) {
+            extracted.deadline().ifPresent(d -> values.put("time_expression", d.toString()));
+        }
+        if (!values.containsKey("time_expression")) {
+            extracted.time().ifPresent(t -> values.put("time_expression", t.toString()));
+        }
+    }
+
+    /**
+     * Rasa's implicit synonym table canonicalises every surface the training corpus annotates
+     * ("cargo ship" → {@code cargo_vessel}), and S6's explicit {@code nlu_tables.yml} blocks
+     * cover freighter/merchantman/liner too — so on the happy path Rasa hands this method an
+     * already-canonical value and the short-circuit below fires (adversarial finding 8: the
+     * two example surfaces are Rasa-handled FIRST). This stage is the FALLBACK for surfaces
+     * outside both tables ("merchant vessel", "boxship", a mapper miss), where the handcrafted
+     * table + WordNet run with the utterance's own words as the Lesk context — a voyage
+     * "liner" resolves to a cruise ship, an eyeliner does not. Unresolvable surfaces are left
+     * as-is (downstream validation owns them).
+     */
+    private void normaliseVesselClass(Map<String, String> values, String text) {
+        String surface = values.get("vessel_class");
+        if (surface == null || PrologQueries.vesselTypeExists(surface)) {
+            return;
+        }
+        java.util.List<String> context = text == null || text.isBlank()
+                ? java.util.List.of()
+                : java.util.List.of(text.toLowerCase(java.util.Locale.ROOT).split("\\W+"));
+        String resolved = wordNet.resolveToOntology(surface, "noun", context);
+        if (PrologQueries.vesselTypeExists(resolved)) {
+            log.debug("Rasa vessel_class '{}' normalised to '{}' (WordNet/Lesk)", surface, resolved);
+            values.put("vessel_class", resolved);
+        } else {
+            log.debug("Rasa vessel_class '{}' resolves to no vessel type ('{}') — left as-is",
+                    surface, resolved);
+        }
     }
 
     private static String policyContent(String text) {
