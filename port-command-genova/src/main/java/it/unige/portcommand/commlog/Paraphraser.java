@@ -68,10 +68,14 @@ public final class Paraphraser {
         return switch (msg.getPerformative()) {
             case ACLMessage.REQUEST -> "Requesting " + requestObject(content);
             case ACLMessage.PROPOSE -> proposeVerb(senderLocalName) + offer(content);
-            case ACLMessage.ACCEPT_PROPOSAL -> "Granted " + deal(content);
+            // reasonSuffix is empty for every pre-S5 grant shape; it renders only the wait-queue
+            // release rationale ("after queue scheduled_ferry rank 3 [R25,R26,R27,R30]").
+            case ACLMessage.ACCEPT_PROPOSAL -> "Granted " + deal(content) + reasonSuffix(content);
             case ACLMessage.REJECT_PROPOSAL -> "Declined the offer" + reasonSuffix(content);
             case ACLMessage.CFP -> "Escort needed for " + vessel(content);
-            case ACLMessage.CONFIRM -> "Cleared " + clearance(content);
+            // reasonSuffix renders the S5 customs rationale ("(inspected [R22,R24])"); empty on
+            // every pre-S5 CONFIRM shape, including the walk-in deal_confirmed.
+            case ACLMessage.CONFIRM -> "Cleared " + clearance(content) + reasonSuffix(content);
             case ACLMessage.INFORM -> "Notifying: " + notice(content, msg);
             case ACLMessage.REFUSE -> "Refusing" + reasonSuffix(content);
             case ACLMessage.CANCEL -> "Cancelling" + reasonSuffix(content);
@@ -229,13 +233,18 @@ public final class Paraphraser {
                 case "routine_inspection" -> "routine inspection";
                 case "weather_hold" -> "weather hold (wind " + moneyText(content, "wind_knots") + "kn)";
                 case "weather_threshold" ->
-                        "weather alert (wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state") + ")";
+                        "weather alert (wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state") + ")"
+                                + reasonSuffix(content);
                 // Task 24: the recovery-direction signals (weather_clear = agent→HM crossing
                 // alert; weather_resume = HM→vessel re-dispatch notice). Deliberately calm
                 // wording — only worsening alerts carry priority=high/URGENT.
                 case "weather_clear" ->
-                        "weather clearing (wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state") + ")";
-                case "weather_resume" -> "weather cleared — resuming escort for " + orVessel(content);
+                        "weather clearing (wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state") + ")"
+                                + reasonSuffix(content);
+                // reasonSuffix renders the S5 emergency-partition rationale ("[R29]") on the
+                // storm-escalated re-dispatches; empty on ordinary resumes.
+                case "weather_resume" ->
+                        "weather cleared — resuming escort for " + orVessel(content) + reasonSuffix(content);
                 // Audit P1-4 follow-up: the 15-sim-minute snapshot the WeatherAgent now sends the
                 // hub. Without its own case it fell to humanize() below and read "weather
                 // periodic" roughly 96 times a game day — the single noisiest line in the comm
