@@ -53,6 +53,11 @@ public final class DealClosedBehaviour extends OneShotBehaviour {
             myAgent.send(confirm);
         }
 
+        // Phase AWAITING_BERTH (S5, ADR-16): the deal-to-grant window is now a REAL resumable
+        // phase, because the wait queue can stretch it to minutes. Before this, flowPhase stayed
+        // null here, refusing every manual save and making the EOD autosave drop a vessel whose
+        // fee was already booked. No deadline: the grant's timing belongs to the HarbourMaster.
+        vessel.reportPhase(BaseVesselAgent.FlowPhase.AWAITING_BERTH, 0L);
         myAgent.addBehaviour(new AwaitBerthBehaviour(myAgent, "berth-" + myAgent.getLocalName()));
         log.info("{}: deal closed at {} ({}h) -> CONFIRM + recorded + awaiting berth",
                 myAgent.getLocalName(), vessel.dealPrice(), vessel.dealHours());

@@ -29,7 +29,7 @@ class CnpRetryBehaviourTest {
         // against -- ISLOCALNAME's constructor throws ("Unknown Platform Name") outside a
         // running container. ISGUID treats the string as already-complete, no lookup needed.
         CnpRequest req = new CnpRequest("V001", new AID("vessel1", AID.ISGUID),
-                new Position(0.0, 0.0, 0.0), new Position(10.0, 10.0, 0.0), 1);
+                new Position(0.0, 0.0, 0.0), new Position(10.0, 10.0, 0.0), 1, "cargo_vessel");
         CnpRetryBehaviour behaviour = new CnpRetryBehaviour(new Agent(), coordinator, req, 1000L);
 
         behaviour.onWake();

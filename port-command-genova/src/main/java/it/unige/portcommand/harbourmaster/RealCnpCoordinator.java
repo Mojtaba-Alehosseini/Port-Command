@@ -5,6 +5,7 @@ import java.util.Deque;
 
 import it.unige.portcommand.behaviours.cnp.InitiateCNPBehaviour;
 import it.unige.portcommand.bootstrap.ServiceLocator;
+import it.unige.portcommand.prolog.PrologQueries;
 import it.unige.portcommand.util.SimClock;
 import jade.core.Agent;
 import org.slf4j.Logger;
@@ -46,13 +47,22 @@ public final class RealCnpCoordinator implements CnpCoordinator {
     private final Agent agent;
     private final ServiceLocator serviceLocator;
     private final SimClock simClock;
+    /** S5: vesselId -> priority-class override (emergency/medical), or null. Supplied by the
+     * HarbourMaster from its escalation map so the dequeue never reaches into agent internals. */
+    private final java.util.function.Function<String, String> overrides;
     private final Deque<CnpRequest> pending = new ArrayDeque<>();
     private boolean inFlight;
 
     public RealCnpCoordinator(Agent agent, ServiceLocator serviceLocator, SimClock simClock) {
+        this(agent, serviceLocator, simClock, id -> null);
+    }
+
+    public RealCnpCoordinator(Agent agent, ServiceLocator serviceLocator, SimClock simClock,
+                              java.util.function.Function<String, String> overrides) {
         this.agent = agent;
         this.serviceLocator = serviceLocator;
         this.simClock = simClock;
+        this.overrides = overrides;
     }
 
     @Override
@@ -71,7 +81,7 @@ public final class RealCnpCoordinator implements CnpCoordinator {
 
     @Override
     public synchronized void completed() {
-        CnpRequest next = pending.poll();
+        CnpRequest next = dequeueHighestPriority();
         if (next == null) {
             inFlight = false;
             return;
@@ -79,5 +89,44 @@ public final class RealCnpCoordinator implements CnpCoordinator {
         log.info("CNP session closed -> launching queued CNP for {} ({} still waiting)",
                 next.vesselId(), pending.size());
         agent.addBehaviour(new InitiateCNPBehaviour(agent, next, serviceLocator, simClock));
+    }
+
+    /**
+     * S5 (audit P2-4, R25-R30): the backlog is dequeued by PRIORITY, not FIFO — the storm
+     * re-dispatch of an emergency-escalated vessel outranks an ordinary queued session. R28's
+     * {@code preempts/2} is the comparison, genuinely CALLED per candidate pair over each
+     * request's R30 {@code effective_priority} class (overrides read from the HarbourMaster's
+     * escalation map); encounter order — FIFO — breaks ties, so with no emergency in the backlog
+     * this is byte-for-byte the old behaviour. The head-of-line bypass in {@code initiate} is
+     * untouched: priority applies to the backlog only.
+     *
+     * <p>Lock-ordering note (design review finding 20): this holds the coordinator monitor while
+     * taking the Prolog lock. No cycle exists — nothing takes them in the other order — but a
+     * future {@code inLock(...)} that calls back into this coordinator would deadlock; keep
+     * Prolog calls OUT of any code the engine lock wraps. Cost, stated (adversarial finding 15):
+     * one uncached assert→query→retract engine round-trip per queued candidate per completion —
+     * fine because the backlog is shallow (weather re-dispatches plus the odd concurrent grant;
+     * single digits), not because the call is free.
+     */
+    private CnpRequest dequeueHighestPriority() {
+        if (pending.isEmpty()) {
+            return null;
+        }
+        CnpRequest best = null;
+        String bestClass = null;
+        for (CnpRequest candidate : pending) {
+            String candidateClass = PrologQueries.effectivePriority(candidate.vesselType(),
+                    overrides.apply(candidate.vesselId())).priorityClass();
+            if (best == null || PrologQueries.preempts(candidateClass, bestClass)) {
+                best = candidate;
+                bestClass = candidateClass;
+            }
+        }
+        pending.remove(best);
+        if (!bestClass.equals("scheduled_arrival")) {
+            log.info("CNP backlog dequeued by priority: {} ({}) preempts {} waiting [R28,R30]",
+                    best.vesselId(), bestClass, pending.size());
+        }
+        return best;
     }
 }

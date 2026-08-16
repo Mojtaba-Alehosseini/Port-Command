@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.Predicate;
 
 import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.agents.MessageProbe;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
 import it.unige.portcommand.gui.events.ContractedFeeEarnedEvent;
@@ -211,6 +212,108 @@ class SaveLoadMidTransitIT {
                 hm.walletLedger().balance() * 100.0, 1e-6,
                 "the wallet holds no sub-cent residue after real CNP awards, got "
                         + hm.walletLedger().balance());
+    }
+
+    /**
+     * S5 (ADR-16, D3): the berth wait queue is PERSISTENCE-FIRST. A walk-in whose deal closed
+     * while its only compatible berth was held used to sit in grant-limbo with
+     * {@code flowPhase()==null} — refusing every manual save and silently DROPPED by the EOD
+     * autosave with its fee already booked. This drives the full story: queue → save (allowed,
+     * stage and phase both {@code AWAITING_BERTH} by name) → load (the queue re-forms from the
+     * persisted stage) → the blocker departs → the sweep grants the RESTORED vessel and the
+     * {@code restoreFrom} arm's {@code AwaitBerthBehaviour} carries it into transit.
+     *
+     * <p>The departure is injected (a probe INFORM on the real {@code departed} intent) — the
+     * blocker's own multi-sim-hour service timeline is the docking round-trip's concern above,
+     * and the release path itself is pinned wire-level by {@code HarbourMasterAgentIT}'s queue
+     * cases. The tanker fixture (11.0/200/60000 → berth_1 ONLY, R8) is what makes the queue
+     * deterministic.
+     */
+    @Test
+    void queuedWalkIn_awaitingBerth_survivesSaveLoad_andIsGrantedAfterRestore() throws Exception {
+        boot = new JadeBootstrap();
+        GameSession session = new GameSession(boot,
+                new BootstrapConfig(TEST_PORT, false, "realtime", 300),
+                new SaveLoadManager(tempDir), new Leaderboard(tempDir.resolve("scores.json")));
+        session.startNewGame();
+        SimClock clock = boot.getSimClock();
+
+        // --- Stage: C001 (CONTRACT-1 → berth_1) announces at once and takes the berth. ---
+        it.unige.portcommand.ontology.VesselSpec c001 = new it.unige.portcommand.ontology.VesselSpec(
+                "C001", "cargo_vessel", 9.5, 180.0, 40_000, "general_cargo", 0L);
+        it.unige.portcommand.bootstrap.AgentRoster.spawnContractedVessel(
+                boot.getSpawner(), c001, "CONTRACT-1", clock, boot.getMarketHistoryArtifact(),
+                session.directory());
+        HarbourMasterAgent hm = (HarbourMasterAgent) session.directory().byName("harbour_master")
+                .orElseThrow();
+        assertTrue(waitUntil(() -> {
+            var t = hm.activeVessels().get("C001");
+            return t != null && "berth_1".equals(t.assignedBerth());
+        }, 15_000), "fixture: C001 must hold berth_1");
+
+        // --- A tanker walk-in deals through the REAL wire path and must QUEUE. ---
+        it.unige.portcommand.ontology.VesselSpec tanker = new it.unige.portcommand.ontology.VesselSpec(
+                "WT5", "tanker", 11.0, 200.0, 60_000, "crude_oil", 0L);
+        it.unige.portcommand.bootstrap.AgentRoster.spawnWalkIn(
+                boot.getSpawner(), tanker, clock, boot.getMarketHistoryArtifact(),
+                boot.getRandomSource(),
+                new it.unige.portcommand.negotiation.RealNegotiationEngine(
+                        it.unige.portcommand.core.Settings.load().roundLimit(),
+                        boot.getRandomSource().forStream("nego-WT5")),
+                session.directory());
+        assertNotNull(awaitEvent(it.unige.portcommand.gui.events.NegotiationOpenedEvent.class,
+                e -> "nego-WT5".equals(e.dialogueId()), 15_000), "the walk-in must open its dialogue");
+        boot.getEventBus().publish(new it.unige.portcommand.gui.events.PlayerCommandEvent(
+                it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind.ACCEPT,
+                "WT5", java.util.Map.of()));
+        assertNotNull(awaitEvent(it.unige.portcommand.gui.events.DealClosedEvent.class,
+                e -> "WT5".equals(e.deal().vesselId()), 15_000), "accepting must close the deal");
+        assertTrue(waitUntil(() -> {
+            var t = hm.activeVessels().get("WT5");
+            return t != null && t.stage()
+                    == it.unige.portcommand.harbourmaster.VesselTracking.Stage.AWAITING_BERTH;
+        }, 10_000), "with berth_1 held, the deal must queue — not grant, refuse, or double-book");
+
+        // --- D3's point: the queued vessel is SAVEABLE and persisted, not limbo. ---
+        Path saved = saveNowRetrying(session, WALK_IN_PATIENCE_HEADROOM_MS);
+        VesselStateDTO dto = new SaveLoadManager(tempDir).load(saved).agents().activeVessels().stream()
+                .filter(v -> "WT5".equals(v.id())).findFirst().orElseThrow(
+                        () -> new AssertionError("the queued walk-in must be IN the save, not dropped"));
+        assertEquals("AWAITING_BERTH", dto.stage(), "stage persists by NAME");
+        assertEquals("AWAITING_BERTH", dto.currentPhase(),
+                "the vessel-side phase matches the stage (checkpoint-#6 F1 discipline)");
+
+        // --- Load: RestoreDispatch re-forms the queue from the persisted stage. ---
+        session.loadGame(saved);
+        HarbourMasterAgent hm2 = (HarbourMasterAgent) session.directory().byName("harbour_master")
+                .orElseThrow();
+        // Observed through activeVessels (a ConcurrentHashMap), NOT berthWaitQueue — the queue
+        // is a plain LinkedHashMap confined to the HM thread by design, and the restore sweep
+        // is concurrently writing it (S5 adversarial finding 5). Queue membership is derivable
+        // from the stage (the queue's own javadoc), so the stage IS the assertion.
+        assertTrue(waitUntil(() -> {
+            var t = hm2.activeVessels().get("WT5");
+            return t != null && t.stage()
+                    == it.unige.portcommand.harbourmaster.VesselTracking.Stage.AWAITING_BERTH;
+        }, 10_000), "the restored world must carry the vessel at AWAITING_BERTH — the granted "
+                + "release below is what proves the queue itself re-formed");
+
+        // --- The blocker departs; the sweep grants the restored vessel. ---
+        boot.getSpawner().spawn("dep_probe", MessageProbe.class, new Object[] {
+                "harbour_master", jade.lang.acl.ACLMessage.INFORM,
+                it.unige.portcommand.core.TerminalJson.write(
+                        java.util.Map.of("intent", "departed", "vessel_id", "C001")), null});
+        assertTrue(waitUntil(() -> {
+            var t = hm2.activeVessels().get("WT5");
+            return t != null && "berth_1".equals(t.assignedBerth()) && t.stage().ordinal()
+                    >= it.unige.portcommand.harbourmaster.VesselTracking.Stage.AWAITING_TUG.ordinal();
+        }, 15_000), "the freed berth must go to the restored queued vessel");
+        assertTrue(waitUntil(() -> session.directory().byName("vessel_wt5")
+                        .filter(it.unige.portcommand.agents.BaseVesselAgent.class::isInstance)
+                        .map(a -> ((it.unige.portcommand.agents.BaseVesselAgent) a).flowPhase()
+                                != it.unige.portcommand.agents.BaseVesselAgent.FlowPhase.AWAITING_BERTH)
+                        .orElse(false), 15_000),
+                "the RESTORED AwaitBerthBehaviour (the restoreFrom arm) must consume the grant");
     }
 
     /**

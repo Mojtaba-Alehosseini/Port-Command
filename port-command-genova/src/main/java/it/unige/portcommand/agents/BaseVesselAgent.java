@@ -1,6 +1,7 @@
 package it.unige.portcommand.agents;
 
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
+import it.unige.portcommand.behaviours.auto_flow.AwaitBerthBehaviour;
 import it.unige.portcommand.behaviours.auto_flow.DepartBehaviour;
 import it.unige.portcommand.behaviours.auto_flow.DockAndServiceBehaviour;
 import it.unige.portcommand.behaviours.auto_flow.TransitToBerthBehaviour;
@@ -37,7 +38,13 @@ public abstract class BaseVesselAgent extends PortCommandAgent
         implements it.unige.portcommand.persistence.Mementoable {
 
     /** The persistable post-deal flow positions ({@code VesselStateDTO.currentPhase}). */
-    public enum FlowPhase { TRANSIT, DOCKED, DEPARTING }
+    /**
+     * {@code AWAITING_BERTH} (S5, ADR-16): between the deal/announce and the HarbourMaster's
+     * berth ACCEPT. Before it existed this window had {@code flowPhase == null}, which refused
+     * every manual save and made the EOD autosave DROP the vessel — tolerable while grants were
+     * instantaneous, fatal once the berth wait-queue made the window minutes long.
+     */
+    public enum FlowPhase { AWAITING_BERTH, TRANSIT, DOCKED, DEPARTING }
 
     protected VesselSpec spec;
     private SimClock simClock;
@@ -88,6 +95,11 @@ public abstract class BaseVesselAgent extends PortCommandAgent
         onRestore(dto);
         FlowPhase phase = FlowPhase.valueOf(dto.currentPhase());
         switch (phase) {
+            // A queued vessel resumes exactly where it parked: listening for the berth grant.
+            // The HarbourMaster side re-enters it into the wait queue (RestoreDispatchBehaviour's
+            // AWAITING_BERTH sweep), so the ACCEPT this behaviour waits for will really arrive.
+            case AWAITING_BERTH -> addBehaviour(
+                    new AwaitBerthBehaviour(this, "berth-" + getLocalName()));
             case TRANSIT -> addBehaviour(TransitToBerthBehaviour.resuming(this, simClock,
                     dto.phaseDeadlineSimMillis()));
             case DOCKED -> addBehaviour(DockAndServiceBehaviour.resuming(this, simClock,

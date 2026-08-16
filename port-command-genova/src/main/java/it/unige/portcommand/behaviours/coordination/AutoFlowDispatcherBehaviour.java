@@ -138,7 +138,43 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
             return;
         }
 
-        ACLMessage accept = MessageFactory.reply(msg, ACLMessage.ACCEPT_PROPOSAL);
+        // S5 (ADR-16): compatible AND free. A contract pins its berth, so "free" here means THAT
+        // berth — a pinned berth occupied at announce time parks the grant in the same wait queue
+        // walk-ins use, keyed on the pin, instead of double-booking. Defensive in shipped content
+        // (every packaged scenario's contracts are berth-disjoint in their absolute windows), but
+        // a berth-sharing future contract now queues instead of colliding. Known consequence,
+        // recorded in ADR-16: the contracted fee fires at the GRANT, so a deferred contracted
+        // grant defers its fee with it.
+        boolean pinnedBerthOccupied = hm.activeVessels().values().stream()
+                .filter(t -> t.stage().ordinal() >= Stage.AWAITING_TUG.ordinal())
+                .anyMatch(t -> contract.berthId().equals(t.assignedBerth()));
+        if (pinnedBerthOccupied) {
+            hm.activeVessels().put(spec.vesselId(), VesselTracking
+                    .arriving(spec.vesselId(), spec, Channel.CONTRACTED, msg.getSender())
+                    .withStage(Stage.AWAITING_BERTH));
+            hm.berthWaitQueue().enqueue(spec.vesselId(), contract.contractedFee(),
+                    contract.contractedHours(), hm.simClock().nowSimMillis());
+            hm.pendingContractGrants().put(spec.vesselId(), contract.contractId());
+            log.info("{}: pinned berth {} occupied — contracted grant queued [R7,R30]",
+                    spec.vesselId(), contract.berthId());
+            return;
+        }
+
+        grantContracted(hm, spec, contract, msg.getSender());
+    }
+
+    /**
+     * The contracted grant pipeline (S5 extraction): ACCEPT + fee event + tracking + tug CNP +
+     * terminal REQUEST + customs pre-clearance. Called on the announce when the pinned berth is
+     * free, and from the wait-queue release sweep when it frees. The ACCEPT is built fresh on the
+     * announce conversation ({@code "berth-"+localName} — the same id {@code MessageFactory.reply}
+     * would have produced), so the deferred path needs no retained original message.
+     */
+    static void grantContracted(HarbourMasterAgent hm, VesselSpec spec, ServiceContract contract,
+                                AID vesselAid) {
+        ACLMessage accept = MessageFactory.create(ACLMessage.ACCEPT_PROPOSAL);
+        accept.addReceiver(vesselAid);
+        accept.setConversationId("berth-" + vesselAid.getLocalName());
         accept.setContent(TerminalJson.write(Map.of(
                 "berth_id", contract.berthId(), "price", contract.contractedFee(),
                 "hours", contract.contractedHours())));
@@ -157,21 +193,24 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
         // transits immediately, so its tracking starts IN_TRANSIT, never AWAITING_TUG.
         int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());
         hm.activeVessels().put(vesselId, VesselTracking
-                .arriving(vesselId, spec, Channel.CONTRACTED, msg.getSender())
+                .arriving(vesselId, spec, Channel.CONTRACTED, vesselAid)
                 .withStage(tugsRequired > 0 ? Stage.AWAITING_TUG : Stage.IN_TRANSIT)
                 .withBerth(contract.berthId()));
 
         if (tugsRequired > 0) {
             Position berthPosition = BerthPositions.position(contract.berthId());
             hm.cnpCoordinator().initiate(
-                    new CnpRequest(vesselId, msg.getSender(), CHANNEL_ENTRY, berthPosition, tugsRequired));
+                    new CnpRequest(vesselId, vesselAid, CHANNEL_ENTRY, berthPosition, tugsRequired,
+                            spec.vesselType()));
         }
 
         sendTerminalRequest(hm, spec, contract, DF_RETRY_ATTEMPTS);
 
-        if (PrologQueries.isHazmat(spec.cargoClass())) {
-            sendCustomsRequest(hm, spec, DF_RETRY_ATTEMPTS);
-        }
+        // S5 (ADR-16 D7): pre-clearance for EVERY contracted arrival, not only hazmat. Required
+        // for the customs rules to be demonstrable at all — hazmat is always high-risk (R24), so
+        // the PreClear fast path and R23's roll could never fire on hazmat-only traffic. Costs
+        // €100/clearance for clean cargo too; DefaultDayCalibrationTest's model gained the line.
+        sendCustomsRequest(hm, spec, DF_RETRY_ATTEMPTS);
 
         log.info("{}: ACCEPT berth {} (contract {}), tugsRequired={}",
                 vesselId, contract.berthId(), contract.contractId(), tugsRequired);
@@ -186,15 +225,15 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
      * TTL) if no terminal is visible yet — fleet spawn is async, so a terminal
      * might not have registered by the moment the first contracted vessel arrives.
      */
-    private void sendTerminalRequest(HarbourMasterAgent hm, VesselSpec spec, ServiceContract contract,
-                                     int attemptsLeft) {
+    static void sendTerminalRequest(HarbourMasterAgent hm, VesselSpec spec, ServiceContract contract,
+                                    int attemptsLeft) {
         List<AID> terminals = hm.serviceLocator().findAll("terminal");
         if (terminals.isEmpty()) {
             if (attemptsLeft <= 0) {
                 log.warn("no terminal registered in DF after retries; cannot request berth {}", contract.berthId());
                 return;
             }
-            myAgent.addBehaviour(new WakerBehaviour(myAgent, DF_RETRY_WALL_MS) {
+            hm.addBehaviour(new WakerBehaviour(hm, DF_RETRY_WALL_MS) {
                 @Override
                 protected void onWake() {
                     sendTerminalRequest(hm, spec, contract, attemptsLeft - 1);
@@ -260,14 +299,14 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
      * vesselId (no reply here carries one). Retries like {@link #sendTerminalRequest}
      * for the same async-DF-registration reason.
      */
-    private void sendCustomsRequest(HarbourMasterAgent hm, VesselSpec spec, int attemptsLeft) {
+    static void sendCustomsRequest(HarbourMasterAgent hm, VesselSpec spec, int attemptsLeft) {
         AID customsAid = hm.resolveCustomsAid();
         if (customsAid == null) {
             if (attemptsLeft <= 0) {
                 log.warn("no customs registered in DF after retries; skipping pre-clearance for {}", spec.vesselId());
                 return;
             }
-            myAgent.addBehaviour(new WakerBehaviour(myAgent, DF_RETRY_WALL_MS) {
+            hm.addBehaviour(new WakerBehaviour(hm, DF_RETRY_WALL_MS) {
                 @Override
                 protected void onWake() {
                     sendCustomsRequest(hm, spec, attemptsLeft - 1);

@@ -22,6 +22,7 @@ import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.harbourmaster.BerthPositions;
+import it.unige.portcommand.harbourmaster.BerthWaitQueue;
 import it.unige.portcommand.harbourmaster.CnpRequest;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.harbourmaster.VesselTracking.Channel;
@@ -165,6 +166,10 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             log.info("{}: departed — tracking closed (was {}, {} tug(s) assigned)",
                     vesselId, removed.stage(), removed.assignedTugs().size());
         }
+        // S5 housekeeping: a departure frees a berth and retires any priority escalation.
+        hm.priorityOverrides().remove(vesselId);
+        hm.berthWaitQueue().remove(vesselId); // defensive; a queued vessel cannot normally depart
+        releaseQueuedGrants(hm);
     }
 
     /**
@@ -266,31 +271,120 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             log.warn("deal_confirmed from untracked vessel {} — ignoring", msg.getSender().getLocalName());
             return;
         }
+        if (tracking.stage() != Stage.NEGOTIATING) {
+            // S5 adversarial finding 1: without this guard a DUPLICATE deal_confirmed (nothing
+            // produces one today — EvaluateCounterOfferBehaviour concludes before DealClosed
+            // sends — but the closed-dialogue ACCEPT-spam residual shows the trigger is
+            // reasoned-about) would re-run the grant against a held-set that now contains the
+            // vessel's OWN berth: a backward stage write to AWAITING_BERTH, its occupied berth
+            // handed to the next waiter, and a second DealClosedEvent.
+            log.warn("{}: deal_confirmed at stage {} — duplicate/late CONFIRM ignored",
+                    tracking.vesselId(), tracking.stage());
+            return;
+        }
         String dialogueId = msg.getConversationId();
-        String berthId = hm.negotiationBerths().getOrDefault(dialogueId, tracking.assignedBerth());
         VesselSpec spec = tracking.spec();
         double price = num(content, "price");
         int hours = (int) num(content, "hours");
 
-        // RULE 4 (the design rules): re-gated through Prolog before this SECOND binding
-        // grant too — a counter-PROPOSE round earlier is not a substitute.
-        boolean compatible = berthId != null && PrologQueries.isCompatible(
-                berthId, spec.vesselType(), spec.draft(), spec.length(), spec.tonnage());
-        String berthConversationId = "berth-" + msg.getSender().getLocalName();
-        if (!compatible) {
-            ACLMessage refuse = MessageFactory.create(ACLMessage.REFUSE);
-            refuse.addReceiver(msg.getSender());
-            refuse.setConversationId(berthConversationId);
-            refuse.setContent(TerminalJson.write(Map.of("reason", "incompatible")));
-            hm.sendLogged(refuse);
-            log.info("{}: REFUSE berth grant (incompatible)", spec.vesselId());
+        // Deal economics land HERE, at the close — matching the vessel's own MarketHistory
+        // DealRecord, which it writes at CONFIRM. The GRANT may be deferred below; money and the
+        // tab close are not (ADR-16 D4 — LedgerCoordinator's vesselId dedupe makes this safe).
+        // The Deal's berth is the dialogue's ADVISORY pick and may differ from (or precede) the
+        // binding grant-time berth — no consumer reads it today (finding 9, stated not hidden).
+        hm.eventBus().publish(new DealClosedEvent(new Deal("deal-" + spec.vesselId(), spec.vesselId(),
+                hm.negotiationBerths().get(dialogueId),
+                price, hours, hm.simClock().nowSimMillis(), Deal.Outcome.DEAL)));
+        hm.eventBus().publish(new NegotiationClosedEvent(dialogueId, spec.vesselId(), Deal.Outcome.DEAL));
+        forgetDialogue(hm, dialogueId);
+
+        // S5 (ADR-16): the berth is RE-PICKED here against live occupancy, not carried from the
+        // opening offer — the occupancy timeline proved that pinning the offer-time pick makes
+        // the storm walk-in wait ~594 sim-min for a berth while another compatible one frees in
+        // 96. RULE 4 holds: findCompatibleBerths (R8) is the binding Prolog gate, and occupancy
+        // is the coordinator's own tracked state (Java on purpose — dynamic Prolog facts would
+        // outlive the world in the process-wide engine; see ADR-16 for the leak scenario).
+        List<String> free = freeCompatibleBerths(hm, spec);
+        if (free.isEmpty()) {
+            // Nothing free RIGHT NOW is no longer a refusal (S3's reverted mistake) and no
+            // longer a silent double-book (the A-02 residual): the grant parks until a berth
+            // frees. Post-deal waits are patience-free — negotiation timeout concluded at the
+            // deal, and AwaitBerthBehaviour has no deadline.
+            hm.berthWaitQueue().enqueue(spec.vesselId(), price, hours, hm.simClock().nowSimMillis());
+            hm.activeVessels().put(spec.vesselId(),
+                    tracking.withStage(Stage.AWAITING_BERTH).withBerth(null));
+            // Finding 4 (defensive): distinguish "all held" from "fits nowhere" — the latter is
+            // unreachable (handleOffer REFUSEs no_compatible_berth at dialogue open) but the
+            // note is a factual claim citing rule ids, so it must not assert the wrong one.
+            boolean fitsSomewhere = !PrologQueries.findCompatibleBerths(
+                    spec.vesselType(), spec.draft(), spec.length(), spec.tonnage()).isEmpty();
+            String note = fitsSomewhere
+                    ? spec.vesselId() + " queued for a berth — every compatible berth is occupied [R7,R30]"
+                    : spec.vesselId() + " queued, but NO berth fits this vessel at all [R8] — "
+                            + "this should have been refused at the dialogue";
+            if (!fitsSomewhere) {
+                log.warn("{}: queued with zero compatible berths — open-time refusal was bypassed",
+                        spec.vesselId());
+            }
+            hm.eventBus().publish(new it.unige.portcommand.gui.events.NotificationEvent(note,
+                    it.unige.portcommand.gui.events.NotificationEvent.Severity.INFO,
+                    hm.simClock().nowSimMillis()));
+            hm.eventBus().publish(new AssistantChatEvent(dialogueId, note));
+            log.info("{}: no compatible berth free — queued ({} waiting)",
+                    spec.vesselId(), hm.berthWaitQueue().size());
             return;
         }
+        grantBerth(hm, spec.vesselId(), msg.getSender(), free.get(0), price, hours, null);
+    }
+
+    /**
+     * Every R8-compatible berth (the binding Prolog gate, rule 4) minus the berths held by a
+     * GRANTED vessel — stages AWAITING_TUG..DEPARTING. NEGOTIATING candidates deliberately do
+     * NOT hold (S5): reservation happens at grant, not at chat-open, so a slow negotiation
+     * cannot starve a faster one. AWAITING_BERTH vessels hold nothing (their berth is null).
+     */
+    static List<String> freeCompatibleBerths(HarbourMasterAgent hm, VesselSpec spec) {
+        List<String> compatible = PrologQueries.findCompatibleBerths(
+                spec.vesselType(), spec.draft(), spec.length(), spec.tonnage());
+        if (compatible.isEmpty()) {
+            return List.of();
+        }
+        Set<String> held = hm.activeVessels().values().stream()
+                .filter(t -> t.stage().ordinal() >= Stage.AWAITING_TUG.ordinal())
+                .map(VesselTracking::assignedBerth)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        return compatible.stream().filter(b -> !held.contains(b)).toList();
+    }
+
+    /**
+     * The one grant pipeline (S5 extraction): the ACCEPT on the vessel's {@code berth-} channel,
+     * the stage write, the occupancy claim (via that stage write — occupancy IS tracked state),
+     * and the tug Contract Net. Called at CONFIRM when a berth is free, and from the release
+     * sweep when one frees for a queued vessel. {@code queueRationale} is non-null only on the
+     * released path and rides the ACCEPT's {@code reason} so the comm log renders the rule ids.
+     */
+    static void grantBerth(HarbourMasterAgent hm, String vesselId, AID vesselAid, String berthId,
+                           double price, int hours, String queueRationale) {
+        VesselTracking tracking = hm.activeVessels().get(vesselId);
+        if (tracking == null) {
+            log.warn("grantBerth for untracked vessel {} — dropped", vesselId);
+            return;
+        }
+        VesselSpec spec = tracking.spec();
+        String berthConversationId = "berth-" + vesselAid.getLocalName();
 
         ACLMessage accept = MessageFactory.create(ACLMessage.ACCEPT_PROPOSAL);
-        accept.addReceiver(msg.getSender());
+        accept.addReceiver(vesselAid);
         accept.setConversationId(berthConversationId);
-        accept.setContent(TerminalJson.write(Map.of("berth_id", berthId, "price", price, "hours", hours)));
+        Map<String, Object> grantContent = new java.util.LinkedHashMap<>();
+        grantContent.put("berth_id", berthId);
+        grantContent.put("price", price);
+        grantContent.put("hours", hours);
+        if (queueRationale != null) {
+            grantContent.put("reason", queueRationale);
+        }
+        accept.setContent(TerminalJson.write(grantContent));
         hm.sendLogged(accept);
 
         // Checkpoint-#6 F1 (fixed 2026-07-18): a vessel that needs no escort never awaits one —
@@ -299,23 +393,106 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         // (W9 departed still showing it). Stage the grant by what actually happens next.
         int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());
         Stage grantStage = tugsRequired > 0 ? Stage.AWAITING_TUG : Stage.IN_TRANSIT;
-        hm.activeVessels().put(spec.vesselId(), tracking.withStage(grantStage).withBerth(berthId));
-        forgetDialogue(hm, dialogueId);
-        log.info("{}: berth GRANTED {} (price {}, {}h)", spec.vesselId(), berthId, price, hours);
-
-        // Task 19: closes a real gap — DealClosedEvent/NegotiationClosedEvent existed since
-        // task 17 but nothing published them, so a chat tab could never close/grey on a deal.
-        hm.eventBus().publish(new DealClosedEvent(new Deal("deal-" + spec.vesselId(), spec.vesselId(), berthId,
-                price, hours, hm.simClock().nowSimMillis(), Deal.Outcome.DEAL)));
-        hm.eventBus().publish(new NegotiationClosedEvent(dialogueId, spec.vesselId(), Deal.Outcome.DEAL));
+        hm.activeVessels().put(vesselId, tracking.withStage(grantStage).withBerth(berthId));
+        log.info("{}: berth GRANTED {} (price {}, {}h{})", vesselId, berthId, price, hours,
+                queueRationale == null ? "" : ", " + queueRationale);
 
         // Task 15: closes the walk-in CNP-dispatch gap ADR-08 left deliberately open —
         // mirrors AutoFlowDispatcherBehaviour's own tugsRequired>0 gate exactly. Terminal/customs
-        // dispatch stays out of scope (not asked for; a separate, larger parity gap — see ADR-09).
+        // dispatch stays out of scope (a separate, larger parity gap — see ADR-09).
         if (tugsRequired > 0) {
             Position berthPosition = BerthPositions.position(berthId);
-            hm.cnpCoordinator().initiate(new CnpRequest(spec.vesselId(), msg.getSender(),
-                    AutoFlowDispatcherBehaviour.CHANNEL_ENTRY, berthPosition, tugsRequired));
+            hm.cnpCoordinator().initiate(new CnpRequest(spec.vesselId(), vesselAid,
+                    AutoFlowDispatcherBehaviour.CHANNEL_ENTRY, berthPosition, tugsRequired,
+                    spec.vesselType()));
+        }
+    }
+
+    /**
+     * The queue release sweep (S5): whenever occupancy may have changed — a departure, or the
+     * 15-sim-min periodic weather snapshot (the idempotent backstop that turns a lost
+     * {@code departed} INFORM from "berth gone forever" into "berth back late") — grant every
+     * queued vessel a now-free compatible berth, HIGHEST PRIORITY FIRST.
+     *
+     * <p>This is where the priority module earns its keep (R25-R30): candidates are ranked by
+     * {@code effective_priority} (R30, through the R26 class bridge — a ferry's
+     * {@code scheduled_ferry} rank 3 outranks everyone's default 4), compared pairwise with
+     * {@code higher_priority} (R27 — genuinely CALLED, not name-dropped), FIFO on ties. The
+     * winning grant's ACCEPT carries the class, rank and rule ids in its rendered reason.
+     */
+    public static void releaseQueuedGrants(HarbourMasterAgent hm) {
+        if (hm.berthWaitQueue().isEmpty()) {
+            return;
+        }
+        while (true) {
+            List<BerthWaitQueue.Waiting> waiting = hm.berthWaitQueue().inArrivalOrder();
+            BerthWaitQueue.Waiting best = null;
+            PrologQueries.VesselPriority bestPriority = null;
+            String bestBerth = null;
+            for (BerthWaitQueue.Waiting candidate : waiting) {
+                VesselTracking tracking = hm.activeVessels().get(candidate.vesselId());
+                if (tracking == null) {
+                    hm.berthWaitQueue().remove(candidate.vesselId()); // departed/ghost cleanup
+                    hm.pendingContractGrants().remove(candidate.vesselId());
+                    continue;
+                }
+                // A queued CONTRACTED grant is pinned to its contract's berth — eligible only
+                // when exactly that berth frees; a walk-in takes any free compatible one.
+                String pinnedContract = hm.pendingContractGrants().get(candidate.vesselId());
+                if (pinnedContract != null && hm.contracts().get(pinnedContract) == null) {
+                    // S5 adversarial finding 3: a pin whose contract left hm.contracts() used
+                    // to yield List.of() on every sweep FOREVER — a silently stranded vessel
+                    // (AwaitBerthBehaviour has no deadline by design). Degrade loudly: drop
+                    // the pin and serve it as a walk-in grant (berth but no contracted
+                    // fee/terminal/customs pipeline — stated cost of the degraded mode).
+                    log.warn("{}: pinned contract {} no longer exists — releasing as a plain "
+                            + "walk-in grant", candidate.vesselId(), pinnedContract);
+                    hm.pendingContractGrants().remove(candidate.vesselId());
+                    pinnedContract = null;
+                }
+                List<String> free;
+                if (pinnedContract != null) {
+                    var contract = hm.contracts().get(pinnedContract);
+                    free = freeCompatibleBerths(hm, tracking.spec()).contains(contract.berthId())
+                            ? List.of(contract.berthId()) : List.of();
+                } else {
+                    free = freeCompatibleBerths(hm, tracking.spec());
+                }
+                if (free.isEmpty()) {
+                    continue;
+                }
+                PrologQueries.VesselPriority priority = PrologQueries.effectivePriority(
+                        tracking.spec().vesselType(),
+                        hm.priorityOverrides().get(candidate.vesselId()));
+                // R27 higher_priority/2 IS the comparator; arrival order breaks ties.
+                if (best == null || PrologQueries.higherPriority(
+                        priority.priorityClass(), bestPriority.priorityClass())) {
+                    best = candidate;
+                    bestPriority = priority;
+                    bestBerth = free.get(0);
+                }
+            }
+            if (best == null) {
+                return; // nobody grantable this round
+            }
+            hm.berthWaitQueue().remove(best.vesselId());
+            VesselTracking tracking = hm.activeVessels().get(best.vesselId());
+            String releasedContract = hm.pendingContractGrants().remove(best.vesselId());
+            if (releasedContract != null) {
+                // Contracted release re-runs the FULL contracted pipeline (fee event, terminal
+                // REQUEST, customs) — a walk-in grant would silently skip all three.
+                log.info("{}: pinned berth freed — releasing contracted grant {} ({} rank {} "
+                                + "[R25,R26,R27,R30])", best.vesselId(), releasedContract,
+                        bestPriority.priorityClass(), bestPriority.rank());
+                AutoFlowDispatcherBehaviour.grantContracted(hm, tracking.spec(),
+                        hm.contracts().get(releasedContract), tracking.aid());
+            } else {
+                String rationale = "after_queue " + bestPriority.priorityClass()
+                        + " rank " + bestPriority.rank() + " [R25,R26,R27,R30]";
+                grantBerth(hm, best.vesselId(), tracking.aid(), bestBerth,
+                        best.price(), best.hours(), rationale);
+            }
+            // Loop: the grant consumed a berth; another waiter may still fit a different one.
         }
     }
 
@@ -336,6 +513,11 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         VesselTracking tracking = findByAid(hm, msg.getSender());
         if (tracking != null) {
             hm.activeVessels().remove(tracking.vesselId());
+            // S5 finding 12: a withdrawing vessel leaves EVERY per-vessel side table, not just
+            // the tracking — the override map has no self-healing sweep of its own.
+            hm.priorityOverrides().remove(tracking.vesselId());
+            hm.pendingContractGrants().remove(tracking.vesselId());
+            hm.berthWaitQueue().remove(tracking.vesselId());
         }
         String dialogueId = msg.getConversationId();
         forgetDialogue(hm, dialogueId);
@@ -386,6 +568,14 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         if (compatible.isEmpty()) {
             return null;
         }
+        // S5: the pick is ADVISORY — the dialogue's candidate berth for the chat and the EV
+        // hint. The binding choice happens at grant time via freeCompatibleBerths, which re-picks
+        // against live occupancy (granted stages only) and queues when nothing is free. So the
+        // all-held fallback below no longer risks a double-book; it just names a plausible berth
+        // for the conversation. The held-set here KEEPS NEGOTIATING candidates on purpose,
+        // unlike freeCompatibleBerths: two concurrent dialogues should discuss different berths
+        // (pinned by twoConcurrentWalkInsOfTheSameClass_getDifferentBerths), even though neither
+        // reserves anything until its grant.
         Set<String> held = hm.activeVessels().values().stream()
                 .map(VesselTracking::assignedBerth)
                 .filter(Objects::nonNull)
@@ -411,8 +601,11 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             // terminal a berth REQUEST at all (ADR-09), so nothing here can currently tell a berth
             // that is genuinely busy from one whose vessel is long gone. That is the same gap ADR-09
             // already tracks; P1-12 is blocked behind it rather than fixable in this method.
-            log.warn("{}: every compatible berth {} is already held — falling back to {}; "
-                            + "this vessel may collide with an existing one (audit A-02 residual)",
+            // No longer the A-02 residual (S5, ADR-16): this candidate is conversational only —
+            // the grant re-picks against live occupancy and queues when nothing is free, so an
+            // occupied candidate here can never become a double-booked grant.
+            log.info("{}: every compatible berth {} is occupied — dialogue proceeds on candidate "
+                            + "{}; the grant will re-pick or queue",
                     spec.vesselId(), compatible, compatible.get(0));
         }
         return free.orElse(compatible.get(0));

@@ -77,6 +77,31 @@ public final class HarbourMasterAgent extends PortCommandAgent
     private final ConcurrentHashMap<String, Long> negotiationOpenedAt = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Double> negotiationPlayerOffers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> cnpRetryAttempts = new ConcurrentHashMap<>();
+    /** S5: parked grants awaiting a free berth. HM-thread confined; see BerthWaitQueue's javadoc. */
+    private final it.unige.portcommand.harbourmaster.BerthWaitQueue berthWaitQueue =
+            new it.unige.portcommand.harbourmaster.BerthWaitQueue();
+    /** S5: queued CONTRACTED grants' vesselId → contractId, so the release sweep can re-run the
+     * contracted grant pipeline (pinned berth, fee event, terminal + customs REQUESTs). */
+    private final ConcurrentHashMap<String, String> pendingContractGrants = new ConcurrentHashMap<>();
+    /**
+     * S5: runtime priority escalations, vesselId → class atom ({@code emergency}/{@code medical}).
+     * The honest producer is the weather cascade — a vessel found UNSAFE in transit IS the
+     * emergency (driven by the R15-R19 verdict, not invented data). Passed per query into
+     * {@code PrologQueries.effectivePriority}; the dynamic Prolog fact exists only transiently
+     * inside that call. Cleared at re-dispatch (paired with {@code weatherHeld}) and at departure.
+     */
+    private final ConcurrentHashMap<String, String> priorityOverrides = new ConcurrentHashMap<>();
+    /**
+     * S5 (Goal B): the last weather reading this hub has seen — written by
+     * {@code HandleWeatherAlertBehaviour} on every alert AND every 15-sim-min periodic snapshot,
+     * read by the player-command Prolog gate. A single volatile record, null until the first
+     * reading arrives (the gate then checks compatibility only — bootstrap grace).
+     */
+    private volatile WeatherReading lastWeather;
+
+    /** The four fields every weather message carries, as one immutable cell. */
+    public record WeatherReading(double windKnots, String visibility, double swell, String state) {
+    }
 
     private WalletLedger walletLedger;
     private ReputationLedger reputationLedger;
@@ -128,7 +153,10 @@ public final class HarbourMasterAgent extends PortCommandAgent
         this.contracts = new ConcurrentHashMap<>(contractsArg());
         JadeAgentSpawner spawner = argAt(5, JadeAgentSpawner.class);
         MarketHistoryArtifact marketHistory = argAt(6, MarketHistoryArtifact.class);
-        this.cnpCoordinator = new RealCnpCoordinator(this, serviceLocator(), simClock);
+        // S5: the coordinator resolves priority overrides through the HM's escalation map, so a
+        // storm-escalated vessel's re-dispatch CNP outranks queued ordinary sessions (R28/R30).
+        this.cnpCoordinator = new RealCnpCoordinator(this, serviceLocator(), simClock,
+                priorityOverrides::get);
 
         // Task 22 restore: the loader appends a HarbourMasterRestoreState (found by type).
         // Ledger BALANCES arrived via HarbourMasterInitArgs; here the in-progress day's
@@ -358,6 +386,31 @@ public final class HarbourMasterAgent extends PortCommandAgent
     /** Zero-bid CNP retry counter per vessel (task 15's {@code CnpRetryBehaviour} seam). */
     public ConcurrentHashMap<String, AtomicInteger> cnpRetryAttempts() {
         return cnpRetryAttempts;
+    }
+
+    /** S5: the berth wait queue. HM-thread confined — call only from HM behaviours. */
+    public it.unige.portcommand.harbourmaster.BerthWaitQueue berthWaitQueue() {
+        return berthWaitQueue;
+    }
+
+    /** S5: queued contracted grants (vesselId → contractId); consumed by the release sweep. */
+    public ConcurrentHashMap<String, String> pendingContractGrants() {
+        return pendingContractGrants;
+    }
+
+    /** S5: runtime priority escalations (vesselId → emergency/medical), weather-cascade-owned. */
+    public ConcurrentHashMap<String, String> priorityOverrides() {
+        return priorityOverrides;
+    }
+
+    /** S5 (Goal B): the last weather reading, or null before the first alert/snapshot. */
+    public WeatherReading lastWeather() {
+        return lastWeather;
+    }
+
+    /** Written by {@code HandleWeatherAlertBehaviour} on every weather message it consumes. */
+    public void recordWeather(WeatherReading reading) {
+        this.lastWeather = reading;
     }
 
     /** Live contract map: {@code contracts.json} + scenario-locals + the daily stream's

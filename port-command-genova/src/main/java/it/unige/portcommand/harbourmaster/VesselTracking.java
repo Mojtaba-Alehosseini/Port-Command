@@ -42,7 +42,14 @@ public record VesselTracking(
 
     public enum Channel { CONTRACTED, WALK_IN }
 
-    public enum Stage { ARRIVING, NEGOTIATING, AWAITING_TUG, IN_TRANSIT, DOCKED, DEPARTING }
+    /**
+     * {@code AWAITING_BERTH} (S5, ADR-16): deal confirmed / arrival announced, but every
+     * compatible berth is occupied — the vessel is parked in the HarbourMaster's wait queue
+     * until one frees. Ordinal position is LOAD-BEARING: {@code advanceStage} compares
+     * ordinals monotonically, so it must sit after NEGOTIATING and before AWAITING_TUG.
+     * Persistence is by NAME, so inserting it is save-compatible.
+     */
+    public enum Stage { ARRIVING, NEGOTIATING, AWAITING_BERTH, AWAITING_TUG, IN_TRANSIT, DOCKED, DEPARTING }
 
     public VesselTracking {
         assignedTugs = assignedTugs == null ? List.of() : List.copyOf(assignedTugs);

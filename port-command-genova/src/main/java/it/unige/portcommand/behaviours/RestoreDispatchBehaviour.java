@@ -77,6 +77,53 @@ public final class RestoreDispatchBehaviour extends OneShotBehaviour {
         }
         redispatchTugless();
         resendPendingCustoms();
+        requeueAwaitingBerth();
+    }
+
+    /**
+     * S5 (ADR-16): restored {@code AWAITING_BERTH} vessels re-enter the wait queue — the queue
+     * itself is never serialized (membership is derivable from the stage), so a load rebuilds it
+     * here and immediately attempts a release: if the blocking vessel was dropped by the same
+     * save, the berth is already free and the grant lands at once. Deal terms come from the
+     * restored tracking's DTO fields ({@code dealPrice}/{@code dealHours} persisted vessel-side,
+     * mirrored into the HM snapshot by {@code GameStateBuilder}); contracted entries re-derive
+     * their pin from {@code contractRef}.
+     */
+    private void requeueAwaitingBerth() {
+        List<VesselTracking> queued = hm.activeVessels().values().stream()
+                .filter(v -> v.stage() == Stage.AWAITING_BERTH)
+                .sorted(java.util.Comparator.comparing(VesselTracking::vesselId))
+                .toList();
+        for (VesselTracking tracking : queued) {
+            var vessel = hm.directory() == null ? null
+                    : hm.directory().byName(
+                                    it.unige.portcommand.bootstrap.AgentRoster.vesselLocalName(tracking.spec()))
+                            .filter(it.unige.portcommand.agents.BaseVesselAgent.class::isInstance)
+                            .map(it.unige.portcommand.agents.BaseVesselAgent.class::cast)
+                            .orElse(null);
+            if (vessel == null) {
+                // S5 adversarial finding 11: also drop the TRACKING, not just the queue entry —
+                // an agent-less AWAITING_BERTH entry would otherwise never be queued, never be
+                // granted, and be re-saved as-is by every later snapshot (a ghost that survives
+                // every reload). Removing it matches the departed-vessel cleanup shape.
+                log.warn("restore dispatch: AWAITING_BERTH {} has no restored agent — dropping "
+                        + "its tracking and queue entry", tracking.vesselId());
+                hm.activeVessels().remove(tracking.vesselId());
+                hm.pendingContractGrants().remove(tracking.vesselId());
+                continue;
+            }
+            hm.berthWaitQueue().enqueue(tracking.vesselId(), vessel.dealPrice(), vessel.dealHours(),
+                    hm.simClock().nowSimMillis());
+            String contractRef = vessel.snapshotDto().contractRef();
+            if (contractRef != null && !contractRef.isEmpty()) {
+                hm.pendingContractGrants().put(tracking.vesselId(), contractRef);
+            }
+            log.info("restore dispatch: {} re-queued for a berth", tracking.vesselId());
+        }
+        if (!queued.isEmpty()) {
+            it.unige.portcommand.behaviours.coordination.ForwardWalkInToPlayerBehaviour
+                    .releaseQueuedGrants(hm);
+        }
     }
 
     private void redispatchTugless() {
@@ -94,7 +141,8 @@ public final class RestoreDispatchBehaviour extends OneShotBehaviour {
             }
             hm.cnpCoordinator().initiate(new CnpRequest(tracking.vesselId(), tracking.aid(),
                     AutoFlowDispatcherBehaviour.CHANNEL_ENTRY,
-                    BerthPositions.position(tracking.assignedBerth()), tugsRequired));
+                    BerthPositions.position(tracking.assignedBerth()), tugsRequired,
+                tracking.spec().vesselType()));
             log.info("restore dispatch: fresh CNP for {} ({} tug(s))", tracking.vesselId(), tugsRequired);
         }
     }

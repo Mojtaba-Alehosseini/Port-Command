@@ -82,6 +82,11 @@ public final class InitiateCNPBehaviour extends OneShotBehaviour {
         this.simClock = simClock;
     }
 
+    /** Which session this launch is for — the coordinator tests assert dequeue ORDER with it. */
+    public CnpRequest request() {
+        return req;
+    }
+
     @Override
     public void action() {
         HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;

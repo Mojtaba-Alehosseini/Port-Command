@@ -51,6 +51,11 @@ public final class AnnounceArrivalBehaviour extends OneShotBehaviour {
         request.setContent(TerminalJson.write(content));
         myAgent.send(request);
 
+        // Phase AWAITING_BERTH (S5, ADR-16): same reasoning as the walk-in side — the
+        // announce-to-grant window becomes a resumable phase instead of a null that transiently
+        // refused manual saves ("between phases"), and the contracted queue (a berth-sharing
+        // future contract) parks here safely.
+        vessel.reportPhase(BaseVesselAgent.FlowPhase.AWAITING_BERTH, 0L);
         myAgent.addBehaviour(new AwaitBerthBehaviour(myAgent, conversationId));
         log.info("{} announced arrival (contract {}) -> harbour-master", myAgent.getLocalName(), contractId);
     }

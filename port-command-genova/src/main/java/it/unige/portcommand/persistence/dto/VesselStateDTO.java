@@ -65,5 +65,6 @@ public record VesselStateDTO(
     public static final String CHANNEL_CONTRACTED = "contracted";
     public static final String CHANNEL_WALK_IN = "walk_in";
 
-    public static final Set<String> PHASES = Set.of("TRANSIT", "DOCKED", "DEPARTING");
+    /** {@code AWAITING_BERTH} added S5 (ADR-16) — additive within schema v1, like task-23's fields. */
+    public static final Set<String> PHASES = Set.of("AWAITING_BERTH", "TRANSIT", "DOCKED", "DEPARTING");
 }
