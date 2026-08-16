@@ -27,7 +27,6 @@ import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.harbourmaster.TugBasePositions;
 import it.unige.portcommand.negotiation.NegotiationEngine;
-import it.unige.portcommand.negotiation.NoOpNegotiationEngine;
 import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.ontology.VesselSpec;
@@ -196,11 +195,20 @@ public final class AgentRoster {
             VesselSpec spec = new VesselSpec(dto.id(), dto.vesselType(), dto.draft(), dto.length(),
                     dto.tonnage(), dto.cargoClass(), dto.etaArrivalSimMillis());
             if (VesselStateDTO.CHANNEL_WALK_IN.equals(dto.channel())) {
-                // A restored walk-in never negotiates again (open negotiations are not
-                // persisted) — the engine slot is filled with the no-op binding.
+                // A restored walk-in never negotiates again BY DESIGN (open negotiations are
+                // not persisted; onRestore concludes the dialogue and attaches no negotiation
+                // behaviours — SaveLoadSessionIT pins it). The engine slot nonetheless gets
+                // the REAL engine (S7, audit P3-11): the old NoOpNegotiationEngine THREW on
+                // evaluate, and JADE kills an agent whose behaviour throws — so any future
+                // change that re-attached negotiation behaviours would have produced silently
+                // dead vessels instead of negotiations. Same construction as the live spawns;
+                // inert today, safe tomorrow.
                 spawner.spawn(vesselLocalName(spec), WalkInVesselAgent.class, new Object[] {
-                        spec, simClock, marketHistory, new NoOpNegotiationEngine(), randomSource,
-                        directory, dto});
+                        spec, simClock, marketHistory,
+                        new it.unige.portcommand.negotiation.RealNegotiationEngine(
+                                it.unige.portcommand.core.Settings.load().roundLimit(),
+                                randomSource.forStream("nego-" + dto.id())),
+                        randomSource, directory, dto});
             } else {
                 spawner.spawn(vesselLocalName(spec), ContractedVesselAgent.class, new Object[] {
                         spec, simClock, marketHistory,

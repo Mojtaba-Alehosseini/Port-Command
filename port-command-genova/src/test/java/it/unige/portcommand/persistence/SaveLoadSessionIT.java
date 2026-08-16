@@ -20,7 +20,6 @@ import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
-import it.unige.portcommand.harbourmaster.financial.IncomeRules;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
 import it.unige.portcommand.lifecycle.events.AutosaveRequestedEvent;
 import it.unige.portcommand.negotiation.RealNegotiationEngine;
@@ -150,13 +149,17 @@ class SaveLoadSessionIT {
                 "exactly one AutosaveCoordinator (session-scoped, survives loads)");
 
         // --- THE TRAP, behaviourally: one deal moves the wallet EXACTLY once. ---
+        // S7 (audit P3-3): the expectation is a LITERAL, not an IncomeRules echo — berthBase is
+        // a passthrough of the deal price (planning/20's table), and the reputation premium is
+        // 0 below the 80-point unlock. The precondition pins the premium term at zero so the
+        // literal cannot silently absorb a surcharge.
+        assertTrue(hm.reputationLedger().score() < 80.0,
+                "fixture: a fresh game starts below the premium threshold (50 < 80), score was "
+                        + hm.reputationLedger().score());
         double synthPrice = 1_000.0;
-        double expectedBase = IncomeRules.berthBase(null, 5, synthPrice);
-        double expectedPremium = IncomeRules.premiumSurcharge(expectedBase,
-                hm.reputationLedger().score());
         boot.getEventBus().publish(new DealClosedEvent(new Deal("deal-SYNTH-1", "SYNTH-1", "berth_1",
                 synthPrice, 5, clock.nowSimMillis(), Deal.Outcome.DEAL)));
-        double expected = walletAtSave + expectedBase + expectedPremium;
+        double expected = walletAtSave + 1_000.0;
         assertTrue(waitUntil(() -> Math.abs(hm.walletLedger().balance() - expected) < 0.0001, 5_000),
                 "one closed deal must move the wallet by its fee EXACTLY once (was: "
                         + hm.walletLedger().balance() + ", expected " + expected + ")");
@@ -174,6 +177,35 @@ class SaveLoadSessionIT {
                         .noneMatch(e -> e.performative() == ACLMessage.PROPOSE
                                 && "vessel_walkin_t1".equals(e.sender())),
                 "a restored walk-in sends no PROPOSE — its beliefs are carried, never surfaced");
+
+        // --- S7 (audit P3-11): a STRAY negotiation message must not kill the restored vessel.
+        // Historically the restore path bound NoOpNegotiationEngine, whose evaluate() THREW —
+        // and JADE kills an agent whose behaviour throws. What this block can honestly pin
+        // TODAY: (a) the stray PROPOSE moves no negotiation state (P-04 — the dialogue stays
+        // concluded), and (b) the agent's JADE lifecycle survives it (state never AP_DELETED —
+        // a DIRECT liveness witness, deliberately not a flow-phase one: at 300 s/day the ferry
+        // may already be DOCKED here, which made a phase-progress witness vacuous, adversarial
+        // finding 9). The RealNegotiationEngine binding itself is belt-and-braces — no restore
+        // path attaches negotiation behaviours, so no test can reach evaluate() until a future
+        // change re-attaches them; the binding exists so THAT change inherits a real engine
+        // instead of a grenade (stated, not overclaimed — finding 10).
+        BaseVesselAgent restored = awaitVesselWithPhase("vessel_walkin_t1", session);
+        boot.getSpawner().spawn("stray_probe", it.unige.portcommand.agents.MessageProbe.class,
+                new Object[] {"vessel_walkin_t1", ACLMessage.PROPOSE,
+                        "{\"intent\": \"counter_offer\", \"price\": 9999.0, \"hours\": 5}", null});
+        clock.advance(clock.simSecondsToWallMs(120));
+        // Give delivery (and any hypothetical behaviour-throw kill) time to land, then check
+        // the lifecycle: a killed agent is AP_DELETED. The negative must HOLD for the window,
+        // so this waits out the full bound rather than returning early on the happy state.
+        Thread.sleep(1_500); // bounded, explicit (design rule 5): the kill would be async
+        assertTrue(restored.getState() != jade.core.Agent.AP_DELETED,
+                "the restored vessel must survive a stray PROPOSE — AP_DELETED means a "
+                        + "behaviour threw on it (the old NoOp-engine failure mode)");
+        assertTrue(publishedAfterLast(GameLoadedEvent.class).stream()
+                        .filter(NegotiationOpenedEvent.class::isInstance)
+                        .map(NegotiationOpenedEvent.class::cast)
+                        .noneMatch(e -> "nego-WALKIN-T1".equals(e.dialogueId())),
+                "the stray PROPOSE must not re-open the concluded negotiation either");
     }
 
     /**

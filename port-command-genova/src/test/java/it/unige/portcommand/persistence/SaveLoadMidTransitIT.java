@@ -314,6 +314,34 @@ class SaveLoadMidTransitIT {
                                 != it.unige.portcommand.agents.BaseVesselAgent.FlowPhase.AWAITING_BERTH)
                         .orElse(false), 15_000),
                 "the RESTORED AwaitBerthBehaviour (the restoreFrom arm) must consume the grant");
+
+        // --- S7 (audit P3, the open-ended-assertion fix): drive it all the way to DOCKED.
+        // ">= AWAITING_TUG" and "!= AWAITING_BERTH" above are entry conditions, satisfiable by
+        // a vessel stuck in transit forever. The completion claim is DOCKED on BOTH sides —
+        // HM tracking and vessel phase. Budget mirrors the docking round-trip above: the
+        // tanker's escort is real distance at tug speed (~5.2 sim-h worst route), advanced in
+        // 15-sim-minute steps within a 6.5 sim-hour cap.
+        boolean docked = false;
+        for (int i = 0; i < 26 && !docked; i++) {
+            clock.advance(clock.simSecondsToWallMs(900L));
+            docked = waitUntil(() -> {
+                var t = hm2.activeVessels().get("WT5");
+                boolean stageDocked = t != null && t.stage()
+                        == it.unige.portcommand.harbourmaster.VesselTracking.Stage.DOCKED;
+                boolean phaseDocked = session.directory().byName("vessel_wt5")
+                        .filter(it.unige.portcommand.agents.BaseVesselAgent.class::isInstance)
+                        .map(a -> ((it.unige.portcommand.agents.BaseVesselAgent) a).flowPhase()
+                                == it.unige.portcommand.agents.BaseVesselAgent.FlowPhase.DOCKED)
+                        .orElse(false);
+                return stageDocked && phaseDocked;
+            }, 500);
+        }
+        assertTrue(docked, "the restored queued vessel must actually DOCK — tracking: "
+                + hm2.activeVessels().get("WT5") + ", phase: "
+                + session.directory().byName("vessel_wt5")
+                        .filter(it.unige.portcommand.agents.BaseVesselAgent.class::isInstance)
+                        .map(a -> String.valueOf(((it.unige.portcommand.agents.BaseVesselAgent) a).flowPhase()))
+                        .orElse("agent absent"));
     }
 
     /**
