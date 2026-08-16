@@ -115,7 +115,7 @@ public final class AgentRoster {
                 null, directory, scenarioRuntime});
         spawner.spawn("weather_agent", WeatherAgent.class,
                 new Object[] {defaultWeatherInit(), randomSource, simClock, eventBus, directory});
-        spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource, directory});
+        spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource, directory, simClock});
         spawner.spawn("assistant_agent", AssistantAgent.class,
                 new Object[] {marketHistory, policyRegistry, llmBridge, eventBus, directory});
 
@@ -172,7 +172,7 @@ public final class AgentRoster {
                 defaultWeatherInit(), randomSource, simClock, eventBus, directory,
                 state.agents().weather().current()});
         spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {
-                randomSource, directory, state.agents().customs()});
+                randomSource, directory, simClock, state.agents().customs()});
         spawner.spawn("assistant_agent", AssistantAgent.class,
                 new Object[] {marketHistory, policyRegistry, llmBridge, eventBus, directory});
 

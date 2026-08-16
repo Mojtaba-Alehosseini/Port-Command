@@ -22,10 +22,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Phase-2 wire gate for the CustomsAgent. Every reply asserts performative +
- * ontology + language + content. Hazmat → CONFIRM with a {@code CL-} ref; a
- * blacklist round-trip (asserted/retracted directly on the live Prolog engine) →
- * INFORM(flagged) then CONFIRM; non-hazmat → the inspection roll is PREDICTED by
- * replicating the seeded {@code forStream("customs")} stream (deterministic).
+ * ontology + language + content. S5 (audit P2-4): the clearance path is now the
+ * rules ROUTER — hazmat is high-risk (R22/R24) and CONFIRMs only after the
+ * inspection delay, with the deciding rules cited in the {@code reason} field;
+ * the blacklist round-trip (asserted/retracted directly on the live Prolog
+ * engine) → INFORM(flagged {@code [R21,R22]}); non-hazmat keeps R23's seeded
+ * roll — a miss pre-clears immediately ({@code [R22,R23]}), a hit inspects
+ * ({@code [R23]}). The retired {@code routine_inspection} INFORM (which nothing
+ * HM-side ever consumed) must never appear again.
  */
 @Tag("integration")
 class CustomsAgentIT {
@@ -52,15 +56,26 @@ class CustomsAgentIT {
         boot = new JadeBootstrap();
         boot.start(new BootstrapConfig(TEST_PORT, false, "realtime", 300));
         RandomSource rng = customsRng != null ? customsRng : boot.getRandomSource();
-        boot.getSpawner().spawn("customs_agent", CustomsAgent.class, new Object[] {rng});
+        boot.getSpawner().spawn("customs_agent", CustomsAgent.class, new Object[] {rng, boot.getSimClock()});
     }
 
     @Test
-    void hazmatClearanceConfirmsWithRef() throws Exception {
+    void hazmatClearanceConfirmsAfterInspection() throws Exception {
         bootCustoms();
+        long before = System.currentTimeMillis();
         ACLMessage reply = request(customsRequest("tanker", "hazmat_class_3"));
+        long elapsed = System.currentTimeMillis() - before;
         assertEnvelope(reply, ACLMessage.CONFIRM);
-        assertTrue(content(reply).get("ref").asText().startsWith("CL-"), "clearance ref");
+        JsonNode c = content(reply);
+        assertTrue(c.get("ref").asText().startsWith("CL-"), "clearance ref");
+        // R22 (is_hazmat subtree) put it in play, R24 (high_risk ≥ 0.5) sent it to inspection.
+        assertEquals("inspected [R22,R24]", c.get("reason").asText(),
+                "hazmat must carry the R22/R24 inspection rationale");
+        assertEquals(120, c.get("inspection_sim_seconds").asLong(),
+                "the inspection's sim duration must ride the CONFIRM");
+        assertTrue(elapsed >= 250,
+                "the CONFIRM must arrive only after the wall-clamped inspection delay (≥250 ms floor), "
+                        + "took " + elapsed + " ms");
     }
 
     @Test
@@ -72,6 +87,8 @@ class CustomsAgentIT {
             ACLMessage flagged = request(customsRequest("tanker", "hazmat_class_3"));
             assertEnvelope(flagged, ACLMessage.INFORM);
             assertEquals("flagged", content(flagged).get("event").asText());
+            assertEquals("blacklisted [R21,R22]", content(flagged).get("reason").asText(),
+                    "the flag must cite the deciding rules (R21 blacklist under R22's gate)");
             assertEquals("high", flagged.getUserDefinedParameter("priority"));
         } finally {
             engine.retractAllMatching("blacklisted_combo(tanker, hazmat_class_3)");
@@ -79,36 +96,73 @@ class CustomsAgentIT {
         ACLMessage confirmed = request(customsRequest("tanker", "hazmat_class_3"));
         assertEnvelope(confirmed, ACLMessage.CONFIRM);
         assertTrue(content(confirmed).get("ref").asText().startsWith("CL-"));
+        assertEquals("inspected [R22,R24]", content(confirmed).get("reason").asText(),
+                "off the blacklist, hazmat still goes through the R24 inspection path");
     }
 
     @Test
     void nonHazmatRollMatchesTheSeededStream() throws Exception {
         bootCustoms();
         // Replicate the customs agent's first roll (same master seed → same sub-stream).
+        // S5: BOTH outcomes are now a CONFIRM — the roll decides between an immediate
+        // pre-clearance and a delayed inspection, and the reason names which.
         double predictedRoll = boot.getRandomSource().forStream("customs").nextDouble();
         ACLMessage reply = request(customsRequest("tanker", "general_cargo"));
-        if (predictedRoll < 0.2) { // inspection_probability(non-hazmat) = 0.2
-            assertEnvelope(reply, ACLMessage.INFORM);
-            assertEquals("routine_inspection", content(reply).get("event").asText());
-        } else {
-            assertEnvelope(reply, ACLMessage.CONFIRM);
-            assertTrue(content(reply).get("ref").asText().startsWith("CL-"));
-        }
+        assertEnvelope(reply, ACLMessage.CONFIRM);
+        assertTrue(content(reply).get("ref").asText().startsWith("CL-"));
+        String expected = predictedRoll < 0.2 // inspection_probability(non-hazmat) = 0.2
+                ? "inspected [R23]"
+                : "no_inspection_required [R22,R23]";
+        assertEquals(expected, content(reply).get("reason").asText(),
+                "the rationale must match the seeded R23 roll (predicted " + predictedRoll + ")");
     }
 
     @Test
-    void nonHazmatLowRollTriggersRoutineInspection() throws Exception {
+    void nonHazmatLowRollInspectsBeforeClearing() throws Exception {
         // Pick a seed whose "customs" sub-stream first roll is < 0.2, forcing the
-        // inspection branch (the default master seed rolls 0.234 → CONFIRM, leaving
+        // inspection branch (the default master seed rolls 0.234 → pre-clear, leaving
         // this path uncovered). Deterministic: the same seed is found every run.
         long seed = 0;
         while (new RandomSource(seed).forStream("customs").nextDouble() >= 0.2) {
             seed++;
         }
         bootCustomsWith(new RandomSource(seed));
+        long before = System.currentTimeMillis();
         ACLMessage reply = request(customsRequest("tanker", "general_cargo"));
-        assertEnvelope(reply, ACLMessage.INFORM);
-        assertEquals("routine_inspection", content(reply).get("event").asText());
+        long elapsed = System.currentTimeMillis() - before;
+        // S5 (D5): a hit is a DELAYED CONFIRM through the inspection stub, not the retired
+        // routine_inspection INFORM (which nothing HM-side ever consumed).
+        assertEnvelope(reply, ACLMessage.CONFIRM);
+        JsonNode c = content(reply);
+        assertTrue(c.get("ref").asText().startsWith("CL-"));
+        assertEquals("inspected [R23]", c.get("reason").asText(),
+                "a clean-cargo random inspection must cite R23 alone");
+        assertEquals(120, c.get("inspection_sim_seconds").asLong());
+        assertTrue(elapsed >= 250,
+                "the inspection delay must be observable (≥250 ms floor), took " + elapsed + " ms");
+    }
+
+    /**
+     * S5 adversarial finding 2: an unrecognised cargo class must FLAG (R21 validates the atoms,
+     * not just the blacklist), never fall through to {@code inspectionProbability}'s
+     * {@code orElseThrow} — which killed the agent's only clearance behaviour. Reachable since
+     * D7 sends EVERY contracted vessel here and {@code SaveLoadManager.validateState} does not
+     * validate {@code cargoClass}, so a hand-edited save delivers exactly this shape. The
+     * follow-up request proves the behaviour SURVIVED.
+     */
+    @Test
+    void unknownCargoClassFlagsInsteadOfKillingTheAgent() throws Exception {
+        bootCustoms();
+        ACLMessage flagged = request(customsRequest("tanker", "mystery_goo"));
+        assertEnvelope(flagged, ACLMessage.INFORM);
+        assertEquals("flagged", content(flagged).get("event").asText());
+        assertEquals("clearance_refused [R21]", content(flagged).get("reason").asText());
+
+        // The behaviour must still be alive to serve the next (valid) request.
+        ACLMessage next = request(customsRequest("tanker", "hazmat_class_3"));
+        assertEnvelope(next, ACLMessage.CONFIRM);
+        assertEquals("inspected [R22,R24]", content(next).get("reason").asText(),
+                "the clearance behaviour must survive the malformed request");
     }
 
     // --- helpers -----------------------------------------------------------

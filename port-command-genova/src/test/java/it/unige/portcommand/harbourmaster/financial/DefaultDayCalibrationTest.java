@@ -78,10 +78,12 @@ class DefaultDayCalibrationTest {
      * {@code contracts.json} would be a recalibration, not a correction.
      *
      * <p><b>Why this suddenly matters:</b> since 2026-07-28 a contracted TANKER is hazmat and pulls
-     * a €100 customs clearance. This model has no customs line and needs none — the real
-     * {@code contracts.json} has no tanker, so a real default day fires no customs REQUEST at all.
-     * The §7.5 band and the recorded landing are therefore untouched by that change. If a tanker is
-     * ever added to {@code contracts.json}, this model gains a customs line and the landing moves.
+     * a €100 customs clearance; since S5 (2026-08-16, ADR-16 D7) customs pre-clearance covers
+     * EVERY contracted vessel — hazmat goes through inspection, clean cargo pre-clears, and both
+     * cost the €100 clearance fee. The reserved customs line below is therefore live: two
+     * contracted arrivals × €100 = €200/day, and the recorded landing moved 10,425 → 10,225 —
+     * still comfortably inside the §7.5 band. Walk-ins carry no customs line (the ADR-09
+     * terminal/customs parity gap: the walk-in grant pipeline dispatches neither).
      *
      * <p>A withdrawing walk-in earns nothing and consumes nothing — it withdraws during
      * negotiation, before any tug is dispatched. It is in the mix because a day where every vessel
@@ -127,9 +129,10 @@ class DefaultDayCalibrationTest {
         // walk-ins = 1500. The CONTRACTED tanker's own surcharge is easy to forget — it is why this
         // is 18950 and not 18450, which is exactly what this test caught.
         assertEquals(18_950.0, dayIncome(), EPS, "7000 contracted + 10450 walk-in mids + 1500 extra-tug");
-        assertEquals(3_325.0, dayVariableExpense(), EPS, "7 tug jobs x EUR475");
+        assertEquals(3_525.0, dayVariableExpense(), EPS,
+                "7 tug jobs x EUR475 + 2 contracted customs clearances x EUR100 (S5/D7)");
         assertEquals(5_200.0, ExpenseRules.dailyFixed(), EPS);
-        assertEquals(10_425.0, dayIncome() - dayVariableExpense() - ExpenseRules.dailyFixed(), EPS);
+        assertEquals(10_225.0, dayIncome() - dayVariableExpense() - ExpenseRules.dailyFixed(), EPS);
     }
 
     /**
@@ -168,7 +171,13 @@ class DefaultDayCalibrationTest {
         double total = 0.0;
         for (Arrival arrival : DEFAULT_DAY) {
             total += arrival.tugs() * ExpenseRules.tugJob(ASSUMED_TUG_BID);
+            if (arrival.contractedFee() != null) {
+                // S5 (ADR-16 D7): every CONTRACTED grant pre-clears customs — €100 each,
+                // hazmat (inspection) and clean cargo (pre-clearance) alike. Walk-ins send
+                // no customs REQUEST (the ADR-09 parity gap), so they carry no line here.
+                total += ExpenseRules.customsClearance();
+            }
         }
-        return total; // no hazmat in the default mix, so no customs clearance
+        return total;
     }
 }

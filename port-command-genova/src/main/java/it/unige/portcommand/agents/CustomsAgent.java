@@ -41,8 +41,15 @@ public final class CustomsAgent extends PortCommandAgent implements Mementoable 
             refSeq.set(restored.nextClearanceRef());
             log.info("{}: restored clearance sequence at {}", getLocalName(), refSeq.get());
         }
+        it.unige.portcommand.util.SimClock simClock =
+                optionalArgOfType(it.unige.portcommand.util.SimClock.class);
+        if (simClock == null) {
+            throw new IllegalStateException(
+                    "CustomsAgent " + getLocalName() + " requires a SimClock arg (S5: the "
+                            + "inspection delay is sim-derived)");
+        }
         Random customsRng = randomSource.forStream("customs");
-        addBehaviour(new HandleClearanceRequestBehaviour(this, customsRng, refSeq));
+        addBehaviour(new HandleClearanceRequestBehaviour(this, customsRng, refSeq, simClock));
     }
 
     public CustomsStateDTO snapshotDto() {
