@@ -59,6 +59,16 @@ public abstract class BaseVesselAgent extends PortCommandAgent
     private volatile FlowPhase flowPhase;
     private volatile long phaseDeadlineSimMillis;
 
+    /**
+     * B-01 (S8, ADR-17): the vessel-side MIRROR of the HarbourMaster's {@code weatherHeld}
+     * tracking flag — set/cleared by {@code HandleWeatherHoldBehaviour} from the protocol-tagged
+     * hold/resume INFORMs, seeded from the persisted DTO on restore. While true, the transit
+     * ticker SLIDES its deadline instead of counting down (progress frozen). Volatile: written
+     * on the agent thread, read by the ticker on the same thread today, but the snapshot walk
+     * reads cross-thread like the phase fields above.
+     */
+    private volatile boolean weatherHeld;
+
     @Override
     protected final void registerServices() {
         registerDfService("vessel", getLocalName());
@@ -69,6 +79,9 @@ public abstract class BaseVesselAgent extends PortCommandAgent
         this.spec = initArg(VesselSpec.class);
         this.simClock = argAt(1, SimClock.class);
         this.marketHistory = argAt(2, MarketHistoryArtifact.class);
+        // B-01 (S8): the weather hold/resume receiver rides BOTH setup paths — a restored
+        // mid-hold vessel must hear the eventual resume exactly like a live one.
+        addBehaviour(new it.unige.portcommand.behaviours.auto_flow.HandleWeatherHoldBehaviour(this));
         VesselStateDTO restored = optionalArgOfType(VesselStateDTO.class);
         if (restored != null) {
             restoreFrom(restored);
@@ -92,6 +105,10 @@ public abstract class BaseVesselAgent extends PortCommandAgent
     private void restoreFrom(VesselStateDTO dto) {
         setDeal(dto.assignedBerth(), dto.dealPrice(), dto.dealHours());
         setPosition(new Position(dto.posX(), dto.posY(), dto.posHeading()));
+        // B-01 (S8, ADR-17): a held vessel restores HELD — the resumed transit ticker stays
+        // frozen until the rebuilt HarbourMaster's weather_resume (or the periodic release
+        // backstop) reaches it. The flag rides the DTO field that has persisted since task 22.
+        this.weatherHeld = dto.weatherHeld();
         onRestore(dto);
         FlowPhase phase = FlowPhase.valueOf(dto.currentPhase());
         switch (phase) {
@@ -211,17 +228,31 @@ public abstract class BaseVesselAgent extends PortCommandAgent
         return phaseDeadlineSimMillis;
     }
 
+    /** B-01 (S8): true while the HarbourMaster holds this vessel offshore — transit frozen. */
+    public boolean weatherHeld() {
+        return weatherHeld;
+    }
+
+    /** Written by {@code HandleWeatherHoldBehaviour} (live) and {@code restoreFrom} (load). */
+    public void setWeatherHeld(boolean held) {
+        this.weatherHeld = held;
+    }
+
     /**
      * Audit catch-all union, by CONVERSATION ID rather than by template object: a vessel's
      * receivers ({@code AwaitBerthBehaviour}, and on the walk-in path
      * {@code EvaluateCounterOfferBehaviour}) build their templates at runtime from a conversation
      * id, so they cannot be named statically — but the ids themselves are derivable from the
      * agent's own identity, which is what makes this safe. The berth grant conversation is
-     * {@code "berth-"+localName} on BOTH channels.
+     * {@code "berth-"+localName} on BOTH channels. Since S8 (B-01) the union also carries the
+     * protocol-tagged weather hold/resume INFORMs, which {@code HandleWeatherHoldBehaviour}
+     * consumes — before that they were deliberately-logged unhandled traffic.
      */
     @Override
     protected MessageTemplate handledTemplate() {
-        return MessageTemplate.MatchConversationId("berth-" + getLocalName());
+        return MessageTemplate.or(
+                MessageTemplate.MatchConversationId("berth-" + getLocalName()),
+                it.unige.portcommand.behaviours.auto_flow.HandleWeatherHoldBehaviour.TEMPLATE);
     }
 
 }

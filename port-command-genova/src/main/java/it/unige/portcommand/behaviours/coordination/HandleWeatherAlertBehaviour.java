@@ -92,9 +92,13 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
         // "weather_periodic" (audit P1-4) is the 15-sim-minute snapshot, not a transition. It runs
         // the SAME hold sweep the worsening branch runs — deliberately, because that sweep is
         // precisely what a vessel entering transit into already-bad weather never gets: alerts
-        // fire on transitions, and its storm had already begun. It must NOT take the clearing
-        // branch (that would re-dispatch held vessels every tick regardless of conditions), and it
-        // must not be mistaken for the legacy absent-event shape either — hence the explicit name.
+        // fire on transitions, and its storm had already begun. Since S8 (B-01, ADR-17) it ALSO
+        // runs the release sweep: releaseHeld is safeFor-gated, so under a live storm it is a
+        // no-op and under recovered conditions it is the idempotent backstop that rescues a held
+        // vessel whose clear TRANSITION was never seen — chiefly the restored-mid-hold vessel
+        // whose first post-load reading is suppressed by the null broadcast baseline (ADR-15).
+        // (An earlier comment here claimed the clearing branch would "re-dispatch held vessels
+        // every tick regardless of conditions" — wrong: the safeFor filter gates every release.)
         boolean periodic = "weather_periodic".equals(event);
 
         // Goal B (S5): every consumed weather message refreshes the hub's last-known reading —
@@ -107,36 +111,7 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
                     hm.activeVessels().size(), windKnots, state);
         }
         if (clearing) {
-            // weatherHeld AND still genuinely waiting (checkpoint-#5 B1): a held vessel can
-            // only be AWAITING_TUG; anything else (or a stale flag on an entry some other
-            // path advanced) must never trigger a re-dispatch. Departure removes the entry
-            // entirely (ForwardWalkInToPlayerBehaviour.handleDeparted) — this stage filter
-            // is the defence-in-depth layer under that fix.
-            //
-            // S5 (R28/R29): re-dispatches run EMERGENCY-CLASS FIRST. Held vessels were escalated
-            // to the emergency priority class when the storm caught them (see holdVessel), so
-            // when the sky clears the recovery order is decided by the priority module:
-            // emergency_overrides_all (R29) IS the partition below. Mind its direction — the
-            // predicate holds for every class the emergency class OVERRIDES (and fails for
-            // emergency itself), so the vessels it holds for wait in the second loop and the
-            // ones it rejects (the emergency peers) go first. On the R27-sorted input the
-            // concatenation equals the sort (emergency already ranks first), but each rule
-            // decides what it states: R27 the pairwise order, R29 the partition. The escalation
-            // survives into the fresh CnpRequest, so the coordinator's R28 dequeue also ranks
-            // it ahead of any queued ordinary session.
-            List<VesselTracking> eligible = hm.activeVessels().values().stream()
-                    .filter(t -> t.weatherHeld() && t.stage() == Stage.AWAITING_TUG)
-                    .filter(t -> safeFor(t, windKnots, visibility, swell, state))
-                    .sorted((a, b) -> compareByPriority(hm, a, b))
-                    .toList();
-            Map<Boolean, List<VesselTracking>> byOverride = eligible.stream().collect(
-                    Collectors.partitioningBy(t -> !PrologQueries.emergencyOverridesAll(effectiveClassOf(hm, t))));
-            for (VesselTracking tracking : byOverride.get(true)) {
-                redispatch(hm, tracking, windKnots, state, true);
-            }
-            for (VesselTracking tracking : byOverride.get(false)) {
-                redispatch(hm, tracking, windKnots, state, false);
-            }
+            releaseHeld(hm, windKnots, visibility, swell, state);
         } else {
             // S5 (R25/R27/R30): when one alert holds SEVERAL vessels, the cancel cascade runs in
             // priority order — the priority module's higher_priority (R27) is the comparator over
@@ -155,9 +130,53 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
 
         // S5 (ADR-16): the periodic snapshot doubles as the berth wait queue's idempotent
         // backstop — if a departed INFORM was ever lost, the freed berth is noticed here at
-        // worst 15 sim-minutes late instead of never.
+        // worst 15 sim-minutes late instead of never. S8 (B-01, ADR-17): and as the weather
+        // hold's release backstop, same shape — a held vessel under recovered conditions is
+        // re-dispatched at worst 15 sim-minutes after the missed transition.
         if (periodic) {
+            releaseHeld(hm, windKnots, visibility, swell, state);
             ForwardWalkInToPlayerBehaviour.releaseQueuedGrants(hm);
+        }
+    }
+
+    /**
+     * The release sweep — the recovery half of the cascade, run by the {@code weather_clear}
+     * TRANSITION alert and (since S8, B-01) by the periodic snapshot as its idempotent backstop.
+     *
+     * <p>weatherHeld AND still genuinely waiting (checkpoint-#5 B1): a held vessel can only be
+     * AWAITING_TUG; anything else (or a stale flag on an entry some other path advanced) must
+     * never trigger a re-dispatch. Departure removes the entry entirely
+     * ({@code ForwardWalkInToPlayerBehaviour.handleDeparted}) — this stage filter is the
+     * defence-in-depth layer under that fix. The {@code safeFor} filter is what makes the
+     * periodic caller safe: under a live storm the sweep selects nothing.
+     *
+     * <p>S5 (R28/R29): re-dispatches run EMERGENCY-CLASS FIRST. Held vessels were escalated to
+     * the emergency priority class when the storm caught them (see holdVessel), so the recovery
+     * order is decided by the priority module: emergency_overrides_all (R29) IS the partition
+     * below. Mind its direction — the predicate holds for every class the emergency class
+     * OVERRIDES (and fails for emergency itself), so the vessels it holds for wait in the
+     * second loop and the ones it rejects (the emergency peers) go first. On the R27-sorted
+     * input the concatenation equals the sort (emergency already ranks first), but each rule
+     * decides what it states: R27 the pairwise order, R29 the partition. The escalation
+     * survives into the fresh CnpRequest, so the coordinator's R28 dequeue also ranks it ahead
+     * of any queued ordinary session. Exactly-once across the transition + periodic callers:
+     * {@code redispatch} clears {@code weatherHeld} before initiating, and both callers run on
+     * the HarbourMaster thread.
+     */
+    private void releaseHeld(HarbourMasterAgent hm, double windKnots, String visibility, double swell,
+                             String state) {
+        List<VesselTracking> eligible = hm.activeVessels().values().stream()
+                .filter(t -> t.weatherHeld() && t.stage() == Stage.AWAITING_TUG)
+                .filter(t -> safeFor(t, windKnots, visibility, swell, state))
+                .sorted((a, b) -> compareByPriority(hm, a, b))
+                .toList();
+        Map<Boolean, List<VesselTracking>> byOverride = eligible.stream().collect(
+                Collectors.partitioningBy(t -> !PrologQueries.emergencyOverridesAll(effectiveClassOf(hm, t))));
+        for (VesselTracking tracking : byOverride.get(true)) {
+            redispatch(hm, tracking, windKnots, state, true);
+        }
+        for (VesselTracking tracking : byOverride.get(false)) {
+            redispatch(hm, tracking, windKnots, state, false);
         }
     }
 
@@ -202,6 +221,10 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
         }
         ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);
         inform.addReceiver(tracking.aid());
+        // S8 (B-01): protocol-tagged so the vessel's HandleWeatherHoldBehaviour can match it —
+        // before this tag the INFORM fell into the vessel's catch-all and the transit ran on.
+        inform.setProtocol(
+                it.unige.portcommand.behaviours.auto_flow.HandleWeatherHoldBehaviour.VESSEL_WEATHER_PROTOCOL);
         inform.setContent(TerminalJson.write(Map.of(
                 "event", "weather_hold", "wind_knots", windKnots, "swell", swell, "state", state)));
         hm.sendLogged(inform);
@@ -244,6 +267,10 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
         }
         ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);
         inform.addReceiver(tracking.aid());
+        // S8 (B-01): the resume carries the same protocol tag — the vessel-side receiver clears
+        // its held flag and the slid transit deadline starts counting again.
+        inform.setProtocol(
+                it.unige.portcommand.behaviours.auto_flow.HandleWeatherHoldBehaviour.VESSEL_WEATHER_PROTOCOL);
         Map<String, Object> content = new java.util.LinkedHashMap<>(Map.of(
                 "event", "weather_resume", "vessel_id", tracking.vesselId(),
                 "wind_knots", windKnots, "state", state));

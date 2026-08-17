@@ -16,24 +16,30 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Enforces the locked behaviour catalogue (INVARIANTS.md / ADR-01): exactly 51
- * stub classes across 5 packages, each a {@link Behaviour}, and NO {@code PlayerAgent}
+ * Enforces the locked behaviour catalogue (INVARIANTS.md / ADR-01): exactly 52
+ * classes across 5 packages, each a {@link Behaviour}, and NO {@code PlayerAgent}
  * (design rule 2). Reflectively scans the compiled package dirs so any drift in
  * the count fails the build — downstream tasks fill bodies, never add classes.
+ *
+ * <p><b>51 → 52, S8 (2026-08-17, ADR-17):</b> the one deliberate growth in the project's
+ * history — {@code auto_flow.HandleWeatherHoldBehaviour}, the vessel-side weather
+ * hold/resume receiver that closes B-01 (a held vessel used to dock through the storm).
+ * Sanctioned at the S8 plan gate; an anonymous class would have dodged this scan, which
+ * is exactly why it was NOT one.
  */
 class BehaviourCatalogueTest {
 
     private static final Map<String, Integer> EXPECTED_PER_PACKAGE = Map.of(
-            "auto_flow", 7,
+            "auto_flow", 8,
             "negotiation", 7,
             "cnp", 6,
             "assistant", 4,
             "coordination", 27);
 
-    private static final int LOCKED_TOTAL = 51;
+    private static final int LOCKED_TOTAL = 52;
 
     @Test
-    void exactlyFiftyOneBehaviourStubsAllExtendingBehaviour() throws Exception {
+    void exactlyFiftyTwoBehaviourClassesAllExtendingBehaviour() throws Exception {
         int total = 0;
         for (Map.Entry<String, Integer> e : EXPECTED_PER_PACKAGE.entrySet()) {
             List<Class<?>> classes = behaviourClassesIn(e.getKey());

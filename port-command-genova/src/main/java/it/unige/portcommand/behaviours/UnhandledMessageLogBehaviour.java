@@ -44,11 +44,13 @@ import org.slf4j.LoggerFactory;
  *
  * <h2>De-duplicated WARN</h2>
  * The first occurrence of each distinct (performative, sender, intent) logs at WARN; repeats are
- * counted and logged at DEBUG. Without this, the three genuinely unconsumed shapes this immediately
- * surfaces — the HarbourMaster's {@code tug_hold}, {@code weather_hold} and {@code weather_resume}
- * INFORMs to vessels, the last of which is backlog B-01 — would repeat per vessel per alert and
- * bury the log during a storm. The message is always CONSUMED either way, which is the point: an
- * unmatched message otherwise sits in the agent's queue for the life of the JVM.
+ * counted and logged at DEBUG. Without this a repeated unconsumed shape would repeat per vessel
+ * per alert and bury the log during a storm. The message is always CONSUMED either way, which is
+ * the point: an unmatched message otherwise sits in the agent's queue for the life of the JVM.
+ * <em>History:</em> the three shapes that originally motivated this dedup were the HarbourMaster's
+ * {@code tug_hold}, {@code weather_hold} and {@code weather_resume} INFORMs to vessels; since S8
+ * (B-01, ADR-17) the two weather ones are protocol-tagged and CONSUMED by the vessels'
+ * {@code HandleWeatherHoldBehaviour} — only {@code tug_hold} still lands here.
  */
 public final class UnhandledMessageLogBehaviour extends CyclicBehaviour {
 
