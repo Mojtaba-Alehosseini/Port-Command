@@ -245,7 +245,9 @@ final class DialogueTabView extends JPanel {
 
         String vesselId = tab.vesselId();
         DialogueCtx ctx = registry.buildCtx(vesselId);
-        processor.process(text, ctx).whenComplete((result, error) -> SwingUtilities.invokeLater(() ->
+        // S8 (D-05 two-step): the registry doubles as the by-vessel context source, so the
+        // pipeline can re-focus onto a vocative's ADDRESSEE and re-parse under ITS offer.
+        processor.process(text, ctx, registry::buildCtx).whenComplete((result, error) -> SwingUtilities.invokeLater(() ->
                 handleResult(vesselId, error != null ? new PipelineResult.Error(String.valueOf(error.getMessage())) : result)));
     }
 
@@ -294,7 +296,18 @@ final class DialogueTabView extends JPanel {
         // Echo how the NL was INTERPRETED (task 19 play-test: Rasa read a bare "so?" as an
         // acceptance and the deal closed with no visible cause — every routed action must be
         // legible). Button clicks skip this: their own label bubble already is the echo.
-        appendSystem(interpretationEcho(kind, content, targetVesselId, typingVesselId));
+        appendSystem(interpretationEcho(kind, content, displayNameFor(targetVesselId),
+                targetVesselId.equals(typingVesselId)));
+    }
+
+    /** S8 (GOAL 3): the echo names the ADDRESSEE by its display name where a dialogue knows one
+     * ("(to Stella Maris)"), falling back to the raw id — same coalesce as the tab title. */
+    private String displayNameFor(String vesselId) {
+        return registry.dialogueIdForVessel(vesselId)
+                .map(id -> registry.tab(id))
+                .filter(java.util.Objects::nonNull)
+                .map(t -> t.snapshot().vesselName())
+                .orElse(vesselId);
     }
 
     /**
@@ -405,10 +418,11 @@ final class DialogueTabView extends JPanel {
                 s.durationHours(), s.berthId());
     }
 
-    /** One line saying what the pipeline UNDERSTOOD, appended after every routed dispatch. */
+    /** One line saying what the pipeline UNDERSTOOD, appended after every routed dispatch.
+     * {@code targetDisplay} is the addressee's display name (S8: human name where known). */
     private static String interpretationEcho(PlayerCommandKind kind, Map<String, Object> content,
-                                             String targetVesselId, String typingVesselId) {
-        String target = targetVesselId.equals(typingVesselId) ? "" : " (to " + targetVesselId + ")";
+                                             String targetDisplay, boolean sameTab) {
+        String target = sameTab ? "" : " (to " + targetDisplay + ")";
         return switch (kind) {
             case PROPOSE -> content.get("price") instanceof Number price
                     ? (content.get("hours") instanceof Number hours

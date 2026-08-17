@@ -68,8 +68,27 @@ public final class Main {
         }
 
         if (guiRequested) {
+            // S8 (D-05 two-step): an explicit implementation, NOT the old 2-arg method ref — the
+            // 3-arg form must reach the pipeline's ctxByVesselId overload, or the interface
+            // default would silently drop the resolver and the two-step could never fire.
+            final it.unige.portcommand.nlp.NLPPipeline nlp = boot.getNlpPipeline();
+            it.unige.portcommand.nlp.ChatInputProcessor processor =
+                    new it.unige.portcommand.nlp.ChatInputProcessor() {
+                        @Override
+                        public java.util.concurrent.CompletableFuture<it.unige.portcommand.nlp.PipelineResult>
+                                process(String text, it.unige.portcommand.nlp.DialogueCtx ctx) {
+                            return nlp.processChatInput(text, ctx);
+                        }
+
+                        @Override
+                        public java.util.concurrent.CompletableFuture<it.unige.portcommand.nlp.PipelineResult>
+                                process(String text, it.unige.portcommand.nlp.DialogueCtx ctx,
+                                        java.util.function.Function<String, it.unige.portcommand.nlp.DialogueCtx> ctxByVesselId) {
+                            return nlp.processChatInput(text, ctx, ctxByVesselId);
+                        }
+                    };
             SwingUtilities.invokeLater(() -> new MainWindow(boot.getEventBus(), boot.getPortStateArtifact(),
-                    boot.getNlpPipeline()::processChatInput, session.lifecycle(), leaderboard,
+                    processor, session.lifecycle(), leaderboard,
                     session, boot::shutdown)
                     .setVisible(true));
         }

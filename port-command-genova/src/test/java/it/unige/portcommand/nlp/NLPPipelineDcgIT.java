@@ -530,4 +530,139 @@ class NLPPipelineDcgIT {
         assertEquals(ACLMessage.ACCEPT_PROPOSAL, routed.msg().getPerformative());
         assertEquals("C001", routed.addressee());
     }
+
+    // ===== S8: D-05 done RIGHT — the two-step vocative (re-focus + re-parse) =====================
+    //
+    // The guard above detects-and-declines; the two-step RESOLVES: with a ctxByVesselId resolver
+    // supplied (production: NegotiationTabRegistry::buildCtx), a per-dialogue move addressed away
+    // from the focused tab is re-parsed under the ADDRESSEE's own context, so the inner move
+    // completes from the RIGHT standing offer. The 2-arg tests above stay untouched — they ARE
+    // the guard-as-fallback pin (no resolver -> exactly the pre-S8 decline).
+
+    /** Carthago's own dialogue, focused: the vessel asked 3000 for 8h at berth_2, no player bid. */
+    private static DialogueCtx carthagoCtx() {
+        return new DialogueCtx("T001",
+                new DialogueCtx.StandingOffer(new DialogueCtx.OfferView(3000.0, 8, "berth_2"),
+                        DialogueCtx.OfferView.NONE),
+                java.util.List.of(
+                        new DialogueCtx.RosterEntry("C001", "cargo_vessel", "Genoa Star", "berth_3", 5),
+                        new DialogueCtx.RosterEntry("T001", "tanker", "Carthago", "berth_2", 8)),
+                "berth_2");
+    }
+
+    /** The by-vessel resolver the GUI wires: Genoa Star's tab or Carthago's. */
+    private static DialogueCtx ctxFor(String vesselId) {
+        return "T001".equals(vesselId) ? carthagoCtx() : m2ctx();
+    }
+
+    /**
+     * THE TRANSPLANT, RESOLVED (born red on the guard-only tree: the guard declined this).
+     * "Carthago: make it 2200" typed in Genoa Star's tab must complete duration/berth from
+     * CARTHAGO's standing offer (8h, berth_2) — never Genoa Star's (5h, berth_3).
+     */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void twoStep_aCrossTabEllipsisCompletesFromTheAddresseesOffer() {
+        PipelineResult result = pipelineWithRasaDown
+                .processChatInput("Carthago: make it 2200", m2ctx(), NLPPipelineDcgIT::ctxFor).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result,
+                "with the resolver wired the two-step must ROUTE, not decline");
+        assertEquals("T001", routed.addressee(), "addressed to Carthago");
+        String content = routed.msg().getContent();
+        assertTrue(content.contains("2200"), content);
+        assertTrue(content.contains("berth_2"), "the berth is CARTHAGO's, not Genoa Star's: " + content);
+        assertTrue(content.contains("\"duration\":8"),
+                "the duration is CARTHAGO's 8h, not Genoa Star's 5: " + content);
+        assertFalse(content.contains("berth_3"), "no term may leak from the focused tab: " + content);
+    }
+
+    /**
+     * Hook 2: the focused tab has NOTHING on the table, so the vocative MISSES under the focused
+     * parse entirely (the inner ellipsis cannot complete) — pre-S8 this fell to Rasa (down here,
+     * so clarification). The colon-prefix probe resolves Carthago, re-focuses, and routes.
+     */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void twoStep_recoversAVocativeThatMissesUnderTheFocusedContext() {
+        DialogueCtx focusedButEmpty = new DialogueCtx("C001", DialogueCtx.StandingOffer.NONE,
+                m2ctx().roster(), null);
+        PipelineResult result = pipelineWithRasaDown
+                .processChatInput("Carthago: make it 2200", focusedButEmpty, NLPPipelineDcgIT::ctxFor).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result,
+                "the DCG-miss hook must re-focus on the colon prefix instead of surrendering to Rasa");
+        assertEquals("T001", routed.addressee());
+        assertTrue(routed.msg().getContent().contains("berth_2"), routed.msg().getContent());
+    }
+
+    /** The typo'd form goes through the SAME two-step (MED rewrite feeds both hooks). */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void twoStep_aTypodCrossTabVocativeResolvesToo() {
+        PipelineResult result = pipelineWithRasaDown
+                .processChatInput("Carthagoo: make it 2200", m2ctx(), NLPPipelineDcgIT::ctxFor).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result);
+        assertEquals("T001", routed.addressee());
+        assertTrue(routed.msg().getContent().contains("berth_2"), routed.msg().getContent());
+    }
+
+    /**
+     * The honest refusal: the addressee's OWN context cannot complete the move (nothing on its
+     * table) — the two-step must clarify with the reason, never route the transplanted frame
+     * and never pretend the guard's generic message applies.
+     */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void twoStep_clarifiesWhenTheAddresseeHasNothingToCompleteFrom() {
+        java.util.function.Function<String, DialogueCtx> emptyCarthago = vesselId ->
+                "T001".equals(vesselId)
+                        ? new DialogueCtx("T001", DialogueCtx.StandingOffer.NONE, m2ctx().roster(), null)
+                        : m2ctx();
+        PipelineResult result = pipelineWithRasaDown
+                .processChatInput("Carthago: make it 2200", m2ctx(), emptyCarthago).join();
+
+        PipelineResult.NeedsClarification nc = assertInstanceOf(PipelineResult.NeedsClarification.class,
+                result, "no context can honestly complete this — clarify, never transplant");
+        assertTrue(nc.message().contains("Carthago"), nc.message());
+        assertTrue(nc.message().contains("nothing on the table"), nc.message());
+    }
+
+    /**
+     * The slot-less cross-tab move must keep ROUTING even when the addressee has nothing on its
+     * table (S8 adversarial finding 1, pinned): "Carthago: accept it" carries no money, hours
+     * or berth — there is nothing to transplant, and re-parsing under an offer-less Carthago
+     * would LOSE it (the anaphoric pronoun needs a standing offer to parse). The two-step must
+     * skip it; the guard's nothing-to-transplant early return routes it, exactly as pre-S8.
+     */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void twoStep_slotlessCrossTabMoveStillRoutes_evenWithAnOfferlessAddressee() {
+        java.util.function.Function<String, DialogueCtx> emptyCarthago = vesselId ->
+                "T001".equals(vesselId)
+                        ? new DialogueCtx("T001", DialogueCtx.StandingOffer.NONE, m2ctx().roster(), null)
+                        : m2ctx();
+        PipelineResult result = pipelineWithRasaDown
+                .processChatInput("Carthago: accept it", m2ctx(), emptyCarthago).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result,
+                "a slot-less cross-tab accept routed before S8 and must keep routing");
+        assertEquals(ACLMessage.ACCEPT_PROPOSAL, routed.msg().getPerformative());
+        assertEquals("T001", routed.addressee());
+    }
+
+    /** Same-tab vocatives never take the two-step detour (addressee == focus). */
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    void twoStep_sameTabVocativeIsUntouched() {
+        PipelineResult result = pipelineWithRasaDown
+                .processChatInput("Genoa Star: make it 2200", m2ctx(), NLPPipelineDcgIT::ctxFor).join();
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result);
+        assertEquals("C001", routed.addressee());
+        assertTrue(routed.msg().getContent().contains("berth_3"),
+                "same-tab completion still uses the focused (== addressee's) offer: "
+                        + routed.msg().getContent());
+    }
 }

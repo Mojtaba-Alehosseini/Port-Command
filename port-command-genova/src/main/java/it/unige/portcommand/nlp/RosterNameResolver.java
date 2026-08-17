@@ -72,6 +72,12 @@ final class RosterNameResolver {
     private RosterNameResolver() {
     }
 
+    /** The REAL stop set, for the drift-proof NamePool pin in this package's test
+     * (S8 adversarial finding 3 — a hand-copied mirror in another package drifts silently). */
+    static java.util.Set<String> grammarStopWords() {
+        return GRAMMAR_STOP;
+    }
+
     /**
      * Returns {@code tokens} with at most one name window rewritten to its canonical roster
      * form, or the list unchanged when nothing (or nothing unambiguous) qualifies.
@@ -177,6 +183,35 @@ final class RosterNameResolver {
         out.addAll(tokens.subList(to, tokens.size()));
         log.debug("MED rewrite: '{}' -> '{}' (distance {})", joined, best, bestDistance);
         return List.copyOf(out);
+    }
+
+    /**
+     * S8 (D-05 two-step, hook 2): EXACT resolution of an already-MED-rewritten window against
+     * the roster — the Java mirror of {@code resolve_name/3}'s identity-match-unique-or-fail
+     * contract, for the one caller that needs the addressee BEFORE any parse can run (the
+     * pipeline's DCG-miss hook). Same canonicalisation as the candidate builder above
+     * (lowercase, single-space); ambiguity (two vessels sharing a name) refuses, like
+     * everything else in this class.
+     */
+    static java.util.Optional<String> resolveExact(List<String> windowTokens, DialogueCtx ctx) {
+        if (ctx == null || windowTokens.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        String joined = String.join(" ", windowTokens);
+        String match = null;
+        for (DialogueCtx.RosterEntry entry : ctx.roster()) {
+            String name = entry.vesselName();
+            if (name == null) {
+                continue;
+            }
+            if (name.toLowerCase(Locale.ROOT).strip().equals(joined)) {
+                if (match != null && !match.equals(entry.id())) {
+                    return java.util.Optional.empty(); // ambiguous — refuse, never guess
+                }
+                match = entry.id();
+            }
+        }
+        return java.util.Optional.ofNullable(match);
     }
 
     /** The length-laddered distance budget: 0 below {@link #MIN_LEN}, 1 for 4–5, 2 from 6. */

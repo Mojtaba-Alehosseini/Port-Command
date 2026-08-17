@@ -72,11 +72,26 @@ public final class NLPPipeline {
      *             DialogueCtx#NONE} when no negotiation is active yet
      */
     public CompletableFuture<PipelineResult> processChatInput(String text, DialogueCtx ctx) {
-        Objects.requireNonNull(ctx, "ctx");
-        return CompletableFuture.supplyAsync(() -> processSync(text, ctx), executor);
+        return processChatInput(text, ctx, null);
     }
 
-    private PipelineResult processSync(String text, DialogueCtx ctx) {
+    /**
+     * S8 (audit D-05, done right): the TWO-STEP vocative form. {@code ctxByVesselId} resolves a
+     * vessel id to THAT dialogue's full context (production: {@code NegotiationTabRegistry::
+     * buildCtx}); when a parsed frame is addressed to a vessel OTHER than the focused tab's, the
+     * pipeline re-fetches the addressee's context and RE-PARSES the whole utterance under it —
+     * so a context-dependent inner move ("make it 2200") completes from the ADDRESSEE's standing
+     * offer, never the focused tab's (the transplant {@code crossTabContextGuard} used to have
+     * to decline). Null keeps the pre-S8 behaviour exactly: the guard stays the last line.
+     */
+    public CompletableFuture<PipelineResult> processChatInput(String text, DialogueCtx ctx,
+            java.util.function.Function<String, DialogueCtx> ctxByVesselId) {
+        Objects.requireNonNull(ctx, "ctx");
+        return CompletableFuture.supplyAsync(() -> processSync(text, ctx, ctxByVesselId), executor);
+    }
+
+    private PipelineResult processSync(String text, DialogueCtx ctx,
+            java.util.function.Function<String, DialogueCtx> ctxByVesselId) {
         try {
             Objects.requireNonNull(text, "text");
             // S6 (audit P2-3): the pre-pass is a PRE-ANNOTATION LAYER, no longer computed and
@@ -90,7 +105,27 @@ public final class NLPPipeline {
 
             Optional<Frame> frame = dcgParser.parse(text, ctx);
             if (frame.isPresent()) {
-                return routeFrame(frame.get(), ctx, text);
+                return routeFrame(frame.get(), ctx, text, ctxByVesselId);
+            }
+
+            // S8 (D-05 two-step, hook 2): a vocative can MISS under the focused ctx yet succeed
+            // under the addressee's (focused tab has nothing on the table, the addressee does —
+            // the inner ellipsis fails against the wrong standing offer and the whole vocative
+            // parse dies before routeFrame ever runs). If the utterance opens with a resolvable
+            // "Name :" prefix, re-focus and re-parse BEFORE surrendering to Rasa. The name has
+            // already been through the MED rewrite inside the resolver helper, so a typo'd name
+            // gets the same one-chance-refuse-on-tie treatment as everywhere else.
+            if (ctxByVesselId != null) {
+                Optional<String> prefixId = vocativePrefixAddressee(text, ctx);
+                if (prefixId.isPresent() && !prefixId.get().equals(ctx.activeNegotiationId())) {
+                    DialogueCtx addresseeCtx = ctxByVesselId.apply(prefixId.get());
+                    if (addresseeCtx != null) {
+                        Optional<Frame> refocused = dcgParser.parse(text, addresseeCtx);
+                        if (refocused.isPresent()) {
+                            return routeFrame(refocused.get(), addresseeCtx, text, null);
+                        }
+                    }
+                }
             }
 
             Optional<RasaParseResult> parsed = callRasaWithTimeout(text);
@@ -108,7 +143,8 @@ public final class NLPPipeline {
      * neither is addressed or focused. A command / constraint / query is not tied to one dialogue. */
     private static final Set<String> PER_DIALOGUE_MOVES = Set.of("propose", "counter", "accept", "reject");
 
-    private PipelineResult routeFrame(Frame frame, DialogueCtx ctx, String text) {
+    private PipelineResult routeFrame(Frame frame, DialogueCtx ctx, String text,
+            java.util.function.Function<String, DialogueCtx> ctxByVesselId) {
         if (!frameValidator.test(frame, text)) {
             return clarification();
         }
@@ -123,12 +159,64 @@ public final class NLPPipeline {
                 && PER_DIALOGUE_MOVES.contains(frame.move())) {
             return clarification();
         }
+        // S8 (D-05 two-step, hook 1): a per-dialogue move addressed AWAY from the focused tab is
+        // re-parsed under the ADDRESSEE's own context — the grammar re-resolves the vocative and
+        // completes the inner move from the RIGHT standing offer. The recursion runs with a null
+        // resolver (no loops) and its guard passes trivially (addressee == the re-fetched focus).
+        // A re-parse miss means the addressee's context cannot support the move (e.g. nothing on
+        // its table to complete from): honest clarification, never the transplanted frame.
+        // A SLOT-LESS cross-tab move (accept / reject / "no it") skips the two-step entirely
+        // (S8 adversarial finding 1): it carries nothing to transplant, so re-parsing under the
+        // addressee can only LOSE it (an anaphoric "accept it" needs a standing offer to parse,
+        // and the addressee may have none while the move is still perfectly meaningful) — those
+        // routed before the guard existed and must keep routing, which the guard's own
+        // nothing-to-transplant early return below guarantees.
+        boolean carriesTerms = frame.element("money") != null || frame.element("duration") != null
+                || frame.element("berth") != null;
+        if (addressee != null && ctxByVesselId != null && carriesTerms
+                && PER_DIALOGUE_MOVES.contains(frame.move())
+                && !String.valueOf(addressee).equals(ctx.activeNegotiationId())) {
+            DialogueCtx addresseeCtx = ctxByVesselId.apply(String.valueOf(addressee));
+            if (addresseeCtx != null) {
+                Optional<Frame> refocused = dcgParser.parse(text, addresseeCtx);
+                if (refocused.isPresent()) {
+                    return routeFrame(refocused.get(), addresseeCtx, text, null);
+                }
+                String to = displayName(ctx, String.valueOf(addressee));
+                log.info("two-step vocative: {}'s context cannot complete the move — clarifying", to);
+                return new PipelineResult.NeedsClarification(ClarificationButtons.defaultOptions(),
+                        "That is addressed to " + to + ", but " + to + " has nothing on the table "
+                                + "to complete it from — say it in full (price, hours and berth), "
+                                + "or switch to " + to + "'s tab first.");
+            }
+        }
         PipelineResult crossTalk = crossTabContextGuard(frame, ctx, text, addressee);
         if (crossTalk != null) {
             return crossTalk;
         }
         ACLMessage msg = FrameToAcl.build(frame, null, ctx.activeNegotiationId());
         return new PipelineResult.Routed(msg, addressee == null ? null : String.valueOf(addressee));
+    }
+
+    /** Tokeniser for the hook-2 prefix probe only (stateless; the parse path owns its own). */
+    private static final DcgTokenizer PREFIX_TOKENIZER = new DcgTokenizer();
+
+    /**
+     * Hook 2's detector: tokenize, run the SAME MED rewrite the parse path runs, and resolve a
+     * "Name :" prefix exactly against the roster. Empty when there is no colon, no unique match,
+     * or the prefix is not name-shaped — falling through to Rasa exactly as before S8.
+     */
+    private static Optional<String> vocativePrefixAddressee(String text, DialogueCtx ctx) {
+        if (text == null || ctx.roster().isEmpty() || text.indexOf(':') < 0) {
+            return Optional.empty();
+        }
+        java.util.List<String> tokens = RosterNameResolver.resolve(
+                PREFIX_TOKENIZER.tokenize(text), ctx);
+        int colon = tokens.indexOf(":");
+        if (colon < 1) {
+            return Optional.empty();
+        }
+        return RosterNameResolver.resolveExact(tokens.subList(0, colon), ctx);
     }
 
     /**
@@ -145,15 +233,17 @@ public final class NLPPipeline {
      * PLUnit case combines a vocative with ellipsis or delta, which is why 16-M2's review could not
      * see it.
      *
-     * <p><b>This is a routing guard, NOT the two-step re-parse the audit proposed.</b> It does not
-     * re-focus the context and re-complete the terms against the resolved vessel — that would touch
-     * the DCG and the goldens' semantics. It only detects the unsafe shape and declines it. The
-     * detector is a second parse of the SAME text against a context that is identical except it has
-     * nothing to complete FROM: same roster (so the vocative still resolves), but no standing offer
-     * and no last-mentioned berth. If the utterance still parses to the same move and the same
-     * terms, every term was explicit in the sentence and the move is safe to route across tabs. If
-     * it does not, the original frame borrowed at least one term from the focused dialogue, and
-     * that is exactly the D-05 shape.
+     * <p><b>Since S8 this guard is the FALLBACK, not the primary defence.</b> The audit's proposed
+     * two-step re-parse now exists (the {@code ctxByVesselId} hooks above): with a resolver wired,
+     * a cross-tab move is re-completed against the ADDRESSEE's own context and routes correctly —
+     * this guard is reached only when NO resolver was supplied (the 2-arg entry: tests, headless
+     * callers) and keeps exactly its pre-S8 decline behaviour there. The detector is a second
+     * parse of the SAME text against a context that is identical except it has nothing to
+     * complete FROM: same roster (so the vocative still resolves), but no standing offer and no
+     * last-mentioned berth. If the utterance still parses to the same move and the same terms,
+     * every term was explicit in the sentence and the move is safe to route across tabs. If it
+     * does not, the original frame borrowed at least one term from the focused dialogue — the
+     * D-05 shape.
      *
      * <p>Cost is one extra DCG goal, and only on a cross-tab vocative — a rare turn. Returns
      * {@code null} when the turn is fine.
