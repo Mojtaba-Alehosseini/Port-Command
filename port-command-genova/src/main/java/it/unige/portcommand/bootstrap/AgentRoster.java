@@ -193,7 +193,7 @@ public final class AgentRoster {
 
         for (VesselStateDTO dto : state.agents().activeVessels()) {
             VesselSpec spec = new VesselSpec(dto.id(), dto.vesselType(), dto.draft(), dto.length(),
-                    dto.tonnage(), dto.cargoClass(), dto.etaArrivalSimMillis());
+                    dto.tonnage(), dto.cargoClass(), dto.etaArrivalSimMillis(), dto.vesselName());
             if (VesselStateDTO.CHANNEL_WALK_IN.equals(dto.channel())) {
                 // A restored walk-in never negotiates again BY DESIGN (open negotiations are
                 // not persisted; onRestore concludes the dialogue and attaches no negotiation

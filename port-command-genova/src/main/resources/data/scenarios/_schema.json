@@ -59,7 +59,8 @@
                   "vesselId": { "type": "string" },
                   "vesselType": { "enum": ["tanker", "container_vessel", "cargo_vessel", "ferry", "cruise_ship"] },
                   "dealPrice": { "type": "number", "exclusiveMinimum": 0 },
-                  "dealHours": { "type": "integer", "minimum": 1, "maximum": 24 }
+                  "dealHours": { "type": "integer", "minimum": 1, "maximum": 24 },
+                  "vesselName": { "type": ["string", "null"], "$comment": "S8: optional display name; same rules as SpawnVessel.vesselName." }
                 }
               }
             }
@@ -118,7 +119,8 @@
               "personality": { "enum": ["AGGRESSIVE", "NEUTRAL", "DESPERATE", null], "$comment": "walk_in hidden-belief pin (P-04: still never surfaced)." },
               "minPrice": { "type": ["number", "null"] },
               "targetPrice": { "type": ["number", "null"] },
-              "etaSimMillis": { "type": "null", "$comment": "Reserved for the engine's daily contracted stream — never authored." }
+              "etaSimMillis": { "type": "null", "$comment": "Reserved for the engine's daily contracted stream — never authored." },
+              "vesselName": { "type": ["string", "null"], "$comment": "S8: walk_in display name (optional). Keep DISJOINT from core/NamePool.POOL (structural test) and digit-free, or MED goes exact-only for it." }
             }
           },
           {

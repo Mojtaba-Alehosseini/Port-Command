@@ -46,7 +46,7 @@
     { "type": "Notification", "simTimeSeconds": 990, "severity": "EMERGENCY",
       "text": "Storm: wind 32 kn — tanker operations unsafe. Escorts cancelled, vessels held offshore." },
     { "type": "SpawnVessel", "simTimeSeconds": 1500, "vesselType": "cargo_vessel", "channel": "walk_in",
-      "vesselId": "STORM-W1", "contractRef": null, "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null },
+      "vesselId": "STORM-W1", "contractRef": null, "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null, "vesselName": "Tempesta Chiara" },
     { "type": "WeatherChange", "simTimeSeconds": 1980, "windKn": 24, "visibility": "good", "swell": 1.0, "state": "cloudy" },
     { "type": "Notification", "simTimeSeconds": 1980, "severity": "INFO",
       "text": "Storm clearing, tanker proceeding — escorts re-dispatched." }

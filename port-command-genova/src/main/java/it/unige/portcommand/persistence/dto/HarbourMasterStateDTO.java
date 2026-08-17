@@ -27,6 +27,12 @@ import it.unige.portcommand.harbourmaster.IncomeEvent;
  *   <li>{@code walkInSpawnCount} — the Poisson spawner's id counter, so post-load
  *       walk-ins continue {@code WALKIN-<n+1>...} instead of colliding with restored
  *       vessels' ids (and their derived RNG stream names).</li>
+ *   <li>{@code namePoolOffset} — the session's rolled name-pool offset (S8, GOAL 3 /
+ *       ADR-17): additive within schema v1. A PRE-S8 save has no such field and Jackson
+ *       binds the int as 0 — a legal offset, so an old save's post-load spawns get the
+ *       offset-0 sequence deterministically (its already-spawned vessels carry id-names
+ *       either way). The -1 sentinel ("roll fresh at boot") is written only by the
+ *       scenario-opening builder, never by a live save.</li>
  * </ul>
  */
 public record HarbourMasterStateDTO(
@@ -34,5 +40,6 @@ public record HarbourMasterStateDTO(
         List<ExpenseEvent> dayExpense,
         Map<String, Integer> performativeCounts,
         Map<String, String> pendingCustomsChecks,
-        int walkInSpawnCount) {
+        int walkInSpawnCount,
+        int namePoolOffset) {
 }

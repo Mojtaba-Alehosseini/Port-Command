@@ -43,7 +43,8 @@ public final class ContractedVesselAgent extends BaseVesselAgent {
                 null, false, false,
                 position().x(), position().y(), position().headingDeg(),
                 contractId,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null,
+                spec.vesselName());
     }
 
     String contractId() {

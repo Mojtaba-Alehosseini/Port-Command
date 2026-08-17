@@ -91,7 +91,8 @@ public final class WalkInVesselAgent extends BaseVesselAgent {
                 s == null ? null : s.maxWaitMinutes(),
                 s == null ? null : s.minDurationHours(),
                 s == null ? null : s.round(),
-                s == null ? null : s.negotiationStartedAtSimMillis());
+                s == null ? null : s.negotiationStartedAtSimMillis(),
+                spec.vesselName());
     }
 
     @Override

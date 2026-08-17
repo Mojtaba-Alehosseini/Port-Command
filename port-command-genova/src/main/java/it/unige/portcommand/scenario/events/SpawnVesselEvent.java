@@ -42,8 +42,17 @@ public record SpawnVesselEvent(
         String personality,     // walk-in belief pin (nullable)
         Double minPrice,        // walk-in belief pin (nullable)
         Double targetPrice,     // walk-in belief pin (nullable)
-        Long etaSimMillis)      // daily-stream only: absolute arrival instant
+        Long etaSimMillis,      // daily-stream only: absolute arrival instant
+        String vesselName)      // walk-in display name (S8, GOAL 3; nullable -> id display)
         implements ScriptedEvent {
+
+    /** Pre-S8 arity (daily-stream constructions and older fixtures): no display name. */
+    public SpawnVesselEvent(long simTimeSeconds, String vesselType, String channel, String vesselId,
+                            String contractRef, String personality, Double minPrice, Double targetPrice,
+                            Long etaSimMillis) {
+        this(simTimeSeconds, vesselType, channel, vesselId, contractRef, personality, minPrice,
+                targetPrice, etaSimMillis, null);
+    }
 
     public static final String CHANNEL_CONTRACTED = "contracted";
     public static final String CHANNEL_WALK_IN = "walk_in";
@@ -78,7 +87,7 @@ public record SpawnVesselEvent(
 
     private void applyWalkIn(GameContext ctx) {
         VesselSpec spec = ScenarioVessels.sampledWalkInSpec(vesselId, vesselType,
-                ctx.randomSource(), ctx.simClock().nowSimMillis());
+                ctx.randomSource(), ctx.simClock().nowSimMillis(), vesselName);
         if (alreadySpawned(ctx, spec)) {
             return;
         }

@@ -219,6 +219,10 @@ public final class ScenarioLoader {
                     at + ".contractRef '" + spawn.contractRef()
                             + "' resolves to no scenario or contracts.json entry");
             require(spawn.vesselId() == null, at + ": contracted spawns take the contract's vessel id");
+            // S8 (adversarial finding 10): a contracted spawn carrying a display name would be
+            // silently dropped (applyWalkIn is the field's only consumer) — refuse the authoring
+            // slip loudly instead.
+            require(spawn.vesselName() == null, at + ": contracted spawns carry no vesselName");
             require(spawn.personality() == null && spawn.minPrice() == null && spawn.targetPrice() == null,
                     at + ": belief pins are walk-in-only");
             ServiceContract contract = s.contracts().stream()
@@ -232,6 +236,10 @@ public final class ScenarioLoader {
             require(notBlank(spawn.vesselId()), at + ": walk-in spawns need a vesselId");
             require(walkInIds.add(spawn.vesselId()), at + ": duplicate walk-in vesselId " + spawn.vesselId());
             require(spawn.contractRef() == null, at + ": walk-ins carry no contractRef");
+            // S8 (GOAL 3): the display name is optional; when present it must be non-blank
+            // (a blank would silently coalesce to the id downstream and hide an authoring slip).
+            require(spawn.vesselName() == null || notBlank(spawn.vesselName()),
+                    at + ": vesselName, when present, must be non-blank");
             if (spawn.personality() != null) {
                 try {
                     Personality.valueOf(spawn.personality());

@@ -118,6 +118,10 @@ public final class HarbourMasterAgent extends PortCommandAgent
      * the walk-in spawn counter. */
     private DispatchPlayerCommandBehaviour dispatchPlayerCommand;
     private PoissonSpawnBehaviour poissonSpawn;
+    /** S8 (GOAL 3, ADR-17): the session's name-pool offset — rolled once per new game from the
+     * seeded {@code "name-pool"} stream, restored verbatim from a save. Read by
+     * {@code PoissonSpawnBehaviour.spawnWalkIn} and persisted by {@link #snapshotDto()}. */
+    private int namePoolOffset;
     /** Task 23: the scenario engine + daily contracted stream; null only in stub harnesses
      * that pass no {@code ScenarioRuntime}. Snapshot reads it for {@code firedEventIds}. */
     private it.unige.portcommand.scenario.ScriptedEventBehaviour scriptedEvents;
@@ -164,14 +168,24 @@ public final class HarbourMasterAgent extends PortCommandAgent
         // dispatcher below re-drives what the save interrupted.
         HarbourMasterRestoreState restore = optionalArgOfType(HarbourMasterRestoreState.class);
         int startingSpawnCount = 0;
+        int restoredNameOffset = -1; // sentinel: not yet drawn (fresh game / scenario opening)
         if (restore != null) {
             walletLedger.restoreHistory(restore.harbourMaster().dayIncome(),
                     restore.harbourMaster().dayExpense());
             performativeCounter.restore(restore.harbourMaster().performativeCounts());
             pendingCustomsChecks.putAll(restore.harbourMaster().pendingCustomsChecks());
             startingSpawnCount = restore.harbourMaster().walkInSpawnCount();
+            restoredNameOffset = restore.harbourMaster().namePoolOffset();
             restoreTracking(restore.activeVessels());
         }
+        // S8 (GOAL 3, ADR-17): the name-pool offset is rolled ONCE per game from the seeded
+        // stream and then persisted — a real save carries the rolled value; a scenario-opening
+        // GameState (and a pre-S8 save, whose missing field binds 0... see the DTO javadoc)
+        // carries the -1 sentinel and rolls fresh here, deterministically from the world's seed.
+        this.namePoolOffset = restoredNameOffset >= 0
+                ? restoredNameOffset
+                : Math.floorMod(randomSource.forStream("name-pool").nextInt(),
+                        it.unige.portcommand.core.NamePool.size());
 
         addBehaviour(new AutoFlowDispatcherBehaviour(this));
         addBehaviour(new ForwardWalkInToPlayerBehaviour(this));
@@ -212,6 +226,15 @@ public final class HarbourMasterAgent extends PortCommandAgent
             addBehaviour(scriptedEvents);
         }
 
+        // S8 (GOAL 3): the comm-log paraphraser resolves vessel ids through THIS agent's live
+        // tracking — "Stella Maris (WALKIN-3)" for named vessels, the bare id otherwise. Reset
+        // in takeDown (the task-22 set-at-setup/clear-at-teardown discipline).
+        Paraphraser.setVesselDisplay(this, vesselId -> {
+            var tracking = activeVessels.get(vesselId);
+            String name = tracking == null ? null : tracking.spec().vesselName();
+            return name == null ? vesselId : name + " (" + vesselId + ")";
+        });
+
         completeOptionalSelfFuture();
     }
 
@@ -224,7 +247,7 @@ public final class HarbourMasterAgent extends PortCommandAgent
     private void restoreTracking(java.util.List<VesselStateDTO> vessels) {
         for (VesselStateDTO dto : vessels) {
             VesselSpec spec = new VesselSpec(dto.id(), dto.vesselType(), dto.draft(), dto.length(),
-                    dto.tonnage(), dto.cargoClass(), dto.etaArrivalSimMillis());
+                    dto.tonnage(), dto.cargoClass(), dto.etaArrivalSimMillis(), dto.vesselName());
             VesselTracking.Channel channel = VesselStateDTO.CHANNEL_WALK_IN.equals(dto.channel())
                     ? VesselTracking.Channel.WALK_IN : VesselTracking.Channel.CONTRACTED;
             AID aid = new AID(AgentRoster.vesselLocalName(spec), AID.ISLOCALNAME);
@@ -246,6 +269,11 @@ public final class HarbourMasterAgent extends PortCommandAgent
      */
     @Override
     protected void onTakeDown() {
+        // S8 (GOAL 3): drop the paraphraser's reference to this world's tracking — but only if
+        // WE still own the hook (compare-and-clear): JADE takedown is async, and a late
+        // takedown of the outgoing world must not wipe the incoming world's freshly-set
+        // resolver (adversarial finding 2).
+        Paraphraser.clearVesselDisplay(this);
         if (dayRolloverCoordinator != null) {
             dayRolloverCoordinator.close();
         }
@@ -285,7 +313,12 @@ public final class HarbourMasterAgent extends PortCommandAgent
                 .forEach(e -> pendingSorted.put(e.getKey(), e.getValue()));
         return new it.unige.portcommand.persistence.dto.HarbourMasterStateDTO(
                 dayIncome, dayExpense, performativeCounter.snapshot(), pendingSorted,
-                poissonSpawn == null ? 0 : poissonSpawn.spawnCount());
+                poissonSpawn == null ? 0 : poissonSpawn.spawnCount(), namePoolOffset);
+    }
+
+    /** S8 (GOAL 3): the session's rolled name-pool offset — see the field's javadoc. */
+    public int namePoolOffset() {
+        return namePoolOffset;
     }
 
     @Override

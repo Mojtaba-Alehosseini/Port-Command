@@ -119,4 +119,23 @@ class RosterNameResolverTest {
         List<String> tokens = List.of("genoa", "sttar", ":", "deal");
         assertSame(tokens, RosterNameResolver.resolve(tokens, ctx));
     }
+
+    /**
+     * The drift-proof NamePool pin (S8 adversarial finding 3): every pool name is checked
+     * against the REAL {@code GRAMMAR_STOP} set — a stop word added later that silently makes
+     * a pool name exact-match-only fails HERE, where the real set lives, not in a hand-copied
+     * mirror in another package.
+     */
+    @Test
+    void everyNamePoolWordAvoidsTheRealGrammarStopSet() {
+        for (String name : it.unige.portcommand.core.NamePool.all()) {
+            for (String word : name.toLowerCase(java.util.Locale.ROOT).split(" ")) {
+                org.junit.jupiter.api.Assertions.assertFalse(
+                        RosterNameResolver.grammarStopWords().contains(word),
+                        "pool name '" + name + "' contains grammar terminal '" + word
+                                + "' — MED would refuse its window and the name loses fuzzy "
+                                + "resolution entirely");
+            }
+        }
+    }
 }

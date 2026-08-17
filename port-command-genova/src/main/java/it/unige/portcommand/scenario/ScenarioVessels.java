@@ -109,10 +109,18 @@ public final class ScenarioVessels {
     /** A template-sampled walk-in spec, drawn from the vessel's own seeded sub-stream. */
     public static VesselSpec sampledWalkInSpec(String vesselId, String vesselType,
                                                RandomSource randomSource, long etaSimMillis) {
+        return sampledWalkInSpec(vesselId, vesselType, randomSource, etaSimMillis, null);
+    }
+
+    /** S8 (GOAL 3): the scripted-spawn form — the AUTHORED display name from the scenario JSON
+     * rides the spec (nullable -> id display). Dims sampling is unchanged. */
+    public static VesselSpec sampledWalkInSpec(String vesselId, String vesselType,
+                                               RandomSource randomSource, long etaSimMillis,
+                                               String vesselName) {
         VesselTemplate template = VesselTemplates.forType(vesselType);
         Random r = randomSource.forStream("spawn-dims-" + vesselId);
         return new VesselSpec(vesselId, vesselType, template.sampleDraft(r), template.sampleLength(r),
-                template.sampleTonnage(r), cargoClassFor(vesselType), etaSimMillis);
+                template.sampleTonnage(r), cargoClassFor(vesselType), etaSimMillis, vesselName);
     }
 
     /** The canonical cargo-class atom a scripted spawn of {@code vesselType} carries. */

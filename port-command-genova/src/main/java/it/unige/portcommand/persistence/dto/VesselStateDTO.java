@@ -60,7 +60,12 @@ public record VesselStateDTO(
         Integer maxWaitMinutes,
         Integer minDurationHours,
         Integer negotiationRound,
-        Long negotiationStartedAtSimMillis) {
+        Long negotiationStartedAtSimMillis,
+        // S8 (GOAL 3, ADR-17): the walk-in display name, drawn once at spawn and persisted
+        // VERBATIM (never re-derived — saveSeedAt evolves the seed). Additive within schema
+        // v1 (the AWAITING_BERTH / firedEventIds precedent); null for contracted vessels and
+        // pre-S8 saves — every display surface falls back to the id.
+        String vesselName) {
 
     public static final String CHANNEL_CONTRACTED = "contracted";
     public static final String CHANNEL_WALK_IN = "walk_in";

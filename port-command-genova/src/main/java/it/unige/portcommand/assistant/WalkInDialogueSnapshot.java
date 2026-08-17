@@ -75,8 +75,11 @@ public record WalkInDialogueSnapshot(
                                             double lastVesselOffer, double lastPlayerOffer, int roundsUsed,
                                             double timeUsedSec, boolean threatenedWithdrawal) {
         Objects.requireNonNull(spec, "spec");
+        // S8 (GOAL 3): the spec's display name flows through — this one argument is what turned
+        // the whole dormant name plumbing (tab title, DialogueCtx roster, Prolog ctx term, MED)
+        // live. A null name still coalesces to the id in the compact constructor.
         return new WalkInDialogueSnapshot(vesselId, spec.vesselType(), spec.draft(), spec.length(),
                 spec.tonnage(), spec.cargoClass(), berthId, durationHours, lastVesselOffer, lastPlayerOffer,
-                roundsUsed, timeUsedSec, threatenedWithdrawal);
+                roundsUsed, timeUsedSec, threatenedWithdrawal, spec.vesselName());
     }
 }

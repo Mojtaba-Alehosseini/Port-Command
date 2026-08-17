@@ -27,6 +27,47 @@ public final class Paraphraser {
 
     private static final Logger log = LoggerFactory.getLogger(Paraphraser.class);
 
+    /**
+     * S8 (GOAL 3): vessel-id → display-string hook, wired by the HarbourMaster from its live
+     * tracking ("Stella Maris (WALKIN-3)" for named vessels, the bare id otherwise) and reset
+     * at its takedown — the same set-at-setup/clear-at-teardown discipline as the task-22 bus
+     * subscriptions, so a reloaded world never renders through a dead HM's roster. Identity by
+     * default: unit tests that call the paraphraser directly are byte-for-byte unchanged.
+     * Bound, stated: only vessels the CURRENT HarbourMaster tracks resolve — departed vessels'
+     * later mentions (and pre-wiring boot lines) fall back to the id.
+     */
+    private static volatile java.util.function.UnaryOperator<String> vesselDisplay =
+            java.util.function.UnaryOperator.identity();
+    private static volatile Object vesselDisplayOwner;
+
+    /**
+     * Install the id → display resolver (HarbourMaster setup). {@code owner} identifies the
+     * installer so a LATE asynchronous takedown of an outgoing world cannot wipe the incoming
+     * world's resolver (S8 adversarial finding 2 — JADE {@code doDelete} is async, and the
+     * failure would be invisible: the comm log would silently fall back to bare ids).
+     */
+    public static void setVesselDisplay(Object owner, java.util.function.UnaryOperator<String> resolver) {
+        vesselDisplayOwner = owner;
+        vesselDisplay = resolver == null ? java.util.function.UnaryOperator.identity() : resolver;
+    }
+
+    /** Reset to identity ONLY if {@code owner} still owns the hook (compare-and-clear). */
+    public static void clearVesselDisplay(Object owner) {
+        if (vesselDisplayOwner == owner) {
+            vesselDisplayOwner = null;
+            vesselDisplay = java.util.function.UnaryOperator.identity();
+        }
+    }
+
+    /** The display string for a vessel id (never null; identity when no resolver is wired). */
+    private static String display(String vesselId) {
+        if (vesselId == null) {
+            return null;
+        }
+        String rendered = vesselDisplay.apply(vesselId);
+        return rendered == null ? vesselId : rendered;
+    }
+
     /** The HarbourMaster's DF/local name — the sender whose PROPOSE is a demand, not an offer. */
     private static final String HARBOUR_MASTER = "harbour_master";
 
@@ -107,10 +148,10 @@ public final class Paraphraser {
         String vesselId = vesselIdOf(content);
         String berthId = text(content, "berth_id");
         if (vesselId != null && berthId != null) {
-            return "berth " + berthId + " for " + vesselId;
+            return "berth " + berthId + " for " + display(vesselId);
         }
         if (vesselId != null) {
-            return "action for " + vesselId;
+            return "action for " + display(vesselId);
         }
         return "assistance";
     }
@@ -140,7 +181,7 @@ public final class Paraphraser {
         Double price = numOrNull(content, "price");
         if (price != null) {
             String vesselId = vesselIdOf(content);
-            return "€" + money(price) + (vesselId != null ? " to " + vesselId : "");
+            return "€" + money(price) + (vesselId != null ? " to " + display(vesselId) : "");
         }
         return "terms";
     }
@@ -160,7 +201,7 @@ public final class Paraphraser {
             return "berth " + berthId;
         }
         if (content.has("vessel_id") && content.has("berth_position")) {
-            return "the escort contract for " + text(content, "vessel_id");
+            return "the escort contract for " + display(text(content, "vessel_id"));
         }
         Double price = numOrNull(content, "price");
         if (price != null) {
@@ -172,7 +213,7 @@ public final class Paraphraser {
     /** CFP shape: {@code {target_vessel_id, target_vessel_position, reply_by}} — one producer, one shape. */
     private static String vessel(JsonNode content) {
         String v = text(content, "target_vessel_id");
-        return v != null ? v : "a vessel";
+        return v != null ? display(v) : "a vessel";
     }
 
     /**
@@ -295,7 +336,7 @@ public final class Paraphraser {
 
     private static String orVessel(JsonNode content) {
         String v = vesselIdOf(content);
-        return v != null ? v : "a vessel";
+        return v != null ? display(v) : "a vessel";
     }
 
     private static String humanize(String s) {

@@ -99,7 +99,8 @@ class SaveLoadManagerRoundTripTest {
                 List.of("tug_1"), false, false,
                 700.0, 200.0, 180.0,
                 "CONTRACT-1",
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null,
+                null); // contracted vessels carry no display name (S8)
         VesselStateDTO walkIn = new VesselStateDTO(
                 "WALKIN-1", "tanker", VesselStateDTO.CHANNEL_WALK_IN,
                 11.0, 220.0, 60_000, "general_cargo", 600_000L,
@@ -108,7 +109,8 @@ class SaveLoadManagerRoundTripTest {
                 List.of(), false, true,
                 420.0, 320.0, 90.0,
                 null,
-                "AGGRESSIVE", 2_100.0, 2_800.0, 45, 6, 3, 1_200_000L);
+                "AGGRESSIVE", 2_100.0, 2_800.0, 45, 6, 3, 1_200_000L,
+                "Stella Maris"); // S8: the persisted-verbatim display name rides the round trip
         Map<String, Integer> performatives = new LinkedHashMap<>();
         performatives.put("REQUEST", 2);
         performatives.put("INFORM", 7);
@@ -135,7 +137,7 @@ class SaveLoadManagerRoundTripTest {
                                 List.of(new ExpenseEvent(350.0, "tug_job", "C001", 6_100_000L)),
                                 performatives,
                                 pendingCustoms,
-                                1),
+                                1, 17), // S8: the rolled name-pool offset persists
                         new WeatherStateDTO(new WeatherSnapshot(22, "good", 0.8, "cloudy", 7_000_000L)),
                         new CustomsStateDTO(3),
                         List.of(

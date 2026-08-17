@@ -130,7 +130,10 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
         return activeWalkIns < MAX_ACTIVE_WALKINS;
     }
 
-    private void spawnWalkIn() {
+    /** Public for the same reason {@link #canSpawnNow()} is (S8): {@code WalkInNamePoolIT}
+     * drives single spawns directly rather than waiting out exponential gaps. Production's
+     * only caller remains {@link #onWake()}, behind the {@code canSpawnNow} gate. */
+    public void spawnWalkIn() {
         List<String> types = List.copyOf(VesselTemplates.types());
         String vesselType = types.get(draw.nextInt(types.size()));
         VesselTemplate template = VesselTemplates.forType(vesselType);
@@ -139,8 +142,13 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
         int tonnage = template.sampleTonnage(draw);
 
         String vesselId = "WALKIN-" + (++spawnCount);
+        // S8 (GOAL 3, ADR-17): the display name is drawn HERE, once, and persisted verbatim —
+        // never re-derived (saveSeedAt evolves the seed, so re-derivation would rename every
+        // vessel across a load). Offset per session, ordinal = the persisted spawn counter.
+        String vesselName = it.unige.portcommand.core.NamePool.name(
+                ((HarbourMasterAgent) myAgent).namePoolOffset(), spawnCount);
         VesselSpec spec = new VesselSpec(vesselId, vesselType, draft, length, tonnage,
-                CARGO_CLASS, simClock.nowSimMillis());
+                CARGO_CLASS, simClock.nowSimMillis(), vesselName);
 
         RealNegotiationEngine engine = new RealNegotiationEngine(
                 Settings.load().roundLimit(), randomSource.forStream("nego-" + vesselId));

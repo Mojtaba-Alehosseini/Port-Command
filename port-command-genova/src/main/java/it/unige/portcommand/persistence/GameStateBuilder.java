@@ -180,7 +180,8 @@ public final class GameStateBuilder {
                 v.contractRef(),
                 v.personality(), v.minAcceptablePrice(), v.targetPrice(),
                 v.maxWaitMinutes(), v.minDurationHours(), v.negotiationRound(),
-                v.negotiationStartedAtSimMillis());
+                v.negotiationStartedAtSimMillis(),
+                v.vesselName());
     }
 
     /**
@@ -251,7 +252,10 @@ public final class GameStateBuilder {
                 new GameState.AgentsState(
                         new it.unige.portcommand.persistence.dto.HarbourMasterStateDTO(
                                 List.of(), List.of(), new java.util.LinkedHashMap<>(),
-                                new java.util.LinkedHashMap<>(), 0),
+                                // namePoolOffset -1: the "roll fresh at boot" sentinel (S8) —
+                                // a scenario opening has no rolled offset yet; the HM draws one
+                                // deterministically from the scenario's seed.
+                                new java.util.LinkedHashMap<>(), 0, -1),
                         new it.unige.portcommand.persistence.dto.WeatherStateDTO(
                                 new it.unige.portcommand.agents.WeatherSnapshot(weather.windKn(),
                                         weather.visibility(), weather.swell(), weather.state(), simMillis)),
@@ -273,7 +277,8 @@ public final class GameStateBuilder {
                 List.of(), false, false,
                 position.x(), position.y(), 0.0,
                 null,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null,
+                v.vesselName());
     }
 
     /** {@code Settings.load()} with the scenario's partial override applied (task 23). */

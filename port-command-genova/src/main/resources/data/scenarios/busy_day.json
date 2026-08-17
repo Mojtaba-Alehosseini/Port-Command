@@ -45,12 +45,12 @@
     { "type": "SpawnVessel", "simTimeSeconds": 120, "vesselType": "container_vessel", "channel": "contracted",
       "vesselId": null, "contractRef": "BD-503", "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null },
     { "type": "SpawnVessel", "simTimeSeconds": 300, "vesselType": "cargo_vessel", "channel": "walk_in",
-      "vesselId": "WALKIN-B1", "contractRef": null, "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null },
+      "vesselId": "WALKIN-B1", "contractRef": null, "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null, "vesselName": "Doria Vecchia" },
     { "type": "SpawnVessel", "simTimeSeconds": 300, "vesselType": "ferry", "channel": "walk_in",
-      "vesselId": "WALKIN-B2", "contractRef": null, "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null },
+      "vesselId": "WALKIN-B2", "contractRef": null, "personality": null, "minPrice": null, "targetPrice": null, "etaSimMillis": null, "vesselName": "Lanterna Rossa" },
     { "type": "TugRefuelComplete", "simTimeSeconds": 720, "tugId": 1 },
     { "type": "BerthFlood", "simTimeSeconds": 780, "berthId": "berth_2" },
     { "type": "SpawnVessel", "simTimeSeconds": 900, "vesselType": "tanker", "channel": "walk_in",
-      "vesselId": "WALKIN-B3", "contractRef": null, "personality": "AGGRESSIVE", "minPrice": null, "targetPrice": null, "etaSimMillis": null }
+      "vesselId": "WALKIN-B3", "contractRef": null, "personality": "AGGRESSIVE", "minPrice": null, "targetPrice": null, "etaSimMillis": null, "vesselName": "San Giorgio" }
   ]
 }

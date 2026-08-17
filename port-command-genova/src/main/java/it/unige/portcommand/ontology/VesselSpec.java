@@ -21,10 +21,21 @@ public record VesselSpec(
         @JsonProperty("length") double length,
         @JsonProperty("tonnage") int tonnage,
         @JsonProperty("cargo_class") String cargoClass,
-        @JsonProperty("eta_arrival_sim_millis") long etaArrivalSimMillis) {
+        @JsonProperty("eta_arrival_sim_millis") long etaArrivalSimMillis,
+        @JsonProperty("vessel_name") String vesselName) {
 
     private static final Set<String> KNOWN_VESSEL_TYPES =
             Set.of("tanker", "container_vessel", "cargo_vessel", "ferry", "cruise_ship");
+
+    /**
+     * S8 (GOAL 3): pre-name-pool arity — {@code vesselName} null (display falls back to the
+     * id). Keeps every existing construction site compiling; only the walk-in producers and
+     * the restore paths use the canonical 8-arg form.
+     */
+    public VesselSpec(String vesselId, String vesselType, double draft, double length, int tonnage,
+                      String cargoClass, long etaArrivalSimMillis) {
+        this(vesselId, vesselType, draft, length, tonnage, cargoClass, etaArrivalSimMillis, null);
+    }
 
     public VesselSpec {
         if (draft <= 0) {

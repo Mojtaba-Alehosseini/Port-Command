@@ -111,7 +111,13 @@ public record Scenario(
     }
 
     /** The pre-existing docked vessel occupying a berth at scenario start. */
-    public record DockedVessel(String vesselId, String vesselType, double dealPrice, int dealHours) {
+    public record DockedVessel(String vesselId, String vesselType, double dealPrice, int dealHours,
+                               String vesselName) {
+
+        /** Pre-S8 arity: no display name (falls back to the id everywhere). */
+        public DockedVessel(String vesselId, String vesselType, double dealPrice, int dealHours) {
+            this(vesselId, vesselType, dealPrice, dealHours, null);
+        }
     }
 
     /**
