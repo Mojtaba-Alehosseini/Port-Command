@@ -94,6 +94,8 @@
 {"block":"ellipsis","ctx":"focus","utterance":"same but 6 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1500,"currency":"EUR"},"duration":6,"berth":"berth_3"}}
 {"block":"ellipsis","ctx":"focus","utterance":"same but 2000","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2000,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
 {"block":"ellipsis","ctx":"focus","utterance":"make it 2200 for 8 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2200,"currency":"EUR"},"duration":8,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"1900 for 6 hours at berth 3","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1900,"currency":"EUR"},"duration":6,"berth":"berth_3"},"note":"S8: DEMO_SCRIPT Beat 3's exact typed line — ellipsis clause 1 with an explicit berth (audit D-01/P3-12)"}
+{"block":"ellipsis","ctx":"focus","utterance":"make it 2200 at berth 2","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2200,"currency":"EUR"},"duration":5,"berth":"berth_2"},"note":"S8: explicit berth wins, duration completes from the standing offer"}
 {"block":"ellipsis","ctx":"none","utterance":"make it 2200","frame":null,"note":"no standing offer to complete from -> clarification"}
 {"block":"ellipsis","ctx":"none","utterance":"2200","frame":null,"note":"bare fragment with no standing offer"}
 {"block":"ellipsis","ctx":"none","utterance":"same but 6 hours","frame":null,"note":"nothing to be the same as"}

@@ -512,10 +512,17 @@ berth_atom(B) :- atom(B), B \== none.
 % "make it 2200" / "2200" / "make it 5 hours" / "same but 5 hours" / "same but 2000". Missing slots
 % are copied from the reference offer. No standing offer -> reference_offer fails -> FAIL (never
 % invents slots). move=counter: a revised offer is a fresh proposal.
+%
+% DCG: clause 1 also takes an explicit berth since S8 (audit D-01/P3-12's acknowledged fix):
+% "1900 for 6 hours at berth 3" / "make it 2200 at berth 2". optional_berth is the SAME
+% guarded nonterminal the plain moves use, so an out-of-range "at berth 9" still FAILS the
+% parse (-> clarification) rather than dropping the slot. Slot order stays money < duration
+% < berth, the plain moves' canonical order — a berth-before-duration utterance leaves the
+% duration in the residue and falls through, precision-first.
 ellipsis_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
-    make_it_lead, money_amount(M), ellipsis_more_duration(DurGiven),
+    make_it_lead, money_amount(M), ellipsis_more_duration(DurGiven), optional_berth(BerthGiven),
     { ctx_standing(Ctx, S), reference_offer(S, Ref),
-      append([money=M], DurGiven, Given), complete_from(Ref, Given, Slots) }.
+      append([[money=M], DurGiven, BerthGiven], Given), complete_from(Ref, Given, Slots) }.
 ellipsis_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
     make_it_lead, duration_phrase(D),
     { ctx_standing(Ctx, S), reference_offer(S, Ref), complete_from(Ref, [duration=D], Slots) }.

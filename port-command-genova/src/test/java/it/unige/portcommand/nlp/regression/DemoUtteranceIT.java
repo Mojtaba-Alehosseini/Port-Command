@@ -32,24 +32,32 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * worked. {@code DEMO_CHECKLIST.md} Row 2 used a different string that did parse, so the two demo
  * documents disagreed and the one Moji is told to print and hold was the broken one.
  *
- * <p>The fix was to correct the sentence, not the grammar (a freeze-safe one-line doc change versus
- * new goldens, a PLUnit case and a re-check of the one-parse-per-utterance property). This gate is
- * what stops the documents drifting away from the grammar again: <b>if you change the typed line in
- * either demo document, change it here too and watch it pass.</b>
+ * <p>The 2026-07-27 fix corrected the sentence, not the grammar (freeze-safe). <b>S8 (2026-08-17)
+ * fixed the grammar</b>: {@code ellipsis_move} clause 1 gained {@code optional_berth} (with new
+ * goldens, PLUnit cases and the one-parse-per-utterance table re-checked), so Beat 3 is back to
+ * the natural verbless line and the old negative control is now a positive regression. This gate
+ * is what stops the documents drifting away from the grammar again: <b>if you change the typed
+ * line in either demo document, change it here too and watch it pass.</b>
  */
 @Tag("integration")
 class DemoUtteranceIT {
 
     private static DCGParser parser;
 
-    /** Beat 3's counter, as {@code docs/DEMO_SCRIPT.md} now words it. */
-    private static final String DEMO_SCRIPT_BEAT_3 = "how about 1900 for 6 hours at berth 3";
+    /** Beat 3's counter, as {@code docs/DEMO_SCRIPT.md} words it — the natural verbless line
+     * again since S8's grammar fix (it coincides with {@link #THE_STRING_THAT_DID_NOT_PARSE}
+     * deliberately: the script line and the historic regression are the same sentence now). */
+    private static final String DEMO_SCRIPT_BEAT_3 = "1900 for 6 hours at berth 3";
 
     /** Row 2's counter, as {@code docs/DEMO_CHECKLIST.md} words it (berth completed from context). */
     private static final String DEMO_CHECKLIST_ROW_2 = "1900 for 6 hours";
 
-    /** The pre-fix Beat 3 string, kept as a negative control so the bug cannot come back unnoticed. */
+    /** The string that fell through to Rasa from task 26 to S7 (audit D-01) — parses since S8. */
     private static final String THE_STRING_THAT_DID_NOT_PARSE = "1900 for 6 hours at berth 3";
+
+    /** The 2026-07-27 workaround wording. No longer in any doc, but it must keep parsing so an
+     * old printed checklist (or muscle memory) cannot fail on stage. */
+    private static final String THE_OLD_WORKAROUND_LINE = "how about 1900 for 6 hours at berth 3";
 
     /** Mirrors {@code DcgRegressionIT.FOCUS}: Genoa Star (cargo) asked 2000 for 5 h at berth_3. */
     private static final DialogueCtx FOCUS = new DialogueCtx(
@@ -90,21 +98,30 @@ class DemoUtteranceIT {
     }
 
     /**
-     * The negative control. If this ever starts parsing — because someone adds {@code optional_berth}
-     * to {@code ellipsis_move} clause 1, which is the correct long-term fix — delete this test and
-     * put the shorter sentence back in the demo script. Until then it records exactly what was
-     * wrong, so "the demo script's string doesn't parse" cannot quietly become folklore.
+     * The FLIPPED negative control (S8). From 2026-07-27 to S7 this asserted the string did NOT
+     * parse (and S7 @Disabled it as a red-on-improvement pin); the D-05/grammar session then made
+     * the long-planned fix — {@code optional_berth} in {@code ellipsis_move} clause 1 — so the
+     * regression now runs in the POSITIVE direction: the demo script's natural line must parse
+     * with the berth slot explicitly bound, forever. The defect record lives in this javadoc and
+     * in {@code docs/audit/AUDIT-D-nlp.md} §D-01.
      */
     @Test
-    @org.junit.jupiter.api.Disabled("S7 (audit P3-12): a test that turns the build RED when the "
-            + "grammar IMPROVES is backwards. Ticket: D-05/grammar session — add optional_berth "
-            + "to ellipsis_move clause 1; on that fix, restore the shorter Beat-3 line in "
-            + "DEMO_SCRIPT.md and DELETE this test (its own javadoc already says so). Kept "
-            + "disabled rather than deleted so the defect record survives until the fix lands.")
-    void theOriginalBeat3StringStillDoesNotParseWhichIsWhyTheScriptChanged() {
-        assertTrue(parser.parse(THE_STRING_THAT_DID_NOT_PARSE, FOCUS).isEmpty(),
-                "if this now parses, restore the shorter sentence in DEMO_SCRIPT.md Beat 3 and "
-                        + "delete this test — the grammar caught up with the documentation");
+    void theOriginalBeat3StringParsesSinceS8TheGrammarCaughtUp() {
+        Optional<Frame> frame = parser.parse(THE_STRING_THAT_DID_NOT_PARSE, FOCUS);
+        assertTrue(frame.isPresent(),
+                "the S8 grammar fix (ellipsis_move clause 1 + optional_berth) must keep this "
+                        + "parsing — DEMO_SCRIPT.md Beat 3 types exactly this line");
+        assertEquals("berth_3", frame.get().element("berth"),
+                "the berth must be bound from the SENTENCE (explicit slot), not completed");
+        assertEquals("counter", frame.get().move());
+    }
+
+    /** The 2026-07-27 workaround wording must keep parsing too (old printed docs, muscle memory). */
+    @Test
+    void theOldWorkaroundLineStillParses() {
+        Optional<Frame> frame = parser.parse(THE_OLD_WORKAROUND_LINE, FOCUS);
+        assertTrue(frame.isPresent(), "counter_move owns the 'how about' lead — unchanged by S8");
+        assertEquals("berth_3", frame.get().element("berth"));
     }
 
     private static double moneyAmount(Frame frame) {

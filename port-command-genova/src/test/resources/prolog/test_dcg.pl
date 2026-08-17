@@ -350,9 +350,19 @@ m2_ellipsis([make, it, 6, hours],    [move=counter, money=price(1500, eur), dura
 m2_ellipsis([same, but, 6, hours],   [move=counter, money=price(1500, eur), duration=6, berth=berth_3]).
 m2_ellipsis([same, but, 2000],       [move=counter, money=price(2000, eur), duration=5, berth=berth_3]).
 m2_ellipsis([make, it, 2200, for, 8, hours], [move=counter, money=price(2200, eur), duration=8, berth=berth_3]).
+% S8 (audit D-01/P3-12's acknowledged fix): clause 1 takes an explicit berth. The first row is
+% DEMO_SCRIPT Beat 3's exact typed line; the duration completes from the standing offer in row 2.
+m2_ellipsis([1900, for, 6, hours, at, berth, 3], [move=counter, money=price(1900, eur), duration=6, berth=berth_3]).
+m2_ellipsis([make, it, 2200, at, berth, 2], [move=counter, money=price(2200, eur), duration=5, berth=berth_2]).
 
 test('16-M2 ellipsis completes missing slots from the standing offer', [forall(m2_ellipsis(T, E))]) :-
     m2_ctx(C), parse_move(T, C, frame(commerce_sell, Els)), assertion(Els == E).
+
+% S8: the berth guard holds inside ellipsis too — an out-of-range "at berth 9" FAILS the parse
+% (-> clarification, where the player learns berth 9 does not exist), never a silently
+% berth-less counter. Same rationale as berth_mention on the plain moves.
+test('16-M2 ellipsis refuses an out-of-range berth', [fail]) :-
+    m2_ctx(C), parse_move([make, it, 2200, at, berth, 9], C, _).
 
 m2_ellipsis_miss([make, it, 2200]).       % no standing offer -> cannot complete
 m2_ellipsis_miss([2200]).
@@ -509,6 +519,8 @@ test('16-M2 command leaves M1 cancel routing to Rasa', [fail]) :-
 % the frame depend on clause order rather than on meaning.
 m2_unambiguous([make, it, 2200]).
 m2_unambiguous([2200]).
+m2_unambiguous([1900, for, 6, hours, at, berth, 3]).   % S8: ellipsis-with-berth (Beat 3's line)
+m2_unambiguous([make, it, 2200, at, berth, 2]).        % S8: ellipsis-with-berth
 m2_unambiguous([same, but, 6, hours]).
 m2_unambiguous([200, more]).
 m2_unambiguous([10, percent, less]).
