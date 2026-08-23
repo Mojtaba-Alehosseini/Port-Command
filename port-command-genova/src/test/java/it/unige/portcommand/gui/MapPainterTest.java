@@ -7,7 +7,6 @@ import java.awt.image.BufferedImage;
 import it.unige.portcommand.agents.BerthOccupancy;
 import it.unige.portcommand.agents.TugStatus;
 import it.unige.portcommand.artifacts.PortStateUpdate;
-import it.unige.portcommand.gui.events.VesselArrivedEvent;
 import it.unige.portcommand.gui.events.WeatherChangeEvent;
 import it.unige.portcommand.gui.model.MapModel;
 import it.unige.portcommand.harbourmaster.BerthPositions;
@@ -141,24 +140,6 @@ class MapPainterTest {
         assertNotEquals(background(image, t), chipAreaPixel, "the weather chip must render near the top-right corner");
     }
 
-    /**
-     * Adversarial-review regression: a burst of concurrent arrivals used to grow the label stack
-     * upward without limit ({@code y = height - 8 - (arrived.size()-1)*12}), eventually drawing
-     * text above the visible canvas. Capped -- a large arrival count must not throw, and the most
-     * recent arrival (always the last one rendered) must still land inside the canvas.
-     */
-    @Test
-    void manyConcurrentArrivalsDoNotThrowAndTheMostRecentStaysOnCanvas() {
-        MapModel model = new MapModel();
-        for (int i = 0; i < 20; i++) {
-            model.applyVesselArrived(new VesselArrivedEvent("V" + i, "cargo_vessel", "contracted"));
-        }
-
-        BufferedImage image = paint(model, WIDTH, HEIGHT); // must not throw despite 20 > the internal cap
-        MapPainter.Transform t = MapPainter.fit(WIDTH, HEIGHT);
-        Color mostRecentLabelArea = new Color(image.getRGB(8, HEIGHT - 8));
-
-        assertNotEquals(background(image, t), mostRecentLabelArea,
-                "the most recent arrival's chip must still render on-canvas near the bottom-left");
-    }
+    // S9: the arrival-chip burst case was DELETED with its event and painter arm (audit C-05's
+    // dead render path — no production publisher ever existed; the decision was remove, not wire).
 }

@@ -9,8 +9,6 @@ import java.util.Optional;
 import it.unige.portcommand.agents.BerthOccupancy;
 import it.unige.portcommand.agents.TugStatus;
 import it.unige.portcommand.artifacts.PortStateUpdate;
-import it.unige.portcommand.gui.events.VesselArrivedEvent;
-import it.unige.portcommand.gui.events.VesselDepartedEvent;
 import it.unige.portcommand.gui.events.WeatherChangeEvent;
 import it.unige.portcommand.harbourmaster.BerthPositions;
 import it.unige.portcommand.harbourmaster.TugBasePositions;
@@ -36,7 +34,6 @@ public final class MapModel {
 
     private final Map<String, BerthOccupancy> berths = new LinkedHashMap<>();
     private final Map<String, PortStateUpdate.TugDelta> tugs = new LinkedHashMap<>();
-    private final Map<String, VesselArrivedEvent> arrivedVessels = new LinkedHashMap<>();
     private WeatherChangeEvent weather;
     private Runnable onChange = () -> { };
 
@@ -68,18 +65,6 @@ public final class MapModel {
         onChange.run();
     }
 
-    /** Vessels not (yet) resolved to a berth occupant — a lightweight arrival/departure chip list. */
-    public void applyVesselArrived(VesselArrivedEvent event) {
-        arrivedVessels.put(event.vesselId(), event);
-        onChange.run();
-    }
-
-    public void applyVesselDeparted(VesselDepartedEvent event) {
-        if (arrivedVessels.remove(event.vesselId()) != null) {
-            onChange.run();
-        }
-    }
-
     /** Immutable snapshot: all 4 canonical berth ids are always present. */
     public Map<String, BerthOccupancy> berths() {
         return Map.copyOf(berths);
@@ -92,10 +77,5 @@ public final class MapModel {
 
     public Optional<WeatherChangeEvent> weather() {
         return Optional.ofNullable(weather);
-    }
-
-    /** Insertion order (oldest arrival first). */
-    public List<VesselArrivedEvent> arrivedVessels() {
-        return List.copyOf(arrivedVessels.values());
     }
 }

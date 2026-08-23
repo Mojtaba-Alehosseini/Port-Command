@@ -61,13 +61,13 @@ public final class TutorialOverlay extends JComponent {
      * own per-step text when it drives).
      *
      * <p>Step 1's wording was corrected on 2026-07-27 (audit C-05): it used to say "vessels arrive
-     * and move here as the day runs", but {@code VesselArrivedEvent}/{@code VesselDepartedEvent}
-     * have no production publisher — {@code MapPanel}'s arrival/departure chips are wired,
-     * consumed and tested, and nothing ever fires them. What the map genuinely shows is berth
-     * occupancy (a vessel appears once a terminal grants and reports its berth), the four tug dots
-     * and the weather chip, so that is what the text now promises. Wiring the two publishers is in
-     * the backlog; until then the text must not point the player at something that cannot render.
-     * {@code tutorial.json}'s own step-1 string was corrected in the same pass. */
+     * and move here as the day runs", but the arrival/departure chip events never had a production
+     * publisher — the map genuinely shows berth occupancy, the four tug dots and the weather chip,
+     * so that is what the text promises. <b>S9 (2026-08-17) closed the loop the other way:</b> the
+     * two dead events and their whole render path were DELETED (Moji's recorded decision — remove,
+     * not wire; berth labels already show arrivals honestly), so the text below is no longer a
+     * workaround for missing publishers — it simply describes the map. {@code tutorial.json}'s
+     * step-1 string was corrected in the C-05 pass and stands unchanged. */
     private static final String[] STEP_TEXT = {
             "This is the map — berths fill as vessels dock, and the four tugs move as they escort.",
             "When a walk-in vessel hails you, its negotiation opens as a chat tab here.",

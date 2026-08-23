@@ -6,13 +6,11 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Rectangle2D;
-import java.util.List;
 import java.util.Map;
 
 import it.unige.portcommand.agents.BerthOccupancy;
 import it.unige.portcommand.agents.TugStatus;
 import it.unige.portcommand.artifacts.PortStateUpdate.TugDelta;
-import it.unige.portcommand.gui.events.VesselArrivedEvent;
 import it.unige.portcommand.gui.events.WeatherChangeEvent;
 import it.unige.portcommand.gui.model.MapModel;
 import it.unige.portcommand.harbourmaster.BerthPositions;
@@ -106,7 +104,6 @@ final class MapPainter {
         paintBerths(g, t, model.berths());
         paintTugs(g, t, model.tugs());
         paintWeatherChip(g, width, model.weather().orElse(null));
-        paintArrivedVessels(g, height, model.arrivedVessels());
     }
 
     private static void paintBackground(Graphics2D g, int width, int height) {
@@ -204,27 +201,4 @@ final class MapPainter {
         g.drawString(text, chipX, 19);
     }
 
-    /** Caps how many chips stack up so a burst of concurrent arrivals can't run the label stack
-     * off the top edge of the panel. */
-    private static final int MAX_ARRIVED_VESSEL_CHIPS = 6;
-
-    private static void paintArrivedVessels(Graphics2D g, int height, List<VesselArrivedEvent> arrived) {
-        if (arrived.isEmpty()) {
-            return;
-        }
-        List<VesselArrivedEvent> visible = arrived.size() > MAX_ARRIVED_VESSEL_CHIPS
-                ? arrived.subList(arrived.size() - MAX_ARRIVED_VESSEL_CHIPS, arrived.size())
-                : arrived;
-        g.setFont(g.getFont().deriveFont(Font.PLAIN, 10f));
-        int y = height - 8 - (visible.size() - 1) * 12;
-        for (VesselArrivedEvent event : visible) {
-            String text = event.vesselId() + " (" + event.vesselType() + ", " + event.channel() + ")";
-            g.setColor(new Color(255, 255, 255, 200));
-            int textWidth = g.getFontMetrics().stringWidth(text);
-            g.fillRect(6, y - 10, textWidth + 6, 12);
-            g.setColor(Color.BLACK);
-            g.drawString(text, 8, y);
-            y += 12;
-        }
-    }
 }

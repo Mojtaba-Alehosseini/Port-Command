@@ -9,8 +9,6 @@ import javax.swing.SwingUtilities;
 
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.artifacts.PortStateUpdate;
-import it.unige.portcommand.gui.events.VesselArrivedEvent;
-import it.unige.portcommand.gui.events.VesselDepartedEvent;
 import it.unige.portcommand.gui.events.WeatherChangeEvent;
 import it.unige.portcommand.gui.model.MapModel;
 import it.unige.portcommand.util.DeliveryMode;
@@ -19,7 +17,9 @@ import it.unige.portcommand.util.Subscription;
 
 /**
  * Real map: harbour outline, the 4 berths colour-coded by occupancy, a tug-base landmark, live tug
- * dots, a weather chip, and arrival/departure chips for vessels not yet resolved to a berth.
+ * dots and a weather chip. (S9: the arrival/departure chip channel was DELETED — its two events
+ * never gained a production publisher in the project's whole life; Moji's recorded decision was
+ * remove-not-wire, since berth labels already show arrivals honestly. Audit C-05's content half.)
  * Simple shapes only (no sprites — see {@link MapPainter}'s javadoc). Rendering is delegated to
  * {@link MapPainter} against a {@link MapModel} the panel keeps up to date; the model itself is a
  * plain POJO, unit-tested headless with no Swing involved (see {@code MapModelTest}).
@@ -30,7 +30,7 @@ import it.unige.portcommand.util.Subscription;
  * delivery-mode concept at all, unlike {@link EventBus}) — so this panel does the EDT hop itself
  * via {@link SwingUtilities#invokeLater} before touching the model. {@link EventBus} in
  * {@link DeliveryMode#EDT} mode already dispatches via {@code invokeLater} internally, so the
- * weather/vessel-arrival/departure subscriptions below do NOT re-wrap — doing so would just be a
+ * weather subscription below does NOT re-wrap — doing so would just be a
  * redundant extra queue hop.
  *
  * <p><b>{@code PortStateArtifact.subscribe} has no cancel method</b> (a task-06 API — out of scope
@@ -47,8 +47,6 @@ public final class MapPanel extends JPanel {
 
     private final MapModel model = new MapModel();
     private final Subscription<WeatherChangeEvent> weatherSubscription;
-    private final Subscription<VesselArrivedEvent> vesselArrivedSubscription;
-    private final Subscription<VesselDepartedEvent> vesselDepartedSubscription;
     private volatile boolean active = true;
 
     public MapPanel(EventBus eventBus, PortStateArtifact portStateArtifact) {
@@ -76,10 +74,6 @@ public final class MapPanel extends JPanel {
 
         this.weatherSubscription =
                 eventBus.subscribe(WeatherChangeEvent.class, model::applyWeather, DeliveryMode.EDT);
-        this.vesselArrivedSubscription =
-                eventBus.subscribe(VesselArrivedEvent.class, model::applyVesselArrived, DeliveryMode.EDT);
-        this.vesselDepartedSubscription =
-                eventBus.subscribe(VesselDepartedEvent.class, model::applyVesselDeparted, DeliveryMode.EDT);
     }
 
     @Override
@@ -93,8 +87,6 @@ public final class MapPanel extends JPanel {
         super.removeNotify();
         active = false;
         weatherSubscription.cancel();
-        vesselArrivedSubscription.cancel();
-        vesselDepartedSubscription.cancel();
     }
 
     /** Test-only: the model backing this panel's rendering. */

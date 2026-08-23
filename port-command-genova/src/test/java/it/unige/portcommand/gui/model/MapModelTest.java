@@ -7,8 +7,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import it.unige.portcommand.agents.BerthOccupancy;
 import it.unige.portcommand.agents.TugStatus;
 import it.unige.portcommand.artifacts.PortStateUpdate;
-import it.unige.portcommand.gui.events.VesselArrivedEvent;
-import it.unige.portcommand.gui.events.VesselDepartedEvent;
 import it.unige.portcommand.gui.events.WeatherChangeEvent;
 import it.unige.portcommand.harbourmaster.BerthPositions;
 import it.unige.portcommand.harbourmaster.TugBasePositions;
@@ -110,36 +108,8 @@ class MapModelTest {
         assertEquals(40.0, model.weather().orElseThrow().windKnots(), 0.0001, "latest event wins, not accumulated");
     }
 
-    @Test
-    void vesselArrivedThenDepartedRemovesTheChip() {
-        MapModel model = new MapModel();
-        model.applyVesselArrived(new VesselArrivedEvent("V1", "cargo_vessel", "contracted"));
-        assertEquals(1, model.arrivedVessels().size());
-
-        model.applyVesselDeparted(new VesselDepartedEvent("V1"));
-        assertTrue(model.arrivedVessels().isEmpty());
-    }
-
-    @Test
-    void duplicateArrivalForTheSameVesselIdDoesNotDuplicateTheChip() {
-        MapModel model = new MapModel();
-        model.applyVesselArrived(new VesselArrivedEvent("V1", "cargo_vessel", "contracted"));
-        model.applyVesselArrived(new VesselArrivedEvent("V1", "cargo_vessel", "contracted"));
-
-        assertEquals(1, model.arrivedVessels().size());
-    }
-
-    @Test
-    void departingAnUnknownVesselIsANoOpAndDoesNotFireOnChange() {
-        MapModel model = new MapModel();
-        AtomicInteger changes = new AtomicInteger();
-        model.setOnChange(changes::incrementAndGet);
-
-        model.applyVesselDeparted(new VesselDepartedEvent("never-arrived"));
-
-        assertTrue(model.arrivedVessels().isEmpty());
-        assertEquals(0, changes.get(), "a departure for a vessel never recorded as arrived must not notify listeners");
-    }
+    // S9: the three arrival/departure-chip cases were DELETED with their events (audit C-05's
+    // dead render path — no production publisher ever existed; Moji's decision: remove, not wire).
 
     @Test
     void onChangeFiresOnEveryMutatingApplyCall() {
@@ -150,9 +120,8 @@ class MapModelTest {
         model.applyBerthDelta(new PortStateUpdate.BerthDelta("berth_1", BerthOccupancy.free("berth_1")));
         model.applyTugDelta(new PortStateUpdate.TugDelta("tug_1", new Position(1, 1, 0), TugStatus.IDLE));
         model.applyWeather(new WeatherChangeEvent(10.0, "good", 0.2, "sunny", false));
-        model.applyVesselArrived(new VesselArrivedEvent("V1", "ferry", "walk_in"));
 
-        assertEquals(4, changes.get());
+        assertEquals(3, changes.get());
     }
 
     @Test
