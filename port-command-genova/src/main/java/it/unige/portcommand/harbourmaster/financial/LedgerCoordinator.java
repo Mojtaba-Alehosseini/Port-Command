@@ -77,7 +77,12 @@ public final class LedgerCoordinator {
     private final WalletLedger wallet;
     private final ReputationLedger reputation;
 
-    private final Set<String> chargedTugJobs = ConcurrentHashMap.newKeySet();
+    /** S9 (P1-8): Set → Map so the decline refund knows the recorded cost — the coordinator is
+     * the money memory; the decline wire carries no amounts. Key stays conversationId|tugId. */
+    private final java.util.concurrent.ConcurrentMap<String, Double> chargedTugJobs =
+            new ConcurrentHashMap<>();
+    /** Exactly-once refunds, mirroring the charge dedupe (S9). */
+    private final Set<String> refundedTugJobs = ConcurrentHashMap.newKeySet();
     private final Set<String> creditedContracts = ConcurrentHashMap.newKeySet();
     private final Set<String> chargedClearances = ConcurrentHashMap.newKeySet();
     private final Set<String> creditedDeals = ConcurrentHashMap.newKeySet();
@@ -99,6 +104,9 @@ public final class LedgerCoordinator {
         subscriptions.add(eventBus.subscribe(WithdrawalEvent.class, this::onWithdrawal, DeliveryMode.CALLER_THREAD));
         subscriptions.add(eventBus.subscribe(
                 TugJobAwardedEvent.class, this::onTugJobAwarded, DeliveryMode.CALLER_THREAD));
+        subscriptions.add(eventBus.subscribe(
+                it.unige.portcommand.gui.events.TugJobDeclinedEvent.class,
+                this::onTugJobDeclined, DeliveryMode.CALLER_THREAD));
         subscriptions.add(eventBus.subscribe(
                 ContractedFeeEarnedEvent.class, this::onContractedFee, DeliveryMode.CALLER_THREAD));
         subscriptions.add(eventBus.subscribe(
@@ -218,7 +226,8 @@ public final class LedgerCoordinator {
      * must stay atomic together.
      */
     public void onTugJobAwarded(TugJobAwardedEvent event) {
-        if (!chargedTugJobs.add(event.conversationId() + "|" + event.tugId())) {
+        if (chargedTugJobs.putIfAbsent(event.conversationId() + "|" + event.tugId(),
+                event.cost()) != null) {
             log.warn("duplicate TugJobAwardedEvent for {}/{} — already charged, ignoring",
                     event.conversationId(), event.tugId());
             return;
@@ -247,6 +256,33 @@ public final class LedgerCoordinator {
         if (surcharge > 0) {
             credit(surcharge, IncomeRules.SOURCE_EXTRA_TUG, event.vesselId(), event.simTimeMillis());
         }
+    }
+
+    /**
+     * S9 (P1-8): a winning tug REFUSEd after the charge-at-award landed — post the COMPENSATING
+     * income entry ({@code tug_job_refund}, amount = the recorded charge). Append-only honoured
+     * (never a mutation, never a negative expense — the {@code <=0} guards stand); exactly-once
+     * by requiring the charge key PRESENT and the refund key ABSENT. A decline for a never-
+     * charged pair is refused loudly — refunding money never spent would be invented income.
+     * The extra-tug surcharge is deliberately NOT reversed (see TugJobDeclinedEvent's javadoc).
+     */
+    public void onTugJobDeclined(it.unige.portcommand.gui.events.TugJobDeclinedEvent event) {
+        String key = event.conversationId() + "|" + event.tugId();
+        Double cost = chargedTugJobs.get(key);
+        if (cost == null) {
+            log.warn("TugJobDeclinedEvent for {}/{} but no charge is recorded — refusing the refund",
+                    event.conversationId(), event.tugId());
+            return;
+        }
+        if (!refundedTugJobs.add(key)) {
+            log.warn("duplicate TugJobDeclinedEvent for {}/{} — already refunded, ignoring",
+                    event.conversationId(), event.tugId());
+            return;
+        }
+        credit(IncomeRules.tugJobRefund(cost), IncomeRules.SOURCE_TUG_JOB_REFUND,
+                event.vesselId(), event.simTimeMillis());
+        log.info("{}: refunded €{} for {}'s declined award on {} ({})", event.vesselId(), cost,
+                event.tugId(), event.conversationId(), event.reason());
     }
 
     /** Customs granted a clearance: €100. */

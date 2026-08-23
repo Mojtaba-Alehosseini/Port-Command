@@ -14,13 +14,12 @@ import it.unige.portcommand.util.Event;
  * either. Publishing here is what keeps the Contract Net economically real — a cheaper winning
  * bid actually saves the port money.
  *
- * <p><strong>Charge-point: AWARD, not completion</strong> (decided 2026-07-17). The known cost:
- * a winning tug that has since committed elsewhere silently declines the ACCEPT
- * ({@code HandleAcceptRejectBehaviour}, no reply — {@code RealCnpCoordinator}'s documented
- * accepted exit ramp), so the port is charged a call-out for an escort that never runs.
- * Charging on completion instead would trade that rare over-charge for a free tug on the same
- * path, and would require making {@code escort_complete} functional (it is currently swallowed
- * by {@code ForwardWalkInToPlayerBehaviour}'s broad template).
+ * <p><strong>Charge-point: AWARD, not completion</strong> (decided 2026-07-17). The known cost
+ * was: a winning tug that had since committed elsewhere silently declined the ACCEPT and the
+ * port kept paying for an escort that never ran. <strong>Resolved S9 (audit P1-8):</strong> the
+ * decline now SENDS (protocol-tagged REFUSE), and {@code LedgerCoordinator.onTugJobDeclined}
+ * posts the compensating {@code tug_job_refund} income for exactly the recorded charge — the
+ * charge-at-award decision stands, with its one over-charge path reversed instead of accepted.
  *
  * <p><strong>{@code conversationId} alone is NOT an idempotency key.</strong> Two co-winning
  * tugs for one vessel share a single CNP {@code cfpId}, so a ledger MUST dedupe on

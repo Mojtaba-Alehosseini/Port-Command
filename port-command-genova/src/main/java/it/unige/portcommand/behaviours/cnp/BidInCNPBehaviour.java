@@ -18,8 +18,9 @@ import org.slf4j.LoggerFactory;
 /**
  * Tug side of the Contract Net: answers every {@code CFP} from the HarbourMaster
  * with a {@code PROPOSE} (if available) or a {@code REFUSE} (task 08 §8.2). The
- * REFUSE is emitted inline here — {@code RefuseAssignmentBehaviour} stays a parked
- * stub (task-07 precedent).
+ * CFP-window REFUSE is emitted inline here; {@code RefuseAssignmentBehaviour} — a parked
+ * stub until S9 — now owns the POST-AWARD decline (a different protocol tag, a different
+ * consumer: audit P1-8, §4.4 tug plan 3).
  *
  * <p>Bid maths route entirely through {@link TugMath}: pixels→km at the single
  * boundary, then knots→km/h, so the quoted {@code eta_minutes} matches what the

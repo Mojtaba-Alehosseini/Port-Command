@@ -679,7 +679,15 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
                     MessageTemplate.not(MessageTemplate.MatchProtocol(InitiateCNPBehaviour.CNP_PROTOCOL)),
                     MessageTemplate.not(MessageTemplate.MatchProtocol(HandleWeatherAlertBehaviour.WEATHER_ALERT_PROTOCOL))),
                     MessageTemplate.and(
-                            MessageTemplate.not(MessageTemplate.MatchProtocol(HandleEmergencyBehaviour.CUSTOMS_CLEARANCE_PROTOCOL)),
+                            MessageTemplate.and(
+                                    MessageTemplate.not(MessageTemplate.MatchProtocol(HandleEmergencyBehaviour.CUSTOMS_CLEARANCE_PROTOCOL)),
+                                    // S9 (P1-8): a tug's post-award decline is a REFUSE on the game
+                                    // ontology — without this exclusion the A-01 vessel-refuse arm
+                                    // consumed it and surfaced a phantom chat line while the real
+                                    // handler starved (found by the born-red e2e's silent run).
+                                    MessageTemplate.not(MessageTemplate.MatchProtocol(
+                                            it.unige.portcommand.behaviours.cnp
+                                                    .RefuseAssignmentBehaviour.POST_AWARD_DECLINE_PROTOCOL))),
                             MessageTemplate.not(MessageTemplate.MatchProtocol(AutoFlowDispatcherBehaviour.TERMINAL_BERTH_PROTOCOL)))));
 
     private static String text(JsonNode node, String field) {

@@ -193,6 +193,10 @@ public final class HarbourMasterAgent extends PortCommandAgent
         addBehaviour(dispatchPlayerCommand);
         addBehaviour(new HandleEmergencyBehaviour(this));
         addBehaviour(new HandleWeatherAlertBehaviour(this));
+        // S9 (P1-8): the post-award tug-decline receiver — uncounted parent-package behaviour,
+        // catalogue stays 52. Permanent, because the per-cfpId bid collector deregisters at
+        // award and a decline arrives after.
+        addBehaviour(new it.unige.portcommand.behaviours.HandleTugDeclineBehaviour(this));
         addBehaviour(new EndOfDayDetectBehaviour(this, simClock));
         this.poissonSpawn = new PoissonSpawnBehaviour(this, simClock, randomSource, spawner,
                 marketHistory, startingSpawnCount);
@@ -596,7 +600,11 @@ public final class HarbourMasterAgent extends PortCommandAgent
                 MessageTemplate.or(AutoFlowDispatcherBehaviour.TEMPLATE, ForwardWalkInToPlayerBehaviour.TEMPLATE),
                 MessageTemplate.or(
                         MessageTemplate.or(HandleWeatherAlertBehaviour.TEMPLATE, HandleEmergencyBehaviour.TEMPLATE),
-                        MessageTemplate.MatchProtocol(InitiateCNPBehaviour.CNP_PROTOCOL)));
+                        // S9 (P1-8): the post-award decline tag is DISTINCT from the CNP
+                        // protocol — without its own arm the catch-all would swallow it.
+                        MessageTemplate.or(
+                                MessageTemplate.MatchProtocol(InitiateCNPBehaviour.CNP_PROTOCOL),
+                                it.unige.portcommand.behaviours.HandleTugDeclineBehaviour.TEMPLATE)));
     }
 
 }

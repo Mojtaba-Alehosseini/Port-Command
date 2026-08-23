@@ -126,8 +126,18 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
             }
         }
 
+        // S9 (P1-8): MERGE with any surviving escort rather than replace. Every pre-S9 caller
+        // reached this with an empty assigned set (fresh grant, weather re-dispatch after the
+        // hold's cancel, restore re-CNP), so union == winners there; the shortfall re-tender
+        // after a post-award decline is the case with a genuine survivor, and replacing wiped
+        // the co-winner from tracking (found by the decline e2e).
         hm.activeVessels().computeIfPresent(req.vesselId(),
-                (id, tracking) -> tracking.withTugs(winners).withStage(Stage.IN_TRANSIT));
+                (id, tracking) -> {
+                    java.util.LinkedHashSet<String> escort =
+                            new java.util.LinkedHashSet<>(tracking.assignedTugs());
+                    escort.addAll(winners);
+                    return tracking.withTugs(java.util.List.copyOf(escort)).withStage(Stage.IN_TRANSIT);
+                });
         hm.cnpRetryAttempts().remove(req.vesselId());
         // Awards are on the wire (before any queued CFP, per-pair FIFO) — the winning tugs will
         // set currentJob before they see the next session's CFP, which is what makes their

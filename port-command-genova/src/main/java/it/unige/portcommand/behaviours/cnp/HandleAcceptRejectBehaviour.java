@@ -57,15 +57,30 @@ public final class HandleAcceptRejectBehaviour extends CyclicBehaviour {
             return;
         }
 
-        // ACCEPT_PROPOSAL
-        Position pickup = tug.takeBid(conversationId);
-        if (pickup == null) {
-            log.warn("{} ACCEPT for unknown/expired CNP {} — ignoring", tug.tugId(), conversationId);
+        // ACCEPT_PROPOSAL — the decline branches SEND since S9 (audit P1-8; §4.4 tug plan 3):
+        // each hands the award to RefuseAssignmentBehaviour, whose protocol-tagged REFUSE
+        // triggers the HarbourMaster's refund + shortfall re-tender. BUSY is checked FIRST —
+        // taking the first award clears every other pending bid ("now busy" below), so a
+        // second award would read as unknown_bid when the honest reason is the commitment.
+        if (tug.currentJob() != null) {
+            log.warn("{} ACCEPT on CNP {} but already committed to {} — declining (busy)",
+                    tug.tugId(), conversationId, tug.currentJob().vesselId());
+            myAgent.addBehaviour(new RefuseAssignmentBehaviour(tug, msg, "busy"));
             return;
         }
-        if (tug.currentJob() != null) {
-            log.warn("{} ACCEPT on CNP {} but already committed to {} — declining",
-                    tug.tugId(), conversationId, tug.currentJob().vesselId());
+        Position pickup = tug.takeBid(conversationId);
+        if (pickup == null) {
+            log.warn("{} ACCEPT for unknown/expired CNP {} — declining (unknown_bid)",
+                    tug.tugId(), conversationId);
+            myAgent.addBehaviour(new RefuseAssignmentBehaviour(tug, msg, "unknown_bid"));
+            return;
+        }
+        if (tug.fuelState() < TugAgent.LOW_FUEL_THRESHOLD) {
+            // The bid-to-award window: the tank drained below the SAME threshold the CFP gate
+            // uses (§4.4 CNP edge case 2, now enforced at the award stage too).
+            log.warn("{} ACCEPT on CNP {} but fuel {} is below {} — declining (low_fuel)",
+                    tug.tugId(), conversationId, tug.fuelState(), TugAgent.LOW_FUEL_THRESHOLD);
+            myAgent.addBehaviour(new RefuseAssignmentBehaviour(tug, msg, "low_fuel"));
             return;
         }
 

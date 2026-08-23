@@ -3,8 +3,10 @@ package it.unige.portcommand.harbourmaster;
 /**
  * Seam between the HarbourMaster's auto-flow dispatch and the tug Contract Net.
  * {@link RealCnpCoordinator} implements the real CFP/collect/award cycle (task 11/ADR-08), with
- * zero-bid retry and Settings-driven timing added by task 15; post-ACCEPT-failure handling
- * (a winning tug REFUSEs) remains the one documented, accepted exit ramp.
+ * zero-bid retry and Settings-driven timing added by task 15. The one documented exit ramp —
+ * post-ACCEPT-failure handling (a winning tug REFUSEs) — was CLOSED in S9 (audit P1-8):
+ * {@code HandleTugDeclineBehaviour} refunds the charge-at-award, drops the decliner from the
+ * escort, and re-tenders the shortfall through this same seam.
  */
 public interface CnpCoordinator {
 

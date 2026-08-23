@@ -464,6 +464,144 @@ class HarbourMasterAgentIT {
         assertEquals(2, rejectCount);
     }
 
+    /**
+     * S9 (audit P1-8) — the CNP's last exit ramp, closed end to end: a WINNING tug REFUSEs its
+     * award AFTER the charge landed. The HarbourMaster must refund exactly the recorded charge
+     * (a compensating {@code tug_job_refund} income — append-only, never a mutation), drop the
+     * decliner from the escort, and re-tender the SHORTFALL on a fresh CNP that a replacement
+     * wins and is charged for — net money: one charge per tug that actually escorts. Born red
+     * on the pre-S9 tree at the refund assert (the decline was a silent no-op; nothing ever
+     * arrived at the HM). The duplicate decline at the end pins the exactly-once guard.
+     */
+    @Test
+    void cnpPostAwardDecline_refundsDropsAndRetendersTheShortfall() throws Exception {
+        double draft = 13.5;
+        double length = 210.0;
+        int tonnage = 85_000;
+        String berthId = PrologQueries.findCompatibleBerths("tanker", draft, length, tonnage).get(0);
+        ServiceContract contract = new ServiceContract("CONTRACT-T9", "T001", "tanker", berthId, 9000.0, 10, 0L);
+        VesselSpec spec = new VesselSpec("T001", "tanker", draft, length, tonnage, "liquid_bulk", 0L);
+        HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-T9", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe vessel = spawnProbe("t9_vessel", null);
+        Map<String, Probe> tugs = new LinkedHashMap<>();
+        tugs.put("t9_tuga", spawnProbe("t9_tuga", "tug-escort"));
+        tugs.put("t9_tugb", spawnProbe("t9_tugb", "tug-escort"));
+        tugs.put("t9_tugc", spawnProbe("t9_tugc", "tug-escort"));
+
+        vessel.outbox.put(contractRequest(hm, "CONTRACT-T9", spec, "t9_vessel"));
+        assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000));
+
+        Map<String, ACLMessage> cfps = new LinkedHashMap<>();
+        for (Map.Entry<String, Probe> e : tugs.entrySet()) {
+            ACLMessage cfp = pollUntil(e.getValue().inbox, m -> true, 10_000);
+            assertNotNull(cfp, e.getKey() + " must receive the first CFP");
+            cfps.put(e.getKey(), cfp);
+        }
+        // tuga and tugb dominate; tugc is priced out of round 1 but stays available.
+        tugs.get("t9_tuga").outbox.put(bidReply(cfps.get("t9_tuga"), 100.0, 5.0, 0.95));
+        tugs.get("t9_tugb").outbox.put(bidReply(cfps.get("t9_tugb"), 150.0, 8.0, 0.80));
+        tugs.get("t9_tugc").outbox.put(bidReply(cfps.get("t9_tugc"), 500.0, 30.0, 0.10));
+
+        ACLMessage acceptA = pollUntil(tugs.get("t9_tuga").inbox,
+                m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000);
+        assertNotNull(acceptA, "t9_tuga wins seat 1");
+        assertNotNull(pollUntil(tugs.get("t9_tugb").inbox,
+                m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000), "t9_tugb wins seat 2");
+        assertTrue(waitForTracking(hm, "T001", t -> t.assignedTugs().size() == 2, 10_000),
+                "staging: both winners recorded before the decline");
+        double chargeA = 100.0; // ExpenseRules.tugJob = the raw winning bid (its own javadoc)
+
+        // --- The decline: tuga bails AFTER the charge, on the distinct post-award tag. ---
+        ACLMessage decline = it.unige.portcommand.core.MessageFactory.reply(acceptA, ACLMessage.REFUSE);
+        decline.setProtocol(it.unige.portcommand.behaviours.cnp
+                .RefuseAssignmentBehaviour.POST_AWARD_DECLINE_PROTOCOL);
+        decline.setContent(TerminalJson.write(Map.of(
+                "reason", "busy", "vessel_id", "T001",
+                "conversation_id", acceptA.getConversationId())));
+        tugs.get("t9_tuga").outbox.put(decline);
+
+        // 1. The compensating entry: exactly the recorded charge, source tug_job_refund.
+        assertTrue(waitUntilLedger(hm, () -> hm.walletLedger().incomeHistory().stream()
+                        .filter(e -> IncomeRules.SOURCE_TUG_JOB_REFUND.equals(e.source()))
+                        .filter(e -> "T001".equals(e.vesselId()))
+                        .count() == 1, 10_000),
+                "the declined award's charge must be refunded exactly once");
+        assertEquals(chargeA, hm.walletLedger().incomeHistory().stream()
+                        .filter(e -> IncomeRules.SOURCE_TUG_JOB_REFUND.equals(e.source()))
+                        .mapToDouble(it.unige.portcommand.harbourmaster.IncomeEvent::amount).sum(),
+                1e-9, "refund amount == the recorded charge, never invented");
+
+        // 2+3. The shortfall re-tender: every tug sees a FRESH CFP (new conversation id).
+        Map<String, ACLMessage> cfps2 = new LinkedHashMap<>();
+        for (Map.Entry<String, Probe> e : tugs.entrySet()) {
+            ACLMessage cfp2 = pollUntil(e.getValue().inbox,
+                    m -> m.getPerformative() == ACLMessage.CFP
+                            && !cfps.get(e.getKey()).getConversationId().equals(m.getConversationId()),
+                    10_000);
+            assertNotNull(cfp2, e.getKey() + " must receive the shortfall re-tender CFP");
+            cfps2.put(e.getKey(), cfp2);
+        }
+        // The decliner stays out; tugc takes the seat this time.
+        tugs.get("t9_tugc").outbox.put(bidReply(cfps2.get("t9_tugc"), 120.0, 6.0, 0.90));
+        assertNotNull(pollUntil(tugs.get("t9_tugc").inbox,
+                m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "the replacement must win the 1-seat re-tender");
+        assertTrue(waitForTracking(hm, "T001", t -> t.assignedTugs().contains("t9_tugc")
+                        && t.assignedTugs().contains("t9_tugb")
+                        && !t.assignedTugs().contains("t9_tuga")
+                        && t.assignedTugs().size() == 2, 10_000),
+                "the escort is whole again: the survivor + the replacement, never the decliner — "
+                        + "the vessel is not stranded");
+
+        // Money: three charges (a, b, c), ONE refund (a) — net one charge per escorting tug.
+        assertEquals(3, hm.walletLedger().expenseHistory().stream()
+                .filter(e -> it.unige.portcommand.harbourmaster.financial.ExpenseRules.SOURCE_TUG_JOB
+                        .equals(e.source()))
+                .filter(e -> "T001".equals(e.vesselId())).count());
+
+        // Exactly-once: a duplicate decline changes nothing.
+        ACLMessage duplicate = it.unige.portcommand.core.MessageFactory.reply(acceptA, ACLMessage.REFUSE);
+        duplicate.setProtocol(it.unige.portcommand.behaviours.cnp
+                .RefuseAssignmentBehaviour.POST_AWARD_DECLINE_PROTOCOL);
+        duplicate.setContent(TerminalJson.write(Map.of(
+                "reason", "busy", "vessel_id", "T001",
+                "conversation_id", acceptA.getConversationId())));
+        tugs.get("t9_tuga").outbox.put(duplicate);
+        Thread.sleep(1_000); // bounded settle; the assert below is the state check
+        assertEquals(1, hm.walletLedger().incomeHistory().stream()
+                        .filter(e -> IncomeRules.SOURCE_TUG_JOB_REFUND.equals(e.source())).count(),
+                "a duplicate decline must not double-refund (the mirror dedupe)");
+    }
+
+    /** Bounded poll over the tracking map (the committed sleep-poll pattern). */
+    private static boolean waitForTracking(HarbourMasterAgent hm, String vesselId,
+            java.util.function.Predicate<it.unige.portcommand.harbourmaster.VesselTracking> cond,
+            long timeoutMs) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            var t = hm.activeVessels().get(vesselId);
+            if (t != null && cond.test(t)) {
+                return true;
+            }
+            Thread.sleep(50);
+        }
+        var t = hm.activeVessels().get(vesselId);
+        return t != null && cond.test(t);
+    }
+
+    /** Bounded poll over a ledger condition. */
+    private static boolean waitUntilLedger(HarbourMasterAgent hm,
+            java.util.function.BooleanSupplier cond, long timeoutMs) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            if (cond.getAsBoolean()) {
+                return true;
+            }
+            Thread.sleep(50);
+        }
+        return cond.getAsBoolean();
+    }
+
     // ==================== Channel B: walk-in relay ====================
 
     @Test

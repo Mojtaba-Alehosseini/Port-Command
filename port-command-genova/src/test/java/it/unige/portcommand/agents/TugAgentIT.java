@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -250,6 +251,75 @@ class TugAgentIT {
         send(cfp("cnp-e2", "tug_1"));
         ACLMessage reply = pollReply(5000);
         assertEnvelope(reply, ACLMessage.PROPOSE);
+    }
+
+    // --- S9 (P1-8): the post-ACCEPT decline finally SENDS — §4.4 tug plan 3 -----------------
+
+    /**
+     * Born red on the pre-S9 tree: the busy branch logged "declining" and sent NOTHING — the
+     * HarbourMaster kept a phantom escort it had already paid for. Now a double-award drives a
+     * protocol-tagged REFUSE (reason busy) back to the awarder.
+     */
+    @Test
+    void postAwardBusyDecline_sendsProtocolTaggedRefuse() throws Exception {
+        spawnTug("tug_1", BASES[0], 1.0);
+
+        send(cfp("cnp-pa1", "tug_1"));
+        ACLMessage bid1 = pollReply(5000);
+        assertEnvelope(bid1, ACLMessage.PROPOSE);
+        send(cfp("cnp-pa2", "tug_1"));
+        ACLMessage bid2 = pollReply(5000);
+        assertEnvelope(bid2, ACLMessage.PROPOSE);
+
+        sendAccept(bid1, "V1", BERTH);
+        assertNotNull(awaitTug("tug_1", d -> d.status() == TugStatus.EN_ROUTE_TO_VESSEL, 40),
+                "staging: the first award is taken");
+
+        inbox.clear();
+        sendAccept(bid2, "V2", BERTH); // the second award arrives while committed to V1
+        ACLMessage decline = pollReply(5000);
+        assertNotNull(decline, "the losing award must be DECLINED on the wire, not silently dropped");
+        assertEnvelope(decline, ACLMessage.REFUSE);
+        assertEquals("busy", node(decline).get("reason").asText());
+        assertEquals("cnp-pa2", decline.getConversationId(), "the decline rides the award's conversation");
+        assertEquals(it.unige.portcommand.behaviours.cnp.RefuseAssignmentBehaviour.POST_AWARD_DECLINE_PROTOCOL,
+                decline.getProtocol(), "a DISTINCT post-award tag — never the CFP-refuse shape");
+        assertEquals("V2", node(decline).get("vessel_id").asText());
+    }
+
+    /**
+     * Born red likewise: the fuel-drop-between-bid-and-award seam (§4.4 CNP edge case 2 at the
+     * AWARD stage). The tug bids healthy, burns below the low-fuel threshold before the ACCEPT
+     * lands, and must decline rather than take a job it cannot run.
+     */
+    @Test
+    void postAwardLowFuelDecline_sendsProtocolTaggedRefuse() throws Exception {
+        it.unige.portcommand.persistence.AgentDirectory directory =
+                new it.unige.portcommand.persistence.AgentDirectory();
+        boot.getSpawner().spawn("tug_1", TugAgent.class, new Object[] {
+                new InitArgs.TugInitArgs("tug_1", BASES[0], BASE_FARE, FUEL_COST_PER_KM,
+                        TOP_SPEED_KNOTS, 0.25),
+                portState, boot.getSimClock(), directory});
+
+        send(cfp("cnp-pf1", "tug_1"));
+        ACLMessage bid = pollReply(5000);
+        assertEnvelope(bid, ACLMessage.PROPOSE);
+        assertEquals(0.25, node(bid).get("fuel_state").asDouble(), 1e-9, "bids healthy at 0.25");
+
+        // The bid-to-award window: the tank drains below LOW_FUEL_THRESHOLD (0.20).
+        TugAgent tug = directory.byName("tug_1").map(TugAgent.class::cast).orElseThrow();
+        tug.consumeFuel(15.0); // 15 km * 0.005/km = 0.075 -> 0.175
+
+        inbox.clear();
+        sendAccept(bid, "V1", BERTH);
+        ACLMessage decline = pollReply(5000);
+        assertNotNull(decline, "an award the tank can no longer honour must be declined");
+        assertEnvelope(decline, ACLMessage.REFUSE);
+        assertEquals("low_fuel", node(decline).get("reason").asText());
+        assertEquals(it.unige.portcommand.behaviours.cnp.RefuseAssignmentBehaviour.POST_AWARD_DECLINE_PROTOCOL,
+                decline.getProtocol());
+        assertNull(awaitTug("tug_1", d -> d.status() == TugStatus.EN_ROUTE_TO_VESSEL, 3),
+                "the declining tug must NOT take the job");
     }
 
     // --- helpers -------------------------------------------------------------

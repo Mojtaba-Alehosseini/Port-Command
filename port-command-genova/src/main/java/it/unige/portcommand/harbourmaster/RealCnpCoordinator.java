@@ -18,7 +18,9 @@ import org.slf4j.LoggerFactory;
  * ADR-08; only the name was stale. Zero-bid retry is now bounded via task 15's
  * {@code CnpRetryBehaviour}, scheduled from {@code AwardContractBehaviour.holdVessel}; the CFP
  * reply-by window is Settings-driven ({@code InitiateCNPBehaviour}). Post-ACCEPT-failure handling
- * (a winning tug REFUSEs) is not implemented — the documented, accepted exit ramp.
+ * (a winning tug REFUSEs) is IMPLEMENTED since S9 (audit P1-8) — the last exit ramp closed:
+ * the tug's protocol-tagged REFUSE reaches {@code HandleTugDeclineBehaviour}, which refunds and
+ * re-tenders the shortfall through {@code initiate()} (the queue below serializes it as usual).
  *
  * <h2>One Contract Net at a time (task 24, visual-checkpoint-#5 B2)</h2>
  * Concurrent CNPs used to race: several same-instant {@code initiate()} calls (the weather-clear

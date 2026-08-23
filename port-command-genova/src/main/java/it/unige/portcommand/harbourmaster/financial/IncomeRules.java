@@ -40,6 +40,10 @@ public final class IncomeRules {
     public static final String SOURCE_BUNKER_FUEL = "bunker_fuel";
     public static final String SOURCE_WATER_WASTE = "water_waste";
     public static final String SOURCE_PREMIUM = "premium_surcharge";
+    /** S9 (P1-8): the compensating entry for a post-award tug decline — an INFLOW that reverses
+     * the charge-at-award without touching the append-only expense history. EOD nets exactly;
+     * the income line includes it, honestly (money returned IS an inflow). */
+    public static final String SOURCE_TUG_JOB_REFUND = "tug_job_refund";
 
     /** planning/20: extra_tug_surcharge +€500 per tug beyond the first. */
     private static final double EXTRA_TUG_EUR = 500.0;
@@ -114,6 +118,15 @@ public final class IncomeRules {
             throw new IllegalArgumentException("tugsUsed must be >= 0: " + tugsUsed);
         }
         return tugsUsed <= 1 ? 0.0 : (tugsUsed - 1) * EXTRA_TUG_EUR;
+    }
+
+    /** S9 (P1-8): the compensating refund for a declined tug award — exactly the recorded
+     * charge, never invented. Guards mirror {@code ExpenseRules.tugJob}. */
+    public static double tugJobRefund(double chargedCost) {
+        if (chargedCost <= 0) {
+            throw new IllegalArgumentException("chargedCost must be > 0: " + chargedCost);
+        }
+        return chargedCost;
     }
 
     /** +€500 for a hazmat cargo. */
