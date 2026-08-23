@@ -22,19 +22,40 @@
 %     5h -> [5, h], 14:20 kept whole). Grammar rules must never call downcase_atom/2 or
 %     re-normalise — duplicating it here would make case mismatches fail silently.
 %
-% FRAME SHAPE (the contract the Java decoder in nlp/Frame.java depends on):
-%   frame(commerce_sell, [move=Move | Slots])
-%   Move  ∈ {propose, counter, accept, reject, ask}   — always the FIRST element.
-%   Slots is a canonically-ordered subset of:
-%     money=price(Amount, Currency)   Currency ∈ {eur, usd}   (Commerce_sell "money")
-%     duration=Hours                  1..24                   (Commerce_sell "duration")
-%     berth=berth_1..berth_4                                  (Commerce_sell "goods")
-%     deadline=Clock                  e.g. '19:30'            (Commerce_sell "deadline")
-%     reason=Reason                   reject moves only
-%     topic=Topic                     ask moves only
-%   Omitted slots are absent, never bound to a placeholder — Frame.fromProlog maps the
-%   list positionally-independently, but the order above is still a fixed contract so
-%   the golden corpus can assert on it.
+% FRAME SHAPE (the contract the Java decoder in nlp/Frame.java depends on).
+% Updated S9 (audit P2-9) to the grammar 16-M2 + S8 actually built — the shape below had
+% frozen at 16-M1's five plain moves while the phenomenon blocks grew around it.
+%
+% TWO frame functors:
+%   frame(commerce_sell, [move=Move | Elements])       — the negotiation frames
+%     Move ∈ {propose, counter, accept, reject, ask}   — always the FIRST element —
+%       plus constrain (the negation block: "nothing below 2000" -> move=constrain).
+%     Elements is a canonically-ordered subset of:
+%       money=price(Amount, Currency)   Currency ∈ {eur, usd}   (Commerce_sell "money")
+%       duration=Hours                  1..24                   (Commerce_sell "duration")
+%       berth=berth_1..berth_4                                  (Commerce_sell "goods")
+%         (explicit in plain moves AND — since S8 — in ellipsis clause 1: "1900 for
+%          6 hours at berth 3"; otherwise completed from the standing offer by the
+%          ellipsis/delta blocks, or resolved by anaphora "that berth")
+%       deadline=Clock                  e.g. '19:30'            (Commerce_sell "deadline")
+%       reason=Reason                   reject moves only
+%       topic=Topic                     ask moves only
+%       polarity=negative, bound=below|above   constrain moves only (negation block)
+%       addressee=Id                    appended LAST by the vocative block
+%         ("Carthago: ..."/"tell the tanker ...") and by anaphora's definite
+%         descriptions ("accept the tanker") — any commerce_sell move can carry it.
+%   frame(command, Elements)                            — the imperative block
+%     Elements = [action=A, quantifier=all|any|N, patient=Type | Tail] with
+%     Tail ∈ { [target=Id], [condition=C], [] } — "hold all tankers until the wind
+%     drops", "send two tugs to the Carthago". FrameToAcl.buildAll fans the resolved
+%     patient set out to N receivers.
+%
+% ENTRY POINTS: parse_move/2 is the empty-context 16-M1 wrapper (phenomenon blocks
+% inert — the regression guard); parse_move/3 carries ctx(StandingOffer, Roster,
+% LastMentioned) built Java-side from observable snapshot fields only (P-04).
+% Omitted elements are absent, never bound to a placeholder — Frame.fromProlog maps the
+% list positionally-independently, but the order above is still a fixed contract so
+% the golden corpus can assert on it.
 %
 % PRECISION OVER RECALL. Every lexical set here is closed. Anything this grammar rejects
 % falls through to the Rasa fallback (PROJECT_DEFINITION §6.1, task 14) — an over-

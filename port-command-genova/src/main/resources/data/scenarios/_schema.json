@@ -83,7 +83,7 @@
     },
     "contracts": {
       "type": "array",
-      "$comment": "Scenario-local ServiceContracts (snake_case wire keys, same shape as data/contracts.json). Ids must not shadow global entries; these never recur daily.",
+      "$comment": "Scenario-local ServiceContracts (snake_case wire keys, same shape as data/contracts.json). Ids must not shadow global entries; these never recur daily. contracted_fee may sit ABOVE the PROJECT_DEFINITION S7.5 walk-in ceilings BY DESIGN (S9, P2-12): contracts are a different channel — pre-negotiated schedule premiums, no hidden-belief haggle (storm's ST-901 at 9000 vs the tanker walk-in target range 5500-8000, ceiling 8000, is the worked example).",
       "items": {
         "type": "object",
         "required": ["contract_id", "vessel_id", "vessel_type", "berth_id", "contracted_fee", "contracted_hours", "expected_arrival_sim_millis"],
