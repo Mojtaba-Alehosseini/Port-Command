@@ -123,11 +123,13 @@ public final class MainWindow extends JFrame {
 
     /** Live mirror of the three non-clock editable settings (task 21): seeded from
      * {@code defaults.json} and updated on {@link SettingsChangedEvent} so re-opening the Settings
-     * dialog shows the last-applied values. The day length is NOT mirrored here — it is read live
-     * off the {@code SimClock}, which is the single source of truth (and reflects scenario pins). */
-    private String currentDifficulty = Settings.load().difficulty();
-    private boolean currentAutopilot = Settings.load().autopilotEnabled();
-    private String currentLlmModel = Settings.load().llmModel();
+     * dialog shows the last-applied values. S9 (adversarial finding 3): the three field
+     * MIRRORS that used to live here were DELETED — once {@code Settings.load()} became the
+     * session's effective record, a mirror seeded at construction went stale after every
+     * {@code loadGame}, and the new write-through would have PERSISTED the stale value on the
+     * next Apply (a silent revert of the restored settings). The dialog now seeds from
+     * {@code Settings.load()} directly; the day length keeps reading the live {@code SimClock}
+     * (single source of truth for pacing, reflects scenario pins). */
 
     /** The latest REAL settled summary — the Debug menu re-shows it once one exists. */
     private EndOfDaySummary latestSummary;
@@ -190,11 +192,11 @@ public final class MainWindow extends JFrame {
         // restored run settles its own first midnight.
         eventBus.subscribe(GameLoadedEvent.class, e -> {
             latestSummary = null;
-            // A respawned AssistantAgent boots autopilot OFF (its constructor's default), so the
-            // GUI mirror must follow or the Settings dialog would seed a stale ON while the agent is
-            // OFF (adversarial finding 4). Difficulty/llmModel mirrors are cosmetic here (inert /
-            // next-launch) and left as-is — the documented task-22 "settings not re-applied on load".
-            currentAutopilot = false;
+            // S9: the old `currentAutopilot = false` line here compensated for a respawned
+            // AssistantAgent booting autopilot OFF unconditionally. Both halves are gone: the
+            // agent now seeds its flag from Settings.load() (which bootWorld applied from the
+            // SAVE before any agent spawned), and the dialog reads Settings.load() directly —
+            // agent and dialog agree on the RESTORED value by construction.
             reflectMode();
         }, DeliveryMode.EDT);
         eventBus.subscribe(EndOfDayCompletedEvent.class, e -> {
@@ -433,8 +435,9 @@ public final class MainWindow extends JFrame {
     private JMenu buildSettingsMenu(EventBus eventBus) {
         JMenu settings = new JMenu("Settings");
         JMenuItem open = new JMenuItem("Settings…");
-        open.addActionListener(e -> SettingsDialog.open(this, eventBus, currentDifficulty,
-                lifecycle.simClock().realSecondsPerGameDay(), currentAutopilot, currentLlmModel));
+        open.addActionListener(e -> SettingsDialog.open(this, eventBus, Settings.load().difficulty(),
+                lifecycle.simClock().realSecondsPerGameDay(), Settings.load().autopilotEnabled(),
+                Settings.load().llmModel()));
         settings.add(open);
         return settings;
     }
@@ -467,15 +470,20 @@ public final class MainWindow extends JFrame {
         SaveLoadDialog.open(this, session.saveLoadManager(), SaveLoadDialog.Mode.LOAD, null, this::confirmAndLoad);
     }
 
-    /** Applies a {@link SettingsChangedEvent} (task 21). Only the day length has a live effect —
-     * it re-paces the shared SimClock at once. The other three are mirrored so the dialog re-opens
-     * on the last-applied values; difficulty has no runtime consumer in v1 and llmModel is picked
-     * up by the sidecar only on the next launch (see {@link SettingsChangedEvent}). */
+    /** Applies a {@link SettingsChangedEvent} (task 21). The day length re-paces the shared
+     * SimClock at once. S9: every carried knob is written through to {@code Settings.load()}'s
+     * live record — llmModel included (finding 2: it still takes effect only next launch, but
+     * it now SURVIVES the save/load round trip instead of silently reverting to the classpath
+     * default) — so the next save captures the change and a later load restores it (the
+     * fix-campaign's settings-revert limitation, closed). The dialog re-opens on
+     * {@code Settings.load()} directly; no mirrors (finding 3). */
     private void applySettings(SettingsChangedEvent event) {
         lifecycle.simClock().setRealSecondsPerGameDay(event.realSecondsPerGameDay());
-        currentDifficulty = event.difficulty();
-        currentAutopilot = event.autopilotEnabled();
-        currentLlmModel = event.llmModel();
+        it.unige.portcommand.core.Settings.applyLive(it.unige.portcommand.core.Settings.load()
+                .withRealSecondsPerGameDay(event.realSecondsPerGameDay())
+                .withDifficulty(event.difficulty())
+                .withAutopilotEnabled(event.autopilotEnabled())
+                .withLlmModel(event.llmModel()));
     }
 
     /**

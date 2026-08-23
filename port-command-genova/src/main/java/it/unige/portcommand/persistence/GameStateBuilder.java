@@ -284,7 +284,12 @@ public final class GameStateBuilder {
     /** {@code Settings.load()} with the scenario's partial override applied (task 23). */
     private static Settings mergedSettings(it.unige.portcommand.scenario.Scenario s,
                                            long realSecondsPerGameDay) {
-        Settings base = Settings.load();
+        // S9 (adversarial finding 4): the base is the CLASSPATH DEFAULTS, not Settings.load() —
+        // load() became the session's live record, and using it here would leak a previous
+        // world's applied settings (a loaded save's roundLimit=7, say) into every scenario
+        // whose override doesn't name that knob. classpathDefaults() restores the exact
+        // pre-S9 semantics: scenario = defaults + the scenario's own override, nothing else.
+        Settings base = Settings.classpathDefaults();
         var override = s.settingsOverride();
         return new Settings(
                 base.roundLimit(), base.timeLimitSeconds(),

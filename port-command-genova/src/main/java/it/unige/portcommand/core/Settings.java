@@ -11,11 +11,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /**
  * The single canonical game-settings record (task 15; {@code planning/15_negotiation_engine.md}
  * §15.1). Lives in {@code core} rather than {@code negotiation} because it is consumed
- * cross-cutting (tasks 15/20/21/22/24). Loaded once from {@code data/defaults.json} on the
- * classpath (static config, not live shared state — same rationale as
- * {@link it.unige.portcommand.negotiation.VesselTemplates}, mirrored here). {@code randomSeed} is
- * deliberately NOT a field — it lives on {@code GameState} (task 22) and is captured in the save
- * file.
+ * cross-cutting (tasks 15/20/21/22/24). {@code randomSeed} is deliberately NOT a field — it
+ * lives on {@code GameState} (task 22) and is captured in the save file.
+ *
+ * <p><b>S9 (2026-08-17): {@code load()} returns the session's EFFECTIVE settings, no longer a
+ * boot-frozen classpath constant.</b> The value is an immutable record swapped atomically
+ * (volatile) at exactly three kinds of moment, all world boundaries or explicit player action:
+ * {@link it.unige.portcommand.persistence.GameSession} applies the SAVED block on load and the
+ * sandbox/scenario baseline on new game (both before agents boot — ADR-15's in-place-restore
+ * slot), and {@code MainWindow.applySettings} writes the form's changes through. Every existing
+ * {@code Settings.load()} read site — engine constructions at spawn, Round-N-of-M, the countdown,
+ * the recommendation budgets — therefore sees restored values after a load with zero call-site
+ * changes, and {@code GameStateBuilder}'s snapshot (which always wrote {@code load()}) now
+ * captures the LIVE values instead of silently recording defaults. This closes the fix-campaign
+ * ledger's "live Settings revert on load" limitation.
  *
  * <p>{@code defaults.json} also carries two unrelated blocks that their owners read independently
  * — {@code llm.timeout_ms} ({@link it.unige.portcommand.nlp.LLMBridge}) and {@code reputation}
@@ -49,7 +58,9 @@ public record Settings(
         @JsonProperty("bankruptcyFloorEur") double bankruptcyFloorEur) {
 
     private static final Set<String> VALID_DIFFICULTIES = Set.of("EASY", "NORMAL", "HARD");
-    private static final Settings CACHED = readFromClasspath();
+    /** The session's effective settings (S9): classpath-seeded, swapped whole at world
+     * boundaries and by the form's write-through. Immutable record + volatile = atomic reads. */
+    private static volatile Settings current = readFromClasspath();
 
     public Settings {
         if (roundLimit < 2 || roundLimit > 8) {
@@ -75,9 +86,62 @@ public record Settings(
                 "microsoft/Phi-4-mini-instruct", 500.0, 5, 30, 5_000.0, -20_000.0);
     }
 
-    /** The classpath-loaded settings, read once and cached (mirrors {@code VesselTemplates}). */
+    /** The session's EFFECTIVE settings (see the class javadoc's S9 note). */
     public static Settings load() {
-        return CACHED;
+        return current;
+    }
+
+    /**
+     * S9: swap the effective settings (null = no-op, so a settings-less pre-S9 save applies
+     * nothing and boot defaults stand). Callers are the three sanctioned sites in the class
+     * javadoc; the record's compact constructor re-validates every swap.
+     */
+    public static void applyLive(Settings settings) {
+        if (settings != null) {
+            current = settings;
+        }
+    }
+
+    /** S9: the pristine classpath baseline — what a fresh sandbox game applies at boot. */
+    public static Settings classpathDefaults() {
+        return readFromClasspath();
+    }
+
+    // S9 with-ers for the live-changeable knobs (records are immutable — new instance each).
+    public Settings withRoundLimit(int v) {
+        return new Settings(v, timeLimitSeconds, autopilotEnabled, difficulty, realSecondsPerGameDay,
+                maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
+                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
+    }
+
+    public Settings withTimeLimitSeconds(int v) {
+        return new Settings(roundLimit, v, autopilotEnabled, difficulty, realSecondsPerGameDay,
+                maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
+                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
+    }
+
+    public Settings withAutopilotEnabled(boolean v) {
+        return new Settings(roundLimit, timeLimitSeconds, v, difficulty, realSecondsPerGameDay,
+                maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
+                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
+    }
+
+    public Settings withDifficulty(String v) {
+        return new Settings(roundLimit, timeLimitSeconds, autopilotEnabled, v, realSecondsPerGameDay,
+                maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
+                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
+    }
+
+    public Settings withRealSecondsPerGameDay(long v) {
+        return new Settings(roundLimit, timeLimitSeconds, autopilotEnabled, difficulty, v,
+                maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
+                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
+    }
+
+    public Settings withLlmModel(String v) {
+        return new Settings(roundLimit, timeLimitSeconds, autopilotEnabled, difficulty,
+                realSecondsPerGameDay, maxGameDays, firstLaunch, v, withdrawalPenaltyEur,
+                cnpReplyBySimSeconds, cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
     }
 
     private static Settings readFromClasspath() {

@@ -29,7 +29,17 @@ import it.unige.portcommand.util.Subscription;
  */
 public final class AssistantAgent extends PortCommandAgent {
 
-    private final AtomicBoolean autopilotEnabled = new AtomicBoolean(false);
+    // S9: seeded from the session's effective settings, not hardcoded false — a restored
+    // (or scenario-merged) autopilotEnabled now takes effect at agent boot; the task-21
+    // SettingsChangedEvent subscription below still flips it live afterwards.
+    private final AtomicBoolean autopilotEnabled =
+            new AtomicBoolean(it.unige.portcommand.core.Settings.load().autopilotEnabled());
+
+    /** S9, test seam: the construction-time autopilot value — SettingsRoundTripIT reads it off
+     * the RESPAWNED agent to prove the saved settings were applied BEFORE agents booted. */
+    public boolean autopilotOn() {
+        return autopilotEnabled.get();
+    }
 
     private RecommendOnDemandBehaviour recommendPlan;
     private AutopilotExecuteBehaviour autopilotPlan;

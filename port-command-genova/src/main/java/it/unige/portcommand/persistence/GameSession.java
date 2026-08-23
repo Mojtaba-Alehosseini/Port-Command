@@ -81,6 +81,11 @@ public final class GameSession {
     public synchronized void startNewGame() {
         boot.start(bootConfig);
         ensureSessionServices();
+        // S9: a fresh sandbox game resets the effective settings to the classpath baseline —
+        // the world-boundary discipline that keeps a previous load's applied block from
+        // leaking into a new game (Settings.load() is the session's live holder now).
+        it.unige.portcommand.core.Settings.applyLive(
+                it.unige.portcommand.core.Settings.classpathDefaults());
         AgentRoster.spawnSingletonsAndFleet(boot.getSpawner(), boot.getPortStateArtifact(),
                 boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact(),
                 boot.getLLMBridge(), boot.getEventBus(), directory, boot.getPolicyRegistryArtifact(),
@@ -282,6 +287,18 @@ public final class GameSession {
                     state.simClock().realSecondsPerGameDay());
             boot.getMarketHistoryArtifact().restore(state.marketHistory());
             restorePolicies(state.policyTriggers());
+            // S9 (the fix-campaign's "live Settings revert on load" limitation, closed): the
+            // saved settings block becomes the session's EFFECTIVE settings BEFORE any agent
+            // boots — engines constructed at respawn read the restored roundLimit, the GUI reads
+            // the restored budgets, and the next snapshot re-captures exactly these values.
+            // Null-tolerant: a settings-less (pre-S9-shape) save means BOOT DEFAULTS — applied
+            // explicitly, so a stray pre-load live value can never leak through the load
+            // boundary (SettingsRoundTripIT pins exactly that). Scenario boots ride this same
+            // line — their GameState.settings IS the merged scenario override, so storm's
+            // autopilotEnabled=false now reaches Settings.load().
+            it.unige.portcommand.core.Settings.applyLive(state.settings() != null
+                    ? state.settings()
+                    : it.unige.portcommand.core.Settings.classpathDefaults());
 
             CompletableFuture<HarbourMasterAgent> hmReady = new CompletableFuture<>();
             AgentRoster.respawnFromSave(boot.getSpawner(), boot.getPortStateArtifact(),

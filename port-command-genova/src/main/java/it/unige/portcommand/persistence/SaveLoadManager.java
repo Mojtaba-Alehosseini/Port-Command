@@ -202,7 +202,12 @@ public final class SaveLoadManager {
 
     /** Schema invariants beyond type binding — each failure is one clear message. */
     private static void validate(GameState state, String source) throws CorruptSaveException {
-        require(state.settings() != null, "settings missing", source);
+        // S9: the settings block became OPTIONAL (was: require non-null). Every save this
+        // project has ever written carries it, but the load path is now null-tolerant by
+        // decision — a missing block means "boot defaults", which GameSession.bootWorld applies
+        // EXPLICITLY (classpathDefaults on null — a mere no-op would leak the pre-load live
+        // value through the boundary). Additive-within-v1 relaxation; SettingsRoundTripIT pins
+        // both directions.
         require(state.simClock() != null, "simClock missing", source);
         require(state.simClock().simMillis() >= 0, "simClock.simMillis negative", source);
         require(state.simClock().realSecondsPerGameDay() > 0, "simClock.realSecondsPerGameDay not positive", source);

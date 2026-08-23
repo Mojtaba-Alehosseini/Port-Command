@@ -33,9 +33,13 @@ import it.unige.portcommand.util.Event;
  *       launch". Carried here for completeness.</li>
  * </ul>
  *
- * <p>Like task 22's accepted "settings not re-applied on load" cost, these knobs are NOT
- * re-plumbed back through the save file at load time; a reload restores the persisted
- * {@code Settings} into {@code GameState} but the live SimClock/assistant adopt boot defaults.
+ * <p><b>Resolved, S9 (2026-08-17):</b> this paragraph used to record task 22's accepted
+ * "settings not re-applied on load" cost — a reload restored the persisted {@code Settings}
+ * into {@code GameState} while the live world adopted boot defaults. {@code Settings.load()}
+ * is now the session's EFFECTIVE record: {@code MainWindow.applySettings} writes each change
+ * through, {@code GameStateBuilder} therefore snapshots the LIVE values, and
+ * {@code GameSession.bootWorld} applies the saved block before agents boot (ADR-15's S9 note;
+ * {@code SettingsRoundTripIT}). The knobs above survive a save/load round trip.
  */
 public record SettingsChangedEvent(String difficulty, long realSecondsPerGameDay,
                                    boolean autopilotEnabled, String llmModel) implements Event {
