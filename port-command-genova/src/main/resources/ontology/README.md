@@ -13,8 +13,14 @@ Both carry an `AUTO-GENERATED … DO NOT EDIT` header. Change the OWL, then rege
 
 ## Contents
 
-~27 named classes / 12 properties, no individuals (berth instances are emitted as
-Prolog `instance_of/2` facts by the converter, keeping the OWL clean):
+~27 named classes / 14 properties (12 datatype + 2 object), no individuals (berth
+instances are emitted as Prolog `instance_of/2` facts by the converter, keeping the
+OWL clean). *(S9, audit P2-8: `hasBeam`/`hasMaxBeam` were the two properties the
+converter emitted without an OWL declaration — the one schema drift. Both are declared
+now, and the converter's `_assert_owl_declares` guard FAILS the run if any emitted
+property is ever undeclared again: the OWL is genuinely the schema's single source of
+truth, while berth/vessel VALUES deliberately stay converter constants — schema-only
+ontology, by design.)*
 
 | Group | Classes |
 |---|---|

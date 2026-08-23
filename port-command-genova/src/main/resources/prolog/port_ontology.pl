@@ -81,12 +81,14 @@ is_hazmat(hazmat_cargo).
 is_hazmat(C) :- subclass_of(C, P), is_hazmat(P).
 
 % --- Property domains ---
+property_domain(has_beam, vessel).
 property_domain(has_cargo_class, vessel).
 property_domain(has_contracted_fee, vessel).
 property_domain(has_contracted_hours, vessel).
 property_domain(has_draft, vessel).
 property_domain(has_imo, vessel).
 property_domain(has_length, vessel).
+property_domain(has_max_beam, berth).
 property_domain(has_max_draft, berth).
 property_domain(has_max_length, berth).
 property_domain(has_tonnage, vessel).
@@ -95,12 +97,14 @@ property_domain(requires_escort, vessel).
 property_domain(requires_hazmat_clearance, vessel).
 
 % --- Property ranges ---
+property_range(has_beam, decimal).
 property_range(has_cargo_class, cargo).
 property_range(has_contracted_fee, decimal).
 property_range(has_contracted_hours, integer).
 property_range(has_draft, decimal).
 property_range(has_imo, string).
 property_range(has_length, decimal).
+property_range(has_max_beam, decimal).
 property_range(has_max_draft, decimal).
 property_range(has_max_length, decimal).
 property_range(has_tonnage, integer).

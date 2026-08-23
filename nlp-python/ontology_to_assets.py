@@ -51,10 +51,15 @@ def to_snake(name: str) -> str:
 
 # --- static data (NOT OWL individuals; keeps the OWL clean) -------------------
 # Berth defaults: real Genova quay tariff data (Job 2 section 2.2).
-# These numbers are the ontology *source of truth* for berth dimensions: the OWL
+# These numbers are the *value* source of truth for berth dimensions: the OWL
 # carries no berth individuals (only class/property schema), so the values live
 # here and are emitted verbatim into port_ontology.pl. Change them HERE, never in
 # the generated .pl.
+# S9 (audit P2-8): the *schema* half is no longer allowed to drift — every property
+# atom these dicts emit into default/3 facts must be a declared OWL property
+# (hasBeam/hasMaxBeam were the two that weren't, for two months). The guard in
+# _assert_owl_declares() fails the run loudly on any undeclared emission, in either
+# direction of future drift (new dict property without an OWL declaration).
 # Task 07b (v1.1, 2026-07-04): berth_2 has_max_length 250->340 (cruise up to 330 m
 # and containers up to 300 m must fit) and berth_4 has_max_beam 22->26 (ferry beam
 # 25 must fit) — reconciles the kernel to vessel_templates.json so every ship type
@@ -82,6 +87,10 @@ VESSEL_BEAMS = {
     "ferry": 25.0,
     "cruise_ship": 35.0,
 }
+# The pinned canonical emission order for berth default/3 facts — ALSO the guard's input
+# (S9 adversarial finding 5: a separate hard-coded guard set could drift from the emission
+# tuple and never fire; one constant feeds both).
+BERTH_PROPS = ("has_max_draft", "has_max_length", "has_max_beam")
 # Static list for the Rasa NLU task; semantic order, not sorted.
 NEGOTIATION_VERBS = ["propose", "offer", "give", "pay", "accept", "refuse", "reject"]
 
@@ -165,6 +174,23 @@ def build_model(onto: owlready2.Ontology) -> dict:
     }
 
 
+def _assert_owl_declares(model: dict, emitted_props: set[str]) -> None:
+    """S9 drift guard (audit P2-8): every property atom emitted into ``default/3``
+    facts must be an OWL-declared property (present in the model's domain rows).
+    A converter dict using an undeclared property silently forked the schema for
+    two months (has_beam/has_max_beam); now it kills the run with the exact names."""
+    declared = {p for p, _ in model["prop_domains"]}
+    undeclared = sorted(emitted_props - declared)
+    if undeclared:
+        raise SystemExit(
+            "ontology drift: default/3 facts emit propert"
+            + ("y " if len(undeclared) == 1 else "ies ")
+            + ", ".join(undeclared)
+            + " but port_ontology.owl declares no such DatatypeProperty — add the"
+            " declaration(s) to the OWL (P2-8 guard; do NOT delete the values here)."
+        )
+
+
 def render_prolog(model: dict) -> str:
     """Render the deterministic ``port_ontology.pl`` text."""
     out: list[str] = []
@@ -216,10 +242,14 @@ def render_prolog(model: dict) -> str:
     out.append("% --- Property ranges ---")
     out += [f"property_range({p}, {r})." for p, r in model["prop_ranges"]]
 
+    # S9 (P2-8): the guard's input is the SAME constant the emission loop iterates — a
+    # property added to (or renamed in) the emission cannot bypass the check.
+    _assert_owl_declares(model, set(BERTH_PROPS) | {"has_beam"})
+
     out.append("")
     out.append("% --- Berth defaults (Genova quay tariff data; see task 02) ---")
     for berth in sorted(BERTH_DEFAULTS):
-        for prop in ("has_max_draft", "has_max_length", "has_max_beam"):
+        for prop in BERTH_PROPS:
             out.append(f"default({berth}, {prop}, {_pl_float(BERTH_DEFAULTS[berth][prop])}).")
 
     out.append("")

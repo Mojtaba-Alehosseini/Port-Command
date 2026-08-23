@@ -164,6 +164,12 @@ def test_no_bare_berth_root_instance(pl_text):
     "property_domain(has_draft, vessel).",
     "property_domain(has_max_draft, berth).",
     "property_domain(has_cargo_class, vessel).",
+    # S9 (audit P2-8): the two beam properties are OWL-declared at last — the schema
+    # rows below are what the drift had been silently missing for two months.
+    "property_domain(has_beam, vessel).",
+    "property_domain(has_max_beam, berth).",
+    "property_range(has_beam, decimal).",
+    "property_range(has_max_beam, decimal).",
     "property_range(has_draft, decimal).",
     "property_range(has_tonnage, integer).",
     "property_range(has_imo, string).",
@@ -173,6 +179,15 @@ def test_no_bare_berth_root_instance(pl_text):
 ])
 def test_property_lines(pl_text, line):
     assert line in pl_text
+
+
+def test_drift_guard_fails_on_undeclared_emitted_property():
+    """S9 (P2-8): a default/3 emission whose property the OWL does not declare must
+    kill the run with the property named — the guard that makes silent schema drift
+    impossible in either direction."""
+    model = {"prop_domains": [("has_max_draft", "berth")]}
+    with pytest.raises(SystemExit, match="has_beam"):
+        ota._assert_owl_declares(model, {"has_max_draft", "has_beam"})
 
 
 # --- header / footer ----------------------------------------------------------
