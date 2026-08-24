@@ -253,6 +253,51 @@ class TugAgentIT {
         assertEnvelope(reply, ACLMessage.PROPOSE);
     }
 
+    /**
+     * S10 (bug hunt, hunter B finding 2): a CANCEL sent right behind its ACCEPT can be DEQUEUED
+     * first — {@code receive()} is template-selective, and the scheduler rotation decides which
+     * cyclic drains its message first. Pre-fix, the cancel-first rotation dropped the CANCEL as
+     * "idle — nothing to abort" and the tug then honoured the stale ACCEPT: it escorted a vessel
+     * the port believed held (uncancellable — no longer in the escort set) and INFORMed a
+     * phantom escort_complete. Post-fix both rotations converge — the award dies either way
+     * (aborted mid-leg, or discarded before it started) — and the tug stays biddable. The
+     * rotation is not controllable from a test, so this asserts the CONVERGED outcome; pre-fix
+     * it failed on whichever run let the cancel handler go first (this is exactly the shipped
+     * storm's award-vs-hold timing, per MIN_CNP_WINDOW_WALL_MS's javadoc).
+     */
+    @Test
+    void cancelImmediatelyBehindAcceptNeverEscorts() throws Exception {
+        spawnTug("tug_1", BASES[0], 1.0);
+
+        send(cfp("cnp-race", "tug_1"));
+        ACLMessage proposal = pollReply(5000);
+        assertEnvelope(proposal, ACLMessage.PROPOSE);
+        sendAccept(proposal, "V1", BERTH);
+        sendCancel("cnp-race", "tug_1"); // no EN_ROUTE wait between the two — the overtaking window
+
+        TugStatus status = null;
+        for (int i = 0; i < 30; i++) {
+            boot.getSimClock().advance(5_000);
+            PortStateUpdate.TugDelta d;
+            while ((d = tugUpdates.poll(50, TimeUnit.MILLISECONDS)) != null) {
+                if (d.tugId().equals("tug_1")) {
+                    status = d.status();
+                }
+            }
+            ACLMessage m = inbox.poll(20, TimeUnit.MILLISECONDS);
+            assertTrue(m == null || !"escort_complete".equals(node(m).path("event").asText()),
+                    "a cancelled award must never escort to completion — the CANCEL was lost");
+        }
+        if (status != null) {
+            assertEquals(TugStatus.IDLE, status, "tug ends IDLE whichever rotation won");
+        }
+        // And the award is truly gone: a fresh CFP draws a PROPOSE, not REFUSE(busy).
+        inbox.clear();
+        send(cfp("cnp-race2", "tug_1"));
+        ACLMessage reply = pollReply(5000);
+        assertEnvelope(reply, ACLMessage.PROPOSE);
+    }
+
     // --- S9 (P1-8): the post-ACCEPT decline finally SENDS — §4.4 tug plan 3 -----------------
 
     /**

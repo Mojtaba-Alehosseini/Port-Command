@@ -28,6 +28,12 @@ public final class HandleCancelBehaviour extends CyclicBehaviour {
             MessageTemplate.MatchPerformative(ACLMessage.CANCEL),
             MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY));
 
+    /** ACCEPT_PROPOSALs only — the half of {@code HandleAcceptRejectBehaviour.TEMPLATE} a
+     * CANCEL can legitimately overtake (see the race note in {@link #action}). */
+    private static final MessageTemplate OVERTAKEN_ACCEPT = MessageTemplate.and(
+            MessageTemplate.MatchOntology(MessageFactory.ONTOLOGY),
+            MessageTemplate.MatchPerformative(ACLMessage.ACCEPT_PROPOSAL));
+
     private final TugAgent tug;
 
     public HandleCancelBehaviour(TugAgent tug) {
@@ -43,6 +49,24 @@ public final class HandleCancelBehaviour extends CyclicBehaviour {
             return;
         }
         if (tug.currentJob() == null && tug.activeMovement() == null) {
+            // S10 (bug hunt, hunter B finding 2): receive() is template-selective, so this
+            // CANCEL can OVERTAKE the very ACCEPT_PROPOSAL it cancels — both sit queued (the
+            // HM sent ACCEPT then CANCEL within one storm pass) and the scheduler rotation ran
+            // this cyclic first. Dropping the CANCEL as "idle" let the tug then honour the
+            // stale ACCEPT and escort a vessel the port believes held — uncancellable (no
+            // longer in the vessel's escort set) and the producer of a phantom
+            // escort_complete. Honour the WIRE order instead: consume the queued ACCEPT and
+            // discard it as cancelled-before-started. Deliberately no REFUSE — the normal
+            // ordering (ACCEPT processed, then CANCEL aborts the leg) sends none and keeps
+            // the charge (the hold path's stated no-refund design); both orderings now land
+            // in the same state.
+            ACLMessage overtaken = myAgent.receive(OVERTAKEN_ACCEPT);
+            if (overtaken != null) {
+                tug.forgetBid(overtaken.getConversationId());
+                log.info("{} CANCEL overtook the queued ACCEPT on CNP {} — award discarded "
+                        + "before it started", tug.tugId(), overtaken.getConversationId());
+                return;
+            }
             log.debug("{} CANCEL while idle — nothing to abort", tug.tugId());
             return;
         }

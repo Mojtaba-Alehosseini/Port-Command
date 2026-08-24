@@ -66,14 +66,24 @@ public final class BidCollectorBehaviour extends CyclicBehaviour {
      * Called exactly once, by the paired {@code WakerBehaviour}.
      */
     void closeAndAward() {
-        List<ACLMessage> collected = List.copyOf(bids);
         HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
+        // S10 (bug hunt, hunter B finding 9): drain BEFORE copying. action() consumes ONE
+        // message per scheduler pass, so bids that ARRIVED inside the window can still sit
+        // queued when the waker fires — and anything matching the template at this instant
+        // was queued before it, i.e. punctual by arrival time. The old order copied first
+        // and then fed exactly those bids to rejectLateBids "at close": under a busy
+        // scheduler at the 50 ms window floor a CNP could reject every one of its bidders
+        // and route to NO_BIDS + retry — the silent zero-bid symptom audit A-03 chased.
+        // "Late" now begins after this drain; the grace reaper below owns real stragglers.
+        ACLMessage queued;
+        while ((queued = hm.receiveLogged(template)) != null) {
+            if (queued.getPerformative() == ACLMessage.PROPOSE) {
+                bids.add(queued);
+            }
+        }
+        List<ACLMessage> collected = List.copyOf(bids);
         myAgent.addBehaviour(new AwardContractBehaviour(myAgent, req, collected));
         log.info("CNP for {} closed with {} bid(s)", req.vesselId(), collected.size());
-
-        // Anything already queued but not yet drained by action() belongs to a window that has
-        // just shut — reject it now rather than let it outlive the template that matches it.
-        rejectLateBids(hm, "at close");
 
         // ...and one grace window for stragglers still in flight. A tug that misses the deadline
         // STILL replies (BidInCNPBehaviour warns and answers anyway), so without this the late

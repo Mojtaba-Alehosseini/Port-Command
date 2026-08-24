@@ -136,7 +136,15 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
                     java.util.LinkedHashSet<String> escort =
                             new java.util.LinkedHashSet<>(tracking.assignedTugs());
                     escort.addAll(winners);
-                    return tracking.withTugs(java.util.List.copyOf(escort)).withStage(Stage.IN_TRANSIT);
+                    // S10 (bug hunt, hunter B finding 5): never write the stage BACKWARDS. A
+                    // shortfall re-tender (P1-8) can land after the surviving co-winner already
+                    // delivered — the vessel is DOCKED, and an unconditional IN_TRANSIT would
+                    // regress it into the weather sweep's hold filter (a docked vessel must
+                    // never be held/re-escorted, the advanceStage invariant). Ordinal guard:
+                    // advance to IN_TRANSIT only from earlier stages, keep DOCKED/later as-is.
+                    Stage stage = tracking.stage().ordinal() > Stage.IN_TRANSIT.ordinal()
+                            ? tracking.stage() : Stage.IN_TRANSIT;
+                    return tracking.withTugs(java.util.List.copyOf(escort)).withStage(stage);
                 });
         hm.cnpRetryAttempts().remove(req.vesselId());
         // Awards are on the wire (before any queued CFP, per-pair FIFO) — the winning tugs will
