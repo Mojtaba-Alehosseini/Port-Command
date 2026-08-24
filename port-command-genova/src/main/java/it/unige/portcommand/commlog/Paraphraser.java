@@ -46,13 +46,18 @@ public final class Paraphraser {
      * world's resolver (S8 adversarial finding 2 — JADE {@code doDelete} is async, and the
      * failure would be invisible: the comm log would silently fall back to bare ids).
      */
-    public static void setVesselDisplay(Object owner, java.util.function.UnaryOperator<String> resolver) {
+    public static synchronized void setVesselDisplay(Object owner,
+            java.util.function.UnaryOperator<String> resolver) {
+        // synchronized since S10 (bug hunt, finding C7): the compare-and-clear below was a
+        // non-atomic check-then-act — a clear's owner read could interleave before this
+        // method's stores and its resets after, wiping the incoming world's hook in a
+        // ~2-instruction window. The class lock makes owner-check + both stores one step.
         vesselDisplayOwner = owner;
         vesselDisplay = resolver == null ? java.util.function.UnaryOperator.identity() : resolver;
     }
 
-    /** Reset to identity ONLY if {@code owner} still owns the hook (compare-and-clear). */
-    public static void clearVesselDisplay(Object owner) {
+    /** Reset to identity ONLY if {@code owner} still owns the hook — atomic with the check (S10). */
+    public static synchronized void clearVesselDisplay(Object owner) {
         if (vesselDisplayOwner == owner) {
             vesselDisplayOwner = null;
             vesselDisplay = java.util.function.UnaryOperator.identity();

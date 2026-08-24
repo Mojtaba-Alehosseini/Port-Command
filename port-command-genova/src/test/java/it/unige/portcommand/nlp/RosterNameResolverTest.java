@@ -77,6 +77,28 @@ class RosterNameResolverTest {
                         List.of("hold", "a", "berth", "for", "the", "cartago"), ctx));
     }
 
+    /**
+     * Bug-hunt S10 (hunter C, finding 6): the site-B window ran to the END of the utterance,
+     * so a trailing filler word ("please", "then"…) inflated the joined length past the
+     * MED budget's |Δlen| gate and the rewrite silently died — the grammar itself tolerates
+     * the filler (residue_ignorable), so a typo'd target + politeness lost fuzzing entirely,
+     * live since the name pool gave vessels real names. Trailing fillers are now trimmed off
+     * the WINDOW (the tokens themselves stay put).
+     */
+    @Test
+    void theCommandTargetSiteSurvivesTrailingFillerWords() {
+        DialogueCtx ctx = roster(vessel("T001", "Carthago"));
+        assertEquals(List.of("send", "two", "tugs", "to", "the", "carthago", "please"),
+                RosterNameResolver.resolve(
+                        List.of("send", "two", "tugs", "to", "the", "carthagoo", "please"), ctx));
+        assertEquals(List.of("send", "two", "tugs", "to", "the", "carthago", "then", "thanks"),
+                RosterNameResolver.resolve(
+                        List.of("send", "two", "tugs", "to", "the", "carthagoo", "then", "thanks"), ctx));
+        // A NON-filler tail still refuses — the window really must span only the name.
+        List<String> nonFillerTail = List.of("send", "two", "tugs", "to", "the", "carthagoo", "tomorrow");
+        assertSame(nonFillerTail, RosterNameResolver.resolve(nonFillerTail, ctx));
+    }
+
     @Test
     void grammarWordsNeverSitInANamePositionAndSurviveUntouched(){
         DialogueCtx ctx = roster(vessel("C001", "Genoa Star"), vessel("T001", "Carthago"));
@@ -135,6 +157,12 @@ class RosterNameResolverTest {
                         "pool name '" + name + "' contains grammar terminal '" + word
                                 + "' — MED would refuse its window and the name loses fuzzy "
                                 + "resolution entirely");
+                // S10 (trailing-filler trim): a name whose word is a FILLER would have it
+                // trimmed off its own site-B window and become unmatchable there.
+                org.junit.jupiter.api.Assertions.assertFalse(
+                        RosterNameResolver.grammarFillerWords().contains(word),
+                        "pool name '" + name + "' contains filler word '" + word
+                                + "' — the site-B window trim would eat it");
             }
         }
     }

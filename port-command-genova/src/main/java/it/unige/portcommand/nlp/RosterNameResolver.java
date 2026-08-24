@@ -78,6 +78,12 @@ final class RosterNameResolver {
         return GRAMMAR_STOP;
     }
 
+    /** The REAL filler set, same drift-proof rationale (S10): a pool name ENDING in a filler
+     * word would have that word trimmed off its own site-B window and become unmatchable. */
+    static java.util.Set<String> grammarFillerWords() {
+        return GRAMMAR_FILLER;
+    }
+
     /**
      * Returns {@code tokens} with at most one name window rewritten to its canonical roster
      * form, or the list unchanged when nothing (or nothing unambiguous) qualifies.
@@ -95,12 +101,20 @@ final class RosterNameResolver {
                 return rewritten;
             }
         }
-        // Site B: the command target — target_prep [the] name_phrase runs to the end of the
-        // utterance. First marker wins; one rewrite per turn (the grammar consumes one name).
+        // Site B: the command target — target_prep [the] name_phrase, with any TRAILING filler
+        // excluded from the window (S10 bug hunt: the grammar's residue_ignorable tolerates a
+        // trailing "please"/"then", but including it here inflated the joined length past the
+        // MED |Δlen| gate and the rewrite silently died for exactly the polite phrasings the
+        // filler set exists for). The filler tokens themselves stay in place — only the
+        // MATCHING window shrinks. First marker wins; one rewrite per turn.
         for (int i = 0; i + 2 < tokens.size(); i++) {
             String t = tokens.get(i);
             if (("to".equals(t) || "for".equals(t)) && "the".equals(tokens.get(i + 1))) {
-                List<String> rewritten = rewriteWindow(tokens, i + 2, tokens.size(), ctx);
+                int end = tokens.size();
+                while (end > i + 3 && GRAMMAR_FILLER.contains(tokens.get(end - 1))) {
+                    end--;
+                }
+                List<String> rewritten = rewriteWindow(tokens, i + 2, end, ctx);
                 if (rewritten != tokens) {
                     return rewritten;
                 }
@@ -108,6 +122,15 @@ final class RosterNameResolver {
         }
         return tokens;
     }
+
+    /**
+     * Mirror of the grammar's {@code filler_word/1} set (dcg_negotiation.pl) — the tokens
+     * {@code residue_ignorable} eats after a parsed move, and therefore the tokens a site-B
+     * name window must NOT be forced to absorb. Update alongside the grammar; the resolver
+     * test's trailing-filler case pins the two most demo-likely words.
+     */
+    private static final java.util.Set<String> GRAMMAR_FILLER = java.util.Set.of(
+            "please", "thanks", "cheers", "mate", "captain", "so", "well", "then", "now");
 
     private static List<String> rewriteWindow(List<String> tokens, int from, int to, DialogueCtx ctx) {
         List<String> window = tokens.subList(from, to);
