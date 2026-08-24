@@ -77,6 +77,18 @@ class CorruptSaveTest {
         assertTrue(e.getMessage().contains("tug_1..tug_4"));
     }
 
+    @Test
+    void nullRestoreCollectionIsCorruptNotAPostTeardownNpe() throws Exception {
+        // S10 (bug hunt, hunter A finding 3): "dayIncome": null deserializes fine and used to
+        // pass validation, then NPE'd inside HarbourMaster boot — AFTER the running world was
+        // torn down. The validate-first rule demands it dies HERE, as one clean exception.
+        // One representative of the S10 guard block (dayIncome/dayExpense/performativeCounts/
+        // pendingCustomsChecks/marketHistory/policyTriggers/assignedTugs share the same require).
+        Path file = rewriteMinimal("\"dayIncome\" : [ ]", "\"dayIncome\" : null");
+        CorruptSaveException e = assertThrows(CorruptSaveException.class, () -> manager().load(file));
+        assertTrue(e.getMessage().contains("dayIncome"), e.getMessage());
+    }
+
     /**
      * Vessel JSON with every required flow field present, so ONLY the field under test can
      * fail validation. Deserialization runs first; validation second.

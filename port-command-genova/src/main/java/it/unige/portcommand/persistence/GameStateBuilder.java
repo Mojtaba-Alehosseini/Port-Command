@@ -48,7 +48,12 @@ import org.slf4j.LoggerFactory;
  * AUTOSAVE — which cannot refuse, it is the EOD hook — DROPS those vessels from the
  * snapshot: in the saved timeline the walk-in never appeared. Berth reservations are
  * reconciled against the surviving vessel set at load ({@link #reconcileTerminals}), so
- * nothing leaks (decision dated 2026-07-17).
+ * nothing leaks (decision dated 2026-07-17). One stated residual (S10 bug hunt, hunter A
+ * finding 8): "never appeared" is not quite true for the WALLET — a grant whose income
+ * landed on the HM thread before the vessel reported its phase is dropped vessel-side but
+ * its fee stays in the persisted day history, so the restored day can carry money from a
+ * vessel the timeline no longer contains. Accepted: the window is one grant round trip,
+ * and clawing the entry back out of the append-only ledger would be worse than the drift.
  */
 public final class GameStateBuilder {
 
@@ -159,6 +164,25 @@ public final class GameStateBuilder {
                 }
                 log.info("autosave: dropping {} (no reported flow phase) from the snapshot",
                         tracking.vesselId());
+                continue;
+            }
+            if (tracking.stage().ordinal() >= Stage.AWAITING_TUG.ordinal()
+                    && agent.flowPhase() == BaseVesselAgent.FlowPhase.AWAITING_BERTH) {
+                // S10 (bug hunt, hunter B finding 4): the berth grant is still ON THE WIRE —
+                // the HM staged AWAITING_TUG on send, the vessel has not consumed the ACCEPT.
+                // Before S5's ADR-16 widened reportPhase this window was flowPhase==null and
+                // the branch above correctly refused; AWAITING_BERTH silently re-opened it. A
+                // save here restores a vessel waiting forever for an ACCEPT nobody re-sends
+                // (requeueAwaitingBerth filters on the TRACKING stage, which says the grant
+                // already happened) while redispatchTugless CNPs real tugs to an empty berth.
+                // Same "no clean phase boundary" rule as the null case.
+                if (!dropNegotiating) {
+                    throw new SaveNotAllowedException(
+                            "Vessel " + tracking.vesselId() + " is between phases; try again in a moment.");
+                }
+                log.info("autosave: dropping {} (berth grant still on the wire — stage {} vs "
+                        + "phase {}) from the snapshot", tracking.vesselId(), tracking.stage(),
+                        agent.flowPhase());
                 continue;
             }
             VesselStateDTO vesselSide = agent.snapshotDto();

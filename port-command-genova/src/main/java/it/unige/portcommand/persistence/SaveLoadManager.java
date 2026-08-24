@@ -213,6 +213,13 @@ public final class SaveLoadManager {
         require(state.simClock().realSecondsPerGameDay() > 0, "simClock.realSecondsPerGameDay not positive", source);
         require(state.reputation() >= 0 && state.reputation() <= 100,
                 "reputation out of 0..100: " + state.reputation(), source);
+        // S10 (bug hunt, hunter A finding 3): every collection the restore path dereferences
+        // must be non-null HERE — a hand-edited save with e.g. "dayIncome": null used to pass
+        // validation and then NPE inside agent boot, AFTER the running world was torn down,
+        // which is exactly what the validate-first rule exists to prevent. (firedEventIds is
+        // exempt: GameState's compact constructor canonicalises null to an empty list.)
+        require(state.marketHistory() != null, "marketHistory null", source);
+        require(state.policyTriggers() != null, "policyTriggers null", source);
         require(state.agents() != null, "agents missing", source);
         require(state.agents().tugs() != null && state.agents().tugs().size() == 4,
                 "expected exactly 4 tugs", source);
@@ -225,6 +232,14 @@ public final class SaveLoadManager {
         require(state.agents().terminals() != null && state.agents().terminals().size() == 2,
                 "expected exactly 2 terminals", source);
         require(state.agents().harbourMaster() != null, "agents.harbourMaster missing", source);
+        require(state.agents().harbourMaster().dayIncome() != null,
+                "harbourMaster.dayIncome null", source);
+        require(state.agents().harbourMaster().dayExpense() != null,
+                "harbourMaster.dayExpense null", source);
+        require(state.agents().harbourMaster().performativeCounts() != null,
+                "harbourMaster.performativeCounts null", source);
+        require(state.agents().harbourMaster().pendingCustomsChecks() != null,
+                "harbourMaster.pendingCustomsChecks null", source);
         require(state.agents().weather() != null && state.agents().weather().current() != null,
                 "agents.weather.current missing", source);
         require(state.agents().customs() != null, "agents.customs missing", source);
@@ -240,6 +255,8 @@ public final class SaveLoadManager {
             require(v.currentPhase() != null && VesselStateDTO.PHASES.contains(v.currentPhase()),
                     "unknown flow phase '" + v.currentPhase() + "' for " + v.id(), source);
             require(stageExists(v.stage()), "unknown tracking stage '" + v.stage() + "' for " + v.id(), source);
+            require(v.assignedTugs() != null, "assignedTugs null for " + v.id()
+                    + " (an empty list means no escort; null NPEs the hold sweep mid-game)", source);
         }
     }
 

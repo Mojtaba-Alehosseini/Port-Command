@@ -132,7 +132,20 @@ public final class Leaderboard {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            mapper.writerWithDefaultPrettyPrinter().writeValue(file.toFile(), entries);
+            // S10 (bug hunt, hunter A finding 4): write-tmp-then-atomic-move, the
+            // SaveLoadManager idiom — a direct overwrite interrupted mid-write left a
+            // truncated scores.json, and load()'s DELIBERATE fail-open (a corrupt board
+            // must not block game over) then silently started an empty board: the whole
+            // history lost to one crash. Fail-open reading is only honest if the writer
+            // can never be the corruptor.
+            Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+            Files.write(temp, mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(entries));
+            try {
+                Files.move(temp, file, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(temp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             log.warn("could not write leaderboard {} — the run's score is lost, game continues", file, e);
         }

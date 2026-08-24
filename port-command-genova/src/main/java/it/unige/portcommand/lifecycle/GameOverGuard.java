@@ -62,10 +62,15 @@ public final class GameOverGuard {
     private volatile double lastKnownWallet;
     private volatile double lastKnownReputation;
     private volatile int lastKnownDay = 1;
-    private int consecutiveDeepDebtDays;
+    /** Volatile like its neighbours (S10 hardening, hunter A finding 7): today the only
+     * cross-thread edge is {@code restoreProgress} on the loader thread before the agents
+     * start (visible via the Thread.start happens-before), and EOD read-modify-writes are
+     * single-writer on the HM thread — but the class's safety must not hinge on boot-code
+     * ordering staying exactly as it is. */
+    private volatile int consecutiveDeepDebtDays;
     /** The last deep-debt day NUMBER — "consecutive" means adjacent game days, not merely
      * successive events (adversarial review n1: a skipped day restarts the streak). */
-    private int lastDeepDebtDay;
+    private volatile int lastDeepDebtDay;
     private boolean gameOverFired;
 
     /**
