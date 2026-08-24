@@ -41,11 +41,16 @@ public final class AutopilotExecuteBehaviour extends OneShotBehaviour {
     private final EventBus eventBus;
     private final RecommendationCache cache;
     private final AtomicBoolean autopilotEnabled;
+    /** Captured at construction, NEVER read from {@code myAgent} in the handlers — JADE nulls
+     * {@code myAgent} once a OneShot completes (the DispatchPlayerCommandBehaviour task-19
+     * lesson), while the bus subscription lives on. */
+    private final Agent agent;
 
     public AutopilotExecuteBehaviour(Agent agent, RecommendationAlgorithm algorithm,
                                      PolicyRegistryArtifact policyRegistry, EventBus eventBus,
                                      RecommendationCache cache, AtomicBoolean autopilotEnabled) {
         super(agent);
+        this.agent = agent;
         this.algorithm = algorithm;
         this.policyRegistry = policyRegistry;
         this.eventBus = eventBus;
@@ -60,8 +65,22 @@ public final class AutopilotExecuteBehaviour extends OneShotBehaviour {
 
     @Override
     public void action() {
-        subscription = eventBus.subscribe(NegotiationOpenedEvent.class, this::onNegotiationOpened, DeliveryMode.ASYNC);
+        subscription = eventBus.subscribe(NegotiationOpenedEvent.class, this::enqueueNegotiationOpened, DeliveryMode.ASYNC);
         log.debug("subscribed to NegotiationOpenedEvent");
+    }
+
+    /** ASYNC-pool half (S10 bug hunt, hunter C finding 5): the EV path runs
+     * {@link RecommendationAlgorithm} — JPL under the process-wide engine lock — which the
+     * EventBus contract forbids on the shared ASYNC pool. The bus handler only enqueues onto
+     * the Assistant's own agent thread ({@code DispatchPlayerCommandBehaviour}'s hop shape);
+     * tests keep driving {@link #onNegotiationOpened} directly, unchanged. */
+    private void enqueueNegotiationOpened(NegotiationOpenedEvent event) {
+        agent.addBehaviour(new OneShotBehaviour(agent) {
+            @Override
+            public void action() {
+                onNegotiationOpened(event);
+            }
+        });
     }
 
     /** Cancels the bus subscription; safe if {@link #action()} never ran. */

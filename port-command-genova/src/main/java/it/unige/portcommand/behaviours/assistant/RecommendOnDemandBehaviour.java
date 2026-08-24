@@ -38,10 +38,15 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
     private final LLMBridge llmBridge;
     private final EventBus eventBus;
     private final RecommendationCache cache;
+    /** Captured at construction, NEVER read from {@code myAgent} in the handlers — JADE nulls
+     * {@code myAgent} once a OneShot completes (the DispatchPlayerCommandBehaviour task-19
+     * lesson), while the bus subscription lives on. */
+    private final Agent agent;
 
     public RecommendOnDemandBehaviour(Agent agent, RecommendationAlgorithm algorithm, LLMBridge llmBridge,
                                       EventBus eventBus, RecommendationCache cache) {
         super(agent);
+        this.agent = agent;
         this.algorithm = algorithm;
         this.llmBridge = llmBridge;
         this.eventBus = eventBus;
@@ -55,8 +60,24 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
 
     @Override
     public void action() {
-        subscription = eventBus.subscribe(HintButtonEvent.class, this::onHintButton, DeliveryMode.ASYNC);
+        subscription = eventBus.subscribe(HintButtonEvent.class, this::enqueueHint, DeliveryMode.ASYNC);
         log.debug("subscribed to HintButtonEvent");
+    }
+
+    /** ASYNC-pool half (S10 bug hunt, hunter C finding 5): {@link #onHintButton} runs
+     * {@link RecommendationAlgorithm} — JPL under the process-wide engine lock — which the
+     * EventBus contract forbids on the shared ASYNC pool (two concurrent handlers would park
+     * BOTH pool threads behind the HM's Prolog work, starving every other subscriber). The
+     * bus handler therefore only enqueues onto the Assistant's own agent thread — the same
+     * hop {@code DispatchPlayerCommandBehaviour} makes for its binding gate. Tests keep
+     * driving {@link #onHintButton} directly, on the calling thread, unchanged. */
+    private void enqueueHint(HintButtonEvent event) {
+        agent.addBehaviour(new OneShotBehaviour(agent) {
+            @Override
+            public void action() {
+                onHintButton(event);
+            }
+        });
     }
 
     /** Cancels the bus subscription; safe if {@link #action()} never ran. */
