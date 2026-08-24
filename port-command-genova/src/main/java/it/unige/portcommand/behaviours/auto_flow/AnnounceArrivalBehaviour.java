@@ -23,13 +23,25 @@ public final class AnnounceArrivalBehaviour extends OneShotBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(AnnounceArrivalBehaviour.class);
 
+    /** Mirrors AutoFlowDispatcherBehaviour's DF-retry pair (S10, hunter B finding 7): the
+     * delay must exceed ServiceLocator's 1 s cache TTL — it caches even an EMPTY result, so
+     * a faster retry would just re-read the failure. */
+    private static final int DF_RETRY_ATTEMPTS = 3;
+    private static final long DF_RETRY_WALL_MS = 1200L;
+
     private final String contractId;
     private final String conversationId;
+    private final int attemptsLeft;
 
     public AnnounceArrivalBehaviour(Agent agent, String contractId) {
+        this(agent, contractId, DF_RETRY_ATTEMPTS);
+    }
+
+    private AnnounceArrivalBehaviour(Agent agent, String contractId, int attemptsLeft) {
         super(agent);
         this.contractId = contractId;
         this.conversationId = "berth-" + agent.getLocalName();
+        this.attemptsLeft = attemptsLeft;
     }
 
     @Override
@@ -37,7 +49,24 @@ public final class AnnounceArrivalBehaviour extends OneShotBehaviour {
         BaseVesselAgent vessel = (BaseVesselAgent) myAgent;
         Optional<AID> harbourMaster = vessel.serviceLocator().findUnique("harbour-master");
         if (harbourMaster.isEmpty()) {
-            log.warn("{}: no harbour-master in DF; cannot announce arrival", myAgent.getLocalName());
+            // S10 (bug hunt, hunter B finding 7): one transient DF hiccup here used to orphan
+            // the vessel FOREVER — no announce, no phase, no berth listener, no retry, and the
+            // HarbourMaster never learns it exists. The same lookup in AutoFlowDispatcher
+            // already retried; this one just hadn't. Bounded retry, then a loud terminal.
+            if (attemptsLeft > 1) {
+                log.warn("{}: no harbour-master in DF — retrying announce in {} ms ({} left)",
+                        vessel.getLocalName(), DF_RETRY_WALL_MS, attemptsLeft - 1);
+                vessel.addBehaviour(new jade.core.behaviours.WakerBehaviour(vessel, DF_RETRY_WALL_MS) {
+                    @Override
+                    protected void onWake() {
+                        vessel.addBehaviour(new AnnounceArrivalBehaviour(vessel, contractId, attemptsLeft - 1));
+                    }
+                });
+            } else {
+                log.error("{}: no harbour-master in DF after {} attempts — arrival never "
+                        + "announced, vessel is stranded (unreachable in a healthy container)",
+                        vessel.getLocalName(), DF_RETRY_ATTEMPTS);
+            }
             return;
         }
         Map<String, Object> content = new LinkedHashMap<>();
