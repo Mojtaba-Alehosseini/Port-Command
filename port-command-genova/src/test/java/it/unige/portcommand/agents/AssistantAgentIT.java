@@ -257,7 +257,7 @@ class AssistantAgentIT {
                 .thenReturn(CompletableFuture.completedFuture(new LLMResponse(cannedText, true)));
 
         ExplainEventBehaviour behaviour = new ExplainEventBehaviour(harnessAgent(), cache, mockBridge, eventBus);
-        behaviour.onExplainRequest(new ExplainRequestEvent("dlg-8-r1"));
+        behaviour.onExplainRequest(new ExplainRequestEvent("dlg-8-r1", "nego-W8"));
 
         List<AssistantChatEvent> chats = chatEvents(eventBus);
         assertEquals(1, chats.size());
@@ -271,7 +271,7 @@ class AssistantAgentIT {
 
         ExplainEventBehaviour behaviour =
                 new ExplainEventBehaviour(harnessAgent(), new RecommendationCache(), mockBridge, eventBus);
-        behaviour.onExplainRequest(new ExplainRequestEvent("never-cached"));
+        behaviour.onExplainRequest(new ExplainRequestEvent("never-cached", "nego-W9"));
 
         List<AssistantChatEvent> chats = chatEvents(eventBus);
         assertEquals(1, chats.size(), "an unknown decisionId must still get a graceful reply");

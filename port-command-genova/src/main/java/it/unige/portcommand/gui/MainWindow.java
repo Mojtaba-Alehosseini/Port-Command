@@ -478,6 +478,17 @@ public final class MainWindow extends JFrame {
      * fix-campaign's settings-revert limitation, closed). The dialog re-opens on
      * {@code Settings.load()} directly; no mirrors (finding 3). */
     private void applySettings(SettingsChangedEvent event) {
+        // S10 (bug hunt): a dialog OK landing while a LOAD is replacing the world would write
+        // the OLD world's knobs over the settings block bootWorld just restored (the dialog was
+        // seeded from pre-load values, so applying them is wrong in both orders). Refuse with a
+        // visible reason instead of racing the loader thread.
+        if (lifecycle.mode() == GameMode.LOADING) {
+            eventBus.publish(new it.unige.portcommand.gui.events.NotificationEvent(
+                    "Settings not applied — a game is loading. Re-open Settings once it finishes.",
+                    it.unige.portcommand.gui.events.NotificationEvent.Severity.WARNING,
+                    lifecycle.simClock().nowSimMillis()));
+            return;
+        }
         lifecycle.simClock().setRealSecondsPerGameDay(event.realSecondsPerGameDay());
         it.unige.portcommand.core.Settings.applyLive(it.unige.portcommand.core.Settings.load()
                 .withRealSecondsPerGameDay(event.realSecondsPerGameDay())

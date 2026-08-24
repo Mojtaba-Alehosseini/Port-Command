@@ -64,7 +64,7 @@ public final class ExplainEventBehaviour extends OneShotBehaviour {
         Optional<Recommendation> cached = cache.get(event.decisionId());
         if (cached.isEmpty()) {
             log.debug("no cached recommendation for decisionId={}", event.decisionId());
-            eventBus.publish(new AssistantChatEvent(event.decisionId(),
+            eventBus.publish(new AssistantChatEvent(event.dialogueId(),
                     "Sorry, I no longer remember the reasoning for that decision."));
             return;
         }
@@ -81,12 +81,12 @@ public final class ExplainEventBehaviour extends OneShotBehaviour {
         llmBridge.explain(request)
                 .thenAccept(response -> {
                     String text = HallucinationValidator.validate(response.text(), rec) ? response.text() : template;
-                    eventBus.publish(new AssistantChatEvent(event.decisionId(), text));
+                    eventBus.publish(new AssistantChatEvent(event.dialogueId(), text));
                 })
                 .exceptionally(ex -> {
                     log.debug("{}: llm explain failed/timed out; falling back to template",
                             event.decisionId(), ex);
-                    eventBus.publish(new AssistantChatEvent(event.decisionId(), template));
+                    eventBus.publish(new AssistantChatEvent(event.dialogueId(), template));
                     return null;
                 });
     }

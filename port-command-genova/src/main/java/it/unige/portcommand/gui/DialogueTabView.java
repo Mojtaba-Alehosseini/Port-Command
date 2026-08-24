@@ -247,13 +247,49 @@ final class DialogueTabView extends JPanel {
         DialogueCtx ctx = registry.buildCtx(vesselId);
         // S8 (D-05 two-step): the registry doubles as the by-vessel context source, so the
         // pipeline can re-focus onto a vocative's ADDRESSEE and re-parse under ITS offer.
-        processor.process(text, ctx, registry::buildCtx).whenComplete((result, error) -> SwingUtilities.invokeLater(() ->
-                handleResult(vesselId, error != null ? new PipelineResult.Error(String.valueOf(error.getMessage())) : result)));
+        // S10 (bug hunt, hunter C finding 1): the hook is invoked on the PIPELINE executor
+        // thread (NLPPipeline's DCG-miss and vocative re-focus sites), but the registry's tab
+        // map is EDT-confined — hand the raw method ref across and a concurrent tab open/close
+        // on the EDT races the roster iteration (CME swallowed into a bogus "couldn't parse",
+        // or a stale roster). buildCtxOnEdt hops the call onto the EDT instead.
+        processor.process(text, ctx, this::buildCtxOnEdt).whenComplete((result, error) -> SwingUtilities.invokeLater(() ->
+                handleResult(vesselId, tab, error != null ? new PipelineResult.Error(String.valueOf(error.getMessage())) : result)));
     }
 
-    private void handleResult(String typingVesselId, PipelineResult result) {
+    /** S10 (hunter C finding 1): the registry is EDT-confined; the pipeline calls this from its
+     * executor thread. An interrupted hop refuses context ({@code DialogueCtx.NONE} — the
+     * pipeline treats an empty roster as "no re-focus available") rather than guessing. */
+    private DialogueCtx buildCtxOnEdt(String vesselId) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            return registry.buildCtx(vesselId);
+        }
+        DialogueCtx[] out = new DialogueCtx[1];
+        try {
+            SwingUtilities.invokeAndWait(() -> out[0] = registry.buildCtx(vesselId));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return DialogueCtx.NONE;
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            throw new RuntimeException(e.getCause());
+        }
+        return out[0];
+    }
+
+    /**
+     * S10 (bug hunt, hunter C finding 4): {@code origin} is the tab model the player actually
+     * typed into, captured at send time. The parse can take seconds (Rasa fallback budget), and
+     * in that window the negotiation can close (timeout withdraw) or the WORLD can change
+     * (load/scenario boot clears the registry — and the new world's deterministic WALKIN-n ids
+     * can recreate the SAME dialogueId, so an id lookup alone would pass). An identity mismatch
+     * means the result belongs to a world that no longer exists: drop it entirely — publishing
+     * a {@code PlayerCommandEvent} across that boundary reaches a different vessel.
+     */
+    private void handleResult(String typingVesselId, DialogueTabModel origin, PipelineResult result) {
+        if (registry.tab(dialogueId) != origin) {
+            return;
+        }
         switch (result) {
-            case PipelineResult.Routed routed -> dispatchRouted(typingVesselId, routed);
+            case PipelineResult.Routed routed -> dispatchRouted(typingVesselId, origin, routed);
             case PipelineResult.NeedsClarification nc -> showClarification(nc.buttons(), nc.message());
             case PipelineResult.Error e -> appendSystem("I couldn't parse that.");
         }
@@ -262,7 +298,14 @@ final class DialogueTabView extends JPanel {
     /** {@code targetVesselId} may differ from the tab typed into (a 16-M2 vocative, e.g.
      * "tell the tanker: deal") — that's fine, it's just the published event's payload;
      * nothing about rendering THIS tab depends on which vessel ends up targeted. */
-    private void dispatchRouted(String typingVesselId, PipelineResult.Routed routed) {
+    private void dispatchRouted(String typingVesselId, DialogueTabModel origin, PipelineResult.Routed routed) {
+        if (origin.isClosed()) {
+            // The negotiation ended while the parse was in flight (S10, finding 4's second
+            // half): a closed dialogue must never emit a move, and silence here would leave
+            // the player's bubble looking sent.
+            appendSystem("This negotiation ended while I was reading that — nothing was sent.");
+            return;
+        }
         String targetVesselId = routed.addressee() != null ? routed.addressee() : typingVesselId;
         PlayerCommandKind kind = kindFor(routed.msg().getPerformative());
         if (kind == null) {
@@ -273,8 +316,12 @@ final class DialogueTabView extends JPanel {
         // status reply could say, and no vessel-side behaviour answers a QUERY_REF (verified:
         // EvaluateCounterOfferBehaviour's template matches PROPOSE/ACCEPT/REJECT/CANCEL only),
         // so dispatching one was pure dead air in the play-test. Answer locally instead.
+        // S10 (hunter C finding 2): a vocative ASK asks about the ADDRESSEE — answering with
+        // the typing tab's own status printed the wrong vessel's numbers.
         if (kind == PlayerCommandKind.ASK) {
-            appendSystem(statusLine());
+            appendSystem(targetVesselId.equals(typingVesselId)
+                    ? statusLine()
+                    : statusLineFor(targetVesselId, false));
             return;
         }
         @SuppressWarnings("unchecked")
@@ -409,12 +456,23 @@ final class DialogueTabView extends JPanel {
     /** The local status reply — everything a (dead-air) QUERY_REF to the vessel could have said. */
     private String statusLine() {
         DialogueTabModel tab = registry.tab(dialogueId);
+        return tab == null ? "No active negotiation." : statusLineFor(tab.vesselId(), true);
+    }
+
+    /** The status of ANY vessel with an open tab, by id — the vocative-ASK arm needs the
+     * ADDRESSEE's numbers, not the typing tab's (S10, hunter C finding 2). {@code sameTab}
+     * only shapes the wording: a cross-tab answer names whose status it is. */
+    private String statusLineFor(String vesselId, boolean sameTab) {
+        DialogueTabModel tab = registry.dialogueIdForVessel(vesselId)
+                .map(registry::tab).orElse(null);
         if (tab == null) {
-            return "No active negotiation.";
+            return sameTab ? "No active negotiation."
+                    : "No open negotiation with " + displayNameFor(vesselId) + ".";
         }
         WalkInDialogueSnapshot s = tab.snapshot();
-        return String.format("Status — their offer: €%.0f · your offer: €%.0f · round %d of %d · %dh at %s.",
-                s.lastVesselOffer(), s.lastPlayerOffer(), s.roundsUsed(), Settings.load().roundLimit(),
+        String subject = sameTab ? "Status" : "Status of " + displayNameFor(vesselId);
+        return String.format("%s — their offer: €%.0f · your offer: €%.0f · round %d of %d · %dh at %s.",
+                subject, s.lastVesselOffer(), s.lastPlayerOffer(), s.roundsUsed(), Settings.load().roundLimit(),
                 s.durationHours(), s.berthId());
     }
 
