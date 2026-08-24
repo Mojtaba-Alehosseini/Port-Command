@@ -235,4 +235,20 @@ class WordNetResolverTest {
     void blankInputIsReturnedUnchanged() {
         assertEquals("  ", resolver.resolveToOntology("  ", "noun"));
     }
+
+    /**
+     * S10 (bug hunt): {@code resolveContextSensitive}'s BOTH accepting branches return
+     * {@code HANDCRAFTED.get(word)} — a word added to {@code CONTEXT_SENSITIVE} without a
+     * {@code HANDCRAFTED} row would make the resolver return {@code null}, breaking its
+     * "mapped form or the input, never null" contract. The coupling was real but untested.
+     */
+    @Test
+    void everyContextSensitiveWordHasAHandcraftedMapping() {
+        for (String word : WordNetResolver.CONTEXT_SENSITIVE.keySet()) {
+            org.junit.jupiter.api.Assertions.assertTrue(
+                    WordNetResolver.HANDCRAFTED.containsKey(word),
+                    "'" + word + "' is CONTEXT_SENSITIVE but has no HANDCRAFTED mapping — "
+                            + "both accepting branches of resolveContextSensitive would return null");
+        }
+    }
 }

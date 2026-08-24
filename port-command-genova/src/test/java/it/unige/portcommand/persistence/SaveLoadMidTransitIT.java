@@ -244,6 +244,13 @@ class SaveLoadMidTransitIT {
         it.unige.portcommand.bootstrap.AgentRoster.spawnContractedVessel(
                 boot.getSpawner(), c001, "CONTRACT-1", clock, boot.getMarketHistoryArtifact(),
                 session.directory());
+        // S10 hardening: startNewGame does NOT await the HarbourMaster's setup (the hmReady
+        // future is a load-path-only arg), and directory registration happens INSIDE setup —
+        // so a bare orElseThrow here raced agent boot and lost once under a parallel-suite
+        // batch (NoSuchElementException at this line). Bounded wait, like every other lookup
+        // in this suite.
+        assertTrue(waitUntil(() -> session.directory().byName("harbour_master").isPresent(),
+                15_000), "fixture: the HarbourMaster must finish booting");
         HarbourMasterAgent hm = (HarbourMasterAgent) session.directory().byName("harbour_master")
                 .orElseThrow();
         assertTrue(waitUntil(() -> {
