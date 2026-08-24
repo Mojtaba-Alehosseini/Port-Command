@@ -37,6 +37,7 @@ class ScriptedEventBehaviourTest {
     private SimClock clock;
     private EventBus bus;
     private Map<String, ServiceContract> contracts;
+    private JadeAgentSpawner spawner;
     private GameContext ctx;
 
     @BeforeEach
@@ -44,7 +45,8 @@ class ScriptedEventBehaviourTest {
         clock = new SimClock(300);
         bus = new EventBus();
         contracts = new ConcurrentHashMap<>();
-        ctx = new GameContext(contracts, clock, Mockito.mock(JadeAgentSpawner.class),
+        spawner = Mockito.mock(JadeAgentSpawner.class);
+        ctx = new GameContext(contracts, clock, spawner,
                 null, new RandomSource(42), bus, null);
     }
 
@@ -288,17 +290,26 @@ class ScriptedEventBehaviourTest {
     }
 
     @Test
-    void aFiredDailyIdWithAVesselTraceIsNeverReMaterialised() {
-        // The normal reload: the day's arrival earned its fee (income trace) — the fired
-        // id is skipped whole. The UNTRACED case is the recovery test further down.
+    void aFiredDailyIdWithAVesselTraceRegistersItsCloneButNeverRefires() {
+        // The normal reload: the day's arrival is vouched for (still tracked, or its fee sits
+        // in today's income) — the SPAWN stays fired, but the day-clone must re-enter the
+        // contract map anyway (S10 bug hunt, hunter A finding 1): every load rebuilds the map
+        // from the pristine base set, and a restored vessel mid-flow resolves its contracted
+        // fee/terminal/customs through exactly this clone — pre-fix, the queued-grant pin
+        // missed the map and the vessel was degraded to a feeless walk-in grant. Pinned at
+        // construction time too, because RestoreDispatchBehaviour's release sweep runs before
+        // the first tick. The UNTRACED case is the recovery test further down.
         ScriptedEventBehaviour behaviour = new ScriptedEventBehaviour(null, ctx,
                 ScenarioRuntime.sandbox(Set.of("contract:CONTRACT-1:d1"), Set.of("C001-D1")),
                 List.of(baseContract()));
+        assertTrue(contracts.containsKey("CONTRACT-1-D1"),
+                "the day-clone is registered by CONSTRUCTION — before any restore sweep runs");
         jumpTo(12 * 3600); // past the day-1 spawn moment
         behaviour.onSimTick();
-        assertFalse(contracts.containsKey("CONTRACT-1-D1"),
-                "a fired, vouched-for daily id is skipped whole — no clone, no event, no respawn");
-        assertEquals(List.of("contract:CONTRACT-1:d1"), behaviour.firedEventIdsSorted());
+        assertEquals("C001-D1", contracts.get("CONTRACT-1-D1").vesselId());
+        assertEquals(List.of("contract:CONTRACT-1:d1"), behaviour.firedEventIdsSorted(),
+                "the spawn event itself never re-fires");
+        Mockito.verifyNoInteractions(spawner);
     }
 
     // ---- lost-spawn recovery (2026-07-18 adversarial-review finding 1) ----
@@ -319,14 +330,18 @@ class ScriptedEventBehaviourTest {
 
     @Test
     void aFiredDailySpawnWithATraceStaysFired() {
-        // The vessel earned its fee today (income trace) — recovery must NOT re-credit it.
+        // The vessel earned its fee today (income trace) — recovery must NOT re-credit it:
+        // the spawn stays fired and nothing respawns. (The day-clone IS still registered —
+        // that is the S10 finding-1 fix, pinned in the materialisation test above; the map
+        // entry is inert for a departed vessel, since nothing iterates the contract map.)
         ScriptedEventBehaviour behaviour = new ScriptedEventBehaviour(null, ctx,
                 ScenarioRuntime.sandbox(Set.of("contract:CONTRACT-1:d1"), Set.of("C001-D1")),
                 List.of(baseContract()));
         jumpTo(12 * 3600);
         behaviour.onSimTick();
-        assertFalse(contracts.containsKey("CONTRACT-1-D1"),
-                "a vouched-for daily spawn is never re-materialised");
+        assertEquals(List.of("contract:CONTRACT-1:d1"), behaviour.firedEventIdsSorted(),
+                "a vouched-for daily spawn is never un-fired");
+        Mockito.verifyNoInteractions(spawner);
     }
 
     @Test

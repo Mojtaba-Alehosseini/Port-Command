@@ -104,6 +104,15 @@ public final class ScriptedEventBehaviour extends SimTickerBehaviour {
             log.info("scenario '{}' armed: {} pending / {} already fired", scenario.key(),
                     pendingScenarioEvents, scenario.events().size() - pendingScenarioEvents);
         }
+        // S10 (bug hunt, hunter A finding 1): materialise AT CONSTRUCTION, not first tick —
+        // a restored world rebuilds the contract map from the pristine base set, and
+        // RestoreDispatchBehaviour's release sweep runs before this ticker's first tick.
+        // Without today's day-clones registered by then, a restored queued daily vessel's
+        // contract pin ("CONTRACT-1-D3") missed the map and the S5 degrade branch served it
+        // as a plain walk-in: no contracted fee (−€5,200 on CONTRACT-1), no terminal booking,
+        // no customs — the log then claimed the contract "no longer exists" when the load had
+        // simply not re-registered it.
+        materialiseDailies();
     }
 
     @Override
@@ -166,11 +175,17 @@ public final class ScriptedEventBehaviour extends SimTickerBehaviour {
             }
             for (ServiceContract base : dailyBase) {
                 String id = ContractSchedule.eventId(base, day);
+                ServiceContract daily = ContractSchedule.dailyContract(base, day);
+                // Registered even when the spawn already FIRED (S10, hunter A finding 1): the
+                // spawn event is fire-once, the contract registration is idempotent — and a
+                // restored vessel mid-flow still needs its day-clone for every fee/terminal/
+                // customs lookup. Residual, stated: a vessel alive across midnight keeps only
+                // its own day's clone if saved+loaded on the NEXT day (this loop starts at the
+                // boot day); that cross-midnight-then-reload window shares A6's accepted class.
+                ctx.contracts().putIfAbsent(daily.contractId(), daily);
                 if (fired.contains(id)) {
                     continue;
                 }
-                ServiceContract daily = ContractSchedule.dailyContract(base, day);
-                ctx.contracts().putIfAbsent(daily.contractId(), daily);
                 pending.add(new Pending(id, ContractSchedule.spawnSimSeconds(daily), seq++, false,
                         new SpawnVesselEvent(ContractSchedule.spawnSimSeconds(daily),
                                 daily.vesselType(), SpawnVesselEvent.CHANNEL_CONTRACTED, null,
