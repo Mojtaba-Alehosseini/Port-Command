@@ -159,6 +159,16 @@ public final class ScenarioLoader {
             require(!global.containsKey(contract.contractId()),
                     "scenario contract " + contract.contractId() + " shadows a global contracts.json entry");
             require(ids.add(contract.contractId()), "duplicate contract id " + contract.contractId());
+            // S10 (bug hunt, hunter B finding 11): an unknown berth id in a contract flows into
+            // CnpRequest via BerthPositions.position() -> null -> the constructor's
+            // requireNonNull -> an uncaught NPE on the HarbourMaster thread, which KILLS the
+            // hub agent (jade.core.Agent.run's catch-all ends the agent). A content typo must
+            // die here at authoring time, like the BerthFlood ids already do. (contracts.json
+            // itself is pinned by ScenarioLoaderTest's physical-berth-table test — this gate
+            // covers scenario-local authoring.)
+            require(contract.berthId() != null && BERTH_IDS.contains(contract.berthId()),
+                    "contract " + contract.contractId() + ".berthId must be berth_1..berth_4, got "
+                            + contract.berthId());
         }
         return ids;
     }

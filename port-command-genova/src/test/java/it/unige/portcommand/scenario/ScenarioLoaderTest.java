@@ -237,6 +237,45 @@ class ScenarioLoaderTest {
         }
     }
 
+    /**
+     * S10 (bug hunt, hunter B finding 11): the compat test above pins the PROLOG side; the
+     * physical side is {@code BerthPositions}, whose {@code position()} returns null for an
+     * unknown id — and a null berth position NPEs {@code CnpRequest}'s constructor ON THE
+     * HARBOURMASTER THREAD, which kills the hub agent (jade's Agent.run catch-all ends the
+     * agent). The two tables only "happen to agree" on berth_1..4 — this makes the agreement
+     * an invariant for every spawnable contract.
+     */
+    @Test
+    void everySpawnableContractBerthExistsInThePhysicalBerthTable() {
+        java.util.List<ServiceContract> all = new java.util.ArrayList<>(
+                AgentRoster.loadContracts().values());
+        for (Scenario s : registry.all()) {
+            all.addAll(s.contracts());
+        }
+        for (ServiceContract contract : all) {
+            org.junit.jupiter.api.Assertions.assertNotNull(
+                    it.unige.portcommand.harbourmaster.BerthPositions.position(contract.berthId()),
+                    contract.contractId() + ": berthId " + contract.berthId() + " has no physical "
+                            + "position — a CNP toward it would NPE the HarbourMaster");
+        }
+    }
+
+    /** The authoring-time gate for the same hazard (S10, finding 11): a typo'd contract berth
+     * id must die in the loader, not as a dead hub mid-demo. */
+    @Test
+    void scenarioContractWithUnknownBerthIdIsRefusedAtLoad() throws Exception {
+        String json;
+        try (InputStream in = getClass().getResourceAsStream("/data/scenarios/storm.json")) {
+            json = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+        assertTrue(json.contains("\"berth_id\": \"berth_1\""), "storm fixture drifted");
+        String bad = json.replace("\"berth_id\": \"berth_1\"", "\"berth_id\": \"berth_9\"");
+        ScenarioValidationException e = assertThrows(ScenarioValidationException.class,
+                () -> loader.load(new java.io.ByteArrayInputStream(
+                        bad.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "storm-bad-berth"));
+        assertTrue(e.getMessage().contains("berth_9"), e.getMessage());
+    }
+
     /** Day-qualified daily clones keep type/berth/fee and derive ETA on the target day. */
     @Test
     void dailyContractClonesAreDayQualifiedEverywhereTheEngineNeedsThem() {
