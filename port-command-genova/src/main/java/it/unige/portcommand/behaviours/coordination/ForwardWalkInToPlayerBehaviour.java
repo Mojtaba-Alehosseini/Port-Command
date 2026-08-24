@@ -125,7 +125,11 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
      * re-dispatch sweep (weatherHeld AND AWAITING_TUG) is naturally skipped for a vessel this
      * advanced past AWAITING_TUG — a docked vessel must never be re-escorted. Terminal removal
      * stays exclusively in {@link #handleDeparted}/{@link #handleWithdraw} (INVARIANTS
-     * "terminal removal" rule).
+     * "terminal removal" rule). S10 (bug hunt, hunter B finding 1): a WEATHER-HELD entry
+     * refuses every advance — its escort was cancelled, so an arriving report (a stale
+     * escort_complete from a tug whose CANCEL lost a race) is by definition about the escort
+     * that no longer exists, and advancing would carry the vessel past the release sweep's
+     * {@code held && AWAITING_TUG} filter: frozen mid-channel forever, berth never freed.
      *
      * <p><b>Report lag is inherent</b> (adversarial review F-1, 2026-07-18): the stage is the
      * HM's best knowledge FROM RECEIVED REPORTS, not a mirror of the vessel's own phase. The
@@ -139,9 +143,16 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             return;
         }
         VesselTracking advanced = hm.activeVessels().computeIfPresent(vesselId,
-                (id, tracking) -> tracking.stage().ordinal() < target.ordinal()
-                        ? tracking.withStage(target)
-                        : tracking);
+                (id, tracking) -> {
+                    if (tracking.weatherHeld()) {
+                        log.warn("{}: stage report {} refused — vessel is weather-held, the "
+                                + "report is stale (its escort was cancelled)", vesselId, target);
+                        return tracking;
+                    }
+                    return tracking.stage().ordinal() < target.ordinal()
+                            ? tracking.withStage(target)
+                            : tracking;
+                });
         if (advanced != null && advanced.stage() == target) {
             log.debug("{}: tracking stage -> {}", vesselId, target);
         }
@@ -411,8 +422,11 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
     /**
      * The queue release sweep (S5): whenever occupancy may have changed — a departure, or the
      * 15-sim-min periodic weather snapshot (the idempotent backstop that turns a lost
-     * {@code departed} INFORM from "berth gone forever" into "berth back late") — grant every
-     * queued vessel a now-free compatible berth, HIGHEST PRIORITY FIRST.
+     * {@code departed} INFORM from "berth gone forever" into "berth back late" — a claim made
+     * TRUE only in S10: the periodic sweep now reaps directory-absent DOCKED+ entries first,
+     * see {@code HandleWeatherAlertBehaviour.reapDepartedGhosts}; this release alone never
+     * removed the ghost that held the berth) — grant every queued vessel a now-free compatible
+     * berth, HIGHEST PRIORITY FIRST.
      *
      * <p>This is where the priority module earns its keep (R25-R30): candidates are ranked by
      * {@code effective_priority} (R30, through the R26 class bridge — a ferry's

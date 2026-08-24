@@ -130,12 +130,54 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
 
         // S5 (ADR-16): the periodic snapshot doubles as the berth wait queue's idempotent
         // backstop — if a departed INFORM was ever lost, the freed berth is noticed here at
-        // worst 15 sim-minutes late instead of never. S8 (B-01, ADR-17): and as the weather
-        // hold's release backstop, same shape — a held vessel under recovered conditions is
-        // re-dispatched at worst 15 sim-minutes after the missed transition.
+        // worst 15 sim-minutes late instead of never. (S10, hunter B finding 6: that claim
+        // used to be FALSE — nothing removed the stale tracking entry, so the berth stayed
+        // held forever; reapDepartedGhosts below is what makes it true.) S8 (B-01, ADR-17):
+        // and as the weather hold's release backstop, same shape — a held vessel under
+        // recovered conditions is re-dispatched at worst 15 sim-minutes after the missed
+        // transition.
         if (periodic) {
+            reapDepartedGhosts(hm);
             releaseHeld(hm, windKnots, visibility, swell, state);
             ForwardWalkInToPlayerBehaviour.releaseQueuedGrants(hm);
+        }
+    }
+
+    /**
+     * S10 (bug hunt, hunter B finding 6): the "lost {@code departed} INFORM → berth back late"
+     * backstop this sweep always claimed to be. {@code releaseQueuedGrants} only re-derives
+     * free berths from {@code activeVessels} — nothing anywhere removed a stale entry, so a
+     * dropped departed INFORM ({@code DepartBehaviour} deletes its agent unconditionally after
+     * a possibly-failed DF lookup, whose empty result {@code ServiceLocator} caches for 1 s)
+     * held the berth FOREVER and stalled the whole wait queue behind it. A tracked vessel at
+     * DOCKED-or-later whose agent has left the in-process directory can only be a completed
+     * departure whose INFORM died — reap it with {@code handleDeparted}'s cleanup. Two windows
+     * considered: a FRESH spawn's registration gap is excluded by the stage gate (a new vessel
+     * is nowhere near DOCKED); a RESTORED DOCKED vessel's gap (tracking exists before its agent
+     * finishes spawning) is excluded because the broadcast producing this sweep is pause-gated
+     * and the load boots with the clock paused — no periodic can land until the world is fully
+     * respawned. The normal race (INFORM still queued when the agent is already gone) is
+     * benign — handleDeparted tolerates an absent entry. releaseQueuedGrants runs right after
+     * in the periodic block, so the freed berth is granted in the same sweep.
+     */
+    private static void reapDepartedGhosts(HarbourMasterAgent hm) {
+        if (hm.directory() == null) {
+            return; // stub harnesses have no directory; every production boot does
+        }
+        for (VesselTracking t : List.copyOf(hm.activeVessels().values())) {
+            if (t.stage().ordinal() < Stage.DOCKED.ordinal()) {
+                continue;
+            }
+            if (hm.directory().byName(
+                    it.unige.portcommand.bootstrap.AgentRoster.vesselLocalName(t.spec())).isPresent()) {
+                continue;
+            }
+            log.warn("{}: agent gone but tracking survived at {} — its departed INFORM was "
+                    + "lost; reaping the ghost (berth {} frees this sweep)",
+                    t.vesselId(), t.stage(), t.assignedBerth());
+            hm.activeVessels().remove(t.vesselId());
+            hm.priorityOverrides().remove(t.vesselId());
+            hm.berthWaitQueue().remove(t.vesselId());
         }
     }
 
@@ -243,14 +285,17 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
     }
 
     /**
-     * The recovery half of the cascade. Clears {@code weatherHeld} BEFORE initiating, so a
-     * second clear alert arriving while the fresh CNP is still collecting bids finds nothing
-     * to re-dispatch — the exactly-once guard on the HM side, complementing the ledger's
-     * {@code (conversationId, tugId)} key on the money side.
+     * The recovery half of the cascade. Clears {@code weatherHeld} BEFORE initiating the CNP,
+     * so a second clear alert arriving while the fresh CNP is still collecting bids finds
+     * nothing to re-dispatch — the exactly-once guard on the HM side, complementing the
+     * ledger's {@code (conversationId, tugId)} key on the money side. S10 (bug hunt, hunter B
+     * finding 8): the clear moved BELOW the bail-out guard — clearing first meant the guard's
+     * {@code return} discarded the only flag that makes {@code releaseHeld} retry, while the
+     * vessel-side mirror stayed held: a fail-open permanent freeze. A bailed-out sweep now
+     * leaves the flag set, so the next sweep retries legitimately (nothing was dispatched).
      */
     private void redispatch(HarbourMasterAgent hm, VesselTracking tracking, double windKnots, String state,
                             boolean emergencyClass) {
-        hm.activeVessels().put(tracking.vesselId(), tracking.withWeatherHeld(false));
         // The escalation deliberately SURVIVES the re-dispatch: the fresh CnpRequest below must
         // still read as emergency when the coordinator's R28 dequeue ranks the backlog (clearing
         // here would demote it before the CNP it was escalated FOR ever launches). It ends at
@@ -265,6 +310,7 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
                     tracking.vesselId(), tugsRequired, berthId);
             return;
         }
+        hm.activeVessels().put(tracking.vesselId(), tracking.withWeatherHeld(false));
         ACLMessage inform = MessageFactory.create(ACLMessage.INFORM);
         inform.addReceiver(tracking.aid());
         // S8 (B-01): the resume carries the same protocol tag — the vessel-side receiver clears

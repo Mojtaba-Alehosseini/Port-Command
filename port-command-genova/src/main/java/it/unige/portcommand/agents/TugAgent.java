@@ -137,9 +137,15 @@ public final class TugAgent extends PortCommandAgent implements it.unige.portcom
                 } else {
                     this.status = TugStatus.IDLE; // job/pickup incoherent — fail safe to idle
                     this.currentJob = null;
+                    this.pickupTarget = null;
                 }
             }
+            // S10 (bug hunt, hunter B finding 14): every non-EN_ROUTE branch clears
+            // pickupTarget — the DTO's contract is "the pickup while EN_ROUTE_TO_VESSEL,
+            // else null", and keeping it here re-persisted a stale pickup on the next save
+            // (the same staleness HandleCancelBehaviour clears on the live path).
             case ESCORTING -> {
+                this.pickupTarget = null;
                 if (currentJob != null) {
                     this.status = TugStatus.ESCORTING;
                     EscortToBerthBehaviour leg = new EscortToBerthBehaviour(this);
@@ -152,6 +158,7 @@ public final class TugAgent extends PortCommandAgent implements it.unige.portcom
             case RETURNING -> {
                 this.status = TugStatus.RETURNING;
                 this.currentJob = null;
+                this.pickupTarget = null;
                 ReturnToBaseBehaviour leg = new ReturnToBaseBehaviour(this);
                 setActiveMovement(leg);
                 addBehaviour(leg);
@@ -159,6 +166,7 @@ public final class TugAgent extends PortCommandAgent implements it.unige.portcom
             default -> {
                 this.status = TugStatus.IDLE;
                 this.currentJob = null;
+                this.pickupTarget = null;
             }
         }
         log.info("{} restored: status={} fuel={} job={}", tugId, status, fuelState,
