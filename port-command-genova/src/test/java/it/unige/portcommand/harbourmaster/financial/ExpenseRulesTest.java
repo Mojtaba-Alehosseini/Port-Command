@@ -80,12 +80,17 @@ class ExpenseRulesTest {
      * Pins the §5.2 canonical tug counts through the formula: {@code tugs*350 + 100 customs share
      * + hours*50 berth occupancy}, at hours=4 → {@code tugs*350 + 300}. Ferry's 0 tugs (own
      * propulsion) is the row that would break loudest if §5.2 ever drifted.
+     *
+     * <p>S11 (logic hunt, L1): cargo corrected 1 → 2. The old row pinned §5.2's abstract
+     * "cargo 1-2" lower bound, but R11 gives 2 for every tonnage the cargo templates can draw
+     * ([20k, 50k]) — the pin was locking in a €350-short EV. PrologQueriesTest cross-checks
+     * this table against R11 itself.
      */
     @ParameterizedTest(name = "marginalCost({0}) = {2} ({1} tugs)")
     @CsvSource({
         "tanker,           2, 1000.0",
         "container_vessel, 2, 1000.0",
-        "cargo_vessel,     1,  650.0",
+        "cargo_vessel,     2, 1000.0",
         "cruise_ship,      2, 1000.0",
         "ferry,            0,  300.0"
     })

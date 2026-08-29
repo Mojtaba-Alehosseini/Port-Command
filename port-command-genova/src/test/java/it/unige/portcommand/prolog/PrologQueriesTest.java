@@ -62,6 +62,33 @@ class PrologQueriesTest {
         assertEquals(expected, PrologQueries.tugsRequired(vesselType, tonnage, 140.0));
     }
 
+    /**
+     * S11 (logic hunt, L1): the drift pin between R11 and {@code ExpenseRules}' constants-only
+     * EV estimate. {@code TYPICAL_TUGS} is private, but {@code marginalCost} exposes it
+     * arithmetically — at hours=0, (marginalCost − 100 customs share) / 350 is the tug count
+     * the Assistant prices. Every type is checked at the min, mid and max of its
+     * {@code vessel_templates.json} tonnage range — the population the game can actually
+     * spawn — read from the REAL loader so there is no third copy of the ranges. Cargo's
+     * stale 1 (correct only below 20k tonnage, which no template produces) skewed every
+     * cargo EV €350 cheap and survived precisely because nothing coupled the two sides; if a
+     * future template/R9 edit makes a type's count non-uniform over its range, this fails
+     * and forces the pricing decision by hand.
+     */
+    @Test
+    void expenseRulesTypicalTugsMatchR11OverTheTemplateTonnageRanges() {
+        for (String type : it.unige.portcommand.negotiation.VesselTemplates.types()) {
+            int[] range = it.unige.portcommand.negotiation.VesselTemplates.forType(type).tonnageRange();
+            int priced = (int) Math.round(
+                    (it.unige.portcommand.harbourmaster.financial.ExpenseRules
+                            .marginalCost(type, "general_cargo", 0, range[0]) - 100.0) / 350.0);
+            for (int tonnage : new int[] {range[0], (range[0] + range[1]) / 2, range[1]}) {
+                assertEquals(PrologQueries.tugsRequired(type, tonnage, 140.0), priced,
+                        type + " at tonnage " + tonnage + ": the Assistant's EV prices " + priced
+                                + " tug(s) but R11 requires a different count");
+            }
+        }
+    }
+
     @Test
     void selectBestBidsHonoursScoreAndCount() {
         List<TugBid> bids = List.of(

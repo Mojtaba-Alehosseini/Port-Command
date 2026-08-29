@@ -78,6 +78,14 @@ public final class DayRolloverCoordinator {
 
     public DayRolloverCoordinator(EventBus eventBus, SimClock simClock, WalletLedger walletLedger,
                                   ReputationLedger reputationLedger, PerformativeCounter performativeCounter) {
+        // design rule 7, enforced where the charge lives: ExpenseRules' javadoc has always
+        // promised "task 24 throws if it ever reads anything else", but nothing threw (S11,
+        // money-hunter doc note). The sum is exact in binary (600+1200+1600+1500+300), so ==
+        // is safe here.
+        if (ExpenseRules.dailyFixed() != 5_200.0) {
+            throw new IllegalStateException("daily fixed cost must be EUR 5200 (design rule 7), got "
+                    + ExpenseRules.dailyFixed());
+        }
         this.eventBus = eventBus;
         this.simClock = simClock;
         this.walletLedger = walletLedger;

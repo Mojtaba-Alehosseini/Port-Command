@@ -51,14 +51,18 @@ public final class ExpenseRules {
 
     // ---- marginalCost inputs (task-10's Assistant EV estimate; unchanged by task 20) ----
 
-    // Typical tug count per type (PROJECT_DEFINITION §5.2's "expected per type over the
-    // template ranges": tanker 2 / container 2 / cargo 1-2 / cruise 2 / ferry 0). The real
-    // per-vessel count (PrologQueries.tugsRequired) also needs vessel length, which this
-    // constants-only estimate does not receive.
+    // Typical tug count per type — R11's outcome over the TEMPLATE tonnage ranges, which is
+    // what the Assistant's EV actually prices. S11 (logic hunt, L1): cargo was 1, quoting
+    // §5.2's abstract "cargo 1-2" — but the 1 needs tonnage < 20k, and cargo templates draw
+    // [20k, 50k] (contracted spawns pin 30k), so every cargo vessel the game can produce
+    // takes 2 tugs; the EV was €350 short on each one, flipping accept/reject at the margin.
+    // PrologQueriesTest pins this map against R11 over the template ranges so it cannot
+    // silently drift again. (The real per-vessel count, PrologQueries.tugsRequired, also
+    // needs vessel length, which this constants-only estimate does not receive.)
     private static final Map<String, Integer> TYPICAL_TUGS = Map.of(
             "tanker", 2,
             "container_vessel", 2,
-            "cargo_vessel", 1,
+            "cargo_vessel", 2,
             "ferry", 0,
             "cruise_ship", 2);
 

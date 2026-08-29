@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p><strong>Which test actually guards what</strong> (the adversarial review measured this, so do
  * not conflate them): the real regression guard is
  * {@link #defaultDayArithmeticIsTheRecordedFigures}, which pins every figure exactly. The band test
- * is the §7.5 ACCEPTANCE, and it is deliberately loose — a 10,425 landing tolerates +1,575/−2,425,
+ * is the §7.5 ACCEPTANCE, and it is deliberately loose — a 10,250 landing tolerates +1,750/−2,250,
  * so a small band edit (the review moved the tanker ceiling 8,000→8,500) shifts income without
  * failing it. That is the acceptance working as intended, not a hole; the exact-figures test is
  * what catches the drift. Do not delete the exact pin and rely on the band alone.
@@ -32,8 +32,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       Both are game-design choices with no canonical source.</li>
  * </ul>
  * The mix below is modelled on the demo transcript's Day 1 (2 contracted + 4 walk-ins, one of
- * which withdraws) and the real {@code contracts.json}. It lands at <b>+€10,425</b>, near
+ * which withdraws) and the real {@code contracts.json}. It lands at <b>+€10,250</b>, near
  * mid-band — see the task-20 Done note in {@code planning/20_financial_dashboard.md}.
+ * (History: 10,425 at task 20 → 10,225 when S5/D7 made contracted customs live → 10,250 at
+ * S11 when the cargo walk-in's tug count was corrected to R11's 2.)
  */
 class DefaultDayCalibrationTest {
 
@@ -63,8 +65,9 @@ class DefaultDayCalibrationTest {
     }
 
     /**
-     * The default day. Tug counts are PROJECT_DEFINITION §5.2's canonical outcomes — tanker 2,
-     * container 2, cargo 1, cruise 2, ferry 0 (own propulsion) — the same table
+     * The default day. Tug counts are R11's outcomes over the template tonnage ranges — tanker 2,
+     * container 2, cargo 2 (S11: the template range [20k, 50k] never reaches §5.2's abstract
+     * 1-tug case), cruise 2, ferry 0 (own propulsion) — the same table
      * {@code ExpenseRulesTest.marginalCostUsesTheCanonicalTugCountPerType} pins through the
      * marginal-cost formula. Contracted FEES are the real {@code contracts.json}: €5200 and €1800.
      *
@@ -92,7 +95,11 @@ class DefaultDayCalibrationTest {
     private static final List<Arrival> DEFAULT_DAY = List.of(
             Arrival.contracted("tanker", 2, 5_200.0),
             Arrival.contracted("ferry", 0, 1_800.0),
-            Arrival.walkIn("cargo_vessel", 1),
+            // S11 (logic hunt, L1): 1 → 2 tugs. The template tonnage range [20k, 50k] puts
+            // every cargo vessel in R9's 2-tug bracket — a 1-tug cargo walk-in is a day the
+            // game cannot produce, and calibrating to it hid the same €350/€500 skew the
+            // ExpenseRules EV carried.
+            Arrival.walkIn("cargo_vessel", 2),
             Arrival.walkIn("container_vessel", 2),
             Arrival.walkIn("tanker", 2),
             Arrival.withdraws("cargo_vessel"));
@@ -125,14 +132,15 @@ class DefaultDayCalibrationTest {
     @Test
     void defaultDayArithmeticIsTheRecordedFigures() {
         // Income: contracted 5200 + 1800 = 7000; walk-in §7.5 midpoints 1800 + 2650 + 6000 = 10450;
-        // extra-tug surcharges 500 each on the 2-tug tanker (contracted), container and tanker
-        // walk-ins = 1500. The CONTRACTED tanker's own surcharge is easy to forget — it is why this
-        // is 18950 and not 18450, which is exactly what this test caught.
-        assertEquals(18_950.0, dayIncome(), EPS, "7000 contracted + 10450 walk-in mids + 1500 extra-tug");
-        assertEquals(3_525.0, dayVariableExpense(), EPS,
-                "7 tug jobs x EUR475 + 2 contracted customs clearances x EUR100 (S5/D7)");
+        // extra-tug surcharges 500 each on the FOUR 2-tug vessels (contracted tanker, cargo,
+        // container and tanker walk-ins) = 2000. The CONTRACTED tanker's own surcharge is easy to
+        // forget — pre-S11 this was 18950's lesson; S11 added the cargo walk-in's (L1: cargo is a
+        // 2-tug vessel over the whole template range).
+        assertEquals(19_450.0, dayIncome(), EPS, "7000 contracted + 10450 walk-in mids + 2000 extra-tug");
+        assertEquals(4_000.0, dayVariableExpense(), EPS,
+                "8 tug jobs x EUR475 + 2 contracted customs clearances x EUR100 (S5/D7)");
         assertEquals(5_200.0, ExpenseRules.dailyFixed(), EPS);
-        assertEquals(10_225.0, dayIncome() - dayVariableExpense() - ExpenseRules.dailyFixed(), EPS);
+        assertEquals(10_250.0, dayIncome() - dayVariableExpense() - ExpenseRules.dailyFixed(), EPS);
     }
 
     /**

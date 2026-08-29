@@ -158,11 +158,13 @@ class RecommendationAlgorithmTest {
     @Test
     void acceptBeatsAnOverGreedyCounterNearTopOfBand() {
         // Hand-verified argmax table case: offer 1900 is already near the top of the cargo_vessel
-        // fair-price band ([1400, 2200], centre 1800); marginal cost is 700 (1 tug + customs +
-        // 5h berth share). accept.ev = 1900-700 = 1200. counter(+10%) clamps to 2090 with
-        // p_accept~0.19 at MAXIMUM urgency (round 4, fully elapsed, threatened) -> ev ~ -141;
-        // counter(+20%) clamps to the band edge 2200 with p_accept~0.12 -> ev ~ -262. Even at
-        // max urgency, gambling on a counter is dominated by the -500 withdrawal-penalty risk.
+        // fair-price band ([1400, 2200], centre 1800); marginal cost is 1050 (2 tugs + customs +
+        // 5h berth share — S11/L1: cargo is a 2-tug type over its whole template range; this
+        // fixture's 700 was the stale 1-tug figure). accept.ev = 1900-1050 = 850. counter(+10%)
+        // clamps to 2090 with p_accept~0.19 at MAXIMUM urgency (round 4, fully elapsed,
+        // threatened) -> ev ~ -207; counter(+20%) clamps to the band edge 2200 with
+        // p_accept~0.12 -> ev ~ -302. Even at max urgency, gambling on a counter is dominated
+        // by the -500 withdrawal-penalty risk.
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
         // "fully elapsed" = timeUsedSec at the shipped 60-real-second window the one-arg
         // RecommendationAlgorithm constructor reads from Settings (audit P1-9 rescaled this from
@@ -173,22 +175,27 @@ class RecommendationAlgorithmTest {
         Recommendation rec = algorithm.run(snapshot);
         assertEquals(RecommendationCandidate.ACCEPT, rec.action());
         assertEquals(1900.0, rec.price(), 1e-9);
-        assertEquals(1200.0, rec.ev(), 1e-6);
+        assertEquals(850.0, rec.ev(), 1e-6);
     }
 
     @Test
     void counterBeatsAcceptWhenOfferBarelyCoversMarginalCost() {
-        // Mirror case: offer 750 barely clears marginal cost (700), so accept.ev is only 50 —
-        // while the band centre (1800) is far above the offer, so a counter clamped up to the
-        // band floor (1400) has p_accept~0.51 at round 3's urgency (0.58) -> ev ~113, beating
-        // accept outright. counter(+10%) and counter(+20%) both clamp to the same 1400 floor
-        // here (both raw values undercut it), so they tie; the algorithm picks the first (+10%).
+        // Mirror case, moved to FERRY at S11: offer 400 barely clears the ferry marginal cost
+        // (350 — 0 tugs + customs + 5h berth share), so accept.ev is only 50, while the band
+        // centre (1300) is far above the offer, so a counter clamped up to the band floor
+        // (1100) wins on the floor's 750 margin over cost. The pre-S11 fixture used
+        // cargo_vessel with the stale 1-tug cost (700): at the corrected 1050 the cargo floor
+        // (1400) nets only 350 over cost, and the withdrawal-penalty risk makes the counter
+        // LOSE to a barely-covering accept — the scenario this test exists for is simply no
+        // longer constructible with cargo, and ferry is the type whose cost L1 did not move.
+        // counter(+10%) and counter(+20%) both clamp to the same 1100 floor here (both raw
+        // values undercut it), so they tie; the algorithm picks the first (+10%).
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
-        WalkInDialogueSnapshot snapshot = new WalkInDialogueSnapshot("cargo_2", "cargo_vessel", 8.0, 150.0, 30000,
-                "general_cargo", "berth_3", 5, 750.0, 0.0, 3, 0.0, false);
+        WalkInDialogueSnapshot snapshot = new WalkInDialogueSnapshot("ferry_2", "ferry", 5.0, 120.0, 12000,
+                "general_cargo", "berth_4", 5, 400.0, 0.0, 3, 0.0, false);
         Recommendation rec = algorithm.run(snapshot);
         assertEquals(RecommendationCandidate.COUNTER, rec.action());
-        assertEquals(1400.0, rec.price(), 1e-9);
+        assertEquals(1100.0, rec.price(), 1e-9);
         assertTrue(rec.ev() > 50.0, "counter's EV must beat accept's EV (50.0); got " + rec.ev());
     }
 
