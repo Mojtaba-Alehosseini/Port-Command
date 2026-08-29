@@ -51,19 +51,28 @@ public abstract class PortCommandAgent extends Agent {
         // honours the constructor-arg/no-static-DI rule (ADR-02).
         this.serviceLocator = new ServiceLocator(getContainerController(), this);
         // Task 22: if the spawner threaded an AgentDirectory through the args channel
-        // (position-independent — scanned by type), self-register so the save snapshot can
-        // reach this agent's beliefs (jade.wrapper deliberately hides the Agent object).
+        // (position-independent — scanned by type), the FIELD is assigned here so subclass
+        // setups can read agentDirectory(); the REGISTRATION happens last — see below.
         this.agentDirectory = optionalArgOfType(AgentDirectory.class);
-        if (agentDirectory != null) {
-            agentDirectory.register(this);
-        }
         registerServices();
         onSetup();
-        // LAST, after every subclass behaviour exists. Registration order buys no priority in
+        // After every subclass behaviour exists. Registration order buys no priority in
         // JADE (the scheduler round-robins), so this is for readability, not correctness — the
         // safety of the catch-all rests entirely on handledTemplate() below being complete.
         this.unhandledMessages = new UnhandledMessageLogBehaviour(this, handledTemplate());
         addBehaviour(unhandledMessages);
+        // S11 landing (the snapshot-NPE lead): directory registration is the VERY LAST setup
+        // step, because registration is publication — the HarbourMaster-thread snapshot walk
+        // (GameStateBuilder) and the ITs read whatever the directory exposes, and this used
+        // to run BEFORE onSetup(), so a save landing in an agent's boot window (new game,
+        // load respawn, walk-in spawn) could read half-built state: a null tugId crashed the
+        // snapshot's id sort, a null unhandledMessages NPE'd an IT. Register-last makes
+        // "directory-visible ⇒ fully initialized" an invariant, and the ConcurrentHashMap
+        // put inside register is the happens-before edge that publishes every field written
+        // above to the snapshotting thread. Do not move this call earlier.
+        if (agentDirectory != null) {
+            agentDirectory.register(this);
+        }
     }
 
     /**

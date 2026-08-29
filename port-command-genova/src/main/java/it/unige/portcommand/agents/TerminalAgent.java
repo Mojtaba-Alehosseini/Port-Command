@@ -61,6 +61,10 @@ public final class TerminalAgent extends PortCommandAgent implements Mementoable
 
     /** The persisted terminal record (task 22): occupancies sorted by berth id (determinism rule). */
     public TerminalStateDTO snapshotDto() {
+        // S11 landing: names the register-last invariant (PortCommandAgent.setup) instead of
+        // letting a violation surface as a comparator NPE two files away in GameStateBuilder.
+        java.util.Objects.requireNonNull(terminalId,
+                "snapshotDto before setup completed — the directory must only expose initialized agents");
         return new TerminalStateDTO(terminalId, state.occupancies().stream()
                 .sorted(java.util.Comparator.comparing(BerthOccupancy::berthId))
                 .toList());

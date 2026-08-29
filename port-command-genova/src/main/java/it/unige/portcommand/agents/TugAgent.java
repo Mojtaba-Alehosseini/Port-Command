@@ -175,6 +175,10 @@ public final class TugAgent extends PortCommandAgent implements it.unige.portcom
 
     /** The persisted tug record (task 22). BIDDING normalises to IDLE — see {@link TugStateDTO}. */
     public TugStateDTO snapshotDto() {
+        // S11 landing: names the register-last invariant (PortCommandAgent.setup) instead of
+        // letting a violation surface as a comparator NPE two files away in GameStateBuilder.
+        java.util.Objects.requireNonNull(tugId,
+                "snapshotDto before setup completed — the directory must only expose initialized agents");
         TugStatus persistedStatus = status == TugStatus.BIDDING ? TugStatus.IDLE : status;
         TugStateDTO.TugJobDTO job = currentJob == null ? null
                 : new TugStateDTO.TugJobDTO(currentJob.vesselId(), currentJob.berthPosition(),
