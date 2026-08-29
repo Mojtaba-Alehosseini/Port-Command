@@ -140,6 +140,13 @@ public final class Leaderboard {
             // can never be the corruptor.
             Path temp = file.resolveSibling(file.getFileName() + ".tmp");
             Files.write(temp, mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(entries));
+            // S11 (fix review, R4): the idiom's third step was missing — without the fsync the
+            // rename can publish unflushed bytes (durable name, page-cache data), and an OS
+            // crash right after game over still wiped the board the atomic move was bought for.
+            try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(
+                    temp, java.nio.file.StandardOpenOption.WRITE)) {
+                channel.force(true);
+            }
             try {
                 Files.move(temp, file, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
                         java.nio.file.StandardCopyOption.REPLACE_EXISTING);

@@ -299,6 +299,24 @@ final class DialogueTabView extends JPanel {
      * "tell the tanker: deal") — that's fine, it's just the published event's payload;
      * nothing about rendering THIS tab depends on which vessel ends up targeted. */
     private void dispatchRouted(String typingVesselId, DialogueTabModel origin, PipelineResult.Routed routed) {
+        String targetVesselId = routed.addressee() != null ? routed.addressee() : typingVesselId;
+        PlayerCommandKind kind = kindFor(routed.msg().getPerformative());
+        // Status is an OBSERVABLE, GUI-local concept — the tab already holds everything a
+        // status reply could say, and no vessel-side behaviour answers a QUERY_REF (verified:
+        // EvaluateCounterOfferBehaviour's template matches PROPOSE/ACCEPT/REJECT/CANCEL only),
+        // so dispatching one was pure dead air in the play-test. Answer locally instead.
+        // S10 (hunter C finding 2): a vocative ASK asks about the ADDRESSEE — answering with
+        // the typing tab's own status printed the wrong vessel's numbers.
+        // S11 (fix review, R3): the ASK arm sits ABOVE the closed-tab guard — an ASK sends
+        // nothing, so the guard's "must never emit a move" rationale does not cover it, and
+        // guarding it cost the player the final figures they were asking for. A closed tab's
+        // statusLine() already speaks in the past tense.
+        if (kind == PlayerCommandKind.ASK) {
+            appendSystem(targetVesselId.equals(typingVesselId)
+                    ? statusLine()
+                    : statusLineFor(targetVesselId, false));
+            return;
+        }
         if (origin.isClosed()) {
             // The negotiation ended while the parse was in flight (S10, finding 4's second
             // half): a closed dialogue must never emit a move, and silence here would leave
@@ -306,22 +324,8 @@ final class DialogueTabView extends JPanel {
             appendSystem("This negotiation ended while I was reading that — nothing was sent.");
             return;
         }
-        String targetVesselId = routed.addressee() != null ? routed.addressee() : typingVesselId;
-        PlayerCommandKind kind = kindFor(routed.msg().getPerformative());
         if (kind == null) {
             handleUnroutableRequest(routed);
-            return;
-        }
-        // Status is an OBSERVABLE, GUI-local concept — the tab already holds everything a
-        // status reply could say, and no vessel-side behaviour answers a QUERY_REF (verified:
-        // EvaluateCounterOfferBehaviour's template matches PROPOSE/ACCEPT/REJECT/CANCEL only),
-        // so dispatching one was pure dead air in the play-test. Answer locally instead.
-        // S10 (hunter C finding 2): a vocative ASK asks about the ADDRESSEE — answering with
-        // the typing tab's own status printed the wrong vessel's numbers.
-        if (kind == PlayerCommandKind.ASK) {
-            appendSystem(targetVesselId.equals(typingVesselId)
-                    ? statusLine()
-                    : statusLineFor(targetVesselId, false));
             return;
         }
         @SuppressWarnings("unchecked")
