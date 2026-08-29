@@ -13,6 +13,7 @@ import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.TugJobAwardedEvent;
 import it.unige.portcommand.harbourmaster.CnpRequest;
+import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
 import it.unige.portcommand.harbourmaster.cnp.CnpRetryBehaviour;
 import it.unige.portcommand.prolog.PrologQueries;
@@ -52,12 +53,36 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
     @Override
     public void action() {
         HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
+        // S11 (logic hunt L3 + fix review): completed() lives in finally — EVERY exit from the
+        // award step, an unexpected exception included, must release the serialized-CNP queue,
+        // or each later Contract Net queues forever behind a session that never closed. The
+        // catch keeps the HarbourMaster alive: JADE's Agent.run treats an uncaught action()
+        // exception as agent death (the B11 dead-hub lesson), which is strictly worse than one
+        // unawarded session — the vessel's own timeout/withdraw machinery still runs.
+        try {
+            awardOrReject(hm);
+        } catch (RuntimeException e) {
+            log.error("CNP for {}: award step failed — session closed with no award; no retry "
+                    + "was scheduled", req.vesselId(), e);
+        } finally {
+            hm.cnpCoordinator().completed();
+        }
+    }
+
+    private void awardOrReject(HarbourMasterAgent hm) {
         Map<String, ACLMessage> bidsByTugId = new LinkedHashMap<>();
         List<TugBid> bids = new ArrayList<>(proposals.size());
         for (ACLMessage p : proposals) {
             JsonNode content = TerminalJson.readTreeOrNull(p.getContent());
+            // S11 (logic hunt, L3): non-finite is malformed. JSON "1e999" parses to Infinity,
+            // PrologTerms would render it as the bare token `Infinity` — a VARIABLE in Prolog
+            // — and R12's is/2 then RAISES instantiation_error rather than failing. Filter it
+            // here at the seam, where a bad bid costs one bidder and not the session.
             if (content == null || !content.hasNonNull("cost") || !content.hasNonNull("eta_minutes")
-                    || !content.hasNonNull("fuel_state")) {
+                    || !content.hasNonNull("fuel_state")
+                    || !Double.isFinite(content.get("cost").asDouble())
+                    || !Double.isFinite(content.get("eta_minutes").asDouble())
+                    || !Double.isFinite(content.get("fuel_state").asDouble())) {
                 continue; // malformed bid, silently excluded from scoring
             }
             String tugId = p.getSender().getLocalName();
@@ -65,11 +90,27 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
                     content.get("eta_minutes").asDouble(), content.get("fuel_state").asDouble()));
             bidsByTugId.put(tugId, p);
         }
+        // S11 (fix review, R2): never award into a weather hold. Both hold producers
+        // (holdVessel, the decline handler's hold shape) write held entries at AWAITING_TUG,
+        // and the release sweep only ever releases that shape — this behaviour's merge below
+        // was the ONE writer that could move a held entry to IN_TRANSIT (a shortfall CNP
+        // racing the hold), a combination neither releaseHeld (stage filter) nor holdVessel
+        // (unsafe-only filter) ever touches: tugs dispatched into the storm, and if the
+        // weather cleared before the next 15-sim-min sweep, a vessel and berth stuck for the
+        // rest of the run. Rejecting the bids preserves the held ⇒ AWAITING_TUG invariant;
+        // the release sweep owns the fresh CNP on clear (redispatch), so no retry here — and
+        // no tug_hold INFORM either, the vessel already holds under the weather INFORM.
+        VesselTracking current = hm.activeVessels().get(req.vesselId());
+        if (current != null && current.weatherHeld()) {
+            log.info("CNP for {}: award overtaken by a weather hold — {} bid(s) rejected, the "
+                    + "release sweep re-tenders on clear", req.vesselId(), bidsByTugId.size());
+            rejectAll(hm, bidsByTugId);
+            return;
+        }
         if (bids.isEmpty()) {
             holdVessel(hm, NO_BIDS);
-            // Terminal path (the retry, if scheduled, re-enters through the queue) — release
-            // the serialized-CNP queue (B2).
-            hm.cnpCoordinator().completed();
+            // Terminal path (the retry, if scheduled, re-enters through the queue); the
+            // serialized-CNP queue is released by action()'s finally (B2).
             return;
         }
 
@@ -83,14 +124,17 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
             // hold, no retry, and the retry counter cleared. Route it to the same hold+retry the
             // zero-bid branch above uses instead.
             //
-            // Honest reachability note: this is a DEFENSIVE guard, not a live bug. CnpRequest
-            // validates tugsRequired >= 1, and R13 (best_n_bids) returns at least one winner for
-            // any non-empty, well-formed bid list, so reaching here needs the Prolog goal itself
-            // to fail — e.g. a non-finite cost rendering as an unbound variable in the term.
-            // PrologQueries.selectBestBids collapses exactly that failure to an empty list with no
-            // log line, which is why it deserves a guard rather than a comment. The genuinely
-            // reachable sibling — winners.size() < tugsRequired, an under-strength escort — is
-            // backlog A-08 and is deliberately NOT changed here.
+            // Honest reachability note (rewritten S11 — the old text misstated the failure
+            // mode): this is a DEFENSIVE guard, not a live bug. CnpRequest validates
+            // tugsRequired >= 1 and R13 (best_n_bids) returns at least one winner for any
+            // non-empty well-formed bid list, so reaching here needs the Prolog goal to FAIL
+            // outright. The once-hypothesised route — a non-finite cost rendering as an
+            // unbound variable — would actually make R12's is/2 RAISE, not fail (swipl-
+            // verified, S11 L3); it is filtered at the parse above, and a raise from any
+            // other cause lands in action()'s catch with the queue still released. What
+            // remains for this branch is the unknown-unknown goal failure it exists for. The
+            // genuinely reachable sibling — winners.size() < tugsRequired, an under-strength
+            // escort — is backlog A-08 and is deliberately NOT changed here.
             log.warn("CNP for {}: {} bid(s) collected but Prolog selected no winner — holding "
                     + "rather than sending the vessel out unescorted", req.vesselId(), bids.size());
             // Answer every bidder before leaving (2026-08-10). Holding the vessel without
@@ -99,7 +143,6 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
             // loser path below sends, so the tugs see a normal end to the session.
             rejectAll(hm, bidsByTugId);
             holdVessel(hm, NO_WINNING_BID);
-            hm.cnpCoordinator().completed();
             return;
         }
         for (Map.Entry<String, ACLMessage> entry : bidsByTugId.entrySet()) {
@@ -149,8 +192,8 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
         hm.cnpRetryAttempts().remove(req.vesselId());
         // Awards are on the wire (before any queued CFP, per-pair FIFO) — the winning tugs will
         // set currentJob before they see the next session's CFP, which is what makes their
-        // busy-REFUSE guard effective. Release the serialized-CNP queue (B2).
-        hm.cnpCoordinator().completed();
+        // busy-REFUSE guard effective. The serialized-CNP queue is released by action()'s
+        // finally (B2).
     }
 
     /** Contentless REJECT to every bidder — the shape the ordinary loser path sends. */

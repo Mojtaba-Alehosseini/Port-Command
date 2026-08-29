@@ -324,6 +324,53 @@ class HarbourMasterAgentIT {
     }
 
     /**
+     * S11 (fix review, R2): an award must never dispatch into a weather hold. The hold
+     * machinery writes held entries at AWAITING_TUG and the release sweep only releases that
+     * shape — pre-fix, a CNP whose award landed after the hold (the shipped race: a shortfall
+     * re-tender in flight when the storm hits) merged IN_TRANSIT + tugs into the held entry,
+     * a combination no sweep ever touches: tugs into the storm, and if the weather cleared
+     * before the next 15-sim-min sweep, a vessel and berth stuck for the rest of the run.
+     * Post-fix the award rejects every bid, leaves the entry held at AWAITING_TUG, and the
+     * release sweep's fresh CNP owns the recovery. Born red on the pre-S11 tree (the tug
+     * received ACCEPT_PROPOSAL).
+     */
+    @Test
+    void cnpAwardIntoWeatherHold_rejectsBidsAndPreservesTheHoldShape() throws Exception {
+        ServiceContract contract =
+                new ServiceContract("CONTRACT-H1", "H001", "cargo_vessel", "berth_1", 5200.0, 8, 32_400_000L);
+        VesselSpec spec = new VesselSpec("H001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 28_830_000L);
+        HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-H1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        Probe vessel = spawnProbe("th_vessel", null);
+        Probe terminal = spawnProbe("th_terminal", "terminal");
+        Probe tug = spawnProbe("th_tug1", "tug-escort");
+
+        vessel.outbox.put(contractRequest(hm, "CONTRACT-H1", spec, "th_vessel"));
+        assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000));
+
+        ACLMessage cfp = pollUntil(tug.inbox, m -> true, 10_000);
+        assertNotNull(cfp, "tug must receive the CFP");
+
+        // The storm lands while the CNP window is open: mark the tracking weather-held (the
+        // exact state holdVessel/the decline handler write), then bid into the doomed session.
+        assertNotNull(pollTracking(hm, "H001", t -> true, 10_000), "tracking exists before the hold");
+        hm.activeVessels().computeIfPresent("H001", (id, t) -> t.withWeatherHeld(true));
+        tug.outbox.put(bidReply(cfp, 100.0, 5.0, 0.9));
+
+        ACLMessage answer = pollUntil(tug.inbox, m -> true, 15_000);
+        assertNotNull(answer, "the bidder must still get an answer");
+        assertEnvelope(answer, ACLMessage.REJECT_PROPOSAL);
+        assertNeverArrives(tug.inbox, ACLMessage.ACCEPT_PROPOSAL, 2000);
+
+        VesselTracking held = hm.activeVessels().get("H001");
+        assertNotNull(held);
+        assertTrue(held.weatherHeld(), "the hold flag survives the overtaken award");
+        assertEquals(VesselTracking.Stage.AWAITING_TUG, held.stage(),
+                "held ⇒ AWAITING_TUG must hold — the release sweep only releases that shape");
+        assertTrue(held.assignedTugs().isEmpty(),
+                "no tug may be dispatched into the hold; the release sweep re-tenders on clear");
+    }
+
+    /**
      * A bid that arrives AFTER the CFP window closes still gets an answer (2026-08-10).
      *
      * <p>{@code BidInCNPBehaviour} warns about a late CFP but replies anyway, and the collector's
