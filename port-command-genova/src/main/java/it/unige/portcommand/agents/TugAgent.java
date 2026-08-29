@@ -282,6 +282,18 @@ public final class TugAgent extends PortCommandAgent implements it.unige.portcom
         pendingBids.clear();
     }
 
+    /**
+     * Re-queues a message this agent received but must not consume — S11 (fix review, R1):
+     * the keyed overtaken-ACCEPT scan in {@code HandleCancelBehaviour} drains queued awards
+     * looking for the cancelled vessel's and puts the others back. JADE's
+     * {@code Agent.putBack} is protected, so the subclass bridges it for the sibling-package
+     * behaviour. putBack re-inserts at the FRONT of the queue — the caller restores original
+     * order by putting back in reverse.
+     */
+    public void putBackMessage(jade.lang.acl.ACLMessage msg) {
+        putBack(msg);
+    }
+
     // ---------------------------------------------------------------------------
     // Status / job accessors (public: behaviours live in sibling packages).
     // ---------------------------------------------------------------------------

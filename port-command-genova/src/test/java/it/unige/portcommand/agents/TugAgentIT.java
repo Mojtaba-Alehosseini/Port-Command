@@ -298,6 +298,57 @@ class TugAgentIT {
         assertEnvelope(reply, ACLMessage.PROPOSE);
     }
 
+    /**
+     * S11 (fix review, R1): the CANCEL is KEYED by vessel. One addressed to a vessel this tug
+     * is NOT escorting targets a queued award, never the live escort — pre-S11 the busy branch
+     * aborted on ANY CANCEL, so a hold CANCEL for a stale assignment would have stranded the
+     * vessel actually under tow mid-channel. Born red on the pre-S11 tree: the mismatched
+     * CANCEL sent the tug RETURNING.
+     */
+    @Test
+    void cancelKeyedToADifferentVesselNeverAbortsTheLiveEscort() throws Exception {
+        spawnTug("tug_1", BASES[0], 1.0);
+
+        send(cfp("cnp-key1", "tug_1"));
+        ACLMessage bid = pollReply(5000);
+        assertEnvelope(bid, ACLMessage.PROPOSE);
+        sendAccept(bid, "VA", BERTH);
+        assertNotNull(awaitTug("tug_1", d -> d.status() == TugStatus.EN_ROUTE_TO_VESSEL, 40),
+                "staging: the award is taken and the escort is live");
+
+        sendCancel("cnp-key1", "tug_1", "VB"); // a hold CANCEL for some OTHER vessel
+
+        assertNull(awaitTug("tug_1", d -> d.status() == TugStatus.RETURNING, 10),
+                "a CANCEL keyed to a vessel this tug is not escorting must not abort the live escort");
+        // Still committed to VA: a probe CFP draws REFUSE(busy), not a bid.
+        inbox.clear();
+        send(cfp("cnp-key2", "tug_1"));
+        ACLMessage reply = pollReply(5000);
+        assertEnvelope(reply, ACLMessage.REFUSE);
+    }
+
+    /**
+     * S11 (fix review, R1, the queue half): with an unrelated award QUEUED, a keyed CANCEL for
+     * an absent vessel must not eat it. Pre-S11 the idle-branch consume took whichever
+     * ACCEPT_PROPOSAL sat first in the queue; post-fix the scan matches by vessel_id and puts
+     * everything else back. Rotation (cancel-first vs accept-first) is not controllable from a
+     * test, so — like {@link #cancelImmediatelyBehindAcceptNeverEscorts} — this asserts the
+     * CONVERGED outcome: VB's escort survives either rotation.
+     */
+    @Test
+    void keyedCancelForAnAbsentVesselLeavesAQueuedAwardUntouched() throws Exception {
+        spawnTug("tug_1", BASES[0], 1.0);
+
+        send(cfp("cnp-put1", "tug_1"));
+        ACLMessage bid = pollReply(5000);
+        assertEnvelope(bid, ACLMessage.PROPOSE);
+        sendAccept(bid, "VB", BERTH);
+        sendCancel("cnp-put1", "tug_1", "VA"); // keyed to a vessel with NO queued award
+
+        assertNotNull(awaitTug("tug_1", d -> d.status() == TugStatus.EN_ROUTE_TO_VESSEL, 40),
+                "VB's queued award must survive a keyed CANCEL for a different vessel");
+    }
+
     // --- S9 (P1-8): the post-ACCEPT decline finally SENDS — §4.4 tug plan 3 -----------------
 
     /**
@@ -397,6 +448,15 @@ class TugAgentIT {
         cancel.setConversationId(conversationId);
         cancel.addReceiver(new AID(tugId, AID.ISLOCALNAME));
         cancel.setContent(TerminalJson.write(Map.of("reason", "operator_abort")));
+        outbox.put(cancel);
+    }
+
+    /** S11 (R1): the keyed variant — the shape the weather hold sends since the CANCEL was keyed. */
+    private void sendCancel(String conversationId, String tugId, String vesselId) throws InterruptedException {
+        ACLMessage cancel = MessageFactory.create(ACLMessage.CANCEL);
+        cancel.setConversationId(conversationId);
+        cancel.addReceiver(new AID(tugId, AID.ISLOCALNAME));
+        cancel.setContent(TerminalJson.write(Map.of("reason", "weather_hold", "vessel_id", vesselId)));
         outbox.put(cancel);
     }
 

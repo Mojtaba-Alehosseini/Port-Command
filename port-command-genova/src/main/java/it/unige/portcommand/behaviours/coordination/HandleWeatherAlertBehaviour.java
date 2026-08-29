@@ -257,7 +257,11 @@ public final class HandleWeatherAlertBehaviour extends CyclicBehaviour {
             tugs.stream().filter(aid -> aid.getLocalName().equals(tugId)).findFirst().ifPresent(tugAid -> {
                 ACLMessage cancel = MessageFactory.create(ACLMessage.CANCEL);
                 cancel.addReceiver(tugAid);
-                cancel.setContent(TerminalJson.write(Map.of("reason", "weather_hold")));
+                // S11 (fix review, R1): the CANCEL names its vessel. Unkeyed, the tug-side
+                // overtaken-ACCEPT consume (S10 B2) could only take "whichever ACCEPT is
+                // queued first" — under two queued awards it discarded the wrong one.
+                cancel.setContent(TerminalJson.write(Map.of(
+                        "reason", "weather_hold", "vessel_id", tracking.vesselId())));
                 hm.sendLogged(cancel);
             });
         }
