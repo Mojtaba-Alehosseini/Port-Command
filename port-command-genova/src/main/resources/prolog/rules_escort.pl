@@ -8,7 +8,10 @@ base_tugs(Tonnage, 2) :- Tonnage >= 20000, Tonnage < 50000, !.
 base_tugs(_, 3).
 
 % RULE R10: per-vessel-type minimum (tankers need pilot + 2 tugs in the approach lane).
-type_tug_minimum(tanker, 2) :- !.
+%   S11 steadfastness fix: the output is bound AFTER the cut. With the old head-constant
+%   form (type_tug_minimum(tanker, 2) :- !.) a CHECKING call type_tug_minimum(tanker, 0)
+%   skipped clause 1 on head mismatch — the cut never ran — and clause 2 wrongly succeeded.
+type_tug_minimum(tanker, Min) :- !, Min = 2.
 type_tug_minimum(VType, 0) :- vessel_type(VType).
 
 % RULE R11: tugs_required/2 — ferry is exempt (own propulsion -> 0 tugs; task 07b,
@@ -17,9 +20,12 @@ type_tug_minimum(VType, 0) :- vessel_type(VType).
 %   tankers 3, which would starve the CNP and break the P&L's ~1-2-tugs/vessel
 %   assumption). Canonical outcomes: PROJECT_DEFINITION S5.2 — tanker/container/
 %   cruise 2, cargo 1-2, ferry 0. Rule count stays 30 (body change, not a new rule).
-tugs_required(Vessel, 0) :-
+%   S11 steadfastness fix (same shape as R10): ferry's 0 is bound after the cut, so a
+%   checking call tugs_required(Ferry, 2) FAILS instead of falling through to clause 2.
+tugs_required(Vessel, N) :-
     instance_of(Vessel, ferry),
-    !.
+    !,
+    N = 0.
 tugs_required(Vessel, N) :-
     instance_of(Vessel, VType),
     vessel_type(VType),

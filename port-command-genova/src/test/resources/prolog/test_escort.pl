@@ -18,6 +18,9 @@ test(r9_base_tugs_large) :- base_tugs(60000, 3).
 % RULE R10
 test(r10_tanker_minimum) :- type_tug_minimum(tanker, 2).
 test(r10_other_minimum)  :- type_tug_minimum(ferry, 0).
+% S11 steadfastness pins: a CHECKING call with the wrong output must FAIL. Before the
+% fix the red cut (head-constant + bare !) let these succeed through the next clause.
+test(r10_tanker_wrong_minimum_fails, [fail]) :- type_tug_minimum(tanker, 0).
 
 % RULE R11 — canonical tug outcomes per PROJECT_DEFINITION S5.2 (updated by task 07b,
 % v1.1 2026-07-04: ferry exempt = own propulsion; every other type capped at 2 because
@@ -37,6 +40,11 @@ test(r11_cargo_mid_two, [setup(mk_vessel(ev, cargo_vessel, 40000)), cleanup(rm_v
     tugs_required(ev, N), N =:= 2.       % 20-50k -> base 2
 test(r11_cruise_large_capped_two, [setup(mk_vessel(ev, cruise_ship, 160000)), cleanup(rm_vessel(ev))]) :-
     tugs_required(ev, N), N =:= 2.       % base 3 capped at 2
+% S11 steadfastness pin: the ferry exemption must also hold in CHECKING mode — before the
+% fix, tugs_required(ferry, 2) succeeded via clause 2 (the tonnage bracket) because the
+% head-constant 0 blocked clause 1's cut from running.
+test(r11_ferry_never_two_checkmode, [setup(mk_vessel(ev, ferry, 30000)), cleanup(rm_vessel(ev)), fail]) :-
+    tugs_required(ev, 2).
 
 % RULE R12
 test(r12_score_bid) :-

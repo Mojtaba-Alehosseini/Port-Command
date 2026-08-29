@@ -13,16 +13,25 @@ priority_rank(maintenance, 6).
 
 % RULE R26: priority_class_of/2 — bridge a vessel to its priority class. A runtime
 %   override (emergency/medical) wins; ferries are scheduled_ferry; default scheduled_arrival.
+%   S11 steadfastness fix: each clause commits (cut) on its GUARD and only then binds the
+%   class. The old head-constant form made a CHECKING call slide past the cut on head
+%   mismatch — priority_class_of(Ferry, scheduled_arrival) succeeded via clause 3, and an
+%   overridden vessel still answered its un-overridden class — contradicting this very
+%   comment. Latent for the shipped Java (effectivePriority always queries with a fresh
+%   variable), pinned by the [fail] checking-mode tests.
 priority_class_of(Vessel, Class) :-
-    vessel_priority_override(Vessel, Class),
-    !.
-priority_class_of(Vessel, scheduled_ferry) :-
+    vessel_priority_override(Vessel, Override),
+    !,
+    Class = Override.
+priority_class_of(Vessel, Class) :-
     instance_of(Vessel, ferry),
-    !.
-priority_class_of(Vessel, scheduled_arrival) :-
+    !,
+    Class = scheduled_ferry.
+priority_class_of(Vessel, Class) :-
     instance_of(Vessel, VType),
     vessel_type(VType),
-    !.
+    !,
+    Class = scheduled_arrival.
 
 % RULE R27: higher_priority/2 — A outranks B (lower rank number).
 higher_priority(ClassA, ClassB) :-

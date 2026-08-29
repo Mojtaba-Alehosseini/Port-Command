@@ -20,6 +20,15 @@ test(r26_default_class, [setup(mk_vessel(pv, tanker)), cleanup(rm_vessel(pv))]) 
 test(r26_override_wins, [setup((mk_vessel(pv, tanker), assertz(user:vessel_priority_override(pv, emergency)))),
                          cleanup(rm_vessel(pv))]) :-
     priority_class_of(pv, emergency).
+% S11 steadfastness pins: R26 must be a FUNCTION of the vessel — a checking call with the
+% wrong class must fail. Before the fix the red cuts let a ferry pass as scheduled_arrival
+% (clause 3) and an overridden vessel still answer its un-overridden class.
+test(r26_ferry_is_not_default_checkmode, [setup(mk_vessel(pv, ferry)), cleanup(rm_vessel(pv)), fail]) :-
+    priority_class_of(pv, scheduled_arrival).
+test(r26_override_shadows_default_checkmode,
+     [setup((mk_vessel(pv, tanker), assertz(user:vessel_priority_override(pv, emergency)))),
+      cleanup(rm_vessel(pv)), fail]) :-
+    priority_class_of(pv, scheduled_arrival).
 
 % RULE R27
 test(r27_higher_priority)        :- higher_priority(emergency, maintenance).
