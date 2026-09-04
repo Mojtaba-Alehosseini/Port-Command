@@ -8,12 +8,12 @@ This directory is the buildable Gradle module. The authoritative specs live one
 level up: `../PROJECT_DEFINITION.md` (the what), `../MASTER_PLAN.md` (the how),
 `../CLAUDE.md` (operating rules).
 
-> **Status (2026-07-27, task 26): feature-complete and demo-ready.** All 26 tasks are done — agents,
+> **Status (2026-07-27, task 26): feature-complete and demo-ready.** All 26 tasks are done: agents,
 > Prolog kernel, DCG grammar, Rasa, LLM sidecar, GUI, save/load, scenarios, game loop, test suite,
 > hardening. *(This note used to read "Task 01 status: scaffolding + a JADE/JPL smoke test only",
 > which had been stale since roughly task 05.)*
 >
-> **Start the game from the repo root, not here** — `../start.sh` / `..\start.bat` boot Rasa and the
+> **Start the game from the repo root, not here.** `../start.sh` / `..\start.bat` boot Rasa and the
 > LLM sidecar alongside it. The `start.sh`/`start.bat` in this directory are thin delegators kept so
 > older instructions still work. See [`../README.md`](../README.md) for the quickstart.
 
@@ -21,7 +21,7 @@ level up: `../PROJECT_DEFINITION.md` (the what), `../MASTER_PLAN.md` (the how),
 
 | Tool | Version | Notes |
 |---|---|---|
-| JDK | **Temurin 21 (LTS)** | The Gradle toolchain pins 21; your PATH `java` may differ — that's fine. |
+| JDK | **Temurin 21 (LTS)** | The Gradle toolchain pins 21; your PATH `java` may differ: that's fine. |
 | Gradle | wrapper (**8.10.2**) | Use `./gradlew` / `gradlew.bat`; never a system Gradle. |
 | SWI-Prolog | **10.0.2** | System install. Ships `jpl.jar` + the native JPL bridge. |
 | Python | **3.10 / 3.11** (never 3.12+) | Ontology converter (task 02) + Rasa (later). See [Regenerating the ontology](#regenerating-the-ontology-prolog-file). |
@@ -33,7 +33,7 @@ macOS `brew install swi-prolog`, Linux `apt install swi-prolog`.
 
 1. **Stage the JADE jar.** JADE 4.6.0 is not on Maven Central (license). Download
    `JADE-bin-4.6.0.zip` from <https://jade.tilab.com/>, and copy the `jade.jar`
-   inside it to `lib/jade-4.6.0.jar`. The jar is git-ignored — do not commit it.
+   inside it to `lib/jade-4.6.0.jar`. The jar is git-ignored; do not commit it.
 
 2. **Point the build at SWI-Prolog and expose the native bridge.** Set
    `SWI_HOME_DIR` to your install root and put its `bin/` on `PATH`, so the OS
@@ -75,7 +75,7 @@ A successful `./gradlew run` logs `SmokeAgent smoke up`, `JPL consult(...) -> tr
 
 `src/main/resources/prolog/port_ontology.pl` and `nlp-python/rasa/data/ontology_vocab.yml`
 are **generated** from `src/main/resources/ontology/port_ontology.owl` (the single source
-of truth) — never hand-edit them. Edit the OWL, then regenerate.
+of truth). Never hand-edit them. Edit the OWL, then regenerate.
 
 One-time Python 3.11 venv (the converter forbids 3.12+):
 
@@ -85,7 +85,7 @@ py -3.11 -m venv nlp-python/.venv
 nlp-python/.venv/Scripts/python -m pip install -r nlp-python/requirements.txt
 ```
 
-Regenerate (deterministic — running twice yields byte-identical files):
+Regenerate (deterministic: running twice yields byte-identical files):
 
 ```bash
 # from the repo root
