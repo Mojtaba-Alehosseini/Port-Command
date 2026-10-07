@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Port Command Genova — the demo launcher (Linux/macOS, and Git Bash on Windows).
+# Port Command Genova - the demo launcher (Linux/macOS, and Git Bash on Windows).
 #
 # Boots the three processes in the order the game needs them, health-checking between each:
 #
-#   1. Rasa NLU server      :5005   from nlp-python/.venv-rasa   (Python 3.10 — rasa 3.6.21
+#   1. Rasa NLU server      :5005   from nlp-python/.venv-rasa   (Python 3.10 - rasa 3.6.21
 #                                    refuses 3.11, see BUILD_LOG task 12)
 #   2. Flask LLM sidecar    :5006   from nlp-python/.venv        (Python 3.11, LLM_QUANT=onnx)
 #   3. The Java game                ./gradlew run --args="--gui"
 #
 # TWO VENVS, ONE PER SERVICE. planning/26's sketch did `source .venv/bin/activate` once and ran
-# both services from it; that predates the two-venv split and cannot work — rasa 3.6.21 will not
+# both services from it; that predates the two-venv split and cannot work - rasa 3.6.21 will not
 # install on 3.11, and the ONNX Runtime GenAI wheel the sidecar needs lives only in .venv. Each
 # service is started from its OWN interpreter below, so nothing is activated at all.
 #
@@ -17,7 +17,7 @@
 # traps re-raise into it), so a single Ctrl-C stops all three. stop.sh is the manual escape
 # hatch if this shell is ever killed with -9.
 #
-#   ./start.sh                       tutorial/sandbox via the New Game dialog
+#   ./start.sh                       sandbox; Game - New Game... picks a scenario
 #   ./start.sh --scenario busy_day   boot straight into a scenario
 #   ./start.sh --profile             record logs/profile.jfr for 15 minutes
 #   ./start.sh --no-services         game only (services already running)
@@ -83,7 +83,7 @@ trap 'exit 130' INT     # -> runs the EXIT trap
 trap 'exit 143' TERM
 
 # A previous run killed with -9 leaves PID files behind. Reap them BEFORE the health checks,
-# or those checks would pass against the OLD servers — a stale Rasa still answers /status,
+# or those checks would pass against the OLD servers - a stale Rasa still answers /status,
 # with the previous model loaded, which is the silent-wrong-result this script exists to stop.
 reap_stale() {
   for f in "$PIDDIR"/*.pid; do
@@ -106,29 +106,62 @@ reap_stale() {
   done
 }
 
-# Polls until the URL answers 200. The sidecar answers 503 while the model loads, so only a
-# 200 counts. Fails loudly rather than launching the game against a service that never came up.
+# Polls until the URL answers 200. A refused or timed-out request is "not ready yet", and so is
+# any other answer unless ANSWER_IS_FINAL is 1 (the sidecar answers 503 while its model loads).
+#
+#   wait_for_health NAME URL SOFT PID [HARD] [ANSWER_IS_FINAL] [EVERY]
+#
+# S12 (live-playtest F-1, backlog R-06): two windows, not one deadline. Up to SOFT seconds it
+# polls quietly. After that, a service whose PID is still ALIVE is taken to be loading: the wait
+# goes on, printing a "still loading" line every EVERY (default 15) s, up to HARD seconds. It
+# gives up early only on evidence: the process exited, or (ANSWER_IS_FINAL=1) the server answered
+# something other than 200. HARD defaults to SOFT, which is the old single deadline.
+#
+# ANSWER_IS_FINAL is for Rasa: it binds :5005 only AFTER loading the model (Sanic runs the
+# before_server_start listener that loads it before it listens), and a failed load leaves it
+# answering 409 on /status for good. Not for the sidecar: it answers 503 both while loading and
+# after a failed load, so a live sidecar is no proof of progress and it keeps one deadline.
+#
+# Wall clock ($SECONDS), not a loop count: on Windows a refused connect costs ~2 s, so the old
+# "180" iterations ran ~10 minutes there. --max-time bounds each request, so a server that
+# accepts and never answers cannot hold the loop past HARD.
 wait_for_health() {
-  local name="$1" url="$2" timeout="$3" pid="$4"
-  step "waiting for $name on $url (up to ${timeout}s)..."
-  local i=0
-  while [ "$i" -lt "$timeout" ]; do
+  local name="$1" url="$2" soft="$3" pid="$4" hard="${5:-$3}" final="${6:-0}" every="${7:-15}"
+  local start="$SECONDS" next="$3" elapsed code
+  [ "$hard" -ge "$soft" ] || hard="$soft"
+  if [ "$hard" -gt "$soft" ]; then
+    step "waiting for $name on $url (up to ${hard}s while it is still running)..."
+  else
+    step "waiting for $name on $url (up to ${soft}s)..."
+  fi
+  while :; do
     if ! kill -0 "$pid" 2>/dev/null; then
-      echo "[start] $name exited before becoming healthy — see $LOGDIR/$name.log" >&2
+      step "$name exited before becoming healthy - see $LOGDIR/$name.log"
       exit 1
     fi
-    if curl -sf -o /dev/null "$url"; then step "$name is up."; return 0; fi
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$url" 2>/dev/null || true)"
+    if [ "$code" = "200" ]; then step "$name is up."; return 0; fi
+    if [ "$final" = "1" ] && [ -n "$code" ] && [ "$code" != "000" ]; then
+      step "$name answered HTTP $code on $url instead of 200 (409 = its model did not load) - see $LOGDIR/$name.log"
+      exit 1
+    fi
+    elapsed=$((SECONDS - start))
+    if [ "$elapsed" -ge "$hard" ]; then
+      step "$name did not become healthy on $url within ${hard}s - see $LOGDIR/$name.log"
+      exit 1
+    fi
+    if [ "$elapsed" -ge "$next" ]; then
+      step "still loading $name... ${elapsed}s elapsed, pid $pid alive (giving up at ${hard}s; log: $LOGDIR/$name.log)"
+      next=$((elapsed + every))
+    fi
     sleep 1
-    i=$((i + 1))
   done
-  echo "[start] $name did not become healthy on $url within ${timeout}s — see $LOGDIR/$name.log" >&2
-  exit 1
 }
 
 if [ "$NO_SERVICES" -eq 0 ]; then
   [ -e "$RASA" ] || { echo "error: nlp-python/.venv-rasa missing. py -3.10 -m venv nlp-python/.venv-rasa && nlp-python/.venv-rasa/bin/pip install -r nlp-python/requirements-rasa.txt" >&2; exit 1; }
   [ -e "$SIDECAR_PY" ] || { echo "error: nlp-python/.venv missing. py -3.11 -m venv nlp-python/.venv && nlp-python/.venv/bin/pip install -r nlp-python/requirements-llm.txt" >&2; exit 1; }
-  [ -f "$MODEL" ] || { echo "error: no trained Rasa model at $MODEL — run: bash nlp-python/train_rasa.sh" >&2; exit 1; }
+  [ -f "$MODEL" ] || { echo "error: no trained Rasa model at $MODEL - run: bash nlp-python/train_rasa.sh" >&2; exit 1; }
 fi
 [ -f "$GAME/lib/jade-4.6.0.jar" ] || { echo "error: $GAME/lib/jade-4.6.0.jar missing (license: not committed). Download from https://jade.tilab.com/" >&2; exit 1; }
 
@@ -141,16 +174,23 @@ if [ "$NO_SERVICES" -eq 0 ]; then
       > "$LOGDIR/rasa.log" 2>&1 &
   RASA_PID=$!
   STARTED_PIDS+=("$RASA_PID"); echo "$RASA_PID $(ps -p "$RASA_PID" -o comm= 2>/dev/null | tr -d ' ')" > "$PIDDIR/rasa.pid"
-  # 180 s, not 120: the 2026-08-04 walk measured the session's FIRST Rasa boot exceeding 120 s on
-  # 3 of 4 attempts (a warm re-run passed, which is what hid it). A miss here aborts the whole
-  # launch - the EXIT trap kills the Rasa we just started and the sidecar below never runs - so
-  # the demo gets no game at all. The only cost of a longer ceiling is how long a genuinely dead
-  # Rasa takes to report itself. See backlog R-06.
-  wait_for_health rasa "http://localhost:5005/status" 180 "$RASA_PID"
+  # Cold start loads DIET + the featurizers off a cold page cache, and nobody has measured its
+  # tail (backlog R-06). A single deadline failed twice: 120 s on 3 of 4 session-first boots
+  # (2026-08-04), then 180 s on the first boot after a reboot (2026-09-21 playtest F-1: still
+  # loading the model at +184 s; the warm re-run was up at +54 s). So (S12): quiet for 60 s,
+  # then keep waiting - visibly - while the Rasa process is alive and not yet answering, up to
+  # 600 s. It still fails fast if Rasa exits, or answers anything but 200 (a model that did not
+  # load). A miss aborts the whole launch - the EXIT trap kills the Rasa we just started and the
+  # sidecar below never runs.
+  wait_for_health rasa "http://localhost:5005/status" 60 "$RASA_PID" 600 1
 
   # 2) The Flask LLM sidecar, from the OTHER (3.11) venv, on the fast ONNX-INT4 backend.
-  #    LLM_QUANT=onnx is what makes an explanation ~17 s instead of ~9 min (BUILD_LOG task 13b),
-  #    so the demo pins it -- but ONLY when the weights are actually on this machine.
+  #    LLM_QUANT=onnx is what makes an explanation take seconds instead of ~9 min (BUILD_LOG task
+  #    13b), so the demo pins it -- but ONLY when the weights are actually on this machine. How
+  #    many seconds (S12, live-playtest F-8): task 13b's "~17 s" was a sidecar-alone smoke with a
+  #    short prompt. The production Hint prompt takes ~18 s on a quiet machine and 40 s+ under
+  #    background load (measured 2026-09-21/30 and 2026-10-07), so the game shows the plain
+  #    template at once and replaces it with the model's validated wording when that arrives.
   #
   #    They are ~2 GB and deliberately live OUTSIDE the repo, so a fresh clone does not have
   #    them. Pinning onnx unconditionally made the sidecar fail to load on such a clone, /health

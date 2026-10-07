@@ -28,7 +28,7 @@ param(
     [switch]$Profile,
     # Seconds of JFR recording; ignored unless -Profile.
     [int]$ProfileSeconds = 900,
-    # tutorial | busy_day | storm. Omitted = the in-game New Game dialog.
+    # tutorial | busy_day | storm. Omitted = a running sandbox (Game - New Game... in-game).
     [string]$Scenario = '',
     # JADE Main Container port. 1099 is also the default Windows RMI registry port; if something
     # else holds it, pass e.g. -JadePort 11099 (see docs/TROUBLESHOOTING.md).
@@ -103,6 +103,11 @@ function Start-Service-Process($Name, $FilePath, $Arguments, $WorkingDirectory) 
     $proc = Start-Process -FilePath $FilePath -ArgumentList $Arguments `
         -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -PassThru `
         -RedirectStandardOutput $out -RedirectStandardError $err
+    # S12 (live-playtest F-1): hold the process handle from the start. The object Start-Process
+    # returns has none, so once the process exits its ExitCode reads back empty and
+    # Wait-ForHealth's "exited with code" message names no code. Touching .Handle makes .NET open
+    # and keep one.
+    $null = $proc.Handle
     $pidFile = Join-Path $PidDir "$Name.pid"
     # pid + image name + start time, not the pid alone. Windows RECYCLES pids, and the case the
     # stale-reaping exists for is a reboot or a power loss - after which the recorded number
@@ -111,30 +116,67 @@ function Start-Service-Process($Name, $FilePath, $Arguments, $WorkingDirectory) 
     Set-Content -Path $pidFile -Encoding ascii `
         -Value ("{0} {1} {2}" -f $proc.Id, $proc.ProcessName, $proc.StartTime.Ticks)
     $script:Started += [pscustomobject]@{ Name = $Name; Process = $proc; PidFile = $pidFile }
-    Write-Step "$Name started (pid $($proc.Id)); log -> $out"
+    # S12 (live-playtest F-1): name both files. Rasa and the sidecar log to STDERR, so the .err.log
+    # is the one that fills - rasa.log stayed 0 bytes all through the 2026-09-21 cold boot.
+    Write-Step "$Name started (pid $($proc.Id)); log -> $out (stderr: $err)"
     return $proc
 }
 
-# Polls until the URL answers 200. Any non-200 (the sidecar answers 503 while the model
-# loads) and any connection error are simply "not ready yet". Fails loudly on timeout rather
-# than launching the game against a service that will never come up.
-function Wait-ForHealth($Name, $Url, $TimeoutSeconds, $Process) {
-    Write-Step "waiting for $Name on $Url (up to ${TimeoutSeconds}s)..."
-    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-    while ((Get-Date) -lt $deadline) {
+# Polls until the URL answers 200. A refused or timed-out request is "not ready yet", and so
+# is any other answer unless -AnswerIsFinal (the sidecar answers 503 while its model loads).
+#
+# S12 (live-playtest F-1, backlog R-06): two windows, not one deadline. Up to -SoftSeconds it
+# polls quietly. After that, a service whose process is still ALIVE is taken to be loading: the
+# wait goes on, printing a "still loading" line every -ProgressEverySeconds, up to
+# -HardCapSeconds. It gives up early only on evidence: the process exited, or (-AnswerIsFinal)
+# the server answered something other than 200. -HardCapSeconds defaults to -SoftSeconds, which
+# is the old single deadline.
+#
+# -AnswerIsFinal is for Rasa: it binds :5005 only AFTER loading the model (Sanic runs the
+# before_server_start listener that loads it before it listens), and a failed load leaves it
+# answering 409 on /status for good. So no answer = still loading; any answer but 200 = the
+# load is over and failed. Not for the sidecar: it answers 503 both while loading and after a
+# failed load, so a live sidecar is no proof of progress and it keeps one deadline.
+#
+# Neither log growth nor CPU time is used as the progress signal: the cold model load writes
+# nothing for minutes, and $Process is rasa.exe, a pip launcher whose own CPU stays near zero
+# while a grandchild python.exe does the work.
+function Wait-ForHealth($Name, $Url, $SoftSeconds, $Process, $HardCapSeconds = 0,
+                        [switch]$AnswerIsFinal, $ProgressEverySeconds = 15) {
+    if ($HardCapSeconds -lt $SoftSeconds) { $HardCapSeconds = $SoftSeconds }
+    $log = Join-Path $LogDir "$Name.err.log"
+    if ($HardCapSeconds -gt $SoftSeconds) {
+        Write-Step "waiting for $Name on $Url (up to ${HardCapSeconds}s while it is still running)..."
+    } else {
+        Write-Step "waiting for $Name on $Url (up to ${SoftSeconds}s)..."
+    }
+    $clock = [System.Diagnostics.Stopwatch]::StartNew()   # monotonic, unlike Get-Date
+    $nextNote = $SoftSeconds
+    while ($true) {
         if ($Process -and $Process.HasExited) {
-            throw "$Name exited with code $($Process.ExitCode) before becoming healthy - see $LogDir\$Name.err.log"
+            throw "$Name exited with code $($Process.ExitCode) before becoming healthy - see $log"
         }
+        $code = 0
         try {
-            $r = Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 5
-            if ($r.StatusCode -eq 200) {
-                Write-Step "$Name is up."
-                return
-            }
-        } catch { }
+            $code = [int](Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 5).StatusCode
+        } catch {
+            # PS 5.1 throws on every non-2xx answer too; only a real answer carries a Response.
+            if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
+        }
+        if ($code -eq 200) { Write-Step "$Name is up."; return }
+        if ($AnswerIsFinal -and $code -ne 0) {
+            throw "$Name answered HTTP $code on $Url instead of 200 (409 = its model did not load) - see $log"
+        }
+        $elapsed = [int][math]::Floor($clock.Elapsed.TotalSeconds)
+        if ($elapsed -ge $HardCapSeconds) {
+            throw "$Name did not become healthy on $Url within ${HardCapSeconds}s - see $log"
+        }
+        if ($elapsed -ge $nextNote) {
+            Write-Step "still loading $Name... ${elapsed}s elapsed, pid $($Process.Id) alive (giving up at ${HardCapSeconds}s; log: $log)"
+            $nextNote = $elapsed + $ProgressEverySeconds
+        }
         Start-Sleep -Seconds 1
     }
-    throw "$Name did not become healthy on $Url within ${TimeoutSeconds}s - see $LogDir\$Name.err.log"
 }
 
 function Stop-AllStarted {
@@ -176,17 +218,24 @@ try {
         $rasa = Start-Service-Process 'rasa' $RasaPy `
             @('run', '--enable-api', '--port', '5005', '--model', 'models\portcmd_nlu.tar.gz') `
             (Join-Path $Nlp 'rasa')
-        # Cold start loads DIET + the featurizers. 120 s was NOT generous enough: the 2026-08-04
-        # walk measured the session's FIRST boot exceeding it on 3 of 4 attempts (a warm re-run
-        # then passed, which is what hid it). A miss here aborts the whole launch - the finally
-        # block stops the Rasa we just started and the sidecar below never runs - so the demo gets
-        # no game at all. The only cost of a longer ceiling is how long a genuinely dead Rasa takes
-        # to report itself, so 180 s. See backlog R-06.
-        Wait-ForHealth 'rasa' 'http://localhost:5005/status' 180 $rasa
+        # Cold start loads DIET + the featurizers off a cold page cache, and nobody has measured
+        # its tail (backlog R-06). A single deadline failed twice: 120 s on 3 of 4 session-first
+        # boots (2026-08-04), then 180 s on the first boot after a reboot (2026-09-21 playtest
+        # F-1: still loading the model at +184 s; the warm re-run was up at +54 s). So (S12):
+        # quiet for 60 s, then keep waiting - visibly - while the Rasa process is alive and not
+        # yet answering, up to 600 s. It still fails fast if Rasa exits, or answers anything but
+        # 200 (a model that did not load). A miss aborts the whole launch - the finally block
+        # stops the Rasa we just started and the sidecar below never runs.
+        Wait-ForHealth 'rasa' 'http://localhost:5005/status' 60 $rasa -HardCapSeconds 600 -AnswerIsFinal
 
         # 2) The Flask LLM sidecar, from the OTHER (3.11) venv, on the fast ONNX-INT4 backend.
-        #    LLM_QUANT=onnx is what makes an explanation ~17 s instead of ~9 min (BUILD_LOG task
-        #    13b), so the demo pins it - but ONLY when the weights are actually on this machine.
+        #    LLM_QUANT=onnx is what makes an explanation take seconds instead of ~9 min (BUILD_LOG
+        #    task 13b), so the demo pins it - but ONLY when the weights are actually on this
+        #    machine. How many seconds (S12, live-playtest F-8): task 13b's "~17 s" was a
+        #    sidecar-alone smoke with a short prompt. The production Hint prompt takes ~18 s on
+        #    a quiet machine and 40 s+ under background load (measured 2026-09-21/30 and
+        #    2026-10-07), so the game shows the plain template at once and replaces it with the
+        #    model's validated wording when that arrives.
         #
         #    The weights are ~2 GB and deliberately live outside the repo, so a fresh clone does
         #    not have them. Pinning onnx unconditionally made the sidecar fail to load, /health

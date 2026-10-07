@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Port Command Genova — stop every process the launcher may have left running.
+# Port Command Genova - stop every process the launcher may have left running.
 #
 # The normal path never needs this: start.sh's EXIT trap stops both services when the game
-# exits, including on Ctrl-C. This is the escape hatch for a shell killed with -9 — and the
+# exits, including on Ctrl-C. This is the escape hatch for a shell killed with -9 - and the
 # thing to run when ":5005 already in use" or the misleading null-container NPE from a JADE
 # port-1099 clash shows up (docs/TROUBLESHOOTING.md).
 #
@@ -41,7 +41,7 @@ for f in "$PIDDIR"/*.pid; do
   rm -f "$f"
 done
 
-# The REAL main class is it.unige.portcommand.Main — planning/26's stop.sh sketch named a
+# The REAL main class is it.unige.portcommand.Main - planning/26's stop.sh sketch named a
 # `PortCommandMain` that has never existed in this repo (dated correction 2026-07-27).
 for pat in 'llm_sidecar' '\.venv-rasa.*rasa' 'it\.unige\.portcommand\.Main'; do
   if pkill -f "$pat" 2>/dev/null; then
