@@ -60,14 +60,19 @@ start.bat
 ./start.sh
 ```
 
-**6. Pick "Tutorial"** in the New Game dialog and follow the five steps.
+**6. Start the tutorial.** The window opens on a running sandbox game: choose **Game → New Game… →
+Tutorial — Calm Morning → Start** and follow the five steps (or launch straight into it with
+`start.bat -Scenario tutorial` / `./start.sh --scenario tutorial`). The first boot after a reboot
+can spend a few minutes loading Rasa's model; the console says `still loading rasa...` meanwhile.
 
 **Optional — the LLM.** The game runs fine without it, and the launcher checks: if the weights are
 not on this machine it says so and starts without the sidecar, and Assistant explanations fall back
 to a plain template carrying the same figures. To get the model's English instead, download the
 Phi-4-mini ONNX CPU-INT4 weights into
 `%USERPROFILE%\.cache\port-command-genova\Phi-4-mini-instruct-onnx\` — the launcher then detects
-them and pins `LLM_QUANT=onnx` (~17 s per explanation; the fp16 path is ~9 minutes and unusable).
+them and pins `LLM_QUANT=onnx` (an explanation takes ~20–45 s on a laptop CPU, so Hint shows the
+plain template at once and swaps in the model's validated wording when it arrives; the fp16 path is
+~9 minutes and unusable).
 
 **Stuck?** → [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md). It covers the two-venv split,
 JPL's `libswipl` PATH requirement, the JADE port-1099 clash, the Rasa cold start, and the sidecar's
