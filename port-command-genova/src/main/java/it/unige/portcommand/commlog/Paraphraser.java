@@ -34,7 +34,10 @@ public final class Paraphraser {
      * subscriptions, so a reloaded world never renders through a dead HM's roster. Identity by
      * default: unit tests that call the paraphraser directly are byte-for-byte unchanged.
      * Bound, stated: only vessels the CURRENT HarbourMaster tracks resolve — departed vessels'
-     * later mentions (and pre-wiring boot lines) fall back to the id.
+     * later mentions (and pre-wiring boot lines) fall back to the id. So does a walk-in's FIRST
+     * contact (S12, live playtest F-5): its opening PROPOSE is logged inside {@code receiveLogged},
+     * before {@code handleOffer} creates the tracking this resolver reads — which is why
+     * {@link #offerer} names a PROPOSE from the message's own {@code vessel_spec} first.
      */
     private static volatile java.util.function.UnaryOperator<String> vesselDisplay =
             java.util.function.UnaryOperator.identity();
@@ -114,8 +117,11 @@ public final class Paraphraser {
         return switch (msg.getPerformative()) {
             case ACLMessage.REQUEST -> "Requesting " + requestObject(content);
             case ACLMessage.PROPOSE -> proposeVerb(senderLocalName) + offer(content);
-            // reasonSuffix is empty for every pre-S5 grant shape; it renders only the wait-queue
-            // release rationale ("after queue scheduled_ferry rank 3 [R25,R26,R27,R30]").
+            // S12 (live playtest F-4): every HM berth grant carries the rule that decided it —
+            // "(compatible [R7])" contracted, "(compatible [R8])" walk-in, or the wait-queue
+            // release rationale "(after queue scheduled ferry rank 3 [R25,R26,R27,R30])". The
+            // PRODUCER names the rule; this template only renders it, because it cannot tell a
+            // grant from a forwarded player ACCEPT nor know whether R7 or R8 decided.
             case ACLMessage.ACCEPT_PROPOSAL -> "Granted " + deal(content) + reasonSuffix(content);
             case ACLMessage.REJECT_PROPOSAL -> "Declined the offer" + reasonSuffix(content);
             case ACLMessage.CFP -> "Escort needed for " + vessel(content);
@@ -175,6 +181,11 @@ public final class Paraphraser {
      * (walk-in negotiation), a tug CNP bid {@code {cost, eta_minutes, fuel_state, position}}
      * (no price/vessel id at all), or a player-command/DCG-frame map that may carry only a
      * bare {@code price}.
+     *
+     * <p>S12 (live playtest F-5): a priced offer reads {@code "€P for Hh from <offerer>"}. The
+     * clause used to be {@code " to " + id}, but the only PROPOSE that carries a vessel id is the
+     * vessel's OWN offer, so "to" named the sender as the recipient. The HarbourMaster's PROPOSE
+     * carries no vessel id and renders with no clause at all ("Demanding €1900 for 6h").
      */
     private static String offer(JsonNode content) {
         if (content == null) {
@@ -185,17 +196,41 @@ public final class Paraphraser {
         }
         Double price = numOrNull(content, "price");
         if (price != null) {
-            String vesselId = vesselIdOf(content);
-            return "€" + money(price) + (vesselId != null ? " to " + display(vesselId) : "");
+            Double hours = numOrNull(content, "hours");
+            String offerer = offerer(content);
+            return "€" + money(price)
+                    + (hours != null ? " for " + money(hours) + "h" : "")
+                    + (offerer != null ? " from " + offerer : "");
         }
         return "terms";
     }
 
     /**
-     * ACCEPT_PROPOSAL shapes: {@code {berth_id, price, hours}} (HM grants a berth — both
-     * contracted and walk-in), {@code {intent:"accept", price, hours}} (vessel accepts a
-     * counter), {@code {vessel_id, berth_position}} (CNP award to the winning tug — no price),
-     * or an empty/arbitrary player-command map.
+     * Who made a priced PROPOSE, or {@code null} when the content carries no vessel id (the
+     * HarbourMaster's own PROPOSE). {@code vessel_spec} is only ever attached by the vessel itself
+     * ({@code OpeningProposalBehaviour}, {@code EvaluateCounterOfferBehaviour}), so it names the
+     * OFFERER, never a recipient (S12, live playtest F-5). The name is read from the message's
+     * own spec first: the opening PROPOSE is logged inside {@code receiveLogged} BEFORE
+     * {@code handleOffer} creates the tracking the S8 resolver reads, so {@link #display} alone
+     * renders the bare id on exactly that line. Same {@code "Name (ID)"} form the HarbourMaster's
+     * resolver produces, so a vessel reads identically before and after its tracking exists.
+     */
+    private static String offerer(JsonNode content) {
+        String id = vesselIdOf(content);
+        if (id == null) {
+            return null;
+        }
+        String name = text(content.get("vessel_spec"), "vessel_name");
+        return name != null ? name + " (" + id + ")" : display(id);
+    }
+
+    /**
+     * ACCEPT_PROPOSAL shapes: {@code {berth_id, price, hours, reason}} (HM grants a berth — both
+     * contracted and walk-in; since S12 {@code reason} always names the deciding rule, rendered
+     * by {@code reasonSuffix}, never here), {@code {intent:"accept", price, hours}} (vessel accepts
+     * a counter), {@code {vessel_id, berth_position}} (CNP award to the winning tug — no price),
+     * or an empty/arbitrary player-command map — which can carry a Rasa-backfilled
+     * {@code berth_id} and so also reads "berth X", with no rule id, because no rule decided it.
      */
     private static String deal(JsonNode content) {
         if (content == null) {

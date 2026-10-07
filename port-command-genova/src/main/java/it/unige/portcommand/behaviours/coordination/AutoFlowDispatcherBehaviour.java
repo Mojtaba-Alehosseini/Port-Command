@@ -1,5 +1,6 @@
 package it.unige.portcommand.behaviours.coordination;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -160,7 +161,9 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
             return;
         }
 
-        grantContracted(hm, spec, contract, msg.getSender());
+        // S12 (live playtest F-4): the isCompatible call above is what decided this grant, so
+        // the ACCEPT names R7. A constant at a fixed code path — never a second query.
+        grantContracted(hm, spec, contract, msg.getSender(), "compatible [R7]");
     }
 
     /**
@@ -169,15 +172,26 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
      * free, and from the wait-queue release sweep when it frees. The ACCEPT is built fresh on the
      * announce conversation ({@code "berth-"+localName} — the same id {@code MessageFactory.reply}
      * would have produced), so the deferred path needs no retained original message.
+     *
+     * <p>{@code reason} (S12, live playtest F-4) rides the ACCEPT's {@code reason} key so the comm
+     * log names the rule that decided the grant: {@code compatible [R7]} on the announce, the
+     * R25-R30 queue rationale on the release. Informational only — {@code AwaitBerthBehaviour}
+     * reads {@code berth_id}/{@code price}/{@code hours} by field and ignores it.
      */
     static void grantContracted(HarbourMasterAgent hm, VesselSpec spec, ServiceContract contract,
-                                AID vesselAid) {
+                                AID vesselAid, String reason) {
         ACLMessage accept = MessageFactory.create(ACLMessage.ACCEPT_PROPOSAL);
         accept.addReceiver(vesselAid);
         accept.setConversationId("berth-" + vesselAid.getLocalName());
-        accept.setContent(TerminalJson.write(Map.of(
-                "berth_id", contract.berthId(), "price", contract.contractedFee(),
-                "hours", contract.contractedHours())));
+        // Same shape and key order as ForwardWalkInToPlayerBehaviour.grantBerth's walk-in ACCEPT.
+        Map<String, Object> grantContent = new LinkedHashMap<>();
+        grantContent.put("berth_id", contract.berthId());
+        grantContent.put("price", contract.contractedFee());
+        grantContent.put("hours", contract.contractedHours());
+        if (reason != null) {
+            grantContent.put("reason", reason);
+        }
+        accept.setContent(TerminalJson.write(grantContent));
         hm.sendLogged(accept);
         // Task 20: the contracted path's counterpart to the walk-in path's DealClosedEvent, which
         // fires only from ForwardWalkInToPlayerBehaviour. Without this the fees in contracts.json

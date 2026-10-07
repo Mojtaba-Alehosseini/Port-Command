@@ -345,7 +345,10 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
                     spec.vesselId(), hm.berthWaitQueue().size());
             return;
         }
-        grantBerth(hm, spec.vesselId(), msg.getSender(), free.get(0), price, hours, null);
+        // S12 (live playtest F-4): findCompatibleBerths (R8, via freeCompatibleBerths) chose this
+        // berth, so the grant names R8 — the mapping DispatchPlayerCommandBehaviour's gate already
+        // uses (R7 = isCompatible on a NAMED berth, R8 = the search). A constant, never a query.
+        grantBerth(hm, spec.vesselId(), msg.getSender(), free.get(0), price, hours, "compatible [R8]");
     }
 
     /**
@@ -372,11 +375,12 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
      * The one grant pipeline (S5 extraction): the ACCEPT on the vessel's {@code berth-} channel,
      * the stage write, the occupancy claim (via that stage write — occupancy IS tracked state),
      * and the tug Contract Net. Called at CONFIRM when a berth is free, and from the release
-     * sweep when one frees for a queued vessel. {@code queueRationale} is non-null only on the
-     * released path and rides the ACCEPT's {@code reason} so the comm log renders the rule ids.
+     * sweep when one frees for a queued vessel. {@code reason} rides the ACCEPT's {@code reason}
+     * key so the comm log renders the rule that decided the grant (S12, live playtest F-4):
+     * {@code compatible [R8]} at CONFIRM, the R25-R30 queue rationale on the released path.
      */
     static void grantBerth(HarbourMasterAgent hm, String vesselId, AID vesselAid, String berthId,
-                           double price, int hours, String queueRationale) {
+                           double price, int hours, String reason) {
         VesselTracking tracking = hm.activeVessels().get(vesselId);
         if (tracking == null) {
             log.warn("grantBerth for untracked vessel {} — dropped", vesselId);
@@ -392,8 +396,8 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         grantContent.put("berth_id", berthId);
         grantContent.put("price", price);
         grantContent.put("hours", hours);
-        if (queueRationale != null) {
-            grantContent.put("reason", queueRationale);
+        if (reason != null) {
+            grantContent.put("reason", reason);
         }
         accept.setContent(TerminalJson.write(grantContent));
         hm.sendLogged(accept);
@@ -406,7 +410,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         Stage grantStage = tugsRequired > 0 ? Stage.AWAITING_TUG : Stage.IN_TRANSIT;
         hm.activeVessels().put(vesselId, tracking.withStage(grantStage).withBerth(berthId));
         log.info("{}: berth GRANTED {} (price {}, {}h{})", vesselId, berthId, price, hours,
-                queueRationale == null ? "" : ", " + queueRationale);
+                reason == null ? "" : ", " + reason);
 
         // Task 15: closes the walk-in CNP-dispatch gap ADR-08 left deliberately open —
         // mirrors AutoFlowDispatcherBehaviour's own tugsRequired>0 gate exactly. Terminal/customs
@@ -491,18 +495,21 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             }
             hm.berthWaitQueue().remove(best.vesselId());
             VesselTracking tracking = hm.activeVessels().get(best.vesselId());
+            // Built ONCE for both branches (S12, live playtest F-4): before, only the walk-in
+            // release carried it, so a released CONTRACTED grant rendered no rule ids at all
+            // while this method's javadoc and ADR-16 D5 said the winner's ACCEPT did. The text
+            // is exact-string asserted by HarbourMasterAgentIT's queue tests — do not reword it.
+            String rationale = "after_queue " + bestPriority.priorityClass()
+                    + " rank " + bestPriority.rank() + " [R25,R26,R27,R30]";
             String releasedContract = hm.pendingContractGrants().remove(best.vesselId());
             if (releasedContract != null) {
                 // Contracted release re-runs the FULL contracted pipeline (fee event, terminal
                 // REQUEST, customs) — a walk-in grant would silently skip all three.
-                log.info("{}: pinned berth freed — releasing contracted grant {} ({} rank {} "
-                                + "[R25,R26,R27,R30])", best.vesselId(), releasedContract,
-                        bestPriority.priorityClass(), bestPriority.rank());
+                log.info("{}: pinned berth freed — releasing contracted grant {} ({})",
+                        best.vesselId(), releasedContract, rationale);
                 AutoFlowDispatcherBehaviour.grantContracted(hm, tracking.spec(),
-                        hm.contracts().get(releasedContract), tracking.aid());
+                        hm.contracts().get(releasedContract), tracking.aid(), rationale);
             } else {
-                String rationale = "after_queue " + bestPriority.priorityClass()
-                        + " rank " + bestPriority.rank() + " [R25,R26,R27,R30]";
                 grantBerth(hm, best.vesselId(), tracking.aid(), bestBerth,
                         best.price(), best.hours(), rationale);
             }

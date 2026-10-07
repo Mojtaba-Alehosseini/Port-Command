@@ -5,6 +5,7 @@ import java.util.stream.Stream;
 
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.ontology.VesselSpec;
 import jade.lang.acl.ACLMessage;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -48,18 +49,46 @@ class ParaphraserTest {
                         "Requesting action for CU1"),
 
                 // PROPOSE
-                Arguments.of("PROPOSE walk-in opening offer (OpeningProposalBehaviour:62)",
+                // S12 (live playtest F-5): vessel_spec names the OFFERER — it used to render as
+                // "to W001", pointing the sender's own offer at itself. An unnamed spec falls back
+                // to the resolver's display(id), identity here.
+                Arguments.of("PROPOSE walk-in opening offer, unnamed spec (OpeningProposalBehaviour:68)",
                         propose(Map.of("intent", "opening_offer", "price", 4800.0, "hours", 6,
                                 "vessel_spec", Map.of("vessel_id", "W001"))),
-                        "Offering €4800 to W001"),
+                        "Offering €4800 for 6h from W001"),
+                // The real wire shape (vessel.spec() serialised whole). No resolver is installed, so
+                // the name can only have come from the message itself: exactly the first-contact
+                // line, which is logged before the HarbourMaster tracks the vessel at all.
+                Arguments.of("PROPOSE walk-in opening offer, named spec (tutorial WALKIN-S1, OpeningProposalBehaviour:68)",
+                        propose(Map.of("intent", "opening_offer", "price", 1436.0, "hours", 6,
+                                "vessel_spec", new VesselSpec("WALKIN-S1", "cargo_vessel", 9.0, 150.0, 30000,
+                                        "general_cargo", 0L, "Santa Lucia"))),
+                        "Offering €1436 for 6h from Santa Lucia (WALKIN-S1)"),
+                Arguments.of("PROPOSE walk-in counter offer, named spec (busy_day WALKIN-B2, EvaluateCounterOfferBehaviour:182)",
+                        propose(Map.of("intent", "counter_offer", "price", 1537.0, "hours", 8,
+                                "vessel_spec", new VesselSpec("WALKIN-B2", "ferry", 6.5, 120.0, 15000,
+                                        "vehicles", 0L, "Lanterna Rossa"))),
+                        "Offering €1537 for 8h from Lanterna Rossa (WALKIN-B2)"),
                 Arguments.of("PROPOSE tug CNP bid (BidInCNPBehaviour:80)",
                         propose(Map.of("cost", 100.0, "eta_minutes", 5.0, "fuel_state", 0.9)),
                         "Offering escort bid: €100 (ETA 5m)"),
 
                 // ACCEPT_PROPOSAL
-                Arguments.of("ACCEPT_PROPOSAL HM grants berth (AutoFlowDispatcherBehaviour:114)",
-                        accept(Map.of("berth_id", "berth_1", "price", 5200.0, "hours", 8)),
-                        "Granted berth berth_1"),
+                // S12 (live playtest F-4): every HM berth grant names the rule that decided it, so
+                // the old reason-less {berth_id, price, hours} grant has no producer any more —
+                // these three are the shapes the four grant sites actually send.
+                Arguments.of("ACCEPT_PROPOSAL HM grants contracted berth, R7 (AutoFlowDispatcherBehaviour.grantContracted)",
+                        accept(Map.of("berth_id", "berth_1", "price", 5200.0, "hours", 8,
+                                "reason", "compatible [R7]")),
+                        "Granted berth berth_1 (compatible [R7])"),
+                Arguments.of("ACCEPT_PROPOSAL HM grants walk-in berth, R8 (ForwardWalkInToPlayerBehaviour.handleDealConfirmed)",
+                        accept(Map.of("berth_id", "berth_2", "price", 4900.0, "hours", 6,
+                                "reason", "compatible [R8]")),
+                        "Granted berth berth_2 (compatible [R8])"),
+                Arguments.of("ACCEPT_PROPOSAL queued grant released (ForwardWalkInToPlayerBehaviour.releaseQueuedGrants)",
+                        accept(Map.of("berth_id", "berth_4", "price", 2100.0, "hours", 4,
+                                "reason", "after_queue scheduled_ferry rank 3 [R25,R26,R27,R30]")),
+                        "Granted berth berth_4 (after queue scheduled ferry rank 3 [R25,R26,R27,R30])"),
                 Arguments.of("ACCEPT_PROPOSAL CNP award to winning tug (AwardContractBehaviour:71)",
                         accept(Map.of("vessel_id", "T001",
                                 "berth_position", Map.of("x", 100.0, "y", 200.0, "heading_deg", 90.0))),
@@ -189,6 +218,12 @@ class ParaphraserTest {
                 "no attached sender (null AID) defaults to Offering");
         assertTrue(Paraphraser.paraphrase(propose, "harbour_master").startsWith("Demanding "),
                 "the HarbourMaster's PROPOSE is a demand");
+
+        // S12 (live playtest F-5): the HarbourMaster's REAL PROPOSE — the player-command map plus
+        // berth_id (DispatchPlayerCommandBehaviour.proposeMessage) — carries no vessel id, so it
+        // names no offerer: the demand alone, no clause pointing at anyone.
+        assertEquals("Demanding €1900 for 6h", Paraphraser.paraphrase(
+                propose(Map.of("price", 1900.0, "hours", 6, "berth_id", "berth_3")), "harbour_master"));
     }
 
     private static ACLMessage request(Map<String, Object> content) {

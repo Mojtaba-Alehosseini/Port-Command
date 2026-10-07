@@ -121,6 +121,9 @@ class HarbourMasterAgentIT {
         assertEquals("berth_1", acceptContent.get("berth_id").asText());
         assertEquals(5200.0, acceptContent.get("price").asDouble());
         assertEquals(8, acceptContent.get("hours").asInt());
+        // S12 (live playtest F-4): the grant names the rule that decided it — R7's isCompatible.
+        assertEquals("compatible [R7]", acceptContent.path("reason").asText(),
+                "the contracted grant must name the rule that decided it");
 
         ACLMessage termReq = pollUntil(terminal.inbox, m -> true, 5000);
         assertNotNull(termReq, "terminal must receive the 9-field BerthRequest");
@@ -225,7 +228,10 @@ class HarbourMasterAgentIT {
                 "deterministic prefix: vessel's REQUEST received, HM's grant sent, "
                         + "HM's terminal REQUEST sent, HM's tug CFP sent (in that order)");
         assertEquals("cl_vessel", commLog.get(0).sender(), "1st event is the vessel's inbound REQUEST");
-        assertTrue(commLog.get(1).paraphrase().contains("berth_1"), "the berth grant paraphrase names the berth");
+        // S12 (live playtest F-4): exact, no longer 'contains' — the line must name the berth AND
+        // the rule that decided the grant.
+        assertEquals("Granted berth berth_1 (compatible [R7])", commLog.get(1).paraphrase(),
+                "the berth grant paraphrase names the berth and the rule that decided it");
         assertEquals(List.of("cl_terminal"), commLog.get(2).receivers(), "3rd event addresses the terminal puppet");
         // Order-insensitive on purpose (2026-07-17, task 20): the CFP's receiver list is built from
         // ServiceLocator's DF search, whose result order JADE does not guarantee — asserting
@@ -864,6 +870,45 @@ class HarbourMasterAgentIT {
         JsonNode grantContent = content(grant);
         assertEquals(berthId, grantContent.get("berth_id").asText());
         assertEquals(4900.0, grantContent.get("price").asDouble());
+        // S12 (live playtest F-4): the R8 search (findCompatibleBerths) chose this berth, so the
+        // grant cites R8 — not R7, which is the contracted path's isCompatible on a named berth.
+        assertEquals("compatible [R8]", grantContent.path("reason").asText(),
+                "the walk-in grant must name the rule that picked its berth");
+    }
+
+    /**
+     * S12 (live playtest F-4/F-5): the walk-in's comm-log lines as the REAL HarbourMaster
+     * instrumentation renders them. The opening PROPOSE is logged inside {@code receiveLogged}
+     * BEFORE {@code handleOffer} creates the tracking the S8 resolver reads, so only the message's
+     * own {@code vessel_spec} can name the vessel on that line — an ordering no unit test can
+     * reproduce. Pre-fix it read "Offering €1436 to W040": unnamed, and pointed at the wrong
+     * party. The grant line must then cite R8, the rule that picked the berth.
+     */
+    @Test
+    void walkInCommLog_namesTheOffererAtFirstContactAndTheGrantRule() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W040", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L,
+                "Santa Lucia");
+        Probe vessel = spawnProbe("t40_vessel", null);
+
+        vessel.outbox.put(openingOffer(hm, spec, 1436.0, 6, "nego-W040"));
+        CommLogEvent opening = awaitEvent(CommLogEvent.class,
+                e -> e.performative() == ACLMessage.PROPOSE && "t40_vessel".equals(e.sender()), 10_000);
+        assertNotNull(opening, "the vessel's opening PROPOSE must reach the comm log");
+        assertEquals("Offering €1436 for 6h from Santa Lucia (W040)", opening.paraphrase(),
+                "first contact: nothing tracks the vessel yet, so its name must come from the message");
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class, e -> "nego-W040".equals(e.dialogueId()), 10_000),
+                "fixture: the dialogue must open");
+
+        vessel.outbox.put(dealConfirmed(hm, 1500.0, 6, "nego-W040"));
+        ACLMessage grant = pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000);
+        assertNotNull(grant, "deal_confirmed must produce a berth grant");
+        CommLogEvent grantLine = awaitEvent(CommLogEvent.class,
+                e -> e.performative() == ACLMessage.ACCEPT_PROPOSAL && e.receivers().contains("t40_vessel"),
+                10_000);
+        assertNotNull(grantLine, "the berth grant must reach the comm log");
+        assertEquals("Granted berth " + content(grant).get("berth_id").asText() + " (compatible [R8])",
+                grantLine.paraphrase(), "the walk-in grant line must cite R8, the rule that picked the berth");
     }
 
     @Test
