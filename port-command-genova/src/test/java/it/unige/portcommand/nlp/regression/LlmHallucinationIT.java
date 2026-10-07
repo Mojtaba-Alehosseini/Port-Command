@@ -50,17 +50,18 @@ class LlmHallucinationIT {
 
     /**
      * Per-trace request timeout for the MEASUREMENT, pinned through {@link LLMBridge}'s explicit
-     * test/ops seam instead of the config-driven production default (30 s, sized in task 13b from
-     * a ~17 s quiet-machine generation).
+     * test/ops seam instead of the config-driven production default (30 s when this was written,
+     * sized in task 13b from a ~17 s quiet-machine generation; 120 s since S12, for the same
+     * CPU-contention reason given below — the seam keeps this suite's bound independent of it).
      *
      * <p>2026-07-27: the first re-measurement of this suite lost 12 of 20 traces to
      * {@code LLMTimeoutException} because a Rasa training run happened to share the CPU — ONNX-INT4
      * inference is CPU-bound, and generation stretched past 30 s. Those rows scored as failures in a
      * table whose whole purpose is to report how often the VALIDATOR passes, which made the
      * measurement an artefact of machine load. This suite is not a latency test — production
-     * latency is governed by {@code llm.timeout_ms} in {@code defaults.json} and is unchanged — so
-     * the bound here is set well past any plausible generation. A timeout at this length means the
-     * sidecar is genuinely wedged, not merely busy.
+     * latency is governed by {@code llm.timeout_ms} in {@code defaults.json}, which this suite
+     * deliberately does not read — so the bound here is set well past any plausible generation. A
+     * timeout at this length means the sidecar is genuinely wedged, not merely busy.
      */
     private static final java.time.Duration MEASUREMENT_TIMEOUT = java.time.Duration.ofSeconds(120);
 

@@ -22,9 +22,14 @@ import org.slf4j.LoggerFactory;
 /**
  * The Assistant's fourth plan, {@code explain_event} (PROJECT_DEFINITION §4.8): regenerates a
  * plain-English explanation for a PAST decision when the player clicks "Why?" (planning/10
- * §10.8b). Looks the decision up in {@link RecommendationCache} and reuses the same explain path
- * as {@link RecommendOnDemandBehaviour}: build prompt + template, call the LLM, validate, fall
- * back to template.
+ * §10.8b). Looks the decision up in {@link RecommendationCache}, builds prompt + template, calls
+ * the LLM, validates, and falls back to the template.
+ *
+ * <p>Unlike the Hint path since S12 ({@link RecommendOnDemandBehaviour} shows the template at
+ * once and lets the validated model text replace it), this plan still publishes nothing until the
+ * model answers or {@code llm.timeout_ms} (120 s) expires. Latent: nothing produces
+ * {@code ExplainRequestEvent} yet — the "Why?" button was never built. Whoever wires it should
+ * give it the same template-first, revise-later shape.
  */
 public final class ExplainEventBehaviour extends OneShotBehaviour {
 

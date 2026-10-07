@@ -3,6 +3,7 @@ package it.unige.portcommand.gui;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -10,6 +11,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
@@ -42,12 +44,28 @@ import it.unige.portcommand.util.Subscription;
  */
 public final class ChatPanel extends JPanel {
 
+    /**
+     * Audit C-07: how long a closed negotiation's tab stays readable before it leaves the strip —
+     * real seconds of RUNNING game time, measured on the shared SimClock like the tab's own
+     * countdown, so a paused game (Esc, the end-of-day summary) keeps closed tabs visible. Closed
+     * tabs used to accumulate until a load, scrolling the live vessel's tab out of view (F-9).
+     * Nothing durable is lost: the chat transcript was never persisted (a load already discards
+     * it), and the ACL exchange behind it stays in the comm log and its archive. Like the
+     * countdown, the dwell is converted at the day length in force at each tick, so changing the
+     * day length while a closed tab waits rescales its wait (it can leave early or late).
+     */
+    static final double CLOSED_TAB_DWELL_REAL_SECONDS = 30.0;
+
     private final NegotiationTabRegistry registry = new NegotiationTabRegistry();
     private final EventBus eventBus;
     private final ChatInputProcessor processor;
     private final SimClock simClock;
     private final JTabbedPane tabbedPane = new JTabbedPane();
     private final Map<String, DialogueTabView> views = new LinkedHashMap<>();
+    /** Focusable on purpose (C-07 review): when the last closed tab leaves while it holds focus,
+     * focus is parked HERE, where keystrokes do nothing — not left to AWT, whose transfer lands
+     * on the comm-log filter combo and lets type-ahead change the filter (the #9 symptom). */
+    private final JLabel waitingPlaceholder = new JLabel("Waiting for a walk-in…", SwingConstants.CENTER);
 
     private final Subscription<NegotiationOpenedEvent> openedSubscription;
     private final Subscription<NegotiationClosedEvent> closedSubscription;
@@ -61,6 +79,11 @@ public final class ChatPanel extends JPanel {
      * it through a {@code BooleanSupplier} so a toggle re-hides/re-shows Hint on the next refresh
      * without threading the flag through every {@link DialogueTabView} field. */
     private boolean autopilotEnabled = Settings.load().autopilotEnabled();
+
+    /** Set while expired tabs are being removed: removing a tab at or before the selected one
+     * re-fires the pane's change event, and the focus hop it triggers must not steal focus from
+     * wherever the player is (e.g. the comm-log filters). */
+    private boolean removingExpiredTabs;
 
     /**
      * Headless-test convenience: a private frozen clock (nothing advances it), so the countdown
@@ -76,7 +99,8 @@ public final class ChatPanel extends JPanel {
         this.eventBus = eventBus;
         this.processor = processor;
         this.simClock = simClock;
-        add(new JLabel("Waiting for a walk-in…", SwingConstants.CENTER), BorderLayout.CENTER);
+        waitingPlaceholder.setFocusable(true);
+        showWaitingPlaceholder();
 
         this.openedSubscription = eventBus.subscribe(NegotiationOpenedEvent.class, this::onNegotiationOpened, DeliveryMode.EDT);
         this.closedSubscription = eventBus.subscribe(NegotiationClosedEvent.class, this::onNegotiationClosed, DeliveryMode.EDT);
@@ -96,7 +120,16 @@ public final class ChatPanel extends JPanel {
         // #9: keep keystrokes in the tab the player is looking at — focusing an open tab's field
         // makes it ready to type; focusing a CLOSED tab's (non-editable) field makes it swallow
         // input rather than letting focus fall through to the comm-log filter combo.
-        tabbedPane.addChangeListener(e -> focusSelectedTabInput());
+        tabbedPane.addChangeListener(e -> {
+            if (!removingExpiredTabs) {
+                focusSelectedTabInput();
+            }
+        });
+    }
+
+    private void showWaitingPlaceholder() {
+        removeAll();
+        add(waitingPlaceholder, BorderLayout.CENTER);
     }
 
     private void onSettingsChanged(SettingsChangedEvent event) {
@@ -117,8 +150,7 @@ public final class ChatPanel extends JPanel {
         registry.reset();
         views.clear();
         tabbedPane.removeAll();
-        removeAll();
-        add(new JLabel("Waiting for a walk-in…", SwingConstants.CENTER), BorderLayout.CENTER);
+        showWaitingPlaceholder();
         // The respawned AssistantAgent boots autopilot OFF; keep this mirror in step so a walk-in
         // after the load shows its Hint button (adversarial finding 4 — else the GUI stayed "ON"
         // and hid Hint while the agent did nothing).
@@ -128,7 +160,42 @@ public final class ChatPanel extends JPanel {
     }
 
     private void onClockTick(SimClockTickEvent event) {
+        removeExpiredTabs();
         views.values().forEach(DialogueTabView::refreshStrip);
+    }
+
+    /** C-07: rides the existing per-sim-minute tick (already EDT-delivered and cancelled in
+     * {@link #removeNotify()}), so there is no extra timer and no wall-clock read; ticks stop
+     * while paused, which is what keeps a closed tab on screen during a pause. */
+    private void removeExpiredTabs() {
+        List<String> expired = registry.sweepClosed(simClock.nowSimMillis(),
+                simClock.simMillisForRealSeconds(CLOSED_TAB_DWELL_REAL_SECONDS));
+        if (expired.isEmpty()) {
+            return;
+        }
+        boolean focusWasInside = false;
+        removingExpiredTabs = true;
+        try {
+            for (String id : expired) {
+                DialogueTabView view = views.remove(id);
+                if (view != null) {
+                    focusWasInside |= SwingUtilities.findFocusOwner(view) != null;
+                    tabbedPane.remove(view);
+                }
+            }
+        } finally {
+            removingExpiredTabs = false;
+        }
+        if (views.isEmpty()) {
+            showWaitingPlaceholder();
+            if (focusWasInside) {
+                SwingUtilities.invokeLater(waitingPlaceholder::requestFocusInWindow);
+            }
+        } else if (focusWasInside) {
+            focusSelectedTabInput(); // focus follows into the tab that took the removed one's place
+        }
+        revalidate();
+        repaint();
     }
 
     private void onNegotiationOpened(NegotiationOpenedEvent event) {
@@ -165,7 +232,7 @@ public final class ChatPanel extends JPanel {
     }
 
     private void onNegotiationClosed(NegotiationClosedEvent event) {
-        Optional<String> dialogueId = registry.onNegotiationClosed(event);
+        Optional<String> dialogueId = registry.onNegotiationClosed(event, simClock.nowSimMillis());
         dialogueId.ifPresent(id -> {
             DialogueTabView view = views.get(id);
             if (view == null) {
@@ -214,6 +281,11 @@ public final class ChatPanel extends JPanel {
     /** Test-only: how many tabs are currently open. */
     int tabCountForTest() {
         return views.size();
+    }
+
+    /** Test-only: how many pages the JTabbedPane itself holds (C-07: must shrink with {@link #views}). */
+    int stripTabCountForTest() {
+        return tabbedPane.getTabCount();
     }
 
     /** Test-only: the JTabbedPane title for a dialogue id, or {@code null} if it has no tab. */

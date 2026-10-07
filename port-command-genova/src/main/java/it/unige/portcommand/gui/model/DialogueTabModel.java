@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 
 import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
+import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.ontology.Deal;
 
 /**
@@ -31,6 +32,11 @@ public final class DialogueTabModel {
     private Integer lastPlayerHours; // task 19b: the player's last PROPOSED stay; null until they name one
     private boolean closed;
     private Deal.Outcome outcome;
+    private long closedAtMillis;
+    /** S12: the newest Hint shown in this tab, and where its entry sits — the only one a revision
+     * may replace. The transcript never removes or reorders entries, so the index stays valid. */
+    private long latestHintId = AssistantChatEvent.NO_HINT;
+    private int latestHintIndex = -1;
 
     public DialogueTabModel(String dialogueId, WalkInDialogueSnapshot snapshot) {
         this.dialogueId = Objects.requireNonNull(dialogueId, "dialogueId");
@@ -92,6 +98,34 @@ public final class DialogueTabModel {
         transcript.add(new ChatEntry(Speaker.SYSTEM, text));
     }
 
+    /**
+     * S12: shows Hint press {@code hintId}'s template and makes it the one revision may replace.
+     * @return false (nothing shown) once the tab is closed — advice for a finished negotiation
+     */
+    public boolean appendHint(long hintId, String text) {
+        if (closed) {
+            return false;
+        }
+        transcript.add(new ChatEntry(Speaker.ASSISTANT, text));
+        latestHintId = hintId;
+        latestHintIndex = transcript.size() - 1;
+        return true;
+    }
+
+    /**
+     * S12: replaces Hint {@code hintId}'s template with the model's validated wording, in place.
+     * Refused (false, nothing changed) when the tab is closed, or when {@code hintId} is not the
+     * newest Hint this tab showed: a late answer never overwrites a newer hint, and an id from
+     * another world (a reload recreates the same dialogue id) matches nothing.
+     */
+    public boolean reviseHint(long hintId, String text) {
+        if (closed || hintId == AssistantChatEvent.NO_HINT || hintId != latestHintId) {
+            return false;
+        }
+        transcript.set(latestHintIndex, new ChatEntry(Speaker.ASSISTANT, text));
+        return true;
+    }
+
     public boolean isClosed() {
         return closed;
     }
@@ -101,7 +135,17 @@ public final class DialogueTabModel {
         return outcome;
     }
 
-    public void close(Deal.Outcome outcome) {
+    /** When the tab first closed, in the caller's clock ({@code ChatPanel}: sim millis); 0 while open. */
+    public long closedAtMillis() {
+        return closedAtMillis;
+    }
+
+    /** The first close fixes {@link #closedAtMillis}: a repeated close (audit C-11) must not
+     * restart the dwell before the tab leaves the strip. */
+    public void close(Deal.Outcome outcome, long atMillis) {
+        if (!closed) {
+            closedAtMillis = atMillis;
+        }
         this.closed = true;
         this.outcome = Objects.requireNonNull(outcome, "outcome");
     }

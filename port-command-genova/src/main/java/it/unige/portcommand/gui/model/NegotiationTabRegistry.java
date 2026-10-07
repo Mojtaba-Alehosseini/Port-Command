@@ -112,13 +112,14 @@ public final class NegotiationTabRegistry {
                 s.roundsUsed(), s.timeUsedSec(), s.threatenedWithdrawal(), s.vesselName());
     }
 
-    /** @return the closed tab's dialogue id, or empty if the event named an unknown dialogue. */
-    public Optional<String> onNegotiationClosed(NegotiationClosedEvent event) {
+    /** @param nowMillis the close instant, in the same clock {@link #sweepClosed} is driven by
+     *  @return the closed tab's dialogue id, or empty if the event named an unknown dialogue. */
+    public Optional<String> onNegotiationClosed(NegotiationClosedEvent event, long nowMillis) {
         DialogueTabModel tab = tabs.get(event.dialogueId());
         if (tab == null) {
             return Optional.empty();
         }
-        tab.close(event.outcome());
+        tab.close(event.outcome(), nowMillis);
         String summary = switch (event.outcome()) {
             case DEAL -> "Deal closed.";
             case WITHDRAW_PRICE -> "Vessel withdrew (price never met).";
@@ -131,16 +132,56 @@ public final class NegotiationTabRegistry {
         return Optional.of(event.dialogueId());
     }
 
-    /** Routes an Assistant reply (Hint or autopilot) by exact {@code dialogueId} match.
-     * @return the routed tab's dialogue id, or empty if no tab matched. */
+    /**
+     * Routes an Assistant message by exact {@code dialogueId} match. Ordinary messages append,
+     * closed tab or not — the berth-queue note is ALWAYS published after the deal closed the tab.
+     * S12: a Hint reply goes through {@link DialogueTabModel#appendHint}/{@link
+     * DialogueTabModel#reviseHint}, which refuse closed tabs and stale revisions; the check and
+     * the change happen here in one EDT step, on the state that gets rendered.
+     * @return the routed tab's dialogue id, or empty if nothing was shown or changed. */
     public Optional<String> onAssistantChat(AssistantChatEvent event) {
         DialogueTabModel tab = tabs.get(event.dialogueId());
         if (tab == null) {
             return Optional.empty();
         }
-        tab.appendAssistantMessage(event.text());
+        boolean shown;
+        if (!event.isHint()) {
+            tab.appendAssistantMessage(event.text());
+            shown = true;
+        } else if (event.revision()) {
+            shown = tab.reviseHint(event.hintId(), event.text());
+        } else {
+            shown = tab.appendHint(event.hintId(), event.text());
+        }
+        if (!shown) {
+            return Optional.empty();
+        }
         onChange.run();
         return Optional.of(event.dialogueId());
+    }
+
+    /**
+     * Audit C-07: removes every CLOSED tab whose dwell has run out — its model and its vessel
+     * mapping — and returns the removed ids in tab order. Open tabs never expire. Pure: the
+     * caller supplies both instants in the clock {@link #onNegotiationClosed} was stamped with.
+     * The stamp lives on the model, so {@link #reset()} discards it along with the model and a
+     * same-id tab in the next world can never inherit an old expiry.
+     */
+    public List<String> sweepClosed(long nowMillis, long dwellMillis) {
+        List<String> expired = new ArrayList<>();
+        for (DialogueTabModel tab : tabs.values()) {
+            if (tab.isClosed() && nowMillis - tab.closedAtMillis() >= dwellMillis) {
+                expired.add(tab.dialogueId());
+            }
+        }
+        for (String id : expired) {
+            DialogueTabModel gone = tabs.remove(id);
+            dialogueIdByVesselId.remove(gone.vesselId(), id); // two-arg: never drop a newer mapping
+        }
+        if (!expired.isEmpty()) {
+            onChange.run();
+        }
+        return List.copyOf(expired);
     }
 
     /** Task 22: a loaded game has no open dialogues — drop every tab and mapping. */

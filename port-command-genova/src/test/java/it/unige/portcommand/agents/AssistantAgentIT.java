@@ -1,11 +1,25 @@
 package it.unige.portcommand.agents;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
 
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
@@ -43,6 +57,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -86,18 +101,19 @@ class AssistantAgentIT {
     // --- Hint flow -----------------------------------------------------------
 
     @Test
-    void hintButtonPublishesLlmPolishedTextWhenValidatorPasses() {
+    void hintButtonShowsTheTemplateAtOnceThenTheValidatedLlmTextReplacesIt() {
         MarketHistoryArtifact marketHistory = new MarketHistoryArtifact();
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(marketHistory);
         EventBus eventBus = new EventBus();
         WalkInDialogueSnapshot snapshot = tankerSnapshot(6000.0, 1, 60.0);
 
         // Independently reproduce the same deterministic recommendation the behaviour will
-        // compute, then hand back its own template text as the "LLM" response — a legitimate
-        // LLM output (the system prompt explicitly allows "repeat the input verbatim") that is
-        // guaranteed to pass the hallucination validator without hand-picking figures.
+        // compute, then hand back its own template text (behind a figure-free, name-free lead-in so
+        // the revision is distinguishable) as the "LLM" response — guaranteed to pass the
+        // hallucination validator without hand-picking figures.
         Recommendation expected = algorithm.run(snapshot);
-        String cannedText = AssistantPromptBuilder.template(expected);
+        String template = AssistantPromptBuilder.template(expected);
+        String cannedText = "Here is my advice. " + template;
         LLMBridge mockBridge = mock(LLMBridge.class);
         when(mockBridge.explain(any(LLMRequest.class)))
                 .thenReturn(CompletableFuture.completedFuture(new LLMResponse(cannedText, true)));
@@ -107,13 +123,21 @@ class AssistantAgentIT {
         behaviour.onHintButton(new HintButtonEvent("dlg-1", snapshot));
 
         List<AssistantChatEvent> chats = chatEvents(eventBus);
-        assertEquals(1, chats.size(), "exactly one AssistantChatEvent must be published");
-        assertEquals("dlg-1", chats.get(0).dialogueId());
-        assertEquals(cannedText, chats.get(0).text());
+        assertEquals(2, chats.size(), "S12: the template at once, then the model's wording as its revision");
+        AssistantChatEvent shown = chats.get(0);
+        AssistantChatEvent revision = chats.get(1);
+        assertEquals("dlg-1", shown.dialogueId());
+        assertEquals(template, shown.text());
+        assertTrue(shown.isHint());
+        assertFalse(shown.revision());
+        assertEquals("dlg-1", revision.dialogueId());
+        assertTrue(revision.revision());
+        assertEquals(shown.hintId(), revision.hintId(), "the revision must name the template it replaces");
+        assertEquals(cannedText, revision.text());
     }
 
     @Test
-    void hintButtonFallsBackToTemplateOnLlmTimeout() {
+    void anLlmTimeoutLeavesTheTemplateStanding() {
         MarketHistoryArtifact marketHistory = new MarketHistoryArtifact();
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(marketHistory);
         EventBus eventBus = new EventBus();
@@ -129,12 +153,13 @@ class AssistantAgentIT {
         behaviour.onHintButton(new HintButtonEvent("dlg-2", snapshot));
 
         List<AssistantChatEvent> chats = chatEvents(eventBus);
-        assertEquals(1, chats.size());
+        assertEquals(1, chats.size(), "a failed call publishes nothing after the template");
         assertEquals(AssistantPromptBuilder.template(expected), chats.get(0).text());
+        assertFalse(chats.get(0).revision());
     }
 
     @Test
-    void hintButtonFallsBackToTemplateWhenLlmOutputFailsValidation() {
+    void llmOutputThatFailsValidationNeverReplacesTheTemplate() {
         MarketHistoryArtifact marketHistory = new MarketHistoryArtifact();
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(marketHistory);
         EventBus eventBus = new EventBus();
@@ -151,9 +176,107 @@ class AssistantAgentIT {
         behaviour.onHintButton(new HintButtonEvent("dlg-3", snapshot));
 
         List<AssistantChatEvent> chats = chatEvents(eventBus);
-        assertEquals(1, chats.size());
-        assertEquals(AssistantPromptBuilder.template(expected), chats.get(0).text(),
-                "a hallucinated LLM response must fall back to the plain template");
+        assertEquals(1, chats.size(), "a hallucinated LLM response must never be shown");
+        assertEquals(AssistantPromptBuilder.template(expected), chats.get(0).text());
+        assertFalse(chats.get(0).revision());
+    }
+
+    /**
+     * S12 (live-playtest F-8), against the REAL {@link LLMBridge} and a fake sidecar that answers
+     * only when the test lets it: the template must already be on the bus while the model is still
+     * "generating", and the validated answer must follow as its revision.
+     */
+    @Test
+    void theTemplateIsOutBeforeASlowModelAnswersAndTheAnswerFollowsAsItsRevision() throws Exception {
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
+        EventBus eventBus = new EventBus();
+        WalkInDialogueSnapshot snapshot = tankerSnapshot(6000.0, 1, 60.0);
+        String template = AssistantPromptBuilder.template(algorithm.run(snapshot));
+        String modelText = "Here is my advice. " + template;
+        CountDownLatch answer = new CountDownLatch(1);
+        HttpServer sidecar = fakeSidecar(answer, modelText);
+        try {
+            RecommendOnDemandBehaviour behaviour = new RecommendOnDemandBehaviour(harnessAgent(), algorithm,
+                    bridgeTo(sidecar, Duration.ofSeconds(10)), eventBus, new RecommendationCache());
+            behaviour.onHintButton(new HintButtonEvent("dlg-slow", snapshot));
+
+            List<AssistantChatEvent> beforeAnswer = chatEvents(eventBus);
+            assertEquals(1, beforeAnswer.size(), "the template must not wait for the model");
+            assertEquals(template, beforeAnswer.get(0).text());
+
+            answer.countDown();
+            assertTrue(pollUntilTrue(() -> chatEvents(eventBus).size() == 2, 10_000),
+                    "the validated answer never arrived: " + chatEvents(eventBus));
+            AssistantChatEvent revision = chatEvents(eventBus).get(1);
+            assertTrue(revision.revision());
+            assertEquals(beforeAnswer.get(0).hintId(), revision.hintId());
+            assertEquals(modelText, revision.text());
+        } finally {
+            answer.countDown();
+            sidecar.stop(0);
+        }
+    }
+
+    /** The other side of the same budget: a model slower than the bridge timeout leaves the
+     * template as the final word — the late answer is never shown. */
+    @Test
+    void aModelSlowerThanTheBridgeTimeoutLeavesOnlyTheTemplate() throws Exception {
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
+        EventBus eventBus = new EventBus();
+        WalkInDialogueSnapshot snapshot = tankerSnapshot(6000.0, 1, 60.0);
+        String template = AssistantPromptBuilder.template(algorithm.run(snapshot));
+        CountDownLatch answer = new CountDownLatch(1);
+        HttpServer sidecar = fakeSidecar(answer, "Here is my advice. " + template);
+        try {
+            LLMBridge realBridge = bridgeTo(sidecar, Duration.ofMillis(300));
+            AtomicReference<CompletableFuture<LLMResponse>> call = new AtomicReference<>();
+            LLMBridge watched = mock(LLMBridge.class);
+            when(watched.explain(any(LLMRequest.class))).thenAnswer(inv -> {
+                CompletableFuture<LLMResponse> future = realBridge.explain(inv.getArgument(0));
+                call.set(future);
+                return future;
+            });
+            RecommendOnDemandBehaviour behaviour = new RecommendOnDemandBehaviour(
+                    harnessAgent(), algorithm, watched, eventBus, new RecommendationCache());
+            behaviour.onHintButton(new HintButtonEvent("dlg-late", snapshot));
+
+            ExecutionException timedOut = assertThrows(ExecutionException.class,
+                    () -> call.get().get(5, TimeUnit.SECONDS));
+            assertTrue(timedOut.getCause() instanceof LLMTimeoutException, "got " + timedOut.getCause());
+            answer.countDown(); // the model "finishes" after the bridge gave up — nothing may follow
+            // A short bounded NEGATIVE wait after the late answer, so the test observes what its
+            // javadoc claims (nothing follows the template) instead of reading the bus at once.
+            assertFalse(pollUntilTrue(() -> chatEvents(eventBus).size() > 1, 500),
+                    "only the template may ever show: " + chatEvents(eventBus));
+            List<AssistantChatEvent> chats = chatEvents(eventBus);
+            assertEquals(1, chats.size(), "only the template: " + chats);
+            assertEquals(template, chats.get(0).text());
+        } finally {
+            answer.countDown();
+            sidecar.stop(0);
+        }
+    }
+
+    @Test
+    void hintIdsNeverRepeatAcrossAssistantRespawns() {
+        // A load respawns the Assistant while the bus — and any in-flight answer — survives, and
+        // dialogue ids recur; a per-instance counter would let an old answer match a new hint.
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
+        EventBus eventBus = new EventBus();
+        LLMBridge mockBridge = mock(LLMBridge.class);
+        when(mockBridge.explain(any(LLMRequest.class)))
+                .thenReturn(CompletableFuture.failedFuture(new LLMTimeoutException("t", new RuntimeException())));
+        WalkInDialogueSnapshot snapshot = tankerSnapshot(6000.0, 1, 60.0);
+
+        new RecommendOnDemandBehaviour(harnessAgent(), algorithm, mockBridge, eventBus, new RecommendationCache())
+                .onHintButton(new HintButtonEvent("nego-v1", snapshot));
+        new RecommendOnDemandBehaviour(harnessAgent(), algorithm, mockBridge, eventBus, new RecommendationCache())
+                .onHintButton(new HintButtonEvent("nego-v1", snapshot));
+
+        List<AssistantChatEvent> chats = chatEvents(eventBus);
+        assertEquals(2, chats.size());
+        assertTrue(chats.get(0).isHint() && chats.get(1).isHint());
+        assertTrue(chats.get(0).hintId() != chats.get(1).hintId(), "hint ids must be JVM-wide: " + chats);
     }
 
     @Test
@@ -308,5 +431,50 @@ class AssistantAgentIT {
                 .filter(AssistantChatEvent.class::isInstance)
                 .map(AssistantChatEvent.class::cast)
                 .toList();
+    }
+
+    /** A stand-in for the Flask sidecar's {@code POST /explain} that answers {@code text} only once
+     * {@code answer} is released (bounded, so a forgotten latch can never hang the suite). Daemon
+     * handler threads, like {@code LLMBridgeTest}'s. */
+    private static HttpServer fakeSidecar(CountDownLatch answer, String text) throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.createContext("/explain", exchange -> {
+            try {
+                answer.await(15, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            byte[] body = new ObjectMapper().writeValueAsBytes(Map.of("text", text, "validated", true));
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(body);
+            }
+        });
+        server.setExecutor(Executors.newCachedThreadPool(r -> {
+            Thread t = new Thread(r, "fake-sidecar");
+            t.setDaemon(true);
+            return t;
+        }));
+        server.start();
+        return server;
+    }
+
+    private static LLMBridge bridgeTo(HttpServer server, Duration timeout) {
+        String base = "http://localhost:" + server.getAddress().getPort();
+        return new LLMBridge(URI.create(base + "/explain"), URI.create(base + "/health"),
+                HttpClient.newHttpClient(), new ObjectMapper(), timeout);
+    }
+
+    /** Bounded poll — the project's no-Awaitility wait (the design rules working-style rule 5). */
+    private static boolean pollUntilTrue(BooleanSupplier condition, long totalMillis) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + totalMillis;
+        while (System.currentTimeMillis() < deadline) {
+            if (condition.getAsBoolean()) {
+                return true;
+            }
+            Thread.sleep(20);
+        }
+        return condition.getAsBoolean();
     }
 }

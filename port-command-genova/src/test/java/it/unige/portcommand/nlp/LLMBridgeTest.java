@@ -205,12 +205,13 @@ class LLMBridgeTest {
 
     @Test
     void resolveTimeoutMsReadsTheShippedDefaultsJson() {
-        // Task 15 created src/main/resources/data/defaults.json with llm.timeout_ms=30000, so this
-        // now exercises the file-present read path (not the file-absent fallback -- that guard
-        // clause in readTimeoutMsFromDefaultsJson is a two-line null check not independently
-        // covered, since testing it would need LLMBridge to accept an injectable resource path,
-        // out of this task's scope). The shipped value equals DEFAULT_TIMEOUT_MS by design.
-        assertEquals(30_000L, LLMBridge.resolveTimeoutMs());
+        // Task 15 created src/main/resources/data/defaults.json with llm.timeout_ms (120000 since
+        // S12 — see LLMBridge's javadoc), so this exercises the file-present read path (not the
+        // file-absent fallback -- that guard clause in readTimeoutMsFromDefaultsJson is a two-line
+        // null check not independently covered, since testing it would need LLMBridge to accept an
+        // injectable resource path, out of this task's scope). The shipped value equals
+        // DEFAULT_TIMEOUT_MS by design.
+        assertEquals(120_000L, LLMBridge.resolveTimeoutMs());
         assertEquals(LLMBridge.DEFAULT_TIMEOUT_MS, LLMBridge.resolveTimeoutMs());
     }
 

@@ -17,6 +17,7 @@ import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
+import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.gui.model.DialogueTabModel;
 import it.unige.portcommand.nlp.ChatInputProcessor;
@@ -28,6 +29,7 @@ import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.util.Event;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.EventBusProbe;
+import it.unige.portcommand.util.SimClock;
 import jade.lang.acl.ACLMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -707,6 +709,108 @@ class ChatPanelTest {
         assertEquals(DialogueTabModel.Speaker.ASSISTANT, aTranscript.get(aTranscript.size() - 1).speaker());
         assertTrue(panel.registry().tab("nego-B").transcript().stream()
                 .noneMatch(e -> e.speaker() == DialogueTabModel.Speaker.ASSISTANT), "tab B must be untouched");
+    }
+
+    @Test
+    @Timeout(5)
+    void aHintRevisionReRendersTheTemplatesBubbleInPlace() throws Exception {
+        EventBus bus = new EventBus();
+        ChatPanel panel = new ChatPanel(bus, (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")));
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        DialogueTabView view = panel.viewForTest("nego-A");
+
+        bus.publish(AssistantChatEvent.hintTemplate("nego-A", 11L, "Accept their offer of 1436 (template)"));
+        SwingUtilities.invokeAndWait(() -> { });
+        int entries = panel.registry().tab("nego-A").transcript().size();
+        assertTrue(view.transcriptTextForTest().contains("(template)"), "the template shows at once");
+
+        bus.publish(AssistantChatEvent.hintRevision("nego-A", 11L, "Taking 1436 now is the better bet (model)"));
+        SwingUtilities.invokeAndWait(() -> { });
+
+        assertEquals(entries, panel.registry().tab("nego-A").transcript().size(), "replaced, not appended");
+        String shown = view.transcriptTextForTest();
+        assertTrue(shown.contains("(model)") && !shown.contains("(template)"), shown);
+        assertEquals(view.transcriptLengthForTest(), view.caretPositionForTest(), "C-28 still holds after a revision");
+    }
+
+    // ==================== audit C-07: closed tabs leave the strip ====================
+
+    private static SimClockTickEvent tick(SimClock clock) {
+        return new SimClockTickEvent(clock.nowSimMillis(), clock.gameDay(), clock.simHour(), clock.simMinute());
+    }
+
+    @Test
+    @Timeout(5)
+    void aClosedTabLeavesTheStripOnceItsDwellHasRunOnTheSharedClock() throws Exception {
+        EventBus bus = new EventBus();
+        SimClock clock = new SimClock(300);
+        ChatPanel panel = new ChatPanel(bus,
+                (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")), clock);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        openTab(bus, panel, "nego-B", "B", "tanker", "Genoa Star");
+        bus.publish(new NegotiationClosedEvent("nego-A", "A", Deal.Outcome.DEAL));
+        SwingUtilities.invokeAndWait(() -> { });
+
+        clock.advance(29_000); // just short of the 30 real-second dwell
+        bus.publish(tick(clock));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(2, panel.stripTabCountForTest(), "the closed tab stays readable during its dwell");
+        assertTrue(panel.tabTitleForTest("nego-A").endsWith("(closed)"));
+
+        clock.advance(1_000);
+        bus.publish(tick(clock));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(1, panel.stripTabCountForTest(), "C-07: the closed tab must leave the strip");
+        assertEquals(1, panel.tabCountForTest());
+        assertNull(panel.viewForTest("nego-A"));
+        assertNull(panel.registry().tab("nego-A"));
+        assertEquals("Genoa Star (tanker)", panel.tabTitleForTest("nego-B"), "the open tab is untouched");
+    }
+
+    @Test
+    @Timeout(5)
+    void aPausedGameKeepsAClosedTabOnScreen() throws Exception {
+        EventBus bus = new EventBus();
+        SimClock clock = new SimClock(300);
+        ChatPanel panel = new ChatPanel(bus,
+                (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")), clock);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        bus.publish(new NegotiationClosedEvent("nego-A", "A", Deal.Outcome.TIMEOUT));
+        SwingUtilities.invokeAndWait(() -> { });
+
+        clock.pause();
+        clock.advance(600_000); // ten real minutes of Esc-pause
+        bus.publish(tick(clock));
+        SwingUtilities.invokeAndWait(() -> { });
+
+        assertEquals(1, panel.stripTabCountForTest(), "the dwell counts running game time only");
+    }
+
+    @Test
+    @Timeout(5)
+    void whenTheLastTabExpiresThePlaceholderReturnsAndTheNextWalkInStillOpens() throws Exception {
+        EventBus bus = new EventBus();
+        SimClock clock = new SimClock(300);
+        ChatPanel panel = new ChatPanel(bus,
+                (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")), clock);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        bus.publish(new NegotiationClosedEvent("nego-A", "A", Deal.Outcome.DEAL));
+        SwingUtilities.invokeAndWait(() -> { });
+
+        clock.advance(30_000);
+        bus.publish(tick(clock));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(0, panel.stripTabCountForTest());
+        assertEquals(1, panel.getComponentCount());
+        assertTrue(panel.getComponent(0) instanceof javax.swing.JLabel label
+                && label.getText().startsWith("Waiting for a walk-in"), "the empty panel shows its placeholder again");
+        assertTrue(panel.getComponent(0).isFocusable(),
+                "the placeholder can take the swept tab's focus, so keys never fall through to the comm log (#9)");
+
+        openTab(bus, panel, "nego-C", "C", "ferry", "Lanterna Rossa");
+        assertEquals(1, panel.stripTabCountForTest());
+        assertTrue(panel.getComponent(0) instanceof javax.swing.JTabbedPane, "the strip is back");
+        assertEquals("Lanterna Rossa (ferry)", panel.tabTitleForTest("nego-C"));
     }
 
     @Test

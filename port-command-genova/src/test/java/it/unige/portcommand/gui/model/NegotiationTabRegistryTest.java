@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NegotiationTabRegistryTest {
@@ -103,7 +104,7 @@ class NegotiationTabRegistryTest {
     void recordPlayerOfferOnAClosedOrUnknownDialogueIsANoOp() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
 
         registry.recordPlayerOffer("nego-W001", 5000.0, 10); // closed
         registry.recordPlayerOffer("nego-GHOST", 5000.0, 10); // unknown
@@ -119,7 +120,7 @@ class NegotiationTabRegistryTest {
         registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
 
         Optional<String> closed = registry.onNegotiationClosed(
-                new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL));
+                new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
 
         assertEquals(Optional.of("nego-W001"), closed);
         assertTrue(registry.tab("nego-W001").isClosed());
@@ -132,7 +133,7 @@ class NegotiationTabRegistryTest {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
 
         Optional<String> closed = registry.onNegotiationClosed(
-                new NegotiationClosedEvent("nego-GHOST", "GHOST", Deal.Outcome.TIMEOUT));
+                new NegotiationClosedEvent("nego-GHOST", "GHOST", Deal.Outcome.TIMEOUT), 0L);
 
         assertEquals(Optional.empty(), closed);
     }
@@ -163,7 +164,7 @@ class NegotiationTabRegistryTest {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
         registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W002", "W002", Deal.Outcome.TIMEOUT));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W002", "W002", Deal.Outcome.TIMEOUT), 0L);
 
         DialogueCtx ctx = registry.buildCtx("W001");
 
@@ -181,7 +182,7 @@ class NegotiationTabRegistryTest {
 
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
         registry.onAssistantChat(new AssistantChatEvent("nego-W001", "hint"));
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
 
         assertEquals(3, changes[0]);
     }
@@ -241,12 +242,223 @@ class NegotiationTabRegistryTest {
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
 
         registry.onNegotiationClosed(
-                new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.WITHDRAW_DURATION));
+                new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.WITHDRAW_DURATION), 0L);
 
         List<DialogueTabModel.ChatEntry> transcript = registry.tab("nego-W001").transcript();
         String closeLine = transcript.get(transcript.size() - 1).text();
         assertTrue(closeLine.contains("hours"),
                 "a duration withdrawal must not masquerade as a price one: " + closeLine);
+    }
+
+    // ==================== S12 (live-playtest F-8): template first, model text in place ====================
+
+    private static String lastText(DialogueTabModel tab) {
+        List<DialogueTabModel.ChatEntry> transcript = tab.transcript();
+        return transcript.get(transcript.size() - 1).text();
+    }
+
+    @Test
+    void aHintRevisionReplacesItsTemplateInPlace() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 7L, "template"));
+        int templateIndex = registry.tab("nego-W001").transcript().size() - 1;
+        // The vessel speaks again while the model is still generating: the revision must land on
+        // the template's own line, not on whatever is last.
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 2, 1700.0));
+        int sizeBefore = registry.tab("nego-W001").transcript().size();
+
+        Optional<String> routed = registry.onAssistantChat(AssistantChatEvent.hintRevision("nego-W001", 7L, "model"));
+
+        List<DialogueTabModel.ChatEntry> transcript = registry.tab("nego-W001").transcript();
+        assertEquals(Optional.of("nego-W001"), routed);
+        assertEquals(sizeBefore, transcript.size(), "a revision replaces, it never appends");
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.ASSISTANT, "model"),
+                transcript.get(templateIndex));
+        assertEquals(DialogueTabModel.Speaker.VESSEL, transcript.get(transcript.size() - 1).speaker(),
+                "the later vessel line stays where it was");
+    }
+
+    @Test
+    void aLateRevisionNeverOverwritesANewerHint() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        int[] changes = {0};
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 1L, "first template"));
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 2L, "second template"));
+        registry.setOnChange(() -> changes[0]++);
+
+        assertEquals(Optional.empty(),
+                registry.onAssistantChat(AssistantChatEvent.hintRevision("nego-W001", 1L, "stale model text")));
+        List<String> texts = registry.tab("nego-W001").transcript().stream().map(DialogueTabModel.ChatEntry::text).toList();
+        assertTrue(texts.contains("first template") && texts.contains("second template"),
+                "a superseded hint's answer changes nothing: " + texts);
+        assertFalse(texts.contains("stale model text"));
+        assertEquals(0, changes[0], "a refused revision must not trigger a re-render");
+
+        registry.onAssistantChat(AssistantChatEvent.hintRevision("nego-W001", 2L, "fresh model text"));
+        assertEquals("fresh model text", lastText(registry.tab("nego-W001")));
+        assertEquals(1, changes[0]);
+    }
+
+    @Test
+    void noHintTemplateOrRevisionLandsInAClosedTab() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 3L, "template"));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
+        List<DialogueTabModel.ChatEntry> before = registry.tab("nego-W001").transcript();
+
+        assertEquals(Optional.empty(),
+                registry.onAssistantChat(AssistantChatEvent.hintRevision("nego-W001", 3L, "model text")));
+        assertEquals(Optional.empty(),
+                registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 4L, "late template")));
+
+        assertEquals(before, registry.tab("nego-W001").transcript(),
+                "advice for a finished negotiation must not appear in its tab");
+    }
+
+    @Test
+    void anOrdinaryAssistantMessageStillLandsInAClosedTab() {
+        // The berth-queue note is published AFTER the deal closed the tab — the hint guards must
+        // not swallow it.
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
+
+        Optional<String> routed = registry.onAssistantChat(new AssistantChatEvent("nego-W001", "queued for berth_2"));
+
+        assertEquals(Optional.of("nego-W001"), routed);
+        assertEquals("queued for berth_2", lastText(registry.tab("nego-W001")));
+    }
+
+    @Test
+    void aRevisionFromBeforeAResetMatchesNothingInTheReopenedTab() {
+        // Dialogue ids recur after a load (nego-W001 again); hint ids do not.
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 5L, "old world's template"));
+        registry.reset();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        List<DialogueTabModel.ChatEntry> before = registry.tab("nego-W001").transcript();
+
+        assertEquals(Optional.empty(),
+                registry.onAssistantChat(AssistantChatEvent.hintRevision("nego-W001", 5L, "old world's model text")));
+        assertEquals(before, registry.tab("nego-W001").transcript());
+    }
+
+    @Test
+    void aRevisionMustNameTheHintItRevises() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new AssistantChatEvent("nego-W001", "text", AssistantChatEvent.NO_HINT, true));
+        assertFalse(new AssistantChatEvent("nego-W001", "text").isHint());
+        assertTrue(AssistantChatEvent.hintTemplate("nego-W001", 9L, "text").isHint());
+    }
+
+    // ==================== audit C-07: closed tabs leave the strip after a dwell ====================
+
+    private static final long DWELL = 1_000L;
+
+    @Test
+    void aClosedTabExpiresExactlyWhenItsDwellRunsOut() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 5_000L);
+
+        assertEquals(List.of(), registry.sweepClosed(5_000L + DWELL - 1, DWELL), "still inside its dwell");
+        assertTrue(registry.dialogueIds().contains("nego-W001"));
+
+        assertEquals(List.of("nego-W001"), registry.sweepClosed(5_000L + DWELL, DWELL));
+        assertEquals(List.of(), registry.dialogueIds());
+        assertEquals(Optional.empty(), registry.dialogueIdForVessel("W001"));
+        assertEquals(List.of(), registry.sweepClosed(Long.MAX_VALUE / 2, DWELL), "a swept tab is gone for good");
+    }
+
+    @Test
+    void openTabsNeverExpire() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+
+        assertEquals(List.of(), registry.sweepClosed(Long.MAX_VALUE / 2, 0L));
+        assertEquals(List.of("nego-W001"), registry.dialogueIds());
+    }
+
+    @Test
+    void eachClosedTabRunsItsOwnDwell() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
+        registry.onNegotiationOpened(opened("nego-W003", "W003", "ferry", "berth_3", 1, 900.0));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W002", "W002", Deal.Outcome.TIMEOUT), 500L);
+
+        assertEquals(List.of("nego-W001"), registry.sweepClosed(DWELL, DWELL));
+        assertEquals(List.of("nego-W002", "nego-W003"), registry.dialogueIds());
+        assertEquals(List.of("nego-W002"), registry.sweepClosed(500L + DWELL, DWELL));
+        assertEquals(List.of("nego-W003"), registry.dialogueIds(), "the open dialogue stays");
+    }
+
+    @Test
+    void aRepeatedCloseDoesNotRestartTheDwell() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 900L);
+
+        assertEquals(List.of("nego-W001"), registry.sweepClosed(DWELL, DWELL));
+    }
+
+    @Test
+    void aSweptDialogueIdReopensAsAFreshTab() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
+        registry.sweepClosed(DWELL, DWELL);
+
+        NegotiationTabRegistry.OpenResult reopened = registry.onNegotiationOpened(
+                opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+
+        assertTrue(reopened.isNewTab(), "the view must add a page again");
+        assertFalse(registry.tab("nego-W001").isClosed());
+        assertEquals(2, registry.tab("nego-W001").transcript().size(), "orientation + opening, nothing inherited");
+        assertEquals(Optional.of("nego-W001"), registry.dialogueIdForVessel("W001"));
+    }
+
+    @Test
+    void sweepingNeverDropsANewerDialoguesVesselMapping() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-A", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-A", "W001", Deal.Outcome.DEAL), 0L);
+        registry.onNegotiationOpened(opened("nego-B", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+
+        assertEquals(List.of("nego-A"), registry.sweepClosed(DWELL, DWELL));
+        assertEquals(Optional.of("nego-B"), registry.dialogueIdForVessel("W001"));
+    }
+
+    @Test
+    void aResetDiscardsPendingExpiriesSoASameIdTabInTheNextWorldStays() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
+        registry.reset();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+
+        assertEquals(List.of(), registry.sweepClosed(Long.MAX_VALUE / 2, DWELL));
+        assertEquals(List.of("nego-W001"), registry.dialogueIds());
+    }
+
+    @Test
+    void onChangeFiresOnlyWhenASweepRemovesSomething() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
+        int[] changes = {0};
+        registry.setOnChange(() -> changes[0]++);
+
+        registry.sweepClosed(DWELL - 1, DWELL);
+        assertEquals(0, changes[0]);
+        registry.sweepClosed(DWELL, DWELL);
+        assertEquals(1, changes[0]);
     }
 
     /** P-04: neither this registry nor the tab model may ever read a walk-in's hidden

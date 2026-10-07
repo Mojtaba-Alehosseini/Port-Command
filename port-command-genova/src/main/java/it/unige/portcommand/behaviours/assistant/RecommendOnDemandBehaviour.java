@@ -1,5 +1,7 @@
 package it.unige.portcommand.behaviours.assistant;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 import it.unige.portcommand.assistant.AssistantPromptBuilder;
 import it.unige.portcommand.assistant.AssistantPromptBuilder.PromptPayload;
 import it.unige.portcommand.assistant.HallucinationValidator;
@@ -33,6 +35,12 @@ import org.slf4j.LoggerFactory;
 public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(RecommendOnDemandBehaviour.class);
+
+    /** JVM-wide on purpose: the Assistant is respawned on every load while the bus (and any
+     * in-flight LLM continuation) survives, and dialogue ids recur ({@code nego-WALKIN-1} again in
+     * the next world). A per-instance counter would restart at 1 and let an old world's late
+     * revision match the new world's first hint. */
+    private static final AtomicLong HINT_IDS = new AtomicLong();
 
     private final RecommendationAlgorithm algorithm;
     private final LLMBridge llmBridge;
@@ -88,31 +96,50 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
         }
     }
 
-    /** Run the algorithm, ask the LLM to polish it, validate, publish — falling back to the
-     * plain template on any LLM timeout/error or on a failed hallucination check. */
+    /**
+     * Run the algorithm, show its plain template AT ONCE, then ask the LLM to polish it and — only
+     * if the polish passes the hallucination check — replace that template in place.
+     *
+     * <p>S12 (live-playtest F-8): the template used to appear only from the failure branch, so the
+     * player saw nothing until the LLM timed out, and a valid answer that arrived after the timeout
+     * was thrown away. Measured: the production prompt takes ~18 s on a quiet laptop and 40-60 s
+     * under ordinary background load (a Windows Update scan overlapped both playtest Hints), so a
+     * fixed timeout cannot both stay short and let the model through. Publishing the template first
+     * makes the wait free: the bridge timeout only bounds how long a revision may still arrive.
+     */
     public void onHintButton(HintButtonEvent event) {
         WalkInDialogueSnapshot snapshot = event.snapshot();
         Recommendation rec = algorithm.run(snapshot);
         cache.put(decisionId(event.dialogueId(), snapshot), rec);
 
         String template = AssistantPromptBuilder.template(rec);
+        long hintId = HINT_IDS.incrementAndGet();
+        // Before explain() is even called, so the revision can never overtake its own template.
+        eventBus.publish(AssistantChatEvent.hintTemplate(event.dialogueId(), hintId, template));
+
         PromptPayload prompt = AssistantPromptBuilder.prompt(rec);
         // requiredFigures(), not allFigures(): the sidecar's own check 1 mirrors the Java one
         // (task 13 parity), so both sides must narrow together — see Recommendation#requiredFigures.
-        // The sidecar's verdict is advisory anyway; HallucinationValidator below is what gates the
-        // fall back to the plain template.
+        // The sidecar's verdict is advisory anyway; HallucinationValidator below is the gate.
         LLMRequest request = new LLMRequest(prompt.user(), prompt.system(),
                 rec.requiredFigures().stream().toList(), rec.namedEntities().stream().toList(), true);
 
+        long askedAt = System.nanoTime(); // log-only: the LLM call's real latency, never game state
         llmBridge.explain(request)
                 .thenAccept(response -> {
-                    String text = HallucinationValidator.validate(response.text(), rec) ? response.text() : template;
-                    eventBus.publish(new AssistantChatEvent(event.dialogueId(), text));
+                    long ms = (System.nanoTime() - askedAt) / 1_000_000L;
+                    if (HallucinationValidator.validate(response.text(), rec)) {
+                        log.info("hint {} ({}): validated model text replaces the template after {} ms",
+                                hintId, event.dialogueId(), ms);
+                        eventBus.publish(AssistantChatEvent.hintRevision(event.dialogueId(), hintId, response.text()));
+                    } else {
+                        log.info("hint {} ({}): model text failed the hallucination check after {} ms; "
+                                + "the template stands", hintId, event.dialogueId(), ms);
+                    }
                 })
                 .exceptionally(ex -> {
-                    log.debug("{}: llm explain failed/timed out; falling back to template",
-                            event.dialogueId(), ex);
-                    eventBus.publish(new AssistantChatEvent(event.dialogueId(), template));
+                    log.info("hint {} ({}): llm explain failed/timed out after {} ms ({}); the template stands",
+                            hintId, event.dialogueId(), (System.nanoTime() - askedAt) / 1_000_000L, ex.toString());
                     return null;
                 });
     }

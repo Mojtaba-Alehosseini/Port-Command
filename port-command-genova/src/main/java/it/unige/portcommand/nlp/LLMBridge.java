@@ -31,22 +31,31 @@ import org.slf4j.LoggerFactory;
  * making the sidecar dead code in-game. {@link #resolveTimeoutMs()} reads {@code llm
  * .timeout_ms} from {@code /data/defaults.json} on the classpath (task 15 owns that file —
  * this class only reads it, never writes it) if present, else defaults to {@value
- * #DEFAULT_TIMEOUT_MS}&nbsp;ms — sized from task 13b's ONNX-INT4 measurement (~17&nbsp;s/
- * explanation, max ~19&nbsp;s cold) with ~1.5&times; margin, covering the 120-token worst
- * case (~26&nbsp;s).
+ * #DEFAULT_TIMEOUT_MS}&nbsp;ms.
+ *
+ * <p><b>Why 120&nbsp;s (S12, live-playtest F-8).</b> The old 30&nbsp;s came from task 13b's
+ * 81-token smoke prompt (~17&nbsp;s). The production Hint prompt is ~182 tokens since the
+ * rule-id system prompt (2026-07-27), and decode is CPU-bound: 18&nbsp;s on a quiet laptop,
+ * 36&nbsp;s idle on 2026-10-07, 40-44&nbsp;s in the playtest (a Windows Update scan running),
+ * 58&nbsp;s with six busy processes — so every playtest Hint timed out with a valid answer
+ * seconds away. The Hint path no longer waits on this budget: its template is on screen before
+ * {@link #explain} is called and the model's text only replaces it (the latent "Why?" plan,
+ * {@code ExplainEventBehaviour}, still waits — nothing produces its event). 120&nbsp;s covers two
+ * queued Hints (the sidecar generates one at a time) at the measured 44&nbsp;s and one at the
+ * loaded 58&nbsp;s, and matches {@code LlmHallucinationIT}'s per-trace bound.
  *
  * <p>{@link #explain} is fully async (never blocks the calling thread) and never retries —
- * a retry after a ~20&nbsp;s generation would double an already-long wait. On timeout the
+ * a retry after a 20-60&nbsp;s generation would only queue behind itself. On timeout the
  * returned future completes exceptionally with {@link LLMTimeoutException}; {@code
- * LLMBridge} has no access to the recommendation trace, so it cannot build the template-text
- * fallback itself — see {@link LLMTimeoutException}'s Javadoc for who does.
+ * LLMBridge} has no access to the recommendation trace, so it cannot build the template text
+ * itself — see {@link LLMTimeoutException}'s Javadoc for who does.
  */
 public final class LLMBridge {
 
     private static final Logger log = LoggerFactory.getLogger(LLMBridge.class);
 
     private static final int DEFAULT_PORT = 5006;
-    static final long DEFAULT_TIMEOUT_MS = 30_000L;
+    static final long DEFAULT_TIMEOUT_MS = 120_000L;
     private static final Duration HEALTH_TIMEOUT = Duration.ofSeconds(3);
     private static final long HEALTH_CACHE_MS = 5_000L;
     private static final String DEFAULTS_JSON_RESOURCE = "/data/defaults.json";

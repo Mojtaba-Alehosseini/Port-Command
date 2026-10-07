@@ -132,8 +132,10 @@ final class DialogueTabView extends JPanel {
         // supposed to answer) off-screen, every turn, in the panel the demo spends the most time
         // in. CommLogPanel already handles the same hazard with its wasAtBottom/setCaretPosition
         // logic; the chat tab had no equivalent. Pinning the caret at the end is unconditional
-        // here rather than stick-to-bottom-only, because a transcript only ever grows at the end
-        // and the player has no reason to be parked mid-history when a new line lands.
+        // here rather than stick-to-bottom-only, because a transcript grows at the end and the
+        // player has no reason to be parked mid-history when a new line lands. The one in-place
+        // edit (S12: a Hint's template replaced by the model's validated wording) re-renders the
+        // same way; the newest lines are what the player should be looking at then too.
         transcriptPane.setCaretPosition(transcriptPane.getDocument().getLength());
         boolean closed = tab.isClosed();
         offerStripLabel.setText(offerStripText(tab, closed));
@@ -564,6 +566,15 @@ final class DialogueTabView extends JPanel {
     /** Test-only: the transcript document's length, the expected caret position. */
     int transcriptLengthForTest() {
         return transcriptPane.getDocument().getLength();
+    }
+
+    /** Test-only: the rendered transcript as plain text (S12 — a Hint revision must show in place). */
+    String transcriptTextForTest() {
+        try {
+            return transcriptPane.getDocument().getText(0, transcriptPane.getDocument().getLength());
+        } catch (javax.swing.text.BadLocationException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /** Test-only: the offer strip's current text (task-24 countdown assertions). */

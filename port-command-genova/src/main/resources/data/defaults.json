@@ -23,6 +23,6 @@
     "daily_target": 2.0
   },
   "llm": {
-    "timeout_ms": 30000
+    "timeout_ms": 120000
   }
 }
