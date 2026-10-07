@@ -2,10 +2,13 @@ package it.unige.portcommand.gui;
 
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Rectangle2D;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import it.unige.portcommand.agents.BerthOccupancy;
@@ -50,8 +53,12 @@ final class MapPainter {
     private static final Color HARBOUR_OUTLINE = new Color(90, 110, 130);
     private static final Color TUG_BASE_ZONE = new Color(210, 210, 200);
 
-    private static final int BERTH_WIDTH = 70;
-    private static final int BERTH_HEIGHT = 50;
+    // Package-private with the label constants (S12, F-6): MapPainterTest checks the label against
+    // the rectangle's painted size. The label font is a fixed size; it does not scale with the map.
+    static final int BERTH_WIDTH = 70;
+    static final int BERTH_HEIGHT = 50;
+    static final float LABEL_FONT_SIZE = 10f;
+    static final int LABEL_PAD = 3;
     private static final int TUG_RADIUS = 7;
 
     // Approximate area near the tug home bases (TugBasePositions, x=50/y=100-250) — deliberately
@@ -129,6 +136,8 @@ final class MapPainter {
     }
 
     private static void paintBerths(Graphics2D g, Transform t, Map<String, BerthOccupancy> berths) {
+        g.setFont(g.getFont().deriveFont(Font.PLAIN, LABEL_FONT_SIZE));
+        FontMetrics fm = g.getFontMetrics();
         for (Map.Entry<String, BerthOccupancy> entry : berths.entrySet()) {
             String berthId = entry.getKey();
             BerthOccupancy occupancy = entry.getValue();
@@ -144,10 +153,50 @@ final class MapPainter {
             g.fillRect(x, y, w, h);
             g.setColor(HARBOUR_OUTLINE);
             g.drawRect(x, y, w, h);
-            g.setFont(g.getFont().deriveFont(Font.PLAIN, 10f));
-            String label = occupancy.vesselId() != null ? berthId + " (" + occupancy.vesselId() + ")" : berthId;
-            g.drawString(label, x + 3, y + 14);
+            int baseline = y + LABEL_PAD + fm.getAscent();
+            for (String line : berthLabelLines(berthId, occupancy.vesselId(), fm, w - 2 * LABEL_PAD)) {
+                g.drawString(line, x + LABEL_PAD, baseline);
+                baseline += fm.getHeight();
+            }
         }
+    }
+
+    /**
+     * S12 (live playtest F-6): the berth label, one fact per line — the berth id, then the
+     * occupant's id when there is one — each fitted to {@code maxWidth}. The old one-line
+     * {@code "berth_1 (C501)"} (~70 px at 10 pt) only fit a map wider than ~650 px; on a narrower
+     * one (MainWindow lets the map shrink to 380 px, a 42 px rectangle) it ran out over the sea
+     * gap, where the neighbouring berth's fill could cover its tail ({@code Map.copyOf} paint
+     * order varies per run): "berth_1 (C50". Two lines fit the rectangle's height from a 460x300
+     * map up. The font stays fixed: scaled with the map it would be ~6 pt at 380 px.
+     */
+    static List<String> berthLabelLines(String berthId, String vesselId, FontMetrics fm, int maxWidth) {
+        List<String> lines = new ArrayList<>(2);
+        lines.add(fitToWidth(berthId, fm, maxWidth));
+        if (vesselId != null) {
+            lines.add(fitToWidth(vesselId, fm, maxWidth));
+        }
+        return lines;
+    }
+
+    /**
+     * {@code text} unchanged if it fits in {@code maxWidth}, else an ellipsis followed by its
+     * longest SUFFIX that still fits; {@code ""} if not even the ellipsis and one character fit.
+     * The tail is kept because it is what tells these ids apart (WALKIN-B1 vs WALKIN-B3,
+     * berth_1..berth_4, C001-D29 vs C001-D30); a kept prefix rendered busy_day's walk-ins
+     * identically as "WALKIN\u2026" below ~535 px of map width.
+     */
+    static String fitToWidth(String text, FontMetrics fm, int maxWidth) {
+        if (fm.stringWidth(text) <= maxWidth) {
+            return text;
+        }
+        for (int start = 1; start < text.length(); start++) {
+            String cut = "\u2026" + text.substring(start);
+            if (fm.stringWidth(cut) <= maxWidth) {
+                return cut;
+            }
+        }
+        return "";
     }
 
     private static Color berthColour(BerthOccupancy.Status status) {

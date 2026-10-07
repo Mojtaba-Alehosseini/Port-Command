@@ -5,6 +5,7 @@ import java.awt.Dimension;
 import java.awt.Frame;
 import java.awt.GridLayout;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 import javax.swing.BorderFactory;
@@ -45,8 +46,7 @@ public final class NewGameDialog extends JDialog {
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(8, 8));
 
-        JLabel detail = new JLabel(" ", SwingConstants.CENTER);
-        detail.setBorder(BorderFactory.createEmptyBorder(4, 12, 4, 12));
+        JLabel detail = detailLabel(scenarios);
 
         JButton start = new JButton("Start");
         start.setEnabled(false);
@@ -61,10 +61,7 @@ public final class NewGameDialog extends JDialog {
             button.setToolTipText(scenario.description());
             button.addActionListener(e -> {
                 selectedKey = scenario.key();
-                detail.setText("<html><center>" + scenario.description()
-                        + "<br><i>Target daily revenue: €"
-                        + String.format("%,.0f", scenario.targetDailyRevenue())
-                        + "</i></center></html>");
+                detail.setText(detailHtml(scenario));
                 start.setEnabled(true);
             });
             group.add(button);
@@ -101,5 +98,42 @@ public final class NewGameDialog extends JDialog {
         NewGameDialog dialog = new NewGameDialog(owner, scenarios);
         dialog.setVisible(true); // modal — blocks until dispose
         return dialog.confirmed ? Optional.ofNullable(dialog.selectedKey) : Optional.empty();
+    }
+
+    /**
+     * What a selection shows: the description, then the target revenue on its own line. The
+     * figure pins {@code Locale.ROOT} (INVARIANTS, money formatting): the default locale groups
+     * it as "3.500" on a Danish or Italian desktop.
+     */
+    static String detailHtml(Scenario scenario) {
+        return "<html><center>" + scenario.description()
+                + "<br><i>Target daily revenue: €"
+                + String.format(Locale.ROOT, "%,.0f", scenario.targetDailyRevenue())
+                + "</i></center></html>";
+    }
+
+    /**
+     * S12 (live playtest F-3): the detail label, already reserving the size of the largest detail.
+     * The dialog {@code pack()}s ONCE, before any selection, and a selection only re-lays-out
+     * inside the unchanged window — packed around the blank placeholder, the centre slot held one
+     * line and the second (the target-revenue figure DEMO_SCRIPT Beat 0 points at) was cut off;
+     * the longer Busy Day / Storm descriptions wrap and would lose it entirely. A fresh HTML
+     * label's preferred size is its natural UNWRAPPED layout, so at the max of them no detail
+     * wraps or clips. Re-packing on selection instead would resize the dialog on every click, and
+     * could not be tested headless, where a {@code JDialog} cannot be constructed.
+     */
+    static JLabel detailLabel(List<Scenario> scenarios) {
+        JLabel detail = new JLabel(" ", SwingConstants.CENTER);
+        detail.setBorder(BorderFactory.createEmptyBorder(4, 12, 4, 12));
+        Dimension reserve = detail.getPreferredSize();
+        for (Scenario scenario : scenarios) {
+            detail.setText(detailHtml(scenario));
+            Dimension need = detail.getPreferredSize();
+            reserve = new Dimension(Math.max(reserve.width, need.width),
+                    Math.max(reserve.height, need.height));
+        }
+        detail.setText(" ");
+        detail.setPreferredSize(reserve);
+        return detail;
     }
 }
