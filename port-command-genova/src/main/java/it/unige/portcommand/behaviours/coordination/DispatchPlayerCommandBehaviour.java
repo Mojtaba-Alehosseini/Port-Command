@@ -181,11 +181,19 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
     /**
      * Refusal = player-visible, wire-silent (stated deviation, ADR-16): the comm log renders the
      * HM's send/receive instrumentation and nothing was sent — the rule id lands where the player
-     * actually reads, the dialogue tab and the HUD, exactly like the queue notice.
+     * actually reads, the dialogue tab and the HUD, exactly like the queue notice. S13 (F-7): the
+     * typed {@link it.unige.portcommand.gui.events.PlayerCommandRefusedEvent} carries the refused
+     * command's id so the tab takes back the offer it already put on its strip.
      */
     private void refuse(PlayerCommand cmd, String reason) {
         String note = "Command " + cmd.kind() + " for " + cmd.targetVesselId()
                 + " refused: " + reason;
+        // The standing price is read HERE, on the HM thread after every earlier dispatch for this
+        // dialogue (the autopilot's too): proposeMessage records a price only once it is on the wire.
+        String dialogueId = "nego-" + cmd.targetVesselId();
+        hm.eventBus().publish(new it.unige.portcommand.gui.events.PlayerCommandRefusedEvent(
+                dialogueId, cmd.kind(), cmd.commandId(),
+                hm.negotiationPlayerOffers().getOrDefault(dialogueId, 0.0), reason));
         hm.eventBus().publish(new it.unige.portcommand.gui.events.NotificationEvent(note,
                 it.unige.portcommand.gui.events.NotificationEvent.Severity.WARNING,
                 hm.simClock().nowSimMillis()));

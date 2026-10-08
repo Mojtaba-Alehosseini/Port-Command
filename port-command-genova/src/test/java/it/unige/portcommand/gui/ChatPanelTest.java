@@ -16,6 +16,7 @@ import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
+import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
@@ -731,6 +732,67 @@ class ChatPanelTest {
         String shown = view.transcriptTextForTest();
         assertTrue(shown.contains("(model)") && !shown.contains("(template)"), shown);
         assertEquals(view.transcriptLengthForTest(), view.caretPositionForTest(), "C-28 still holds after a revision");
+    }
+
+    // ==================== S13 (live-playtest F-7): a refused PROPOSE leaves the strip ====================
+
+    @Test
+    @Timeout(5)
+    void aProposeThePrologGateRefusedComesBackOffTheOfferStrip() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "ferry", "Rada Calma");
+        DialogueTabView view = panel.viewForTest("nego-A");
+        String standing = view.offerStripTextForTest();
+
+        // The playtest's Beat 3b: the DCG parsed it, then the gate refused berth_3 for a ferry.
+        processor.returning(new PipelineResult.Routed(acl(ACLMessage.PROPOSE, Map.of(
+                "move", "counter",
+                "money", Map.of("amount", 1900.0, "currency", "EUR"),
+                "duration", 4,
+                "berth", "berth_3"))));
+        view.sendText("1900 for 4 hours at berth 3");
+        SwingUtilities.invokeAndWait(() -> { });
+        assertTrue(view.offerStripTextForTest().contains("Your offer: €1900 for 4h"),
+                "setup: the send shows on the strip at once: " + view.offerStripTextForTest());
+
+        PlayerCommandEvent sent = published(bus, PlayerCommandEvent.class).get(0);
+        assertTrue(sent.commandId() != PlayerCommandEvent.NO_COMMAND_ID,
+                "a PROPOSE the strip shows early must carry an id a refusal can name");
+        assertEquals(java.util.Set.of("price", "hours", "berth_id"), sent.content().keySet(),
+                "the id is bus-only — the wire content is unchanged");
+
+        bus.publish(new PlayerCommandRefusedEvent("nego-A", PlayerCommandKind.PROPOSE, sent.commandId(),
+                0.0, "berth_3 is incompatible with a ferry [R7]")); // the HM dispatched no offer yet
+        SwingUtilities.invokeAndWait(() -> { });
+
+        assertEquals(standing, view.offerStripTextForTest(),
+                "nothing reached the vessel, so the strip must show the last standing offer again");
+    }
+
+    @Test
+    @Timeout(5)
+    void anotherSendsRefusalLeavesTheStripAlone() throws Exception {
+        // The autopilot's commands carry no id (it never writes the strip): its refusals, and any
+        // id this tab did not record, must not touch what the strip shows.
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        DialogueTabView view = panel.viewForTest("nego-A");
+        processor.returning(new PipelineResult.Routed(acl(ACLMessage.PROPOSE, Map.of("price", 2000, "hours", 5))));
+        view.sendText("2000 for 5 hours");
+        SwingUtilities.invokeAndWait(() -> { });
+        String shown = view.offerStripTextForTest();
+
+        bus.publish(new PlayerCommandRefusedEvent("nego-A", PlayerCommandKind.PROPOSE,
+                PlayerCommandEvent.NO_COMMAND_ID, 0.0, "operations unsafe [R15,R16]"));
+        bus.publish(new PlayerCommandRefusedEvent("nego-A", PlayerCommandKind.ACCEPT,
+                published(bus, PlayerCommandEvent.class).get(0).commandId() + 1_000, 0.0, "swell [R17]"));
+        SwingUtilities.invokeAndWait(() -> { });
+
+        assertEquals(shown, view.offerStripTextForTest());
     }
 
     // ==================== audit C-07: closed tabs leave the strip ====================

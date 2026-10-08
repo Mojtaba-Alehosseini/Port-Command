@@ -15,9 +15,19 @@ import it.unige.portcommand.util.Event;
  * @param kind           the command kind
  * @param targetVesselId the vessel this command targets
  * @param content        command-specific payload (e.g. {@code {"price": 2400}} for a PROPOSE)
+ * @param commandId      S13 (live-playtest F-7): a correlation id, or {@link #NO_COMMAND_ID}. The
+ *                       chat tab assigns one to every PROPOSE whose terms it shows on the offer
+ *                       strip before the HarbourMaster's Prolog gate has judged it; a gate refusal
+ *                       echoes it in {@link PlayerCommandRefusedEvent} so the tab can take exactly
+ *                       that offer back. Bus-only: it is a record field, never a {@code content}
+ *                       key, so it never reaches the wire.
  */
-public record PlayerCommandEvent(PlayerCommandKind kind, String targetVesselId, Map<String, Object> content)
+public record PlayerCommandEvent(PlayerCommandKind kind, String targetVesselId, Map<String, Object> content,
+                                 long commandId)
         implements Event {
+
+    /** The {@code commandId} of a command no one needs to correlate (autopilot, buttons, tests). */
+    public static final long NO_COMMAND_ID = 0L;
 
     /**
      * Defensive copy that KEEPS insertion order — deliberately not {@code Map.copyOf}, which
@@ -32,6 +42,11 @@ public record PlayerCommandEvent(PlayerCommandKind kind, String targetVesselId, 
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(targetVesselId, "targetVesselId");
         content = content == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(content));
+    }
+
+    /** A command with no correlation id — every producer except the chat tab's PROPOSE send. */
+    public PlayerCommandEvent(PlayerCommandKind kind, String targetVesselId, Map<String, Object> content) {
+        this(kind, targetVesselId, content, NO_COMMAND_ID);
     }
 
     /** Identical to the internal {@code PlayerCommand.kind} (task 11) this event is mapped to. */

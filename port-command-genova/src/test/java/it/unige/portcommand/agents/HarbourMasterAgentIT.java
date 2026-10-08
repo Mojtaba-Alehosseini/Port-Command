@@ -31,6 +31,7 @@ import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
+import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
 import it.unige.portcommand.gui.events.TugJobAwardedEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.harbourmaster.ExpenseEvent;
@@ -1256,19 +1257,40 @@ class HarbourMasterAgentIT {
 
         DispatchPlayerCommandBehaviour dispatch = new DispatchPlayerCommandBehaviour(hm);
         dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.PROPOSE, "W050",
-                Map.of("price", 5000.0, "hours", 8, "berth_id", "berth_2")));
+                Map.of("price", 5000.0, "hours", 8, "berth_id", "berth_2"), 7_050L));
 
         AssistantChatEvent refusal = awaitEvent(AssistantChatEvent.class,
                 e -> "nego-W050".equals(e.dialogueId()) && e.text().contains("[R7]"), 10_000);
         assertNotNull(refusal, "the gate must refuse with the failing rule id in the dialogue tab");
+        // S13 (live-playtest F-7): the typed twin names the refused send, so the chat tab can take
+        // the offer it already showed back off its strip.
+        PlayerCommandRefusedEvent typed = awaitEvent(PlayerCommandRefusedEvent.class,
+                e -> "nego-W050".equals(e.dialogueId()), 10_000);
+        assertNotNull(typed, "the gate must also publish the typed refusal");
+        assertEquals(PlayerCommandKind.PROPOSE, typed.kind());
+        assertEquals(7_050L, typed.commandId(), "the refusal must echo the refused command's id");
+        assertTrue(typed.reason().contains("[R7]"), "the verdict rides along: " + typed.reason());
+        assertEquals(0.0, typed.standingPlayerPrice(), 0.001, "no player offer has reached the vessel yet");
         assertNeverArrives(vessel.inbox, ACLMessage.PROPOSE, 1_500);
 
         dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.PROPOSE, "W050",
-                Map.of("price", 5000.0, "hours", 8, "berth_id", "berth_1")));
+                Map.of("price", 5000.0, "hours", 8, "berth_id", "berth_1"), 7_051L));
         ACLMessage propose = pollUntil(vessel.inbox,
                 m -> m.getPerformative() == ACLMessage.PROPOSE, 10_000);
         assertNotNull(propose, "a compatible binding command must pass the gate unchanged");
         assertEquals("nego-W050", propose.getConversationId());
+        assertFalse(propose.getContent().contains("7051") || propose.getContent().contains("command"),
+                "the correlation id is bus-only and must never reach the wire: " + propose.getContent());
+
+        // Once an offer HAS reached the vessel, a later refusal reports it as the standing price:
+        // the HarbourMaster's own record, which the chat tab restores (S13 review finding).
+        dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.PROPOSE, "W050",
+                Map.of("price", 4800.0, "hours", 8, "berth_id", "berth_2"), 7_052L));
+        PlayerCommandRefusedEvent second = awaitEvent(PlayerCommandRefusedEvent.class,
+                e -> e.commandId() == 7_052L, 10_000);
+        assertNotNull(second, "the second incompatible PROPOSE must be refused too");
+        assertEquals(5000.0, second.standingPlayerPrice(), 0.001,
+                "the standing price is the one the vessel last heard, never the refused 4800");
     }
 
     /**

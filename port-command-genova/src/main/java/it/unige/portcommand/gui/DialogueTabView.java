@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 
 import javax.swing.JButton;
@@ -44,6 +45,11 @@ import jade.lang.acl.ACLMessage;
  * server-originated events (opened/closed/assistant-chat) to {@link #refresh}.
  */
 final class DialogueTabView extends JPanel {
+
+    /** S13 (F-7): ids for the PROPOSEs whose terms the strip shows before the Prolog gate's verdict.
+     * JVM-wide, like the Assistant's hint ids: a refusal still in flight across a load must not
+     * match the next world's same-id dialogue. */
+    private static final AtomicLong COMMAND_IDS = new AtomicLong();
 
     private final String dialogueId;
     private final NegotiationTabRegistry registry;
@@ -334,18 +340,23 @@ final class DialogueTabView extends JPanel {
         Map<String, Object> frameElements =
                 (Map<String, Object>) TerminalJson.readOrNull(routed.msg().getContent(), Map.class);
         Map<String, Object> content = toVesselProtocol(frameElements);
+        long commandId = PlayerCommandEvent.NO_COMMAND_ID;
         if (kind == PlayerCommandKind.PROPOSE && content.get("price") instanceof Number price) {
-            // The offer strip + DialogueCtx standing offer need the player's side; no event
-            // carries it back (the HM doesn't track it), so record it at the send. Task 19b:
-            // the proposed HOURS ride along (null when the utterance named none — the standing
-            // value holds). The task-19 "only the fee is negotiable" note is gone: duration is
-            // a real §7.3 dimension now, and the bargaining feedback is the vessel's own reply
-            // ("they need at least Nh" on a floor pushback — see the registry's offerSummary).
+            // The offer strip + DialogueCtx standing offer need the player's side, at once, so
+            // record it at the send. Task 19b: the proposed HOURS ride along (null when the
+            // utterance named none — the standing value holds). The task-19 "only the fee is
+            // negotiable" note is gone: duration is a real §7.3 dimension now, and the bargaining
+            // feedback is the vessel's own reply ("they need at least Nh" on a floor pushback —
+            // see the registry's offerSummary). S13 (F-7): the HarbourMaster's Prolog gate has not
+            // judged the send yet, so it carries an id; a refusal names it and the registry puts
+            // the previous offer back on the strip.
             Integer proposedHours = content.get("hours") instanceof Number n ? n.intValue() : null;
+            long sendId = COMMAND_IDS.incrementAndGet();
+            commandId = sendId;
             registry.dialogueIdForVessel(targetVesselId)
-                    .ifPresent(id -> registry.recordPlayerOffer(id, price.doubleValue(), proposedHours));
+                    .ifPresent(id -> registry.recordPlayerOffer(id, price.doubleValue(), proposedHours, sendId));
         }
-        eventBus.publish(new PlayerCommandEvent(kind, targetVesselId, content));
+        eventBus.publish(new PlayerCommandEvent(kind, targetVesselId, content, commandId));
         // Echo how the NL was INTERPRETED (task 19 play-test: Rasa read a bare "so?" as an
         // acceptance and the deal closed with no visible cause — every routed action must be
         // legible). Button clicks skip this: their own label bubble already is the echo.

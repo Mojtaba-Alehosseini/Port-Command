@@ -11,9 +11,12 @@ import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
 /**
  * HarbourMaster-internal representation of a player action, mapped 1:1 from the
  * GUI-facing {@link PlayerCommandEvent} by {@code DispatchPlayerCommandBehaviour} —
- * the only conversion point ({@code kind}'s values are identical in both types).
+ * the only conversion point ({@code kind}'s values are identical in both types). {@code commandId}
+ * is carried through only so a gate refusal can name the command it refused (S13, F-7 — see
+ * {@link PlayerCommandEvent#commandId()}); nothing here puts it on the wire.
  */
-public record PlayerCommand(PlayerCommandKind kind, String targetVesselId, Map<String, Object> content) {
+public record PlayerCommand(PlayerCommandKind kind, String targetVesselId, Map<String, Object> content,
+                            long commandId) {
 
     /**
      * Defensive copy that KEEPS insertion order — deliberately not {@code Map.copyOf}. {@code
@@ -30,7 +33,11 @@ public record PlayerCommand(PlayerCommandKind kind, String targetVesselId, Map<S
         content = content == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(content));
     }
 
+    public PlayerCommand(PlayerCommandKind kind, String targetVesselId, Map<String, Object> content) {
+        this(kind, targetVesselId, content, PlayerCommandEvent.NO_COMMAND_ID);
+    }
+
     public static PlayerCommand from(PlayerCommandEvent event) {
-        return new PlayerCommand(event.kind(), event.targetVesselId(), event.content());
+        return new PlayerCommand(event.kind(), event.targetVesselId(), event.content(), event.commandId());
     }
 }

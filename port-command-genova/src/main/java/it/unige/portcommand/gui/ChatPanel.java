@@ -18,6 +18,7 @@ import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
@@ -70,6 +71,7 @@ public final class ChatPanel extends JPanel {
     private final Subscription<NegotiationOpenedEvent> openedSubscription;
     private final Subscription<NegotiationClosedEvent> closedSubscription;
     private final Subscription<AssistantChatEvent> assistantSubscription;
+    private final Subscription<PlayerCommandRefusedEvent> refusedSubscription;
     private final Subscription<SimClockTickEvent> clockSubscription;
     private final Subscription<SettingsChangedEvent> settingsSubscription;
     private final Subscription<it.unige.portcommand.persistence.events.GameLoadedEvent> loadedSubscription;
@@ -105,6 +107,10 @@ public final class ChatPanel extends JPanel {
         this.openedSubscription = eventBus.subscribe(NegotiationOpenedEvent.class, this::onNegotiationOpened, DeliveryMode.EDT);
         this.closedSubscription = eventBus.subscribe(NegotiationClosedEvent.class, this::onNegotiationClosed, DeliveryMode.EDT);
         this.assistantSubscription = eventBus.subscribe(AssistantChatEvent.class, this::onAssistantChat, DeliveryMode.EDT);
+        // S13 (live-playtest F-7): a PROPOSE the Prolog gate refused never reached the vessel, so
+        // its terms come back off the offer strip (the refusal TEXT arrives as an AssistantChatEvent).
+        this.refusedSubscription = eventBus.subscribe(PlayerCommandRefusedEvent.class,
+                this::onPlayerCommandRefused, DeliveryMode.EDT);
         // Task 24: the per-sim-minute tick re-renders every open tab's offer strip so the
         // "~Ns remaining" hint counts down for real (~5 Hz wall at the default day length —
         // strip-label-only refresh, never the full transcript re-render).
@@ -257,12 +263,22 @@ public final class ChatPanel extends JPanel {
         });
     }
 
+    private void onPlayerCommandRefused(PlayerCommandRefusedEvent event) {
+        registry.onPlayerCommandRefused(event).ifPresent(id -> {
+            DialogueTabView view = views.get(id);
+            if (view != null) {
+                view.refreshStrip();
+            }
+        });
+    }
+
     @Override
     public void removeNotify() {
         super.removeNotify();
         openedSubscription.cancel();
         closedSubscription.cancel();
         assistantSubscription.cancel();
+        refusedSubscription.cancel();
         clockSubscription.cancel();
         settingsSubscription.cancel();
         loadedSubscription.cancel();

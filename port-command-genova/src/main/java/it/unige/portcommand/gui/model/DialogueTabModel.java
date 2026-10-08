@@ -26,6 +26,12 @@ public final class DialogueTabModel {
         }
     }
 
+    /** S13 (F-7): a PROPOSE whose terms the strip shows before the Prolog gate has judged it,
+     * and the hours the strip showed before it ({@code null} = none named yet) — restored if the
+     * gate refuses it. The price needs no memory here: the refusal carries the HarbourMaster's. */
+    private record PendingOffer(long commandId, Integer hoursBefore) {
+    }
+
     private final String dialogueId;
     private final List<ChatEntry> transcript = new ArrayList<>();
     private WalkInDialogueSnapshot snapshot;
@@ -37,6 +43,10 @@ public final class DialogueTabModel {
      * may replace. The transcript never removes or reorders entries, so the index stays valid. */
     private long latestHintId = AssistantChatEvent.NO_HINT;
     private int latestHintIndex = -1;
+    /** S13 (F-7): chat PROPOSEs not yet known to have passed the gate, in send order. Bounded by
+     * the negotiation's own length (one entry per send); the gate judges commands in send order,
+     * so a refusal also settles every older entry — see {@link #refusePendingOffer}. */
+    private final List<PendingOffer> pendingOffers = new ArrayList<>();
 
     public DialogueTabModel(String dialogueId, WalkInDialogueSnapshot snapshot) {
         this.dialogueId = Objects.requireNonNull(dialogueId, "dialogueId");
@@ -76,6 +86,50 @@ public final class DialogueTabModel {
         if (hours != null) {
             this.lastPlayerHours = hours;
         }
+    }
+
+    /** S13 (F-7): call BEFORE the strip shows send {@code commandId}'s terms; {@code hoursBefore}
+     * is the {@link #lastPlayerHours()} it showed until then. */
+    public void notePendingOffer(long commandId, Integer hoursBefore) {
+        pendingOffers.add(new PendingOffer(commandId, hoursBefore));
+    }
+
+    /** S13 (F-7): an offer written WITHOUT an id cannot be taken back and replaces every pending
+     * one on the strip, so no later refusal may roll the strip back past it. */
+    public void clearPendingOffers() {
+        pendingOffers.clear();
+    }
+
+    /**
+     * S13 (F-7): the Prolog gate refused send {@code commandId}. When that send is still the
+     * NEWEST one, puts back the hours it overwrote and returns true — the caller then restores the
+     * price. False when it is unknown here (the autopilot's, an old world's, already settled) or a
+     * later send already replaced it on the strip — then that later send inherits the refused
+     * one's {@code hoursBefore}, because a refused offer never stood. Every send OLDER than the
+     * refused one is settled too: the gate judges commands in send order, and their own refusals
+     * would have arrived first, so they passed.
+     */
+    public boolean refusePendingOffer(long commandId) {
+        int refused = -1;
+        for (int i = 0; i < pendingOffers.size(); i++) {
+            if (pendingOffers.get(i).commandId() == commandId) {
+                refused = i;
+                break;
+            }
+        }
+        if (refused < 0) {
+            return false;
+        }
+        Integer hoursBefore = pendingOffers.get(refused).hoursBefore();
+        boolean newest = refused == pendingOffers.size() - 1;
+        if (newest) {
+            lastPlayerHours = hoursBefore; // null included: "no hours named yet"
+        } else {
+            PendingOffer next = pendingOffers.get(refused + 1);
+            pendingOffers.set(refused + 1, new PendingOffer(next.commandId(), hoursBefore));
+        }
+        pendingOffers.subList(0, refused + 1).clear();
+        return newest;
     }
 
     public List<ChatEntry> transcript() {

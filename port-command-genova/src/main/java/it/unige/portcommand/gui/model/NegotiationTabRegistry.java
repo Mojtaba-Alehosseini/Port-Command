@@ -12,6 +12,8 @@ import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.PlayerCommandEvent;
+import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
 import it.unige.portcommand.nlp.DialogueCtx;
 
 /**
@@ -97,13 +99,54 @@ public final class NegotiationTabRegistry {
      * to a "we need at least Nh" counter implicitly concedes the Nh.
      */
     public void recordPlayerOffer(String dialogueId, double price, Integer hours) {
+        recordPlayerOffer(dialogueId, price, hours, PlayerCommandEvent.NO_COMMAND_ID);
+    }
+
+    /**
+     * As {@link #recordPlayerOffer(String, double, Integer)}, for a send the Prolog gate may still
+     * refuse (S13, live-playtest F-7): the strip shows the terms at once, and {@code commandId} —
+     * the id the send's {@link PlayerCommandEvent} carries — remembers what it showed before, so
+     * {@link #onPlayerCommandRefused} can put that back.
+     */
+    public void recordPlayerOffer(String dialogueId, double price, Integer hours, long commandId) {
         DialogueTabModel tab = tabs.get(dialogueId);
         if (tab == null || tab.isClosed()) {
             return;
         }
+        if (commandId != PlayerCommandEvent.NO_COMMAND_ID) {
+            tab.notePendingOffer(commandId, tab.lastPlayerHours());
+        } else {
+            tab.clearPendingOffers();
+        }
         tab.updateSnapshot(withPlayerOffer(tab.snapshot(), price));
         tab.recordPlayerHours(hours != null ? hours : tab.snapshot().durationHours());
         onChange.run();
+    }
+
+    /**
+     * S13 (live-playtest F-7): the Prolog gate refused a command, so nothing reached the vessel.
+     * If it was a PROPOSE this tab recorded at send time and no later send has replaced it, the
+     * strip — and the {@link DialogueCtx} standing offer built from it — goes back to the last
+     * standing offer: the price the HarbourMaster says the vessel last heard (it records the
+     * player's price only on dispatch, so never a refused one; {@code €0} when there was none),
+     * and the hours the strip showed before that send (the HM does not track hours).
+     * @return the dialogue whose strip changed, or empty if nothing did (an autopilot or button
+     *         command, an unknown or superseded send, another world's id)
+     */
+    public Optional<String> onPlayerCommandRefused(PlayerCommandRefusedEvent event) {
+        DialogueTabModel tab = tabs.get(event.dialogueId());
+        if (tab == null || event.commandId() == PlayerCommandEvent.NO_COMMAND_ID) {
+            return Optional.empty();
+        }
+        if (!tab.refusePendingOffer(event.commandId())) {
+            return Optional.empty();
+        }
+        // The HM's price, not this tab's memory of the strip: an id-less autopilot counter
+        // dispatched between the send and this refusal is in the HM's record but was never in
+        // this tab's (review finding, S13). The model has already put the hours back.
+        tab.updateSnapshot(withPlayerOffer(tab.snapshot(), event.standingPlayerPrice()));
+        onChange.run();
+        return Optional.of(event.dialogueId());
     }
 
     private static WalkInDialogueSnapshot withPlayerOffer(WalkInDialogueSnapshot s, double playerOffer) {

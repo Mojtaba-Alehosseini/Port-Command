@@ -10,6 +10,8 @@ import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.PlayerCommandEvent;
+import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
 import it.unige.portcommand.nlp.DialogueCtx;
 import it.unige.portcommand.ontology.Deal;
 import it.unige.portcommand.ontology.VesselSpec;
@@ -459,6 +461,139 @@ class NegotiationTabRegistryTest {
         assertEquals(0, changes[0]);
         registry.sweepClosed(DWELL, DWELL);
         assertEquals(1, changes[0]);
+    }
+
+    // ==================== S13 (live-playtest F-7): a refused PROPOSE leaves the strip ====================
+
+    /** {@code standingPrice} = what the HarbourMaster reports the vessel last heard at the refusal. */
+    private static PlayerCommandRefusedEvent refused(String dialogueId, long commandId, double standingPrice) {
+        return new PlayerCommandRefusedEvent(dialogueId, PlayerCommandEvent.PlayerCommandKind.PROPOSE, commandId,
+                standingPrice, "berth_3 is incompatible with a ferry [R7]");
+    }
+
+    @Test
+    void aRefusedProposeGoesBackToTheLastStandingOffer() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.recordPlayerOffer("nego-W001", 2000.0, 6, 1L); // passes the gate — no event at all
+        registry.recordPlayerOffer("nego-W001", 1900.0, 4, 2L); // refused below
+        assertEquals(1900.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001,
+                "setup: the strip shows a send at once, before the gate's verdict");
+        int[] changes = {0};
+        registry.setOnChange(() -> changes[0]++);
+
+        Optional<String> changed = registry.onPlayerCommandRefused(refused("nego-W001", 2L, 2000.0));
+
+        DialogueTabModel tab = registry.tab("nego-W001");
+        assertEquals(Optional.of("nego-W001"), changed);
+        assertEquals(2000.0, tab.snapshot().lastPlayerOffer(), 0.001, "the strip shows what the vessel last heard");
+        assertEquals(6, tab.lastPlayerHours(), "the refused hours come off the strip too");
+        assertEquals(2000.0, registry.buildCtx("W001").standingOffer().playerOffer().price(), 0.001,
+                "the DCG's standing offer must not carry the refused terms either");
+        assertEquals(1, changes[0]);
+    }
+
+    @Test
+    void aRefusedFirstOfferLeavesTheStripWithNoOfferAgain() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.recordPlayerOffer("nego-W001", 1900.0, 4, 7L);
+
+        registry.onPlayerCommandRefused(refused("nego-W001", 7L, 0.0));
+
+        DialogueTabModel tab = registry.tab("nego-W001");
+        assertEquals(0.0, tab.snapshot().lastPlayerOffer(), 0.001, "no offer ever stood: back to none");
+        assertEquals(null, tab.lastPlayerHours(), "and no hours named: the strip falls back to the hours under discussion");
+    }
+
+    @Test
+    void aRefusalOfASendAlreadyReplacedKeepsTheNewerOfferAndHandsItTheRollback() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.recordPlayerOffer("nego-W001", 2000.0, 6, 1L); // passes
+        registry.recordPlayerOffer("nego-W001", 1900.0, 4, 2L); // refused, but only after...
+        registry.recordPlayerOffer("nego-W001", 1950.0, 6, 3L); // ...this newer send hit the strip
+
+        assertEquals(Optional.empty(), registry.onPlayerCommandRefused(refused("nego-W001", 2L, 2000.0)),
+                "the strip shows the newer send, which the refusal does not concern");
+        assertEquals(1950.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001);
+
+        registry.onPlayerCommandRefused(refused("nego-W001", 3L, 2000.0));
+        assertEquals(2000.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001,
+                "back to the last offer that stood — never to the refused 1900");
+        assertEquals(6, registry.tab("nego-W001").lastPlayerHours());
+    }
+
+    @Test
+    void aRefusalSettlesEveryOlderSendSoALateDuplicateChangesNothing() {
+        // The gate judges commands in send order, so once send 2 is refused, send 1 has been
+        // judged too — no refusal for it can still be on its way.
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.recordPlayerOffer("nego-W001", 2000.0, 6, 1L);
+        registry.recordPlayerOffer("nego-W001", 1900.0, 4, 2L);
+        registry.onPlayerCommandRefused(refused("nego-W001", 2L, 2000.0));
+
+        assertEquals(Optional.empty(), registry.onPlayerCommandRefused(refused("nego-W001", 1L, 2000.0)));
+        assertEquals(Optional.empty(), registry.onPlayerCommandRefused(refused("nego-W001", 2L, 2000.0)), "settled once");
+        assertEquals(2000.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001);
+    }
+
+    @Test
+    void onlyTheChatTabsOwnSendsAreTakenBack() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.recordPlayerOffer("nego-W001", 1900.0, 4, 9L);
+        int[] changes = {0};
+        registry.setOnChange(() -> changes[0]++);
+
+        // The autopilot assigns no id (it never writes the strip), and an unknown id matches nothing.
+        assertEquals(Optional.empty(),
+                registry.onPlayerCommandRefused(refused("nego-W001", PlayerCommandEvent.NO_COMMAND_ID, 0.0)));
+        assertEquals(Optional.empty(), registry.onPlayerCommandRefused(refused("nego-W001", 12_345L, 0.0)));
+        assertEquals(Optional.empty(), registry.onPlayerCommandRefused(refused("nego-GHOST", 9L, 0.0)));
+        assertEquals(1900.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001);
+        assertEquals(0, changes[0], "nothing changed, so nothing re-renders");
+
+        // A send recorded without an id (the legacy three-argument form) cannot be taken back.
+        registry.recordPlayerOffer("nego-W001", 1800.0, 6);
+        assertEquals(Optional.empty(), registry.onPlayerCommandRefused(refused("nego-W001", 9L, 0.0)),
+                "send 9 was replaced on the strip by the id-less send");
+        assertEquals(1800.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001);
+    }
+
+    @Test
+    void theRestoredPriceIsTheHarbourMastersEvenAfterAnAutopilotCounterLandedInBetween() {
+        // Review finding (S13): the autopilot's counters carry no id and are never recorded here,
+        // but the HarbourMaster stamps them into the next vessel counter. A chat send refused after
+        // such a counter must restore the HM's price, not the strip's memory from before the send.
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.recordPlayerOffer("nego-W001", 2000.0, 6, 1L); // passes
+        registry.recordPlayerOffer("nego-W001", 1900.0, 4, 2L); // refused below
+        // Meanwhile the autopilot's €2100 counter went out; the vessel's reply carries the HM's stamp.
+        registry.onNegotiationOpened(new NegotiationOpenedEvent("nego-W001", WalkInDialogueSnapshot.of(
+                "W001", spec("W001", "cargo_vessel"), "berth_1", 6, 1700.0, 2100.0, 2, 0.0, false)));
+
+        registry.onPlayerCommandRefused(refused("nego-W001", 2L, 2100.0));
+
+        assertEquals(2100.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001,
+                "what the vessel last heard — the autopilot's counter, not the pre-send €2000");
+        assertEquals(2100.0, registry.buildCtx("W001").standingOffer().playerOffer().price(), 0.001);
+        assertEquals(6, registry.tab("nego-W001").lastPlayerHours(), "the hours the strip showed before the refused send");
+    }
+
+    @Test
+    void aRefusalFromBeforeAResetMatchesNothingInTheReopenedTab() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.recordPlayerOffer("nego-W001", 1900.0, 4, 31L);
+        registry.reset();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.recordPlayerOffer("nego-W001", 2100.0, 6, 32L);
+
+        assertEquals(Optional.empty(), registry.onPlayerCommandRefused(refused("nego-W001", 31L, 0.0)));
+        assertEquals(2100.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001);
     }
 
     /** P-04: neither this registry nor the tab model may ever read a walk-in's hidden

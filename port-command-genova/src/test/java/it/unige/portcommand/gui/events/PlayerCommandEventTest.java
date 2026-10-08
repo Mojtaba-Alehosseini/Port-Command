@@ -46,6 +46,18 @@ class PlayerCommandEventTest {
     }
 
     @Test
+    void theCorrelationIdIsBusOnlyAndAbsentByDefault() {
+        // S13 (F-7): every producer but the chat tab's PROPOSE uses the three-argument form.
+        PlayerCommandEvent plain = new PlayerCommandEvent(PlayerCommandKind.ACCEPT, "V1", Map.of());
+        assertEquals(PlayerCommandEvent.NO_COMMAND_ID, plain.commandId());
+
+        PlayerCommandEvent tagged = new PlayerCommandEvent(PlayerCommandKind.PROPOSE, "V1", Map.of("price", 1900L), 42L);
+        assertEquals(42L, tagged.commandId());
+        assertEquals("{\"price\":1900}", TerminalJson.write(tagged.content()),
+                "the id is a record field, never a content key — it must not reach the wire");
+    }
+
+    @Test
     void contentIsDefensivelyCopied() {
         Map<String, Object> source = new LinkedHashMap<>();
         source.put("price", 2000L);
