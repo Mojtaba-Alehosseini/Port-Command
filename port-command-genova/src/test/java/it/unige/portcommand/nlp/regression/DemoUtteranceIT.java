@@ -37,7 +37,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * goldens, PLUnit cases and the one-parse-per-utterance table re-checked), so Beat 3 is back to
  * the natural verbless line and the old negative control is now a positive regression. This gate
  * is what stops the documents drifting away from the grammar again: <b>if you change the typed
- * line in either demo document, change it here too and watch it pass.</b>
+ * line in either demo document, change it here too and watch it pass.</b> Since S12 Beat 3 types
+ * TWO lines — the {@code 2400 …} opener that draws the counter, then the pinned {@code 1900 …}
+ * close — and both are pinned here (the opener since S13).
  */
 @Tag("integration")
 class DemoUtteranceIT {
@@ -48,6 +50,11 @@ class DemoUtteranceIT {
      * again since S8's grammar fix (it coincides with {@link #THE_STRING_THAT_DID_NOT_PARSE}
      * deliberately: the script line and the historic regression are the same sentence now). */
     private static final String DEMO_SCRIPT_BEAT_3 = "1900 for 6 hours at berth 3";
+
+    /** Beat 3's OPENER since S12 (2026-10-07): the seeded tutorial walk-in accepts anything up to
+     * her €1,900 ceiling on the spot, so the presenter first asks above it to draw a counter, then
+     * closes with {@link #DEMO_SCRIPT_BEAT_3}. Pinned in S13; it was SWI-Prolog-checked only. */
+    private static final String DEMO_SCRIPT_BEAT_3_OPENER = "2400 for 6 hours at berth 3";
 
     /** Row 2's counter, as {@code docs/DEMO_CHECKLIST.md} words it (berth completed from context). */
     private static final String DEMO_CHECKLIST_ROW_2 = "1900 for 6 hours";
@@ -68,6 +75,17 @@ class DemoUtteranceIT {
                     new DialogueCtx.RosterEntry("T001", "tanker", "Carthago", "berth_2", 8)),
             "berth_3");
 
+    /** Santa Lucia's state when the presenter types the Beat-3 opener: her opening ask, 1436 for
+     * 6 h at berth_2, and NO player offer yet — what the live tab builds ({@code StandingOffer.from}
+     * maps the €0 player side to NONE). Unlike {@link #FOCUS}, a berth the grammar completed from
+     * context would read berth_2 here, so berth_3 proves it was bound from the sentence (review
+     * finding, S13). */
+    private static final DialogueCtx BEAT_3_OPENING = new DialogueCtx(
+            "WALKIN-S1",
+            new DialogueCtx.StandingOffer(new DialogueCtx.OfferView(1436.0, 6, "berth_2"), DialogueCtx.OfferView.NONE),
+            List.of(new DialogueCtx.RosterEntry("WALKIN-S1", "cargo_vessel", "Santa Lucia", "berth_2", 6)),
+            "berth_2");
+
     @BeforeAll
     static void initEngine() {
         PrologEngine.getInstance().init();
@@ -86,6 +104,25 @@ class DemoUtteranceIT {
         // expected value must be 6L — an int literal boxes to Integer and never equals Long(6).
         assertEquals(6L, f.element("duration"), "the hours the presenter says out loud");
         assertEquals("berth_3", f.element("berth"), "the berth the presenter says out loud");
+    }
+
+    @Test
+    void theDemoScriptsBeat3OpenerParsesWithAllThreeSlots() {
+        // Both contexts on purpose: the opening state is the one the presenter really types into,
+        // and it proves the BERTH came from the sentence (FOCUS's own bid is at berth_3); FOCUS
+        // proves the HOURS did (Santa Lucia's own ask is 6 h too).
+        for (DialogueCtx ctx : List.of(BEAT_3_OPENING, FOCUS)) {
+            String where = ctx == FOCUS ? " (FOCUS)" : " (Santa Lucia's opening state)";
+            Optional<Frame> frame = parser.parse(DEMO_SCRIPT_BEAT_3_OPENER, ctx);
+            assertTrue(frame.isPresent(), "DEMO_SCRIPT.md Beat 3 opens with this and claims the DCG parsed it: "
+                    + DEMO_SCRIPT_BEAT_3_OPENER + where);
+            Frame f = frame.get();
+            assertEquals("counter", f.move(), "the opener is a counter-offer above her ceiling" + where);
+            assertEquals(2400.0, moneyAmount(f), "the price the presenter says out loud" + where);
+            assertEquals(6L, f.element("duration"), "the hours the presenter says out loud" + where);
+            assertEquals("berth_3", f.element("berth"),
+                    "the berth the presenter says out loud — bound from the sentence, not completed" + where);
+        }
     }
 
     @Test
