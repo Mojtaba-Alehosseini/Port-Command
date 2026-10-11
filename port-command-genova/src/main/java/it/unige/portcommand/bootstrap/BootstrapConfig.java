@@ -6,12 +6,13 @@ package it.unige.portcommand.bootstrap;
  * @param mainPort              JADE Main Container port (default 1099; overridable via {@code -Djade.main.port})
  * @param enableRMA            launch the JADE RMA debug GUI (default false; {@code -Djade.gui=true})
  * @param simClockMode         descriptive label for the clock pacing mode
- * @param realSecondsPerGameDay real seconds mapped to one simulated 24&nbsp;h (default 300)
+ * @param realSecondsPerGameDay real seconds mapped to one simulated 24&nbsp;h at ×1 speed (default 3600
+ *                              since S14 — a 60-minute sandbox day; scenarios pin their own)
  */
 public record BootstrapConfig(int mainPort, boolean enableRMA, String simClockMode, long realSecondsPerGameDay) {
 
     public static final int DEFAULT_PORT = 1099;
-    public static final long DEFAULT_REAL_SECONDS_PER_GAME_DAY = 300L;
+    public static final long DEFAULT_REAL_SECONDS_PER_GAME_DAY = 3_600L;
     public static final String DEFAULT_SIMCLOCK_MODE = "realtime";
 
     public BootstrapConfig {

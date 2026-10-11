@@ -2,6 +2,7 @@ package it.unige.portcommand.core;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Set;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -40,11 +41,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * game-over rule is "wallet below this floor at end-of-day for 3 CONSECUTIVE days", −€20,000
  * canonical — NOT planning/24's older "any negative wallet at EOD", which would bankrupt a
  * zero-deal day-1 run on the €5,200 fixed cost alone. {@code GameOverGuard} is the sole consumer.
+ *
+ * <p><b>S14 (2026-10-11, playability/timing — ADR-18).</b> {@code timeLimitSeconds} is RETIRED: it
+ * was the nominal 60 s window behind the old "~Ns remaining" countdown and the Assistant's urgency
+ * time term, and both now read the vessel's real conversation clock instead. Old saves still carry
+ * the key; {@link JsonIgnoreProperties} drops it. {@code gameSpeed} is NEW: the player's ×1/×2/×4
+ * speed control, saved with the rest of this block (save schemaVersion stays 1) — a save written
+ * before it existed binds the field as 0, which reads as ×1. The shipped defaults moved with the
+ * same decision: a 60-minute game day ({@code realSecondsPerGameDay} 300 → 3600) and 6 negotiation
+ * rounds ({@code roundLimit} 4 → 6).
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Settings(
         @JsonProperty("roundLimit") int roundLimit,
-        @JsonProperty("timeLimitSeconds") int timeLimitSeconds,
         @JsonProperty("autopilotEnabled") boolean autopilotEnabled,
         @JsonProperty("difficulty") String difficulty,
         @JsonProperty("realSecondsPerGameDay") long realSecondsPerGameDay,
@@ -55,7 +64,11 @@ public record Settings(
         @JsonProperty("cnpReplyBySimSeconds") int cnpReplyBySimSeconds,
         @JsonProperty("cnpRetryAfterSimSeconds") int cnpRetryAfterSimSeconds,
         @JsonProperty("dailyTargetEur") double dailyTargetEur,
-        @JsonProperty("bankruptcyFloorEur") double bankruptcyFloorEur) {
+        @JsonProperty("bankruptcyFloorEur") double bankruptcyFloorEur,
+        @JsonProperty("gameSpeed") int gameSpeed) {
+
+    /** S14: the speed multipliers the player can choose, slowest first. */
+    public static final List<Integer> GAME_SPEEDS = List.of(1, 2, 4);
 
     private static final Set<String> VALID_DIFFICULTIES = Set.of("EASY", "NORMAL", "HARD");
     /** The session's effective settings (S9): classpath-seeded, swapped whole at world
@@ -66,9 +79,6 @@ public record Settings(
         if (roundLimit < 2 || roundLimit > 8) {
             throw new IllegalArgumentException("roundLimit out of range 2..8: " + roundLimit);
         }
-        if (timeLimitSeconds < 30 || timeLimitSeconds > 180) {
-            throw new IllegalArgumentException("timeLimitSeconds out of range 30..180: " + timeLimitSeconds);
-        }
         if (!VALID_DIFFICULTIES.contains(difficulty)) {
             throw new IllegalArgumentException("difficulty must be EASY/NORMAL/HARD: " + difficulty);
         }
@@ -78,12 +88,18 @@ public record Settings(
         if (bankruptcyFloorEur >= 0) {
             throw new IllegalArgumentException("bankruptcyFloorEur must be < 0: " + bankruptcyFloorEur);
         }
+        if (gameSpeed == 0) {
+            gameSpeed = 1; // a save from before S14 has no such key and binds 0 — it was running at ×1
+        }
+        if (!GAME_SPEEDS.contains(gameSpeed)) {
+            throw new IllegalArgumentException("gameSpeed must be one of " + GAME_SPEEDS + ": " + gameSpeed);
+        }
     }
 
     /** The hard-coded fallback values (task-15 brief, §15.1) — also what ships in defaults.json. */
     public static Settings defaults() {
-        return new Settings(4, 60, false, "NORMAL", 300L, 30, true,
-                "microsoft/Phi-4-mini-instruct", 500.0, 5, 30, 5_000.0, -20_000.0);
+        return new Settings(6, false, "NORMAL", 3_600L, 30, true,
+                "microsoft/Phi-4-mini-instruct", 500.0, 5, 30, 5_000.0, -20_000.0, 1);
     }
 
     /** The session's EFFECTIVE settings (see the class javadoc's S9 note). */
@@ -109,39 +125,40 @@ public record Settings(
 
     // S9 with-ers for the live-changeable knobs (records are immutable — new instance each).
     public Settings withRoundLimit(int v) {
-        return new Settings(v, timeLimitSeconds, autopilotEnabled, difficulty, realSecondsPerGameDay,
+        return new Settings(v, autopilotEnabled, difficulty, realSecondsPerGameDay,
                 maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
-                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
-    }
-
-    public Settings withTimeLimitSeconds(int v) {
-        return new Settings(roundLimit, v, autopilotEnabled, difficulty, realSecondsPerGameDay,
-                maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
-                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
+                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, gameSpeed);
     }
 
     public Settings withAutopilotEnabled(boolean v) {
-        return new Settings(roundLimit, timeLimitSeconds, v, difficulty, realSecondsPerGameDay,
+        return new Settings(roundLimit, v, difficulty, realSecondsPerGameDay,
                 maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
-                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
+                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, gameSpeed);
     }
 
     public Settings withDifficulty(String v) {
-        return new Settings(roundLimit, timeLimitSeconds, autopilotEnabled, v, realSecondsPerGameDay,
+        return new Settings(roundLimit, autopilotEnabled, v, realSecondsPerGameDay,
                 maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
-                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
+                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, gameSpeed);
     }
 
     public Settings withRealSecondsPerGameDay(long v) {
-        return new Settings(roundLimit, timeLimitSeconds, autopilotEnabled, difficulty, v,
+        return new Settings(roundLimit, autopilotEnabled, difficulty, v,
                 maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
-                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
+                cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, gameSpeed);
     }
 
     public Settings withLlmModel(String v) {
-        return new Settings(roundLimit, timeLimitSeconds, autopilotEnabled, difficulty,
+        return new Settings(roundLimit, autopilotEnabled, difficulty,
                 realSecondsPerGameDay, maxGameDays, firstLaunch, v, withdrawalPenaltyEur,
-                cnpReplyBySimSeconds, cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur);
+                cnpReplyBySimSeconds, cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, gameSpeed);
+    }
+
+    /** S14: the speed control's write-through. */
+    public Settings withGameSpeed(int v) {
+        return new Settings(roundLimit, autopilotEnabled, difficulty,
+                realSecondsPerGameDay, maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur,
+                cnpReplyBySimSeconds, cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, v);
     }
 
     private static Settings readFromClasspath() {

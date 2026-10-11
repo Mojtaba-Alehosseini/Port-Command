@@ -87,10 +87,20 @@ public abstract class BaseVesselAgent extends PortCommandAgent
             restoreFrom(restored);
             return;
         }
-        long delayWallMs = arrivalDelayWallMs(spec.etaArrivalSimMillis(), simClock.nowSimMillis(), simClock);
-        addBehaviour(new WakerBehaviour(this, delayWallMs) {
+        // S14: the ETA is a SIM instant, and a contracted vessel is spawned two sim-hours ahead of
+        // it — a five-minute wall wait on a 60-minute day, during which the player may well pause
+        // or change speed. SimDeadlineWait keeps the waker honest about that; with an untouched
+        // pace its chunks add up to exactly the single arrivalDelayWallMs delay used before.
+        it.unige.portcommand.util.SimDeadlineWait arrival =
+                new it.unige.portcommand.util.SimDeadlineWait(simClock);
+        addBehaviour(new WakerBehaviour(this, arrival.armUntil(spec.etaArrivalSimMillis())) {
             @Override
             protected void onWake() {
+                long more = arrival.next();
+                if (more > 0) {
+                    reset(more); // not there yet in game time: paused, re-paced, or mid-wait
+                    return;
+                }
                 onArrival();
             }
         });

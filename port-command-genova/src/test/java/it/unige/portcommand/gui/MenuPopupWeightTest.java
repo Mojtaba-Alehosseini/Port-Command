@@ -66,4 +66,26 @@ class MenuPopupWeightTest {
 
         assertFalse(bar.getMenu(0).getPopupMenu().isLightWeightPopupEnabled());
     }
+
+    @Test
+    void aSubmenusDropdownIsHeavyweightToo() {
+        // S14: Game > Speed is the first submenu on the bar. Its popup is a separate JPopupMenu
+        // from its parent's, so the sweep has to descend — a lightweight one would open under the
+        // PAUSED scrim, the same defect one level down.
+        JMenuBar bar = barWith("Game", "Help");
+        JMenu speed = new JMenu("Speed");
+        speed.add(new JMenuItem("x1"));
+        JMenu nested = new JMenu("Nested");
+        nested.add(new JMenuItem("an item"));
+        speed.add(nested);
+        bar.getMenu(0).add(speed);
+        assertTrue(speed.getPopupMenu().isLightWeightPopupEnabled(), "fixture sanity: lightweight by default");
+
+        MainWindow.makePopupsHeavyweight(bar);
+
+        assertFalse(speed.getPopupMenu().isLightWeightPopupEnabled(),
+                "the Speed submenu would render under the PAUSED glass pane");
+        assertFalse(nested.getPopupMenu().isLightWeightPopupEnabled(), "at any depth");
+        assertFalse(bar.getMenu(0).getPopupMenu().isLightWeightPopupEnabled());
+    }
 }

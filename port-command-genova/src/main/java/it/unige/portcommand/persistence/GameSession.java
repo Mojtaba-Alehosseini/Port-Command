@@ -86,6 +86,7 @@ public final class GameSession {
         // leaking into a new game (Settings.load() is the session's live holder now).
         it.unige.portcommand.core.Settings.applyLive(
                 it.unige.portcommand.core.Settings.classpathDefaults());
+        applySettingsSpeed();
         AgentRoster.spawnSingletonsAndFleet(boot.getSpawner(), boot.getPortStateArtifact(),
                 boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact(),
                 boot.getLLMBridge(), boot.getEventBus(), directory, boot.getPolicyRegistryArtifact(),
@@ -299,6 +300,10 @@ public final class GameSession {
             it.unige.portcommand.core.Settings.applyLive(state.settings() != null
                     ? state.settings()
                     : it.unige.portcommand.core.Settings.classpathDefaults());
+            // S14: the speed control is one of those settings, and the SimClock instance outlives
+            // a world swap (the GUI holds it) — so it is re-paced here, before any agent boots
+            // and arms a timer at the previous world's pace.
+            boot.getSimClock().setSpeedMultiplier(it.unige.portcommand.core.Settings.load().gameSpeed());
 
             CompletableFuture<HarbourMasterAgent> hmReady = new CompletableFuture<>();
             AgentRoster.respawnFromSave(boot.getSpawner(), boot.getPortStateArtifact(),
@@ -464,6 +469,20 @@ public final class GameSession {
                 null, simMillis));
         boot.getEventBus().publish(new SimClockTickEvent(simMillis, SimClock.gameDayOf(simMillis),
                 boot.getSimClock().simHour(), boot.getSimClock().simMinute()));
+        // S14: the HUD toggles and the Game ▸ Speed menu re-select the restored speed.
+        boot.getEventBus().publish(new it.unige.portcommand.gui.events.GameSpeedChangedEvent(
+                boot.getSimClock().speedMultiplier()));
+    }
+
+    /**
+     * S14: puts the effective settings' game speed in force on the shared clock and tells the
+     * speed controls. A fresh sandbox game starts at the classpath default (×1) even if the
+     * previous world ran at ×4 — the same world-boundary discipline as the settings themselves.
+     */
+    private void applySettingsSpeed() {
+        int speed = it.unige.portcommand.core.Settings.load().gameSpeed();
+        boot.getSimClock().setSpeedMultiplier(speed);
+        boot.getEventBus().publish(new it.unige.portcommand.gui.events.GameSpeedChangedEvent(speed));
     }
 
     // --- accessors for Main / MainWindow / tests ---

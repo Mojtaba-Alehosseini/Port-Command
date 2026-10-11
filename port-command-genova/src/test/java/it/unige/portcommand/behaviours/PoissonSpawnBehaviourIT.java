@@ -11,6 +11,7 @@ import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.harbourmaster.VesselTracking.Channel;
+import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
 import it.unige.portcommand.ontology.VesselSpec;
 import jade.core.AID;
 import org.junit.jupiter.api.AfterEach;
@@ -30,6 +31,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * parent {@code behaviours} package, NOT {@code behaviours.coordination} — a test
  * class in a catalogue-counted sub-package shadows {@code BehaviourCatalogueTest}'s
  * {@code getResource} scan (same reason as {@code WithdrawalBehaviourTest}).
+ *
+ * <p>S14 (playability/timing): the gate has TWO limits now — at most three walk-ins in port
+ * (task 19, unchanged) and at most two of them still NEGOTIATING (new: what one player can hold
+ * a conversation with). Each has its own case below, staged so that only the limit under test
+ * can be the one that refuses.
  */
 @Tag("integration")
 class PoissonSpawnBehaviourIT {
@@ -68,28 +74,85 @@ class PoissonSpawnBehaviourIT {
         PoissonSpawnBehaviour behaviour = new PoissonSpawnBehaviour(hm, boot.getSimClock(),
                 boot.getRandomSource(), boot.getSpawner(), boot.getMarketHistoryArtifact());
 
-        for (int i = 1; i <= 2; i++) {
-            hm.activeVessels().put("WALKIN-" + i, walkIn("WALKIN-" + i));
-        }
+        // Every walk-in here is PAST negotiation (deal closed, in its flow), so the S14
+        // negotiating limit cannot be what refuses — this case is the in-port count alone.
+        hm.activeVessels().put("WALKIN-1", walkIn("WALKIN-1", Stage.DOCKED));
+        hm.activeVessels().put("WALKIN-2", walkIn("WALKIN-2", Stage.IN_TRANSIT));
         assertTrue(behaviour.canSpawnNow(), "2 active walk-ins must still be under the cap of 3");
 
-        hm.activeVessels().put("WALKIN-3", walkIn("WALKIN-3"));
+        hm.activeVessels().put("WALKIN-3", walkIn("WALKIN-3", Stage.AWAITING_TUG));
         assertFalse(behaviour.canSpawnNow(), "a 3rd active walk-in must hit the cap: no 4th");
 
         // A contracted vessel must never count against the walk-in cap.
         hm.activeVessels().remove("WALKIN-3");
-        hm.activeVessels().put("CONTRACTED-1", contracted("CONTRACTED-1"));
+        hm.activeVessels().put("CONTRACTED-1", contracted("CONTRACTED-1", Stage.DOCKED));
         assertTrue(behaviour.canSpawnNow(), "a contracted vessel must not count toward the walk-in cap");
     }
 
-    private static VesselTracking walkIn(String vesselId) {
-        VesselSpec spec = new VesselSpec(vesselId, "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
-        return VesselTracking.arriving(vesselId, spec, Channel.WALK_IN, new AID(vesselId, AID.ISGUID));
+    /**
+     * S14: at most two walk-ins NEGOTIATING at once. Before this limit the spawner happily opened
+     * a third dialogue while two were unanswered — and with patience now measured in real minutes
+     * (ADR-18) those dialogues no longer clear themselves in a few game minutes.
+     */
+    @Test
+    void twoNegotiatingWalkIns_holdTheNextArrival() throws Exception {
+        HarbourMasterAgent hm = spawnHm();
+        PoissonSpawnBehaviour behaviour = new PoissonSpawnBehaviour(hm, boot.getSimClock(),
+                boot.getRandomSource(), boot.getSpawner(), boot.getMarketHistoryArtifact());
+
+        hm.activeVessels().put("WALKIN-1", walkIn("WALKIN-1", Stage.NEGOTIATING));
+        assertTrue(behaviour.canSpawnNow(), "one open negotiation leaves room for a second");
+
+        hm.activeVessels().put("WALKIN-2", walkIn("WALKIN-2", Stage.NEGOTIATING));
+        assertFalse(behaviour.canSpawnNow(),
+                "2 walk-ins negotiating must hold the next arrival, although only 2 of 3 are in port");
+
+        // WALKIN-2 closes its deal and moves on: one negotiating + one past negotiation.
+        hm.activeVessels().computeIfPresent("WALKIN-2", (id, t) -> t.withStage(Stage.AWAITING_TUG));
+        assertTrue(behaviour.canSpawnNow(),
+                "1 negotiating + 1 past negotiation is under both limits: the next walk-in may come");
+
+        // A second vessel past negotiation fills the port: one negotiating + two past.
+        hm.activeVessels().put("WALKIN-3", walkIn("WALKIN-3", Stage.DOCKED));
+        assertFalse(behaviour.canSpawnNow(),
+                "1 negotiating + 2 past negotiation is 3 walk-ins in port: the older cap still holds");
     }
 
-    private static VesselTracking contracted(String vesselId) {
+    /** Neither limit ever counts a contracted vessel, whatever its stage. */
+    @Test
+    void contractedVessels_countTowardNeitherLimit() throws Exception {
+        HarbourMasterAgent hm = spawnHm();
+        PoissonSpawnBehaviour behaviour = new PoissonSpawnBehaviour(hm, boot.getSimClock(),
+                boot.getRandomSource(), boot.getSpawner(), boot.getMarketHistoryArtifact());
+
+        hm.activeVessels().put("WALKIN-1", walkIn("WALKIN-1", Stage.NEGOTIATING));
+        hm.activeVessels().put("CONTRACTED-1", contracted("CONTRACTED-1", Stage.AWAITING_TUG));
+        hm.activeVessels().put("CONTRACTED-2", contracted("CONTRACTED-2", Stage.IN_TRANSIT));
+        hm.activeVessels().put("CONTRACTED-3", contracted("CONTRACTED-3", Stage.DOCKED));
+        assertTrue(behaviour.canSpawnNow(),
+                "three contracted vessels in port must not fill the walk-in cap of 3");
+
+        // A contracted vessel never negotiates in play; the stage is forced here only to pin the
+        // CHANNEL half of the negotiating count — it must filter on walk-ins, not on the stage alone.
+        hm.activeVessels().put("CONTRACTED-4", contracted("CONTRACTED-4", Stage.NEGOTIATING));
+        assertTrue(behaviour.canSpawnNow(),
+                "a contracted entry at NEGOTIATING must not count as a second open negotiation");
+
+        hm.activeVessels().put("WALKIN-2", walkIn("WALKIN-2", Stage.NEGOTIATING));
+        assertFalse(behaviour.canSpawnNow(),
+                "fixture sanity: a second NEGOTIATING walk-in is what does hold the next arrival");
+    }
+
+    private static VesselTracking walkIn(String vesselId, Stage stage) {
         VesselSpec spec = new VesselSpec(vesselId, "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
-        return VesselTracking.arriving(vesselId, spec, Channel.CONTRACTED, new AID(vesselId, AID.ISGUID));
+        return VesselTracking.arriving(vesselId, spec, Channel.WALK_IN, new AID(vesselId, AID.ISGUID))
+                .withStage(stage);
+    }
+
+    private static VesselTracking contracted(String vesselId, Stage stage) {
+        VesselSpec spec = new VesselSpec(vesselId, "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        return VesselTracking.arriving(vesselId, spec, Channel.CONTRACTED, new AID(vesselId, AID.ISGUID))
+                .withStage(stage);
     }
 
     private HarbourMasterAgent spawnHm() throws Exception {

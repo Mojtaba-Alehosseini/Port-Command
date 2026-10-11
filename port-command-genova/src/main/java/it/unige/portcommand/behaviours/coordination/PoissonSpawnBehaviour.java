@@ -9,12 +9,14 @@ import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.JadeAgentSpawner;
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.harbourmaster.VesselTracking.Channel;
+import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
 import it.unige.portcommand.negotiation.RealNegotiationEngine;
 import it.unige.portcommand.negotiation.VesselTemplate;
 import it.unige.portcommand.negotiation.VesselTemplates;
 import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.util.RandomSource;
 import it.unige.portcommand.util.SimClock;
+import it.unige.portcommand.util.SimDeadlineWait;
 import jade.core.Agent;
 import jade.core.behaviours.WakerBehaviour;
 import org.slf4j.Logger;
@@ -51,19 +53,35 @@ import org.slf4j.LoggerFactory;
  * semantics. The behaviour still reschedules itself on a skipped wake, so it keeps
  * checking rather than dying. The deeper "wall ticks assume sim-time lockstep"
  * mismatch stays filed for task 24, exactly as planning/19 says.
+ *
+ * <p><b>S14 (2026-10-11, playability/timing).</b> Three changes, all Moji's decisions after the
+ * live playtest. (1) The rate drops from one arrival every two sim-hours to one every three —
+ * about eight a game day. (2) A second limit: at most {@link #MAX_NEGOTIATING_WALKINS} walk-ins
+ * may be at stage NEGOTIATING at once, so the player is never asked to hold three conversations;
+ * the in-port limit of {@link #MAX_ACTIVE_WALKINS} is unchanged. Scripted scenario spawns go
+ * through {@code AgentRoster.spawnWalkIn} directly and bypass both, as before. (3) The gap is a
+ * sim-time gap, so it is waited with {@link SimDeadlineWait}: a pause HOLDS the pending arrival
+ * instead of dropping it (the old wake-while-paused threw the arrival away and drew a new gap),
+ * and a speed change re-times it. With an untouched pace the wall wait is exactly what it was.
  */
 public final class PoissonSpawnBehaviour extends WakerBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(PoissonSpawnBehaviour.class);
-    private static final double DEFAULT_RATE_PER_SIM_HOUR = 0.5; // task 23: source from scenario config
+    /** S14: one walk-in every three sim-hours on average — about eight a game day (was 0.5). */
+    public static final double DEFAULT_RATE_PER_SIM_HOUR = 1.0 / 3.0;
     private static final String CARGO_CLASS = "general_cargo"; // task 23: sample a real cargo mix
-    private static final int MAX_ACTIVE_WALKINS = 3; // task 19 STEP 1: caps the reported spawn flood
+    /** Task 19 STEP 1: at most this many walk-ins in port at once (caps the reported spawn flood). */
+    public static final int MAX_ACTIVE_WALKINS = 3;
+    /** S14: at most this many walk-ins NEGOTIATING at once — what a human can actually hold. */
+    public static final int MAX_NEGOTIATING_WALKINS = 2;
 
     private final SimClock simClock;
     private final RandomSource randomSource;
     private final JadeAgentSpawner spawner;
     private final MarketHistoryArtifact marketHistory;
     private final Random draw;
+    /** S14: the pace-aware wait for the next arrival's sim-time deadline. */
+    private final SimDeadlineWait gap;
     private int spawnCount;
 
     public PoissonSpawnBehaviour(Agent agent, SimClock simClock, RandomSource randomSource,
@@ -86,7 +104,15 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
     private PoissonSpawnBehaviour(Agent agent, SimClock simClock, RandomSource randomSource,
                                   JadeAgentSpawner spawner, MarketHistoryArtifact marketHistory, Random draw,
                                   int startingSpawnCount) {
-        super(agent, nextGapWallMs(simClock, draw));
+        this(agent, simClock, randomSource, spawner, marketHistory, draw, startingSpawnCount,
+                new SimDeadlineWait(simClock));
+    }
+
+    private PoissonSpawnBehaviour(Agent agent, SimClock simClock, RandomSource randomSource,
+                                  JadeAgentSpawner spawner, MarketHistoryArtifact marketHistory, Random draw,
+                                  int startingSpawnCount, SimDeadlineWait gap) {
+        super(agent, gap.armUntil(simClock.nowSimMillis() + nextGapSimMillis(draw)));
+        this.gap = gap;
         this.simClock = simClock;
         this.randomSource = randomSource;
         this.spawner = spawner;
@@ -102,17 +128,28 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
 
     @Override
     protected void onWake() {
+        if (simClock.isPaused()) {
+            // S14: a pause holds the pending arrival — it is neither spawned nor thrown away.
+            reset(SimDeadlineWait.HOLD_WALL_MS);
+            return;
+        }
+        long more = gap.next();
+        if (more > 0) {
+            reset(more); // still short of the arrival's sim time (mid-wait, or re-paced)
+            return;
+        }
         if (canSpawnNow()) {
             spawnWalkIn();
         }
-        reset(nextGapWallMs(simClock, draw));
+        reset(gap.armUntil(simClock.nowSimMillis() + nextGapSimMillis(draw)));
     }
 
     /** @return true iff the clock isn't paused, no scenario scripted wave is firing
      * (task 23: Poisson traffic is suppressed until the last scripted event, and because
      * the wave is derived from events-minus-firedEventIds the suppression window survives
-     * a mid-scenario save/load), and fewer than {@link #MAX_ACTIVE_WALKINS} walk-ins are
-     * currently active. Public (not private) so {@code PoissonSpawnBehaviourIT}
+     * a mid-scenario save/load), fewer than {@link #MAX_ACTIVE_WALKINS} walk-ins are
+     * currently active, and (S14) fewer than {@link #MAX_NEGOTIATING_WALKINS} of them are
+     * still negotiating. Public (not private) so {@code PoissonSpawnBehaviourIT}
      * (parent {@code behaviours} test package — a test in this sub-package would shadow
      * {@code BehaviourCatalogueTest}'s scan) can drive it directly without needing a full
      * spawn round-trip to observe the outcome. */
@@ -127,7 +164,10 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
         long activeWalkIns = hm.activeVessels().values().stream()
                 .filter(v -> v.channel() == Channel.WALK_IN)
                 .count();
-        return activeWalkIns < MAX_ACTIVE_WALKINS;
+        long negotiating = hm.activeVessels().values().stream()
+                .filter(v -> v.channel() == Channel.WALK_IN && v.stage() == Stage.NEGOTIATING)
+                .count();
+        return activeWalkIns < MAX_ACTIVE_WALKINS && negotiating < MAX_NEGOTIATING_WALKINS;
     }
 
     /** Public for the same reason {@link #canSpawnNow()} is (S8): {@code WalkInNamePoolIT}
@@ -158,11 +198,16 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
                 vesselId, vesselType, draft, length, tonnage);
     }
 
-    /** Exponential inter-arrival gap for a Poisson process at {@link #DEFAULT_RATE_PER_SIM_HOUR}. */
-    private static long nextGapWallMs(SimClock simClock, Random draw) {
+    /**
+     * Exponential inter-arrival gap for a Poisson process at {@link #DEFAULT_RATE_PER_SIM_HOUR},
+     * in whole sim-seconds expressed as sim-millis (at least one sim-second). Public and static
+     * so the rate is testable from the draw alone, with no agent and no clock — from the parent
+     * {@code behaviours} test package, for the same reason {@link #canSpawnNow()} is public.
+     */
+    public static long nextGapSimMillis(Random draw) {
         double u = draw.nextDouble();
         double gapSimHours = -Math.log(1 - u) / DEFAULT_RATE_PER_SIM_HOUR;
         long gapSimSeconds = Math.round(gapSimHours * 3600.0);
-        return simClock.simSecondsToWallMs(Math.max(1L, gapSimSeconds));
+        return Math.max(1L, gapSimSeconds) * 1_000L;
     }
 }

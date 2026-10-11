@@ -17,6 +17,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -58,7 +59,7 @@ class SettingsRoundTripIT {
     }
 
     @Test
-    void roundLimitTimeLimitAutopilotDifficulty_surviveTheRoundTrip_andApplyBeforeAgentsBoot()
+    void roundLimitSpeedAutopilotDifficulty_surviveTheRoundTrip_andApplyBeforeAgentsBoot()
             throws Exception {
         boot = new JadeBootstrap();
         GameSession session = new GameSession(boot,
@@ -71,7 +72,7 @@ class SettingsRoundTripIT {
         // The player's four live-changeable knobs, all moved off their defaults.
         Settings changed = Settings.load()
                 .withRoundLimit(7)
-                .withTimeLimitSeconds(150)
+                .withGameSpeed(2)
                 .withAutopilotEnabled(true)
                 .withDifficulty("HARD");
         Settings.applyLive(changed);
@@ -82,20 +83,25 @@ class SettingsRoundTripIT {
         //    Settings.load(), which is no longer a boot-frozen constant).
         JsonNode settingsNode = new ObjectMapper().readTree(saved.toFile()).get("settings");
         assertEquals(7, settingsNode.get("roundLimit").asInt(), "the save captures the LIVE roundLimit");
-        assertEquals(150, settingsNode.get("timeLimitSeconds").asInt());
+        assertEquals(2, settingsNode.get("gameSpeed").asInt(), "S14: the speed control is saved");
+        assertNull(settingsNode.get("timeLimitSeconds"), "S14: the retired nominal window is not written");
         assertTrue(settingsNode.get("autopilotEnabled").asBoolean());
         assertEquals("HARD", settingsNode.get("difficulty").asText());
 
         // 2) Corrupt the live value to prove the LOAD (not leftover statics) restores it.
         Settings.applyLive(Settings.classpathDefaults());
-        assertEquals(4, Settings.load().roundLimit(), "sanity: defaults back in force pre-load");
+        assertEquals(Settings.classpathDefaults().roundLimit(), Settings.load().roundLimit(),
+                "sanity: defaults back in force pre-load");
+        assertEquals(1, Settings.load().gameSpeed());
+        boot.getSimClock().setSpeedMultiplier(1);
 
         session.loadGame(saved);
 
         // 3) Applied on load, before agents booted (the bootWorld slot): the session's
         //    effective settings ARE the saved four.
         assertEquals(7, Settings.load().roundLimit(), "restored roundLimit is the effective one");
-        assertEquals(150, Settings.load().timeLimitSeconds());
+        assertEquals(2, Settings.load().gameSpeed(), "restored speed is the effective setting");
+        assertEquals(2, boot.getSimClock().speedMultiplier(), "and it is applied to the game clock");
         assertTrue(Settings.load().autopilotEnabled());
         assertEquals("HARD", Settings.load().difficulty());
 

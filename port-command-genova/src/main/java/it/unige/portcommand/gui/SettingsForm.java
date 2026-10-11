@@ -17,6 +17,7 @@ import javax.swing.JTextField;
 
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
+import it.unige.portcommand.gui.model.DayLengthSteps;
 import it.unige.portcommand.nlp.PolicyParser;
 import it.unige.portcommand.util.EventBus;
 
@@ -40,6 +41,10 @@ import it.unige.portcommand.util.EventBus;
  * assert the published {@link SettingsChangedEvent}. Same view/model split as
  * {@code EndOfDaySummaryDialog} → {@code EndOfDaySummaryModel}.
  *
+ * <p><b>S14: the day length is eight fixed steps</b> ({@link DayLengthSteps}: 5 min … 2 h), not a
+ * 180-600 s range. It sets the &times;1 BASE pace; the speed control (HUD / Game &#9656; Speed)
+ * multiplies it and is not on this form.
+ *
  * <p><b>Honest per-knob apply</b> (see {@link SettingsChangedEvent}): day-length is live
  * (SimClock), autopilot is live (Assistant + Hint button), {@code llmModel} takes effect on the
  * next launch (sidecar restart — labelled as such), and {@code difficulty} is recorded only — no
@@ -47,10 +52,6 @@ import it.unige.portcommand.util.EventBus;
  * knobs) and the event carries all four; the form does not pretend the inert ones do more.
  */
 final class SettingsForm extends JPanel {
-
-    /** Slider bounds for {@code realSecondsPerGameDay} (planning/21 §21.1: 180–600, default 300). */
-    static final int DAY_MIN_SECONDS = 180;
-    static final int DAY_MAX_SECONDS = 600;
 
     private static final String[] DIFFICULTIES = {"EASY", "NORMAL", "HARD"};
     private static final String[] LLM_MODELS = {"microsoft/Phi-4-mini-instruct", "google/gemma-3-4b-it"};
@@ -62,24 +63,25 @@ final class SettingsForm extends JPanel {
     private final JButton policyButton = new JButton("Set policy");
     private final JLabel policyFeedback = new JLabel(" ");
     private final JComboBox<String> difficultyCombo = new JComboBox<>(DIFFICULTIES);
-    private final JSlider dayLengthSlider = new JSlider(DAY_MIN_SECONDS, DAY_MAX_SECONDS, DAY_MIN_SECONDS);
+    /** S14: the slider's value is a STEP INDEX into {@link DayLengthSteps}, never seconds. */
+    private final JSlider dayLengthSlider = new JSlider(0, DayLengthSteps.count() - 1, 0);
     private final JLabel dayLengthReadout = new JLabel();
     private final JCheckBox autopilotCheck = new JCheckBox("Enable Channel-B autopilot");
     private final JComboBox<String> llmCombo = new JComboBox<>(LLM_MODELS);
     private final JButton applyButton = new JButton("Apply");
 
-    /** The TRUE live day length the form opened on (may exceed the slider's 180–600 range when a
-     * scenario pinned e.g. 1800), and the clamped position the slider actually shows for it. If the
-     * player never moves the slider off {@link #initialSliderValue}, Apply re-publishes
-     * {@link #seededDayLength} — so a scenario's pacing is preserved, NOT stomped down to the clamp.
-     * Only an explicit drag publishes the slider value (the "player intent wins" override). */
+    /** The TRUE live day length the form opened on. Every shipped pace is one of the steps, but a
+     * {@code --day-length} test pace need not be: the slider then shows the NEAREST step, and as
+     * long as the player leaves it alone Apply re-publishes this true value — a pace is never
+     * changed by merely opening the dialog. Only moving the slider (or Reset) publishes a step. */
     private final long seededDayLength;
-    private final int initialSliderValue;
+    /** Whether the player has moved the day-length slider (or pressed Reset) since the form opened. */
+    private boolean dayLengthTouched;
 
     /**
-     * @param initialDayLengthSeconds the LIVE {@code SimClock} rate (so a scenario's pinned pacing
-     *                                is reflected, not the stale {@code defaults.json} value),
-     *                                clamped into the slider's sandbox range
+     * @param initialDayLengthSeconds the LIVE {@code SimClock} base rate (so a scenario's pinned
+     *                                pacing is reflected, not the stale {@code defaults.json}
+     *                                value), shown at its nearest step
      * @param onCloseRequest          run by OK (after Apply) and Cancel; the wrapping dialog disposes
      */
     SettingsForm(EventBus eventBus, String difficulty, long initialDayLengthSeconds,
@@ -87,23 +89,27 @@ final class SettingsForm extends JPanel {
         super(new GridBagLayout());
         this.eventBus = eventBus;
         this.seededDayLength = initialDayLengthSeconds;
-        this.initialSliderValue = clampDay(initialDayLengthSeconds);
         setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
 
         difficultyCombo.setSelectedItem(difficulty);
         difficultyCombo.setToolTipText("Challenge level, recorded with your save "
                 + "(engine balancing hooks are not wired in v1).");
 
-        dayLengthSlider.setValue(initialSliderValue);
-        dayLengthSlider.setMajorTickSpacing(120);
+        dayLengthSlider.setValue(DayLengthSteps.nearestIndex(initialDayLengthSeconds));
+        dayLengthSlider.setMajorTickSpacing(1);
+        dayLengthSlider.setSnapToTicks(true);
         dayLengthSlider.setPaintTicks(true);
         var labels = new Hashtable<Integer, JLabel>();
-        labels.put(DAY_MIN_SECONDS, new JLabel(DAY_MIN_SECONDS + "s"));
-        labels.put(300, new JLabel("300s"));
-        labels.put(DAY_MAX_SECONDS, new JLabel(DAY_MAX_SECONDS + "s"));
+        for (int i = 0; i < DayLengthSteps.count(); i++) {
+            labels.put(i, new JLabel(DayLengthSteps.label(DayLengthSteps.secondsAt(i))));
+        }
         dayLengthSlider.setLabelTable(labels);
         dayLengthSlider.setPaintLabels(true);
-        dayLengthSlider.addChangeListener(e -> updateDayReadout());
+        // Registered AFTER the seed value is set: only a later change counts as the player's.
+        dayLengthSlider.addChangeListener(e -> {
+            dayLengthTouched = true;
+            updateDayReadout();
+        });
         updateDayReadout();
 
         autopilotCheck.setSelected(autopilotEnabled);
@@ -124,7 +130,7 @@ final class SettingsForm extends JPanel {
 
         int row = 0;
         addRow(row++, "Difficulty:", difficultyCombo);
-        addRow(row++, "Real seconds per game day:", dayLengthSlider);
+        addRow(row++, "Game day length (at \u00d71 speed):", dayLengthSlider);
         addRow(row++, "", dayLengthReadout);
         addRow(row++, "Autopilot:", autopilotCheck);
         addRow(row++, "Autopilot policy:", policyRow);
@@ -226,25 +232,23 @@ final class SettingsForm extends JPanel {
 
     private void updateDayReadout() {
         long effective = effectiveDayLength();
-        if (effective != dayLengthSlider.getValue()) {
-            // The seed exceeded the slider (a scenario's pinned pacing); show the TRUE value and
-            // say plainly that leaving the slider alone keeps it — no silent clamp-down.
-            dayLengthReadout.setText(effective + " s/day (scenario pace — drag to override)");
+        if (!DayLengthSteps.isStep(effective)) {
+            // The live pace is not one of the steps (a --day-length test pace); show the TRUE
+            // value and say plainly that leaving the slider alone keeps it — no silent snap.
+            dayLengthReadout.setText(effective + " s per game day (custom pace — move the slider to change)");
         } else {
-            dayLengthReadout.setText(dayLengthSlider.getValue() + " s/day"
-                    + (dayLengthSlider.getValue() == 300 ? " (default)" : ""));
+            dayLengthReadout.setText(DayLengthSteps.label(effective) + " per game day"
+                    + (effective == Settings.defaults().realSecondsPerGameDay() ? " (default)" : ""));
         }
     }
 
     /**
-     * The day length Apply will publish: the slider value once the player has moved it, otherwise
-     * the true {@link #seededDayLength} the form opened on (so a scenario's 900/1800 pacing is
-     * preserved rather than stomped down to the clamped slider position). A deliberate drag to
-     * exactly the clamped seed position reads as "unchanged" — a benign corner (that IS the shown
-     * value).
+     * The day length Apply will publish: the slider's step once the player has moved it (or
+     * pressed Reset), otherwise the true {@link #seededDayLength} the form opened on — so a pace
+     * that is not one of the steps is preserved rather than snapped by merely opening the dialog.
      */
     private long effectiveDayLength() {
-        return dayLengthSlider.getValue() == initialSliderValue ? seededDayLength : dayLengthSlider.getValue();
+        return dayLengthTouched ? DayLengthSteps.secondsAt(dayLengthSlider.getValue()) : seededDayLength;
     }
 
     /** Publishes the current widget values. Apply and OK both call this; Reset does not (a reset is
@@ -260,13 +264,11 @@ final class SettingsForm extends JPanel {
     private void resetToDefaults() {
         Settings d = Settings.defaults();
         difficultyCombo.setSelectedItem(d.difficulty());
-        dayLengthSlider.setValue(clampDay(d.realSecondsPerGameDay()));
+        dayLengthSlider.setValue(DayLengthSteps.nearestIndex(d.realSecondsPerGameDay()));
+        dayLengthTouched = true; // even when the slider was already there: Reset MEANS the default
+        updateDayReadout();
         autopilotCheck.setSelected(d.autopilotEnabled());
         llmCombo.setSelectedItem(d.llmModel());
-    }
-
-    private static int clampDay(long seconds) {
-        return (int) Math.max(DAY_MIN_SECONDS, Math.min(DAY_MAX_SECONDS, seconds));
     }
 
     // ---- test seams (headless) ----
@@ -277,6 +279,11 @@ final class SettingsForm extends JPanel {
 
     JSlider dayLengthSliderForTest() {
         return dayLengthSlider;
+    }
+
+    /** Test-only: the readout line under the slider. */
+    String dayLengthReadoutForTest() {
+        return dayLengthReadout.getText();
     }
 
     JCheckBox autopilotCheckForTest() {

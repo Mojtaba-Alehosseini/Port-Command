@@ -315,16 +315,16 @@ public final class GameStateBuilder {
         // pre-S9 semantics: scenario = defaults + the scenario's own override, nothing else.
         Settings base = Settings.classpathDefaults();
         var override = s.settingsOverride();
-        return new Settings(
-                base.roundLimit(), base.timeLimitSeconds(),
-                override != null && override.autopilotEnabled() != null
-                        ? override.autopilotEnabled() : base.autopilotEnabled(),
-                override != null && override.difficulty() != null
-                        ? override.difficulty() : base.difficulty(),
-                realSecondsPerGameDay,
-                base.maxGameDays(), base.firstLaunch(), base.llmModel(),
-                base.withdrawalPenaltyEur(), base.cnpReplyBySimSeconds(),
-                base.cnpRetryAfterSimSeconds(), base.dailyTargetEur(), base.bankruptcyFloorEur());
+        // With-ers, not a positional constructor (S14): a field added to Settings — gameSpeed was
+        // the first — then needs no edit here, and a new scenario game starts from its default.
+        Settings merged = base.withRealSecondsPerGameDay(realSecondsPerGameDay);
+        if (override != null && override.autopilotEnabled() != null) {
+            merged = merged.withAutopilotEnabled(override.autopilotEnabled());
+        }
+        if (override != null && override.difficulty() != null) {
+            merged = merged.withDifficulty(override.difficulty());
+        }
+        return merged;
     }
 
     /**

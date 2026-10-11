@@ -22,7 +22,8 @@ import it.unige.portcommand.smoke.SmokeRunner;
  * <p>Flags: {@code --gui} opens the Swing shell (task 17); {@code --day-length
  * <seconds>} overrides how many real seconds one game day lasts (task 24 — maps to the
  * {@code simclock.real.seconds.per.day} system property that
- * {@link BootstrapConfig#fromSystemProperties()} reads; default 300; when passed it also
+ * {@link BootstrapConfig#fromSystemProperties()} reads; default 3600 since S14 — a 60-minute
+ * day at ×1, the speed control multiplies it; when passed it also
  * beats any scenario pacing override); {@code --load <path>} (task 22) boots FROM a save
  * file instead of starting fresh; {@code --scenario <key>} (task 23) boots one of the 3
  * scripted scenarios ({@code tutorial | busy_day | storm}) — mutually exclusive with

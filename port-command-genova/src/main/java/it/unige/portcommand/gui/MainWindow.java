@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.prefs.Preferences;
 
 import javax.swing.AbstractAction;
+import javax.swing.ButtonGroup;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLayeredPane;
@@ -22,6 +23,7 @@ import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
 import javax.swing.WindowConstants;
@@ -30,8 +32,11 @@ import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.DebugWeatherEvent;
 import it.unige.portcommand.gui.events.EndOfDayCompletedEvent;
+import it.unige.portcommand.gui.events.GameSpeedChangedEvent;
 import it.unige.portcommand.gui.events.GuiReadyEvent;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
+import it.unige.portcommand.gui.model.GameSpeedControl;
+import it.unige.portcommand.gui.model.GameSpeedModel;
 import it.unige.portcommand.harbourmaster.financial.EndOfDaySummary;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
 import it.unige.portcommand.harbourmaster.financial.PerformativeCounter;
@@ -87,6 +92,8 @@ public final class MainWindow extends JFrame {
     private static final int SIDE_MIN_WIDTH = 240;
 
     /** Component names the {@link TutorialOverlay} highlights by (never by pixels — #8/§21.3). */
+    /** S14: component name of the Game ▸ Speed submenu. */
+    static final String NAME_SPEED_MENU = "menu-game-speed";
     static final String NAME_HUD = "tutorial-hud";
     static final String NAME_MAP = "tutorial-map";
     static final String NAME_CHAT = "tutorial-chat";
@@ -105,6 +112,10 @@ public final class MainWindow extends JFrame {
     private final GameOverDialog gameOverDialog;
     private final PauseOverlay pauseOverlay;
     private final TutorialOverlay tutorialOverlay;
+    /** S14: the one applier behind both speed controls (HUD toggles, Game ▸ Speed). */
+    private final GameSpeedControl speedControl;
+    /** S14: kept so the pause overlay can pass the chat's rectangle through (typing while paused). */
+    private ChatPanel chatPanel;
     private final Preferences prefs = Preferences.userNodeForPackage(MainWindow.class);
     private JSplitPane outerSplit;
     private JSplitPane innerSplit;
@@ -162,8 +173,13 @@ public final class MainWindow extends JFrame {
         // live bounds (in glass-pane coordinates) to pass mouse events through and to skip when
         // painting the scrim. Computed lazily on every hit-test/paint — the menu bar does not exist
         // yet at this point in construction, and its height can change with the look-and-feel.
-        this.pauseOverlay = new PauseOverlay(this::toggleMenuResume, this::menuBarBoundsInGlassPane);
+        this.pauseOverlay = new PauseOverlay(this::toggleMenuResume, this::menuBarBoundsInGlassPane,
+                this::chatBoundsInGlassPane);
         setGlassPane(pauseOverlay);
+        // S14: refused while a load owns the world — the loader applies the SAVED speed, and a
+        // click landing mid-load must not overwrite it (same guard as applySettings).
+        this.speedControl = new GameSpeedControl(lifecycle.simClock(), eventBus,
+                () -> lifecycle.mode() == GameMode.LOADING);
         setJMenuBar(buildMenuBar(eventBus, onClose));
         layOutPanels(eventBus, portStateArtifact, chatInputProcessor);
         installEscBinding();
@@ -273,7 +289,7 @@ public final class MainWindow extends JFrame {
                               ChatInputProcessor chatInputProcessor) {
         setLayout(new BorderLayout());
 
-        HUDPanel hud = new HUDPanel(eventBus);
+        HUDPanel hud = new HUDPanel(eventBus, speedControl);
         hud.setName(NAME_HUD);
 
         MapPanel map = new MapPanel(eventBus, portStateArtifact);
@@ -282,6 +298,7 @@ public final class MainWindow extends JFrame {
 
         ChatPanel chat = new ChatPanel(eventBus, chatInputProcessor, lifecycle.simClock());
         chat.setName(NAME_CHAT);
+        this.chatPanel = chat;
         chat.setMinimumSize(new Dimension(SIDE_MIN_WIDTH, 0));
 
         CommLogPanel commLog = new CommLogPanel(eventBus);
@@ -387,6 +404,7 @@ public final class MainWindow extends JFrame {
         exit.addActionListener(e -> shutdownAndExit(onClose));
         game.add(pauseItem);
         game.add(resumeItem);
+        game.add(buildSpeedMenu(eventBus));
         game.addSeparator();
         game.add(saveItem);
         game.add(loadItem);
@@ -424,9 +442,52 @@ public final class MainWindow extends JFrame {
         for (int i = 0; i < bar.getMenuCount(); i++) {
             JMenu menu = bar.getMenu(i);
             if (menu != null) {
-                menu.getPopupMenu().setLightWeightPopupEnabled(false);
+                makePopupsHeavyweight(menu);
             }
         }
+    }
+
+    /** A menu's own dropdown AND every submenu's (S14: Game ▸ Speed is the first submenu — its
+     * popup is a separate {@code JPopupMenu}, and a lightweight one would open under the PAUSED
+     * scrim exactly like the C-04 case above). */
+    private static void makePopupsHeavyweight(JMenu menu) {
+        menu.getPopupMenu().setLightWeightPopupEnabled(false);
+        for (java.awt.Component item : menu.getMenuComponents()) {
+            if (item instanceof JMenu submenu) {
+                makePopupsHeavyweight(submenu);
+            }
+        }
+    }
+
+    /**
+     * Game ▸ Speed (S14): the keyboard half of the speed control — ×1 / ×2 / ×4 on Ctrl+1 / Ctrl+2
+     * / Ctrl+4, mirroring the HUD toggles. Both go through {@link GameSpeedControl#set(int)} and
+     * both follow {@link GameSpeedChangedEvent}, so they cannot disagree and a load re-selects the
+     * saved speed. Left enabled in every mode: while paused the choice simply takes effect on
+     * resume, and while a load is in flight the control itself refuses.
+     */
+    private JMenu buildSpeedMenu(EventBus eventBus) {
+        JMenu speedMenu = new JMenu("Speed");
+        speedMenu.setName(NAME_SPEED_MENU);
+        ButtonGroup group = new ButtonGroup();
+        Map<Integer, JRadioButtonMenuItem> items = new LinkedHashMap<>();
+        for (int speed : GameSpeedModel.options()) {
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(GameSpeedModel.label(speed));
+            item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0 + speed,
+                    java.awt.event.InputEvent.CTRL_DOWN_MASK));
+            item.addActionListener(e -> speedControl.set(speed));
+            group.add(item);
+            items.put(speed, item);
+            speedMenu.add(item);
+        }
+        items.get(speedControl.current()).setSelected(true);
+        eventBus.subscribe(GameSpeedChangedEvent.class, e -> {
+            JRadioButtonMenuItem item = items.get(GameSpeedModel.normalise(e.speed()));
+            if (item != null) {
+                item.setSelected(true);
+            }
+        }, DeliveryMode.EDT);
+        return speedMenu;
     }
 
     /** Settings → Settings…: opens the four-knob dialog seeded with the current live values (day
@@ -637,6 +698,17 @@ public final class MainWindow extends JFrame {
             return new java.awt.Rectangle();
         }
         return javax.swing.SwingUtilities.convertRectangle(bar.getParent(), bar.getBounds(), pauseOverlay);
+    }
+
+    /** S14: the chat panel's rectangle in the glass pane's coordinate space, or an empty one while
+     * it is not showing. The pause overlay lets input through there: patience is frozen while the
+     * game is paused (ADR-18), and the player may read, think and type. */
+    private java.awt.Rectangle chatBoundsInGlassPane() {
+        if (chatPanel == null || !chatPanel.isShowing() || chatPanel.getParent() == null) {
+            return new java.awt.Rectangle();
+        }
+        return javax.swing.SwingUtilities.convertRectangle(chatPanel.getParent(), chatPanel.getBounds(),
+                pauseOverlay);
     }
 
     /** Esc toggles pause/resume — bound WHEN_IN_FOCUSED_WINDOW so it works from any panel. */

@@ -6,8 +6,10 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.PolicyParsedEvent;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
+import it.unige.portcommand.gui.model.DayLengthSteps;
 import it.unige.portcommand.nlp.PolicyParser;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
@@ -26,7 +28,7 @@ class SettingsFormTest {
 
     private static SettingsForm form(EventBus bus, List<SettingsChangedEvent> sink) {
         bus.subscribe(SettingsChangedEvent.class, sink::add, DeliveryMode.CALLER_THREAD);
-        return new SettingsForm(bus, "NORMAL", 300L, false, "microsoft/Phi-4-mini-instruct", () -> { });
+        return new SettingsForm(bus, "NORMAL", 3_600L, false, "microsoft/Phi-4-mini-instruct", () -> { });
     }
 
     // ==================== Autopilot policy field (audit C-01/D-02, 2026-07-28) ====================
@@ -126,7 +128,7 @@ class SettingsFormTest {
         SettingsForm form = form(bus, events);
 
         form.difficultyComboForTest().setSelectedItem("HARD");
-        form.dayLengthSliderForTest().setValue(540);
+        form.dayLengthSliderForTest().setValue(DayLengthSteps.nearestIndex(2_700)); // the 45 min step
         form.autopilotCheckForTest().setSelected(true);
         form.llmComboForTest().setSelectedItem("google/gemma-3-4b-it");
         form.clickApplyForTest();
@@ -134,7 +136,7 @@ class SettingsFormTest {
         assertEquals(1, events.size(), "Apply must publish exactly one SettingsChangedEvent");
         SettingsChangedEvent e = events.get(0);
         assertEquals("HARD", e.difficulty());
-        assertEquals(540L, e.realSecondsPerGameDay());
+        assertEquals(2_700L, e.realSecondsPerGameDay(), "the slider publishes SECONDS, not its step index");
         assertTrue(e.autopilotEnabled());
         assertEquals("google/gemma-3-4b-it", e.llmModel());
     }
@@ -145,12 +147,13 @@ class SettingsFormTest {
         EventBus bus = new EventBus();
         List<SettingsChangedEvent> events = new ArrayList<>();
         SettingsForm form = new SettingsForm(bus, "HARD", 600L, true, "google/gemma-3-4b-it", () -> { });
+        long defaultDay = Settings.defaults().realSecondsPerGameDay();
         bus.subscribe(SettingsChangedEvent.class, events::add, DeliveryMode.CALLER_THREAD);
 
         form.resetToDefaultsForTest();
 
         assertEquals("NORMAL", form.difficultyComboForTest().getSelectedItem());
-        assertEquals(300, form.dayLengthSliderForTest().getValue());
+        assertEquals(DayLengthSteps.nearestIndex(defaultDay), form.dayLengthSliderForTest().getValue());
         assertFalse(form.autopilotCheckForTest().isSelected());
         assertEquals("microsoft/Phi-4-mini-instruct", form.llmComboForTest().getSelectedItem());
         assertTrue(events.isEmpty(), "Reset must not publish — only Apply/OK do");
@@ -158,52 +161,121 @@ class SettingsFormTest {
         form.clickApplyForTest();
         assertEquals(1, events.size());
         assertEquals("NORMAL", events.get(0).difficulty());
-        assertEquals(300L, events.get(0).realSecondsPerGameDay());
+        assertEquals(defaultDay, events.get(0).realSecondsPerGameDay());
+        assertEquals(3_600L, defaultDay, "S14: the default day is 60 real minutes");
+    }
+
+    // ==================== Day length: eight fixed steps (S14) ====================
+
+    @Test
+    @Timeout(5)
+    void theSliderHasExactlyTheEightStepsAndOpensOnTheLivePace() {
+        EventBus bus = new EventBus();
+        SettingsForm form = new SettingsForm(bus, "EASY", 1_800L, false, "microsoft/Phi-4-mini-instruct", () -> { });
+
+        assertEquals(0, form.dayLengthSliderForTest().getMinimum());
+        assertEquals(DayLengthSteps.count() - 1, form.dayLengthSliderForTest().getMaximum());
+        assertTrue(form.dayLengthSliderForTest().getSnapToTicks(), "no position between two steps");
+        assertEquals(DayLengthSteps.nearestIndex(1_800), form.dayLengthSliderForTest().getValue(),
+                "a scenario's 30-minute day is one of the steps, so the slider shows it exactly");
+        assertTrue(form.dayLengthReadoutForTest().startsWith("30 min"), form.dayLengthReadoutForTest());
     }
 
     @Test
     @Timeout(5)
-    void dayLengthSliderIsClampedIntoTheSandboxRangeOnOpen() {
+    void everyStepPublishesItsOwnSeconds() {
         EventBus bus = new EventBus();
-        // A scenario's 1800 s/day pin exceeds the 180–600 slider; the form clamps for display and
-        // the readout still shows a real value, rather than throwing on setValue out of range.
-        SettingsForm form = new SettingsForm(bus, "EASY", 1800L, false, "microsoft/Phi-4-mini-instruct", () -> { });
-        assertEquals(SettingsForm.DAY_MAX_SECONDS, form.dayLengthSliderForTest().getValue());
+        List<SettingsChangedEvent> events = new ArrayList<>();
+        SettingsForm form = form(bus, events);
+        long[] expected = {300, 600, 900, 1_800, 2_700, 3_600, 5_400, 7_200};
+
+        for (int i = 0; i < expected.length; i++) {
+            form.dayLengthSliderForTest().setValue(i);
+            form.clickApplyForTest();
+            assertEquals(expected[i], events.get(events.size() - 1).realSecondsPerGameDay(), "step " + i);
+        }
+    }
+
+    @Test
+    @Timeout(5)
+    void theReadoutNamesTheStepAndMarksTheDefault() {
+        EventBus bus = new EventBus();
+        SettingsForm form = form(bus, new ArrayList<>());
+        assertEquals("1 h per game day (default)", form.dayLengthReadoutForTest());
+
+        form.dayLengthSliderForTest().setValue(DayLengthSteps.nearestIndex(5_400));
+
+        assertEquals("1.5 h per game day", form.dayLengthReadoutForTest());
     }
 
     /**
-     * Adversarial finding 1 (2026-07-18): opening Settings mid-scenario (1800 s/day) and clicking
-     * Apply WITHOUT touching the day-length slider must re-publish the true 1800 — NOT the clamped
-     * 600 the slider shows — so merely toggling another knob never silently re-paces the clock.
+     * Adversarial finding 1 (2026-07-18), restated for the stepped slider: opening Settings on a
+     * pace that is NOT one of the steps (a {@code --day-length} test pace) and clicking Apply
+     * without touching the slider must re-publish the true pace — not the nearest step the slider
+     * happens to show — so merely toggling another knob never silently re-paces the clock.
      */
     @Test
     @Timeout(5)
-    void scenarioPacingIsPreservedWhenTheDayLengthSliderIsUntouched() {
+    void anOffStepPaceIsPreservedWhenTheDayLengthSliderIsUntouched() {
         EventBus bus = new EventBus();
         List<SettingsChangedEvent> events = new ArrayList<>();
-        SettingsForm form = new SettingsForm(bus, "EASY", 1800L, false, "microsoft/Phi-4-mini-instruct", () -> { });
+        SettingsForm form = new SettingsForm(bus, "EASY", 75L, false, "microsoft/Phi-4-mini-instruct", () -> { });
         bus.subscribe(SettingsChangedEvent.class, events::add, DeliveryMode.CALLER_THREAD);
+        assertEquals(0, form.dayLengthSliderForTest().getValue(), "shown at its nearest step, 5 min");
+        assertTrue(form.dayLengthReadoutForTest().startsWith("75 s"),
+                "but the readout says what is really in force: " + form.dayLengthReadoutForTest());
 
         form.autopilotCheckForTest().setSelected(true); // change a DIFFERENT knob only
         form.clickApplyForTest();
 
-        assertEquals(1800L, events.get(0).realSecondsPerGameDay(),
-                "an untouched day-length slider must preserve the scenario's pinned pacing, not the clamp");
+        assertEquals(75L, events.get(0).realSecondsPerGameDay(),
+                "an untouched day-length slider must preserve the live pace, not snap it to a step");
         assertTrue(events.get(0).autopilotEnabled());
     }
 
     @Test
     @Timeout(5)
-    void draggingTheSliderOverridesTheScenarioPace() {
+    void scenarioPacingIsPreservedWhenTheDayLengthSliderIsUntouched() {
         EventBus bus = new EventBus();
         List<SettingsChangedEvent> events = new ArrayList<>();
-        SettingsForm form = new SettingsForm(bus, "EASY", 1800L, false, "microsoft/Phi-4-mini-instruct", () -> { });
+        SettingsForm form = new SettingsForm(bus, "EASY", 1_800L, false, "microsoft/Phi-4-mini-instruct", () -> { });
         bus.subscribe(SettingsChangedEvent.class, events::add, DeliveryMode.CALLER_THREAD);
 
-        form.dayLengthSliderForTest().setValue(400); // explicit override
+        form.autopilotCheckForTest().setSelected(true);
         form.clickApplyForTest();
 
-        assertEquals(400L, events.get(0).realSecondsPerGameDay(),
-                "moving the slider is an explicit override and must publish the slider value");
+        assertEquals(1_800L, events.get(0).realSecondsPerGameDay());
+    }
+
+    @Test
+    @Timeout(5)
+    void movingTheSliderOverridesTheLivePace() {
+        EventBus bus = new EventBus();
+        List<SettingsChangedEvent> events = new ArrayList<>();
+        SettingsForm form = new SettingsForm(bus, "EASY", 75L, false, "microsoft/Phi-4-mini-instruct", () -> { });
+        bus.subscribe(SettingsChangedEvent.class, events::add, DeliveryMode.CALLER_THREAD);
+
+        form.dayLengthSliderForTest().setValue(DayLengthSteps.nearestIndex(900)); // explicit override
+        form.clickApplyForTest();
+
+        assertEquals(900L, events.get(0).realSecondsPerGameDay(),
+                "moving the slider is an explicit override and must publish the chosen step");
+    }
+
+    @Test
+    @Timeout(5)
+    void resetMeansTheDefaultEvenWhenTheSliderAlreadySitsOnItsStep() {
+        // 4000 s shows at the 1 h step — the default's own position. Reset moves nothing on
+        // screen, and must still publish 3600, not the 4000 the form opened on.
+        EventBus bus = new EventBus();
+        List<SettingsChangedEvent> events = new ArrayList<>();
+        SettingsForm form = new SettingsForm(bus, "NORMAL", 4_000L, false, "microsoft/Phi-4-mini-instruct", () -> { });
+        bus.subscribe(SettingsChangedEvent.class, events::add, DeliveryMode.CALLER_THREAD);
+
+        form.resetToDefaultsForTest();
+        form.clickApplyForTest();
+
+        assertEquals(3_600L, events.get(0).realSecondsPerGameDay());
+        assertEquals("1 h per game day (default)", form.dayLengthReadoutForTest());
     }
 }

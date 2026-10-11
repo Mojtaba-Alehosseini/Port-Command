@@ -32,7 +32,9 @@ import org.slf4j.LoggerFactory;
  */
 public final class WallClockAdvancer {
 
-    /** 100 ms per tick ≈ 28.8 sim-seconds at the default 300 s/game-day. */
+    /** 100 ms per tick ≈ 2.4 sim-seconds at the default 3600 s/game-day and ×1 (28.8 at the
+     * pre-S14 300 s default). The same 100 ms are also the conversation clock's resolution:
+     * {@code SimClock.advance} forwards them to it unscaled (ADR-18). */
     static final long DEFAULT_TICK_PERIOD_MS = 100L;
 
     private static final Logger log = LoggerFactory.getLogger(WallClockAdvancer.class);
