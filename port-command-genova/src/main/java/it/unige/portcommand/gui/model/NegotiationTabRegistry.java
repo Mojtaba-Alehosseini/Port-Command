@@ -150,9 +150,7 @@ public final class NegotiationTabRegistry {
     }
 
     private static WalkInDialogueSnapshot withPlayerOffer(WalkInDialogueSnapshot s, double playerOffer) {
-        return new WalkInDialogueSnapshot(s.vesselId(), s.vesselType(), s.draft(), s.length(), s.tonnage(),
-                s.cargoClass(), s.berthId(), s.durationHours(), s.lastVesselOffer(), playerOffer,
-                s.roundsUsed(), s.timeUsedSec(), s.threatenedWithdrawal(), s.vesselName());
+        return s.withLastPlayerOffer(playerOffer); // S14: every other field rides along, the counter too
     }
 
     /** @param nowMillis the close instant, in the same clock {@link #sweepClosed} is driven by

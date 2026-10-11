@@ -1,9 +1,12 @@
 package it.unige.portcommand.gui;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Font;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 
@@ -23,12 +26,14 @@ import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
 import it.unige.portcommand.gui.model.DialogueTabModel;
 import it.unige.portcommand.gui.model.NegotiationTabRegistry;
+import it.unige.portcommand.gui.model.PatienceCounterModel;
 import it.unige.portcommand.nlp.ButtonOption;
 import it.unige.portcommand.nlp.ChatInputProcessor;
 import it.unige.portcommand.nlp.ClarificationButtons;
 import it.unige.portcommand.nlp.DialogueCtx;
 import it.unige.portcommand.nlp.NLPPipeline;
 import it.unige.portcommand.nlp.PipelineResult;
+import it.unige.portcommand.util.ConversationClock;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.SimClock;
 import jade.lang.acl.ACLMessage;
@@ -51,6 +56,13 @@ final class DialogueTabView extends JPanel {
      * match the next world's same-id dialogue. */
     private static final AtomicLong COMMAND_IDS = new AtomicLong();
 
+    /** Component name of the live counter, so a test (and the coming redesign) can find it. */
+    static final String COUNTER_NAME = "dialogue-counter";
+    /** S14: the counter's three colours — normal, under 30 s, under 10 s. */
+    static final Color COUNTER_NORMAL = new Color(0x33, 0x33, 0x33);
+    static final Color COUNTER_WARNING = new Color(0xE0, 0x7B, 0x00);
+    static final Color COUNTER_CRITICAL = new Color(0xC6, 0x28, 0x28);
+
     private final String dialogueId;
     private final NegotiationTabRegistry registry;
     private final EventBus eventBus;
@@ -61,23 +73,11 @@ final class DialogueTabView extends JPanel {
      * Read live rather than off the static {@code Settings.load()} so the toggle takes effect at
      * once instead of only reflecting the {@code defaults.json} value. */
     private final BooleanSupplier autopilotEnabled;
-    /**
-     * Sim instant this dialogue opened — the countdown's zero point (task 24).
-     *
-     * <p>Seeded from this tab's own construction, then pulled back MONOTONICALLY towards the
-     * HarbourMaster's origin on every snapshot refresh (2026-08-10, audit P1-9): the snapshot's
-     * {@code timeUsedSec} is elapsed real seconds since the HM stamped the dialogue, so
-     * {@code now - that} reconstructs the HM's own zero point. Before this the tab stamped its own
-     * instant and the Assistant's urgency used a hard-coded 0.0 — two notions of "how long has
-     * this run". One clock, two consumers: what the player watches tick down and what the
-     * Assistant reasons from are now the same quantity. The clock ticks it forward continuously
-     * via {@code refreshStrip()}; see {@link #resyncCountdownOrigin} for why the re-derivation
-     * must only ever move this earlier.
-     */
-    private long openedAtSimMillis;
-
     private final JTextPane transcriptPane = new JTextPane();
     private final JLabel offerStripLabel = new JLabel();
+    /** S14 (ADR-18): the real time this vessel will still wait, as {@code m:ss} — a number and a
+     * colour, never a label and never an explanation (players discover why vessels differ). */
+    private final JLabel counterLabel = new JLabel();
     private final JTextField inputField = new JTextField();
     private final JButton sendButton = new JButton("Send");
     private final JButton hintButton = new JButton("Hint");
@@ -92,7 +92,6 @@ final class DialogueTabView extends JPanel {
         this.processor = processor;
         this.simClock = simClock;
         this.autopilotEnabled = autopilotEnabled;
-        this.openedAtSimMillis = simClock.nowSimMillis();
 
         transcriptPane.setContentType("text/html");
         transcriptPane.setEditable(false);
@@ -114,7 +113,13 @@ final class DialogueTabView extends JPanel {
         south.add(clarificationPanel, BorderLayout.NORTH);
         south.add(inputRow, BorderLayout.SOUTH);
 
-        add(offerStripLabel, BorderLayout.NORTH);
+        counterLabel.setName(COUNTER_NAME);
+        counterLabel.setFont(counterLabel.getFont().deriveFont(Font.BOLD));
+        JPanel north = new JPanel(new BorderLayout(8, 0));
+        north.add(offerStripLabel, BorderLayout.CENTER);
+        north.add(counterLabel, BorderLayout.EAST);
+
+        add(north, BorderLayout.NORTH);
         add(new JScrollPane(transcriptPane), BorderLayout.CENTER);
         add(south, BorderLayout.SOUTH);
 
@@ -129,7 +134,6 @@ final class DialogueTabView extends JPanel {
         if (tab == null) {
             return;
         }
-        resyncCountdownOrigin(tab);
         transcriptPane.setText(ChatMessageRenderer.renderTranscript(tab.transcript()));
         // Audit C-28 (2026-07-27): JEditorPane.setText replaces the document and leaves the caret
         // at offset 0, and the default DefaultCaret update policy then scrolls the viewport TO the
@@ -145,6 +149,7 @@ final class DialogueTabView extends JPanel {
         transcriptPane.setCaretPosition(transcriptPane.getDocument().getLength());
         boolean closed = tab.isClosed();
         offerStripLabel.setText(offerStripText(tab, closed));
+        refreshCounter();
         // #9 (checkpoint fix, 2026-07-18): a CLOSED tab keeps its input field ENABLED (hence
         // focusable) but NON-EDITABLE. A non-editable focused field silently swallows typed
         // characters (they no-op and never propagate); the old setEnabled(false) instead dropped
@@ -160,14 +165,37 @@ final class DialogueTabView extends JPanel {
         clarificationPanel.setVisible(!closed);
     }
 
-    /** Re-renders ONLY the offer strip — the per-sim-minute clock tick calls this ~5×/s at the
-     * default day length, and re-rendering the whole HTML transcript at that rate would flicker
-     * and churn (task 24). */
+    /** Re-renders ONLY the offer strip — a refused PROPOSE puts the previous offer back (S13, F-7)
+     * without re-rendering the whole HTML transcript. */
     void refreshStrip() {
         DialogueTabModel tab = registry.tab(dialogueId);
         if (tab != null) {
             offerStripLabel.setText(offerStripText(tab, tab.isClosed()));
         }
+    }
+
+    /**
+     * S14 (ADR-18): re-reads this dialogue's conversation clock and shows what is left — the one
+     * thing on the tab that moves on its own, so {@code ChatPanel}'s one-second Swing timer calls
+     * only this. Blank when there is nothing to count: a closed tab, or a conversation the clock
+     * does not know (never "0:00", which would read as a timeout that did not happen).
+     */
+    void refreshCounter() {
+        DialogueTabModel tab = registry.tab(dialogueId);
+        Optional<ConversationClock.View> view = tab == null || tab.isClosed()
+                ? Optional.empty()
+                : simClock.conversationClock().view(dialogueId);
+        if (view.isEmpty()) {
+            counterLabel.setText("");
+            return;
+        }
+        long remaining = view.get().remainingMillis();
+        counterLabel.setText(PatienceCounterModel.text(remaining));
+        counterLabel.setForeground(switch (PatienceCounterModel.level(remaining)) {
+            case NORMAL -> COUNTER_NORMAL;
+            case WARNING -> COUNTER_WARNING;
+            case CRITICAL -> COUNTER_CRITICAL;
+        });
     }
 
     /** Task 19b: both §7.3 dimensions on the strip — their €X for Yh / your €A for Bh. The
@@ -180,49 +208,9 @@ final class DialogueTabView extends JPanel {
         int playerHours = tab.lastPlayerHours() != null ? tab.lastPlayerHours() : s.durationHours();
         int roundLimit = Settings.load().roundLimit();
         return String.format(
-                "Their offer: €%.0f for %dh  |  Your offer: €%.0f for %dh  |  Round %d of %d  |  ~%ds remaining",
+                "Their offer: €%.0f for %dh  |  Your offer: €%.0f for %dh  |  Round %d of %d",
                 s.lastVesselOffer(), s.durationHours(), s.lastPlayerOffer(), playerHours,
-                s.roundsUsed(), roundLimit, remainingSeconds());
-    }
-
-    /**
-     * The "~Ns remaining" countdown (task 24, live for the first time — the pre-task-24 value
-     * was a static stub off {@code WalkInDialogueSnapshot.timeUsedSec}, which was published as
-     * {@code 0.0} until audit P1-9 made it real; the two now share one origin, see
-     * {@link #openedAtSimMillis}). Counts down {@code Settings.timeLimitSeconds} — the PUBLIC nominal
-     * negotiation window, deliberately approximate — in REAL seconds, converting the elapsed sim
-     * time since this tab opened through the clock's own day-length mapping. The true per-vessel
-     * deadline is the hidden {@code maxWaitMinutes} belief (P-04: never shown), whose
-     * template ranges task 24 recalibrated to land around this same nominal window.
-     */
-    private long remainingSeconds() {
-        long elapsedSimMs = Math.max(0L, simClock.nowSimMillis() - openedAtSimMillis);
-        double elapsedRealSec = simClock.realSecondsForSimMillis(elapsedSimMs);
-        return Math.max(0L, Settings.load().timeLimitSeconds() - Math.round(elapsedRealSec));
-    }
-
-    /**
-     * Re-anchors {@link #openedAtSimMillis} on the HarbourMaster's dialogue origin, reconstructed
-     * from the snapshot's elapsed-real-seconds figure (audit P1-9 — see that field's javadoc).
-     * Only moves the anchor when the HM has actually reported elapsed time, so a snapshot from
-     * before that field was live cannot slam the countdown back to full.
-     */
-    private void resyncCountdownOrigin(DialogueTabModel tab) {
-        WalkInDialogueSnapshot snapshot = tab.snapshot();
-        if (snapshot == null || snapshot.timeUsedSec() <= 0.0) {
-            return;
-        }
-        // MONOTONE (2026-08-10 adversarial review): take the EARLIER origin, never assign
-        // outright. refresh() runs on many paths that carry no NEW snapshot — every player send,
-        // every system line, an assistant reply, a settings change — and re-deriving the origin
-        // from a stale timeUsedSec while `now` keeps moving rewinds the countdown and then pins
-        // it (measured: 60 -> 35 -> 20, then back to 35 and frozen there the moment the player
-        // typed). An origin can only ever be discovered to be EARLIER than assumed: the tab's own
-        // construction stamp is by definition no earlier than the HarbourMaster's, and a later
-        // snapshot's elapsed figure only ever grows. So min() converges on the HM's true origin
-        // and a stale re-derivation is a no-op.
-        openedAtSimMillis = Math.min(openedAtSimMillis,
-                simClock.nowSimMillis() - simClock.simMillisForRealSeconds(snapshot.timeUsedSec()));
+                s.roundsUsed(), roundLimit);
     }
 
     private void onSend() {
@@ -549,10 +537,19 @@ final class DialogueTabView extends JPanel {
         }
     }
 
+    /**
+     * S14: the snapshot a Hint reasons from carries the counter AS IT READS NOW. The stored
+     * snapshot's time figures date from the vessel's last message; the Assistant's urgency term
+     * must see what the player sees at the moment they ask (INVARIANTS: one visible counter, two
+     * consumers). No conversation on the clock: the stored figures stand.
+     */
     private void onHint() {
         DialogueTabModel tab = registry.tab(dialogueId);
         if (tab != null) {
-            eventBus.publish(new HintButtonEvent(dialogueId, tab.snapshot()));
+            WalkInDialogueSnapshot snapshot = simClock.conversationClock().view(dialogueId)
+                    .map(v -> tab.snapshot().withTime(v.elapsedMillis() / 1000.0, v.totalMillis() / 1000.0))
+                    .orElse(tab.snapshot());
+            eventBus.publish(new HintButtonEvent(dialogueId, snapshot));
         }
     }
 
@@ -588,9 +585,19 @@ final class DialogueTabView extends JPanel {
         }
     }
 
-    /** Test-only: the offer strip's current text (task-24 countdown assertions). */
+    /** Test-only: the offer strip's current text. */
     String offerStripTextForTest() {
         return offerStripLabel.getText();
+    }
+
+    /** Test-only: the live counter's text ({@code m:ss}, or blank). */
+    String counterTextForTest() {
+        return counterLabel.getText();
+    }
+
+    /** Test-only: the live counter's colour. */
+    Color counterColourForTest() {
+        return counterLabel.getForeground();
     }
 
     boolean clarificationVisibleForTest() {

@@ -108,7 +108,7 @@ public final class SmokeRunner {
         COVERAGE.put("2  Walk-in negotiation, happy path",
                 "engine: WalkInVesselAgentIT + NegotiationEngine tests | GUI half: manual");
         COVERAGE.put("3  Walk-in withdrawal, timeout",
-                "engine: WalkInVesselAgentIT | GUI half: manual");
+                "engine: WalkInPatienceIT (conversation time, ADR-18) | GUI half: manual");
         COVERAGE.put("4  Walk-in withdrawal, over-priced",
                 "engine: WalkInVesselAgentIT | GUI half: manual");
         COVERAGE.put("5  Autopilot ON",

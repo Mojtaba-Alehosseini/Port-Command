@@ -345,13 +345,27 @@ class ScenarioSessionIT {
                 + "collect by subscription instead)");
     }
 
+    /**
+     * Bounded retry past a transient {@link SaveNotAllowedException}.
+     *
+     * <p>S14 (ADR-18): this used to sleep and try again, because an unanswered walk-in "concludes
+     * in wall-ms here" — its patience was 140-480 game MINUTES, a second or two at this suite's
+     * 5 s/day. Patience is conversation time now: real seconds (240 for the tutorial's scripted
+     * cargo vessel), whatever the game pace, so with nobody answering it WALKIN-S1 would refuse
+     * every save for four minutes against this helper's 20 s. The test therefore plays the player
+     * who lets the offer run out: each refusal lets ten minutes pass on the conversation clock —
+     * directly, never through {@code SimClock.advance}, so game time does not move — and the
+     * vessel's own 250 ms poll then withdraws it ({@code "timeout"}), after which a retry finds no
+     * open dialogue.
+     */
     private Path awaitSave(GameSession session, long timeoutMs) throws Exception {
         long deadline = System.currentTimeMillis() + timeoutMs;
         while (System.currentTimeMillis() < deadline) {
             try {
                 return session.saveNow();
             } catch (SaveNotAllowedException transientRefusal) {
-                Thread.sleep(100); // a walk-in is mid-negotiation/arrival — concludes in wall-ms here
+                boot.getSimClock().conversationClock().advance(600_000L);
+                Thread.sleep(100); // the withdrawal (or a grant still on the wire) lands in wall-ms
             }
         }
         throw new AssertionError("manual save never became possible within " + timeoutMs + "ms");

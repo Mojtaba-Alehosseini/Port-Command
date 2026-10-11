@@ -116,7 +116,7 @@ public final class AgentRoster {
                 new Object[] {defaultWeatherInit(), randomSource, simClock, eventBus, directory});
         spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource, directory, simClock});
         spawner.spawn("assistant_agent", AssistantAgent.class,
-                new Object[] {marketHistory, policyRegistry, llmBridge, eventBus, directory});
+                assistantArgs(marketHistory, policyRegistry, llmBridge, eventBus, directory, simClock));
 
         spawner.spawn("terminal_container", TerminalAgent.class, new Object[] {
                 new TerminalInitArgs("terminal_container", List.of("berth_2"), 4), portState, simClock,
@@ -173,7 +173,7 @@ public final class AgentRoster {
         spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {
                 randomSource, directory, simClock, state.agents().customs()});
         spawner.spawn("assistant_agent", AssistantAgent.class,
-                new Object[] {marketHistory, policyRegistry, llmBridge, eventBus, directory});
+                assistantArgs(marketHistory, policyRegistry, llmBridge, eventBus, directory, simClock));
 
         spawner.spawn("terminal_container", TerminalAgent.class, new Object[] {
                 new TerminalInitArgs("terminal_container", List.of("berth_2"), 4), portState, simClock,
@@ -314,5 +314,18 @@ public final class AgentRoster {
         } catch (IOException e) {
             throw new IllegalStateException("failed to load data/contracts.json", e);
         }
+    }
+
+    /**
+     * The Assistant's spawn args, built in ONE place for the fresh and the restore path (S14):
+     * the last entry is the game's conversation clock, which the Hint freeze needs and which
+     * {@code AssistantAgent} refuses to boot without. Two hand-copied arrays were one edit away
+     * from a load-only bug — the restore path is the one every scenario start and load takes.
+     */
+    private static Object[] assistantArgs(MarketHistoryArtifact marketHistory,
+                                          PolicyRegistryArtifact policyRegistry, LLMBridge llmBridge,
+                                          EventBus eventBus, AgentDirectory directory, SimClock simClock) {
+        return new Object[] {marketHistory, policyRegistry, llmBridge, eventBus, directory,
+                simClock.conversationClock()};
     }
 }

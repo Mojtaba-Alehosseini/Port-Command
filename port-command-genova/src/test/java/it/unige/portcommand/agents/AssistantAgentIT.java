@@ -46,6 +46,7 @@ import it.unige.portcommand.nlp.LLMResponse;
 import it.unige.portcommand.nlp.LLMTimeoutException;
 import it.unige.portcommand.nlp.PolicyParser;
 import it.unige.portcommand.prolog.PrologEngine;
+import it.unige.portcommand.util.ConversationClock;
 import it.unige.portcommand.util.Event;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.EventBusProbe;
@@ -299,6 +300,123 @@ class AssistantAgentIT {
                 "the Hint plan must only ever display a recommendation, never dispatch one");
     }
 
+    // --- Hint freeze (S14, ADR-18) ---------------------------------------------
+    //
+    // A walk-in's patience is real conversation time, and the model behind a Hint takes 18-60 real
+    // seconds to answer. The player asked for help and must not pay for that latency: the
+    // dialogue's conversation stands still from the moment the model is asked until its call ends,
+    // however it ends. Driven on a real ConversationClock, moved by hand — nothing sleeps.
+
+    @Test
+    void aPendingHintFreezesThatDialoguesPatienceUntilTheModelAnswers() {
+        ConversationClock clock = new ConversationClock();
+        clock.open("nego-freeze", 120_000L);
+        clock.advance(5_000L);
+        assertEquals(115_000L, remainingMillis(clock, "nego-freeze"), "fixture: the clock runs before the Hint");
+
+        CompletableFuture<LLMResponse> modelCall = new CompletableFuture<>();
+        LLMBridge mockBridge = mock(LLMBridge.class);
+        when(mockBridge.explain(any(LLMRequest.class))).thenReturn(modelCall);
+        hintPlanOn(clock, mockBridge, new EventBus())
+                .onHintButton(new HintButtonEvent("nego-freeze", tankerSnapshot(6000.0, 1, 60.0)));
+
+        clock.advance(10_000L);
+        assertEquals(115_000L, remainingMillis(clock, "nego-freeze"),
+                "while the model is thinking, this dialogue's patience must not run down");
+        assertEquals(5_000L, elapsedMillis(clock, "nego-freeze"),
+                "a frozen conversation does not count the frozen time as elapsed either");
+
+        modelCall.complete(new LLMResponse("Here is my advice.", true));
+        clock.advance(10_000L);
+        assertEquals(105_000L, remainingMillis(clock, "nego-freeze"),
+                "once the model has answered, patience runs again — by exactly the time that passed");
+    }
+
+    @Test
+    void aFailedModelCallThawsTheDialogueToo() {
+        ConversationClock clock = new ConversationClock();
+        clock.open("nego-fail", 120_000L);
+
+        CompletableFuture<LLMResponse> modelCall = new CompletableFuture<>();
+        LLMBridge mockBridge = mock(LLMBridge.class);
+        when(mockBridge.explain(any(LLMRequest.class))).thenReturn(modelCall);
+        hintPlanOn(clock, mockBridge, new EventBus())
+                .onHintButton(new HintButtonEvent("nego-fail", tankerSnapshot(6000.0, 1, 60.0)));
+
+        clock.advance(10_000L);
+        assertEquals(120_000L, remainingMillis(clock, "nego-fail"), "fixture: frozen while the call is open");
+
+        // The bridge's own timeout is the common way a call ends without an answer.
+        modelCall.completeExceptionally(new LLMTimeoutException("llm timed out", new RuntimeException()));
+        clock.advance(10_000L);
+        assertEquals(110_000L, remainingMillis(clock, "nego-fail"),
+                "a call that FAILED must release the freeze as surely as one that answered — "
+                        + "otherwise a sidecar outage would hold every hinted vessel in port");
+    }
+
+    @Test
+    void aBridgeThatThrowsThawsAtOnceAndStillPropagates() {
+        ConversationClock clock = new ConversationClock();
+        clock.open("nego-throw", 120_000L);
+        EventBus eventBus = new EventBus();
+
+        LLMBridge mockBridge = mock(LLMBridge.class);
+        when(mockBridge.explain(any(LLMRequest.class))).thenThrow(new IllegalStateException("bridge down"));
+        RecommendOnDemandBehaviour behaviour = hintPlanOn(clock, mockBridge, eventBus);
+
+        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                () -> behaviour.onHintButton(new HintButtonEvent("nego-throw", tankerSnapshot(6000.0, 1, 60.0))));
+        assertEquals("bridge down", thrown.getMessage(), "the bridge's own failure must reach the caller unchanged");
+        assertEquals(1, chatEvents(eventBus).size(), "the template was already shown before the call was attempted");
+
+        clock.advance(10_000L);
+        assertEquals(110_000L, remainingMillis(clock, "nego-throw"),
+                "no future exists to release the freeze later, so it must be released at once");
+    }
+
+    @Test
+    void aBridgeThatMakesNoCallThawsAtOnce() {
+        ConversationClock clock = new ConversationClock();
+        clock.open("nego-nocall", 120_000L);
+        EventBus eventBus = new EventBus();
+
+        LLMBridge mockBridge = mock(LLMBridge.class);
+        when(mockBridge.explain(any(LLMRequest.class))).thenReturn((CompletableFuture<LLMResponse>) null);
+        hintPlanOn(clock, mockBridge, eventBus)
+                .onHintButton(new HintButtonEvent("nego-nocall", tankerSnapshot(6000.0, 1, 60.0)));
+
+        List<AssistantChatEvent> chats = chatEvents(eventBus);
+        assertEquals(1, chats.size(), "no model call means no revision: the template stands alone");
+        assertFalse(chats.get(0).revision());
+
+        clock.advance(10_000L);
+        assertEquals(110_000L, remainingMillis(clock, "nego-nocall"),
+                "a call that was never made has nothing to wait for — patience keeps running");
+    }
+
+    @Test
+    void aPendingHintLeavesEveryOtherDialogueRunning() {
+        ConversationClock clock = new ConversationClock();
+        clock.open("nego-hinted", 120_000L);
+        clock.open("nego-other", 180_000L);
+
+        CompletableFuture<LLMResponse> modelCall = new CompletableFuture<>();
+        LLMBridge mockBridge = mock(LLMBridge.class);
+        when(mockBridge.explain(any(LLMRequest.class))).thenReturn(modelCall);
+        hintPlanOn(clock, mockBridge, new EventBus())
+                .onHintButton(new HintButtonEvent("nego-hinted", tankerSnapshot(6000.0, 1, 60.0)));
+
+        clock.advance(10_000L);
+        assertEquals(120_000L, remainingMillis(clock, "nego-hinted"), "the hinted dialogue is frozen");
+        assertEquals(170_000L, remainingMillis(clock, "nego-other"),
+                "the freeze belongs to ONE tab: another vessel's patience must keep running");
+
+        modelCall.complete(new LLMResponse("Here is my advice.", true));
+        clock.advance(10_000L);
+        assertEquals(110_000L, remainingMillis(clock, "nego-hinted"), "thawed once the model has answered");
+        assertEquals(160_000L, remainingMillis(clock, "nego-other"), "and the other dialogue never stopped");
+    }
+
     // --- Autopilot flow --------------------------------------------------------
 
     @Test
@@ -417,6 +535,85 @@ class AssistantAgentIT {
         assertEquals(1, counts.get("assistant"), "Assistant singleton must register DF cleanly with its 4 args");
     }
 
+    /**
+     * S14 (adversarial review): the freeze's lease is sized from the bridge's OWN timeout, so a
+     * raised {@code llm.timeout_ms} can never let the lease thaw a vessel while its tab's Hint
+     * is still legitimately waiting.
+     */
+    @Test
+    void theFreezeOutlastsABridgeWithALongTimeout() {
+        ConversationClock clock = new ConversationClock();
+        clock.open("nego-slow", 120_000L);
+        LLMBridge slowBridge = mock(LLMBridge.class);
+        when(slowBridge.timeout()).thenReturn(Duration.ofMinutes(10));
+        when(slowBridge.explain(any(LLMRequest.class))).thenReturn(new CompletableFuture<>());
+        hintPlanOn(clock, slowBridge, new EventBus())
+                .onHintButton(new HintButtonEvent("nego-slow", tankerSnapshot(6000.0, 1, 60.0)));
+
+        clock.advance(400_000L); // far past the 150 s default lease, well inside the bridge's 10 min
+
+        assertEquals(120_000L, remainingMillis(clock, "nego-slow"),
+                "the model may still answer for another three minutes: the vessel must stay frozen");
+    }
+
+    /** ...and a freeze nobody ever releases still ends: the default lease, past the bridge's timeout. */
+    @Test
+    void anAbandonedFreezeEndsWithItsLease() {
+        ConversationClock clock = new ConversationClock();
+        clock.open("nego-lost", 120_000L);
+        LLMBridge mockBridge = mock(LLMBridge.class); // states no timeout: the default lease applies
+        when(mockBridge.explain(any(LLMRequest.class))).thenReturn(new CompletableFuture<>());
+        hintPlanOn(clock, mockBridge, new EventBus())
+                .onHintButton(new HintButtonEvent("nego-lost", tankerSnapshot(6000.0, 1, 60.0)));
+
+        clock.advance(ConversationClock.DEFAULT_FREEZE_LEASE_MILLIS - 1);
+        assertEquals(120_000L, remainingMillis(clock, "nego-lost"), "inside the lease: frozen");
+        clock.advance(1L);
+        clock.advance(10_000L);
+
+        assertEquals(110_000L, remainingMillis(clock, "nego-lost"),
+                "a future nobody completes must not hold a vessel in port forever");
+    }
+
+    /**
+     * S14 (adversarial review): the WIRING. Every case above hands the clock to a hand-built
+     * behaviour; this one presses Hint against the Assistant the roster really spawns and checks
+     * that what freezes is the GAME's conversation clock — the one the vessels are on. With a
+     * stand-in clock inside the agent the Hint would freeze nothing and no other test would notice.
+     */
+    @Test
+    void aHintThroughTheRosterSpawnedAssistantFreezesTheGamesOwnClock() throws Exception {
+        LLMBridge pendingBridge = mock(LLMBridge.class);
+        when(pendingBridge.explain(any(LLMRequest.class))).thenReturn(new CompletableFuture<>());
+        boot = new JadeBootstrap();
+        boot.start(new BootstrapConfig(TEST_PORT, false, "realtime", 300));
+        AgentRoster.spawnSingletonsAndFleet(boot.getSpawner(), boot.getPortStateArtifact(),
+                boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact(),
+                pendingBridge, boot.getEventBus());
+        ConversationClock clock = boot.getSimClock().conversationClock();
+        clock.open("nego-wired", 120_000L);
+        clock.open("nego-other", 120_000L);
+
+        // The Assistant subscribes on its own thread just after setup; a Hint published before
+        // that is simply not heard. Re-press (bounded) until the model has been asked.
+        HintButtonEvent hint = new HintButtonEvent("nego-wired", tankerSnapshot(6000.0, 1, 0.0));
+        long deadline = System.currentTimeMillis() + 20_000L;
+        boolean asked = false;
+        while (!asked && System.currentTimeMillis() < deadline) {
+            boot.getEventBus().publish(hint);
+            asked = pollUntilTrue(() -> !org.mockito.Mockito.mockingDetails(pendingBridge).getInvocations()
+                    .stream().filter(i -> "explain".equals(i.getMethod().getName())).toList().isEmpty(), 500);
+        }
+        assertTrue(asked, "the roster-spawned Assistant never asked the model for the Hint");
+
+        clock.advance(10_000L);
+
+        assertEquals(120_000L, remainingMillis(clock, "nego-wired"),
+                "the Hint must freeze the conversation on the game's own clock");
+        assertEquals(110_000L, remainingMillis(clock, "nego-other"),
+                "fixture: that clock really ran — the other dialogue lost its 10 s");
+    }
+
     // --- helpers ---------------------------------------------------------------
 
     /** A plain (never {@code .setup()}'d / never container-attached) {@link Agent} handle to
@@ -424,6 +621,28 @@ class AssistantAgentIT {
      * internals (DF, container) directly, only their injected collaborators. */
     private static Agent harnessAgent() {
         return new AssistantAgent();
+    }
+
+    /** The Hint plan wired to {@code clock} through the S14 six-arg constructor — the form
+     * {@code AssistantAgent} uses with the game's own conversation clock. */
+    private static RecommendOnDemandBehaviour hintPlanOn(ConversationClock clock, LLMBridge bridge,
+                                                         EventBus eventBus) {
+        return new RecommendOnDemandBehaviour(harnessAgent(),
+                new RecommendationAlgorithm(new MarketHistoryArtifact()), bridge, eventBus,
+                new RecommendationCache(), clock);
+    }
+
+    private static long remainingMillis(ConversationClock clock, String dialogueId) {
+        return view(clock, dialogueId).remainingMillis();
+    }
+
+    private static long elapsedMillis(ConversationClock clock, String dialogueId) {
+        return view(clock, dialogueId).elapsedMillis();
+    }
+
+    private static ConversationClock.View view(ConversationClock clock, String dialogueId) {
+        return clock.view(dialogueId)
+                .orElseThrow(() -> new AssertionError("no conversation on the clock for " + dialogueId));
     }
 
     private static List<AssistantChatEvent> chatEvents(EventBus bus) {

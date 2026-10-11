@@ -56,7 +56,7 @@ import it.unige.portcommand.behaviours.cnp.InitiateCNPBehaviour;
  * alongside every message this hub sends or receives.
  *
  * <p>{@code activeVessels}/{@code pendingCustomsChecks}/{@code negotiationBerths}/
- * {@code negotiationRounds}/{@code negotiationOpenedAt}/{@code negotiationPlayerOffers}
+ * {@code negotiationRounds}/{@code negotiationPlayerOffers}
  * are {@link ConcurrentHashMap}s shared read/write across
  * several behaviours (planning/11's Risks section calls out {@code activeVessels}
  * concurrency explicitly). {@code customsAid} is resolved lazily (never eagerly at
@@ -74,7 +74,6 @@ public final class HarbourMasterAgent extends PortCommandAgent
     private final ConcurrentHashMap<String, String> pendingCustomsChecks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> negotiationBerths = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> negotiationRounds = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Long> negotiationOpenedAt = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Double> negotiationPlayerOffers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, AtomicInteger> cnpRetryAttempts = new ConcurrentHashMap<>();
     /** S5: parked grants awaiting a free berth. HM-thread confined; see BerthWaitQueue's javadoc. */
@@ -394,18 +393,6 @@ public final class HarbourMasterAgent extends PortCommandAgent
 
     public ConcurrentHashMap<String, AtomicInteger> negotiationRounds() {
         return negotiationRounds;
-    }
-
-    /**
-     * Sim instant each open walk-in dialogue began, keyed by conversationId (2026-08-10, audit
-     * P1-9). The zero point for {@code WalkInDialogueSnapshot.timeUsedSec}, which had no source
-     * before this and was published as a hard-coded 0.0, leaving the urgency heuristic's
-     * time-progress term permanently dead. Stamped once by {@code ForwardWalkInToPlayerBehaviour}
-     * on a dialogue's first offer, and removed on every terminal path alongside
-     * {@code negotiationBerths}/{@code negotiationRounds}.
-     */
-    public ConcurrentHashMap<String, Long> negotiationOpenedAt() {
-        return negotiationOpenedAt;
     }
 
     /**

@@ -13,6 +13,7 @@ import java.util.function.Predicate;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.behaviours.coordination.DispatchPlayerCommandBehaviour;
 import it.unige.portcommand.behaviours.coordination.HandleEmergencyBehaviour;
 import it.unige.portcommand.behaviours.coordination.HandleWeatherAlertBehaviour;
@@ -80,6 +81,13 @@ class HarbourMasterAgentIT {
     // comfortable 5 real seconds — the task-03/15-default 300 (5-min sim-day) would
     // squeeze it to ~17ms, too tight for a probe round-trip.
     private static final long CNP_FRIENDLY_REAL_SECONDS_PER_DAY = 86_400L;
+    // The end-of-day case's own pace, a pinned literal since S14. It used to borrow
+    // BootstrapConfig.DEFAULT_REAL_SECONDS_PER_GAME_DAY, which was 300 and is now 3600 (the
+    // 60-minute sandbox day). That case's "exactly once" watch is a 500 ms wall window sized in
+    // EndOfDayDetectBehaviour's sim-minute ticker periods: ~208 ms each at 300 s/day, so two or
+    // three further ticks land in it — but 2.5 s each at 3600, so none would, and the "never
+    // climbs past one" assertion would pass without observing a single extra tick.
+    private static final long END_OF_DAY_REAL_SECONDS_PER_DAY = 300L;
 
     @BeforeAll
     static void initEngine() {
@@ -679,6 +687,10 @@ class HarbourMasterAgentIT {
      * Audit P1-9: the snapshot handed to the Assistant must carry the dialogue's REAL observable
      * state. {@code lastPlayerOffer} and {@code timeUsedSec} used to be hard-coded 0.0, which left
      * two of {@code UrgencyCalculator}'s three terms permanently dead.
+     *
+     * <p>S14 (ADR-18): the time term is no longer elapsed sim time against a nominal Settings
+     * window. It is the dialogue's CONVERSATION clock, in real seconds — {@code timeUsedSec} what
+     * has run, {@code timeLimitSec} elapsed + remaining — the same counter the player's tab draws.
      */
     @Test
     void walkInSnapshot_carriesTheRealPlayerOfferAndElapsedTime() throws Exception {
@@ -686,14 +698,21 @@ class HarbourMasterAgentIT {
         VesselSpec spec = new VesselSpec("W030", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
         Probe vessel = spawnProbe("t30_vessel", null);
 
+        // The probe "vessel" is not a WalkInVesselAgent, so nothing opens this dialogue's
+        // conversation the way OpeningProposalBehaviour does. Opened here in the same order the
+        // real vessel uses — BEFORE the offer leaves — with a cargo vessel's 240 s.
+        boot.getSimClock().conversationClock().open("nego-W030", 240_000L);
+
         vessel.outbox.put(openingOffer(hm, spec, 4800.0, 6, "nego-W030"));
         NegotiationOpenedEvent opening = awaitEvent(NegotiationOpenedEvent.class,
                 e -> "nego-W030".equals(e.dialogueId()), 10_000);
         assertNotNull(opening, "fixture: the opening offer must reach the player");
         assertEquals(0.0, opening.snapshot().lastPlayerOffer(),
                 "round 1: the player has not countered yet, so there is genuinely no offer to report");
-        assertNotNull(hm.negotiationOpenedAt().get("nego-W030"),
-                "the dialogue's sim-time origin must be stamped on the first offer");
+        assertEquals(240.0, opening.snapshot().timeLimitSec(), 1e-9,
+                "the opening snapshot must carry the vessel's whole conversation budget, in real seconds");
+        assertEquals(0.0, opening.snapshot().timeUsedSec(), 1e-9,
+                "nothing has run on the conversation clock yet");
 
         // The player counters. DispatchPlayerCommandBehaviour is the ONLY point the HarbourMaster
         // ever sees their price (the vessel's reply carries no player terms). Driven directly, the
@@ -708,8 +727,10 @@ class HarbourMasterAgentIT {
                 "the player's PROPOSE price must be recorded against its dialogue (gate passed), got "
                         + hm.negotiationPlayerOffers().get("nego-W030"));
 
-        // Advance sim time so the elapsed-time term has something to report, then have the vessel
-        // counter — which is what rebuilds the snapshot.
+        // Let two real seconds pass so the elapsed-time term has something to report, then have
+        // the vessel counter — which is what rebuilds the snapshot. SimClock.advance is where real
+        // time enters the game: it forwards the same 2 000 ms, unscaled, to the conversation clock
+        // (at this file's 1:1 pace that is also two sim-seconds, which no longer decides anything).
         boot.getSimClock().advance(2_000);
         vessel.outbox.put(openingOffer(hm, spec, 4400.0, 6, "nego-W030"));
 
@@ -718,19 +739,47 @@ class HarbourMasterAgentIT {
         assertNotNull(counter, "the vessel's counter must republish the dialogue snapshot");
         assertEquals(3900.0, counter.snapshot().lastPlayerOffer(),
                 "the snapshot must carry the player's real standing offer, not a hard-coded 0.0");
-        assertTrue(counter.snapshot().timeUsedSec() > 0.0,
-                "elapsed real seconds must be reported once the clock has moved, got "
-                        + counter.snapshot().timeUsedSec());
+        assertEquals(2.0, counter.snapshot().timeUsedSec(), 1e-9,
+                "elapsed REAL seconds off the conversation clock must be reported once it has moved");
+        assertEquals(240.0, counter.snapshot().timeLimitSec(), 1e-9,
+                "the limit is elapsed + remaining (2 + 238): the visible total, which running time "
+                        + "alone never changes");
 
-        // Terminal paths must not leak the two new per-dialogue entries. handleWithdraw clears
-        // them before it publishes, so the event is a sufficient barrier.
+        // Terminal paths must not leak the per-dialogue entry. handleWithdraw clears it before it
+        // publishes, so the event is a sufficient barrier.
         vessel.outbox.put(withdrawMessage(hm, "over_priced", "nego-W030"));
         assertNotNull(awaitEvent(WithdrawalEvent.class, e -> "W030".equals(e.vesselId()), 10_000),
                 "fixture: the withdraw must be processed");
-        assertFalse(hm.negotiationOpenedAt().containsKey("nego-W030"),
-                "a closed dialogue must forget its sim-time origin");
         assertFalse(hm.negotiationPlayerOffers().containsKey("nego-W030"),
                 "a closed dialogue must forget the player's offer");
+    }
+
+    /**
+     * S14 (ADR-18): a dialogue with NO conversation on the clock — every probe-driven walk-in in
+     * this file, and any vessel that is not a {@code WalkInVesselAgent} — must publish "no counter
+     * known" ({@link WalkInDialogueSnapshot#NO_TIME_LIMIT}), never a zero-second window. The
+     * Assistant's urgency reads a real limit as time pressure, so an invented one would report
+     * every such dialogue as already out of time.
+     */
+    @Test
+    void walkInSnapshot_withNoConversationOnTheClock_carriesNoTimeLimit() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W033", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vessel = spawnProbe("t33_vessel", null);
+        assertTrue(boot.getSimClock().conversationClock().view("nego-W033").isEmpty(),
+                "fixture: nothing may have opened a conversation for this dialogue");
+
+        // Real time passing must not invent a counter either.
+        boot.getSimClock().advance(2_000);
+        vessel.outbox.put(openingOffer(hm, spec, 4800.0, 6, "nego-W033"));
+
+        NegotiationOpenedEvent opening = awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-W033".equals(e.dialogueId()), 10_000);
+        assertNotNull(opening, "the offer must still be forwarded — a missing counter is not an error");
+        assertEquals(WalkInDialogueSnapshot.NO_TIME_LIMIT, opening.snapshot().timeLimitSec(), 1e-9,
+                "no conversation on the clock means no time limit is known");
+        assertEquals(0.0, opening.snapshot().timeUsedSec(), 1e-9,
+                "and no elapsed time is claimed for a counter that does not exist");
     }
 
     @Test
@@ -1872,7 +1921,7 @@ class HarbourMasterAgentIT {
 
     @Test
     void endOfDay_publishesExactlyOnceOnMidnightCrossing() throws Exception {
-        HarbourMasterAgent hm = spawnHm(Map.of(), BootstrapConfig.DEFAULT_REAL_SECONDS_PER_GAME_DAY);
+        HarbourMasterAgent hm = spawnHm(Map.of(), END_OF_DAY_REAL_SECONDS_PER_DAY);
         double startingBalance = hm.walletLedger().balance();
 
         boot.getSimClock().advanceToNextDay();

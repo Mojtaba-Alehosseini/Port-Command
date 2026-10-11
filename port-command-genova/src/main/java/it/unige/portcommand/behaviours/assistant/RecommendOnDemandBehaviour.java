@@ -1,5 +1,6 @@
 package it.unige.portcommand.behaviours.assistant;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 
 import it.unige.portcommand.assistant.AssistantPromptBuilder;
@@ -13,6 +14,8 @@ import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.HintButtonEvent;
 import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.nlp.LLMRequest;
+import it.unige.portcommand.nlp.LLMResponse;
+import it.unige.portcommand.util.ConversationClock;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.Subscription;
@@ -42,23 +45,37 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
      * revision match the new world's first hint. */
     private static final AtomicLong HINT_IDS = new AtomicLong();
 
+    /** How far past the bridge's own timeout an unreleased Hint freeze is given up on. */
+    private static final long FREEZE_LEASE_MARGIN_MILLIS = 30_000L;
+
     private final RecommendationAlgorithm algorithm;
     private final LLMBridge llmBridge;
     private final EventBus eventBus;
     private final RecommendationCache cache;
+    /** S14 (ADR-18): the vessel's patience stands still while this tab's Hint waits for the model
+     * — the player asked for help and should not pay for the model's latency. */
+    private final ConversationClock conversationClock;
     /** Captured at construction, NEVER read from {@code myAgent} in the handlers — JADE nulls
      * {@code myAgent} once a OneShot completes (the DispatchPlayerCommandBehaviour task-19
      * lesson), while the bus subscription lives on. */
     private final Agent agent;
 
+    /** No conversation clock: nothing to freeze (a private clock no vessel is on). */
     public RecommendOnDemandBehaviour(Agent agent, RecommendationAlgorithm algorithm, LLMBridge llmBridge,
                                       EventBus eventBus, RecommendationCache cache) {
+        this(agent, algorithm, llmBridge, eventBus, cache, new ConversationClock());
+    }
+
+    public RecommendOnDemandBehaviour(Agent agent, RecommendationAlgorithm algorithm, LLMBridge llmBridge,
+                                      EventBus eventBus, RecommendationCache cache,
+                                      ConversationClock conversationClock) {
         super(agent);
         this.agent = agent;
         this.algorithm = algorithm;
         this.llmBridge = llmBridge;
         this.eventBus = eventBus;
         this.cache = cache;
+        this.conversationClock = conversationClock;
     }
 
     /** Held so AssistantAgent cancels on takedown (task 22): the bus outlives the agent,
@@ -124,8 +141,27 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
         LLMRequest request = new LLMRequest(prompt.user(), prompt.system(),
                 rec.requiredFigures().stream().toList(), rec.namedEntities().stream().toList(), true);
 
+        // S14 (ADR-18): freeze this dialogue's patience for exactly as long as the model is
+        // thinking. Released ONCE, from the future's own completion — success, failure and timeout
+        // alike — and at once if the call never produced a future. A release that never comes
+        // (a future nobody completes) is bounded by the lease, which is sized from the bridge's
+        // own timeout so it can never fire while a legitimate call is still running.
+        Runnable thaw = conversationClock.freeze(event.dialogueId(), freezeLeaseMillis());
         long askedAt = System.nanoTime(); // log-only: the LLM call's real latency, never game state
-        llmBridge.explain(request)
+        CompletableFuture<LLMResponse> answer;
+        try {
+            answer = llmBridge.explain(request);
+        } catch (RuntimeException e) {
+            thaw.run();
+            throw e;
+        }
+        if (answer == null) {
+            thaw.run();
+            log.info("hint {} ({}): no model call was made; the template stands", hintId, event.dialogueId());
+            return;
+        }
+        answer.whenComplete((response, error) -> thaw.run());
+        answer
                 .thenAccept(response -> {
                     long ms = (System.nanoTime() - askedAt) / 1_000_000L;
                     if (HallucinationValidator.validate(response.text(), rec)) {
@@ -142,6 +178,15 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
                             hintId, event.dialogueId(), (System.nanoTime() - askedAt) / 1_000_000L, ex.toString());
                     return null;
                 });
+    }
+
+    /** The bridge's configured timeout plus a margin, never less than the clock's default lease
+     * (and exactly that default when the bridge states no timeout — a test double). */
+    private long freezeLeaseMillis() {
+        java.time.Duration timeout = llmBridge.timeout();
+        return timeout == null ? ConversationClock.DEFAULT_FREEZE_LEASE_MILLIS
+                : Math.max(ConversationClock.DEFAULT_FREEZE_LEASE_MILLIS,
+                        timeout.toMillis() + FREEZE_LEASE_MARGIN_MILLIS);
     }
 
     static String decisionId(String dialogueId, WalkInDialogueSnapshot snapshot) {

@@ -10,9 +10,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * wired in task 24) supplies elapsed real milliseconds to {@link #advance(long)};
  * that keeps the clock fully deterministic for tests.
  *
- * <p>Mapping is governed by {@code realSecondsPerGameDay} (default 300 — five real
- * minutes per simulated 24&nbsp;h). Injected via constructor; never a global static
- * singleton, so tests can use their own deterministic instance.
+ * <p>Mapping is governed by {@code realSecondsPerGameDay} — the x1 BASE pace (sandbox default
+ * 3600, one real hour per simulated 24&nbsp;h, since S14; scenarios pin their own) — times the
+ * live {@link #speedMultiplier() speed multiplier} (x1/x2/x4, S14). Injected via constructor;
+ * never a global static singleton, so tests can use their own deterministic instance.
  *
  * <p>Thread-safe: the sim-time counter is an {@link AtomicLong} and midnight
  * detection uses a CAS, so concurrent agent advances are safe.
@@ -33,6 +34,16 @@ public final class SimClock {
     private final AtomicLong simMillisSinceStart = new AtomicLong(0);
     private final AtomicLong lastObservedDay = new AtomicLong(1);
     private volatile boolean paused;
+    /** S14: the player's speed control. Multiplies the pace inside every sim<->wall conversion
+     * below; {@link #realSecondsPerGameDay()} stays the x1 base (it is what a save records). */
+    private volatile int speedMultiplier = 1;
+    /** S14: bumped whenever the sim<->wall relation is disturbed — a pause, a pace change, a
+     * restore. A timer armed ONCE in wall time (a JADE waker) compares the value it armed under
+     * with the value at wake to know whether to re-derive its remaining wait from sim time. */
+    private final AtomicLong timingEpoch = new AtomicLong(0);
+    /** S14 (ADR-18): negotiation patience runs on REAL time, not on this clock's game time. It
+     * lives here so real milliseconds enter the game in one place — see {@link #advance}. */
+    private final ConversationClock conversationClock = new ConversationClock();
 
     public SimClock(long realSecondsPerGameDay) {
         if (realSecondsPerGameDay <= 0) {
@@ -56,38 +67,48 @@ public final class SimClock {
      * The inverse of {@link #simMillisDelta}: how many REAL seconds a sim-millisecond interval
      * corresponds to under this clock's current mapping.
      *
-     * <p>Single-sourced here (2026-08-10, audit P1-9) because two consumers must agree exactly:
-     * the negotiation tab's "~Ns remaining" countdown and the HarbourMaster-side
-     * {@code WalkInDialogueSnapshot.timeUsedSec} that feeds {@code UrgencyCalculator}. Both
-     * measure the same dialogue against the same PUBLIC nominal window
-     * ({@code Settings.timeLimitSeconds}), so a second open-coded copy of this arithmetic would
-     * let the number the player watches and the number the Assistant reasons from drift apart.
-     *
-     * <p>Real seconds, not sim seconds, on purpose: the nominal window is pacing-invariant, so
-     * this is the one scale that means the same thing at 300 s/day and at the tutorial's
-     * 1800 s/day.
+     * <p>Single-sourced here (2026-08-10, audit P1-9) for the negotiation tab's "~Ns remaining"
+     * countdown and the HarbourMaster's {@code WalkInDialogueSnapshot.timeUsedSec}, which had to
+     * agree exactly. S14 (ADR-18) retired both uses — negotiation time is no longer derived from
+     * game time at all, it is read off the {@link #conversationClock()} — so today this pair of
+     * conversions serves only what really is "real seconds of RUNNING game time": the chat
+     * panel's closed-tab dwell (through {@link #simMillisForRealSeconds}). The speed multiplier
+     * is folded in, so 30 real seconds are 30 real seconds at ×1 and at ×4.
      */
     public double realSecondsForSimMillis(long simMillisElapsed) {
-        return simMillisElapsed * (double) realSecondsPerGameDay / MILLIS_PER_DAY;
+        return simMillisElapsed * (double) realSecondsPerGameDay / MILLIS_PER_DAY / speedMultiplier;
     }
 
     /** The reverse of {@link #realSecondsForSimMillis}, for callers that need to reconstruct a
      * dialogue's sim-time origin from an elapsed real-seconds figure. */
     public long simMillisForRealSeconds(double realSeconds) {
-        return Math.round(realSeconds * MILLIS_PER_DAY / (double) realSecondsPerGameDay);
+        return Math.round(realSeconds * speedMultiplier * MILLIS_PER_DAY / (double) realSecondsPerGameDay);
     }
 
-    /** Advances sim time by the sim-equivalent of {@code realMillisElapsed}; no-op while paused. */
+    /**
+     * Advances sim time by the sim-equivalent of {@code realMillisElapsed}; no-op while paused.
+     * The same real milliseconds, unscaled, also go to the {@link #conversationClock()} — so a
+     * paused game freezes negotiation patience, and the speed multiplier never touches it.
+     */
     public void advance(long realMillisElapsed) {
         if (paused) {
             return;
         }
-        simMillisSinceStart.addAndGet(simMillisDelta(realMillisElapsed, realSecondsPerGameDay));
+        conversationClock.advance(realMillisElapsed);
+        // Speed scales the ELAPSED time, not the base rate: dividing the base would truncate
+        // (75 s/day at x2) and the static conversion above keeps its two-argument contract.
+        simMillisSinceStart.addAndGet(simMillisDelta(realMillisElapsed * speedMultiplier, realSecondsPerGameDay));
     }
 
     /** Stops {@link #advance(long)} from accumulating. Idempotent. */
     public void pause() {
+        // The flag BEFORE the epoch: a waiter that reads the epoch and then isPaused() (see
+        // SimDeadlineWait.armUntil) must never see the bumped epoch with the flag still clear.
+        boolean wasPaused = paused;
         paused = true;
+        if (!wasPaused) {
+            timingEpoch.incrementAndGet();
+        }
     }
 
     /** Re-enables {@link #advance(long)}. Idempotent (no-op if not paused). */
@@ -114,6 +135,7 @@ public final class SimClock {
         simMillisSinceStart.set(0);
         lastObservedDay.set(1);
         paused = false;
+        conversationClock.reset();
     }
 
     /**
@@ -135,6 +157,8 @@ public final class SimClock {
         this.realSecondsPerGameDay = realSecondsPerGameDay;
         simMillisSinceStart.set(simMillis);
         lastObservedDay.set(gameDayOf(simMillis));
+        timingEpoch.incrementAndGet(); // speed is NOT touched here: it is a setting, applied by the loader
+        conversationClock.reset(); // a restore is a world swap, and open negotiations are never saved
     }
 
     public long nowSimMillis() {
@@ -185,12 +209,43 @@ public final class SimClock {
      * scale with {@code realSecondsPerGameDay} instead of hard-coding wall delays.
      */
     public long simSecondsToWallMs(long simSeconds) {
-        // Inverse of simMillisDelta: realMs = simSeconds * rate * 1000 / secondsPerDay.
-        return simSeconds * realSecondsPerGameDay * 1_000L / SECONDS_PER_DAY;
+        // Inverse of simMillisDelta: realMs = simSeconds * rate * 1000 / (secondsPerDay * speed).
+        return simSeconds * realSecondsPerGameDay * 1_000L / (SECONDS_PER_DAY * speedMultiplier);
     }
 
+    /** The x1 BASE pace: real seconds per game day before the speed multiplier. */
     public long realSecondsPerGameDay() {
         return realSecondsPerGameDay;
+    }
+
+    /** S14: the player's speed control (1, 2 or 4 in the shipped UI; any positive value here). */
+    public int speedMultiplier() {
+        return speedMultiplier;
+    }
+
+    /**
+     * S14: changes ONLY how fast game time runs, live — accumulated sim time, the base rate and
+     * the pause state are untouched, exactly like {@link #setRealSecondsPerGameDay}. Negotiation
+     * patience is NOT game time (ADR-18): the conversation clock never sees this.
+     */
+    public void setSpeedMultiplier(int speedMultiplier) {
+        if (speedMultiplier <= 0) {
+            throw new IllegalArgumentException("speedMultiplier must be > 0, got " + speedMultiplier);
+        }
+        if (this.speedMultiplier != speedMultiplier) {
+            this.speedMultiplier = speedMultiplier;
+            timingEpoch.incrementAndGet();
+        }
+    }
+
+    /** S14: see the field — changes on a pause, a pace change or a restore, never otherwise. */
+    public long timingEpoch() {
+        return timingEpoch.get();
+    }
+
+    /** S14 (ADR-18): the real-time clock walk-in patience runs on; fed by {@link #advance}. */
+    public ConversationClock conversationClock() {
+        return conversationClock;
     }
 
     /**
@@ -206,6 +261,9 @@ public final class SimClock {
             throw new IllegalArgumentException(
                     "realSecondsPerGameDay must be > 0, got " + realSecondsPerGameDay);
         }
-        this.realSecondsPerGameDay = realSecondsPerGameDay;
+        if (this.realSecondsPerGameDay != realSecondsPerGameDay) {
+            this.realSecondsPerGameDay = realSecondsPerGameDay;
+            timingEpoch.incrementAndGet();
+        }
     }
 }

@@ -11,9 +11,11 @@ import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.negotiation.Decision;
 import it.unige.portcommand.negotiation.NegotiationEngine;
+import it.unige.portcommand.negotiation.PatiencePolicy;
 import it.unige.portcommand.negotiation.WalkInState;
 import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.prolog.PrologQueries;
+import it.unige.portcommand.util.ConversationClock;
 import jade.core.Agent;
 import jade.core.behaviours.CyclicBehaviour;
 import jade.lang.acl.ACLMessage;
@@ -35,22 +37,30 @@ import org.slf4j.LoggerFactory;
  * vessel-side template: the player's refusal was silently ignored, the dialogue stayed
  * open, and a later "deal" could still close it — and the {@code PLAYER_REFUSED}
  * outcome (declared since task 02, mapped since task 07) was unreachable in production.
+ *
+ * <p><b>S14 (ADR-18):</b> every player message that reaches this vessel buys
+ * {@link PatiencePolicy#REPLY_BONUS_MILLIS} more patience (never more than
+ * {@link PatiencePolicy#CAP_REMAINING_MILLIS} left on the clock), and every path that ends the
+ * dialogue closes its conversation so the counter stops with it.
  */
 public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(EvaluateCounterOfferBehaviour.class);
 
     private final AtomicReference<WalkInState> stateRef;
+    private final AtomicReference<ConversationClock.Conversation> conversationRef;
     private final NegotiationEngine engine;
     private final String conversationId;
     private final AtomicBoolean concluded;
     private final MessageTemplate template;
 
     public EvaluateCounterOfferBehaviour(Agent agent, AtomicReference<WalkInState> stateRef,
+                                         AtomicReference<ConversationClock.Conversation> conversationRef,
                                          NegotiationEngine engine, String conversationId,
                                          AtomicBoolean concluded) {
         super(agent);
         this.stateRef = stateRef;
+        this.conversationRef = conversationRef;
         this.engine = engine;
         this.conversationId = conversationId;
         this.concluded = concluded;
@@ -84,6 +94,15 @@ public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
             return;
         }
         BaseVesselAgent vessel = (BaseVesselAgent) myAgent;
+
+        // S14 (ADR-18): the player answered — the vessel waits a little longer. Counted HERE, on
+        // arrival, so it covers every message that actually reaches the vessel (a counter, a
+        // malformed counter this class REFUSEs, a status query) and nothing that does not (a
+        // command the HarbourMaster's Prolog gate refused never gets this far).
+        ConversationClock.Conversation conversation = conversationRef.get();
+        if (conversation != null) {
+            conversation.extend(PatiencePolicy.REPLY_BONUS_MILLIS, PatiencePolicy.CAP_REMAINING_MILLIS);
+        }
 
         // Player accepted OUR standing PROPOSE -> close at our last offer: the standing price
         // AND the standing hours term (task 19b — after an hours counter, "deal" closes at the
@@ -119,6 +138,7 @@ public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
         // player_refused outcome (task 19; see class javadoc).
         if (msg.getPerformative() == ACLMessage.REJECT_PROPOSAL || msg.getPerformative() == ACLMessage.CANCEL) {
             concluded.set(true);
+            closeConversation();
             log.info("{}: player refused/withdrew -> leaving", myAgent.getLocalName());
             myAgent.addBehaviour(new WithdrawalBehaviour(myAgent, stateRef, conversationId, "player_refused"));
             myAgent.removeBehaviour(this); // MUST be last: removeBehaviour nulls myAgent
@@ -199,6 +219,7 @@ public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
                 // engine's own reason straight through so WithdrawalBehaviour.outcomeFor
                 // records the canonical WITHDRAW_PRICE / WITHDRAW_DURATION.
                 concluded.set(true);
+                closeConversation();
                 myAgent.addBehaviour(new WithdrawalBehaviour(myAgent, stateRef, conversationId, decision.reason()));
                 myAgent.removeBehaviour(this);
             }
@@ -208,9 +229,18 @@ public final class EvaluateCounterOfferBehaviour extends CyclicBehaviour {
     private void closeDeal(BaseVesselAgent vessel, ACLMessage trigger, String berthId, double price, int hours) {
         vessel.setDeal(berthId, price, hours);
         concluded.set(true);
+        closeConversation();
         log.info("{}: ACCEPT at {} ({}h) -> closing deal", myAgent.getLocalName(), price, hours);
         myAgent.addBehaviour(new DealClosedBehaviour(myAgent, conversationId));
         myAgent.removeBehaviour(this); // MUST be last: removeBehaviour nulls myAgent
+    }
+
+    /** S14: the dialogue is over — its conversation leaves the clock, and the counter with it. */
+    private void closeConversation() {
+        ConversationClock.Conversation conversation = conversationRef.get();
+        if (conversation != null) {
+            conversation.close();
+        }
     }
 
     private static String text(JsonNode node, String field) {

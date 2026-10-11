@@ -64,7 +64,18 @@ public final class AssistantAgent extends PortCommandAgent {
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(marketHistory);
         RecommendationCache cache = new RecommendationCache();
 
-        recommendPlan = new RecommendOnDemandBehaviour(this, algorithm, llmBridge, eventBus, cache);
+        // S14 (ADR-18): the game's conversation clock — found by type (its position after the
+        // nullable AgentDirectory does not matter) and REQUIRED. A private stand-in clock would
+        // make the Hint freeze silently inert: nothing would fail, the vessel's counter would
+        // just keep running while the model thinks (adversarial review, S14).
+        it.unige.portcommand.util.ConversationClock conversationClock =
+                optionalArgOfType(it.unige.portcommand.util.ConversationClock.class);
+        if (conversationClock == null) {
+            throw new IllegalStateException("AssistantAgent " + getLocalName()
+                    + " requires the game's ConversationClock among its args (SimClock.conversationClock())");
+        }
+        recommendPlan = new RecommendOnDemandBehaviour(this, algorithm, llmBridge, eventBus, cache,
+                conversationClock);
         autopilotPlan = new AutopilotExecuteBehaviour(this, algorithm, policyRegistry, eventBus, cache,
                 autopilotEnabled);
         policyPlan = new PolicyParseBehaviour(this, policyRegistry, eventBus);

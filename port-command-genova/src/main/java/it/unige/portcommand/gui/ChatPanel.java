@@ -12,6 +12,7 @@ import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
@@ -57,6 +58,10 @@ public final class ChatPanel extends JPanel {
      */
     static final double CLOSED_TAB_DWELL_REAL_SECONDS = 30.0;
 
+    /** S14 (ADR-18): how often every tab's live counter is re-read. Conversation time is REAL
+     * time, so it cannot ride the sim-minute tick (2.5 s apart at the default day length). */
+    static final int COUNTER_REFRESH_MILLIS = 1_000;
+
     private final NegotiationTabRegistry registry = new NegotiationTabRegistry();
     private final EventBus eventBus;
     private final ChatInputProcessor processor;
@@ -67,6 +72,10 @@ public final class ChatPanel extends JPanel {
      * focus is parked HERE, where keystrokes do nothing — not left to AWT, whose transfer lands
      * on the comm-log filter combo and lets type-ahead change the filter (the #9 symptom). */
     private final JLabel waitingPlaceholder = new JLabel("Waiting for a walk-in…", SwingConstants.CENTER);
+    /** S14: a Swing timer, so it fires on the EDT. It only READS the conversation clock (which is
+     * driven by the game's own advancer, frozen by a pause) — it is a repaint cadence, not a
+     * time source. Runs only while the panel is displayable. */
+    private final Timer counterTimer = new Timer(COUNTER_REFRESH_MILLIS, e -> refreshCounters());
 
     private final Subscription<NegotiationOpenedEvent> openedSubscription;
     private final Subscription<NegotiationClosedEvent> closedSubscription;
@@ -88,9 +97,9 @@ public final class ChatPanel extends JPanel {
     private boolean removingExpiredTabs;
 
     /**
-     * Headless-test convenience: a private frozen clock (nothing advances it), so the countdown
-     * simply shows the full window. PRODUCTION MUST use the 3-arg constructor with the boot's
-     * shared {@code SimClock} — {@code MainWindow} does.
+     * Headless-test convenience: a private frozen clock (nothing advances it, and no vessel has a
+     * conversation on it, so every counter stays blank). PRODUCTION MUST use the 3-arg
+     * constructor with the boot's shared {@code SimClock} — {@code MainWindow} does.
      */
     ChatPanel(EventBus eventBus, ChatInputProcessor processor) {
         this(eventBus, processor, new SimClock(Settings.load().realSecondsPerGameDay()));
@@ -111,9 +120,9 @@ public final class ChatPanel extends JPanel {
         // its terms come back off the offer strip (the refusal TEXT arrives as an AssistantChatEvent).
         this.refusedSubscription = eventBus.subscribe(PlayerCommandRefusedEvent.class,
                 this::onPlayerCommandRefused, DeliveryMode.EDT);
-        // Task 24: the per-sim-minute tick re-renders every open tab's offer strip so the
-        // "~Ns remaining" hint counts down for real (~5 Hz wall at the default day length —
-        // strip-label-only refresh, never the full transcript re-render).
+        // The per-sim-minute tick sweeps closed tabs off the strip (C-07). S14: it no longer
+        // re-renders the offer strips — the "~Ns remaining" it used to count down is gone, and
+        // the live counter that replaced it runs on its own one-second Swing timer.
         this.clockSubscription = eventBus.subscribe(SimClockTickEvent.class, this::onClockTick, DeliveryMode.EDT);
         // Task 22: a loaded game never carries an open negotiation (saves drop/refuse them),
         // so the pre-load world's tabs are stale — clean slate on the loaded-marker event. Stored +
@@ -167,7 +176,18 @@ public final class ChatPanel extends JPanel {
 
     private void onClockTick(SimClockTickEvent event) {
         removeExpiredTabs();
-        views.values().forEach(DialogueTabView::refreshStrip);
+    }
+
+    /** S14: every open tab re-reads its conversation clock. Package-private so a headless test
+     * can stand in for the timer. */
+    void refreshCounters() {
+        views.values().forEach(DialogueTabView::refreshCounter);
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        counterTimer.start();
     }
 
     /** C-07: rides the existing per-sim-minute tick (already EDT-delivered and cancelled in
@@ -275,6 +295,7 @@ public final class ChatPanel extends JPanel {
     @Override
     public void removeNotify() {
         super.removeNotify();
+        counterTimer.stop();
         openedSubscription.cancel();
         closedSubscription.cancel();
         assistantSubscription.cancel();
@@ -282,6 +303,11 @@ public final class ChatPanel extends JPanel {
         clockSubscription.cancel();
         settingsSubscription.cancel();
         loadedSubscription.cancel();
+    }
+
+    /** Test-only: whether the one-second counter timer is running (S14). */
+    boolean counterTimerRunningForTest() {
+        return counterTimer.isRunning();
     }
 
     /** Test-only: the shared model backing every tab. */

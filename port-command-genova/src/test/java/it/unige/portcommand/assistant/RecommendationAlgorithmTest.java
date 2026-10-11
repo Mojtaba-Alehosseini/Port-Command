@@ -18,9 +18,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RecommendationAlgorithmTest {
 
-    /** The shipped defaults, so a test varying one budget holds the other steady. */
+    /**
+     * The round budget these fixtures' hand-verified arithmetic was worked out under. Passed
+     * EXPLICITLY since S14: the shipped default went 4 -> 6, and a test that silently read
+     * {@code Settings} would have had every "round 4 = last round" figure shift under it.
+     */
     private static final int ROUNDS = 4;
-    private static final int WINDOW = 60;
+    /** A conversation counter's total, for the fixtures that want the time term in play. */
+    private static final double WINDOW = 60.0;
 
     @BeforeAll
     static void initEngine() {
@@ -44,7 +49,7 @@ class RecommendationAlgorithmTest {
         // the literal bug: "the Assistant would recommend reject silently on every first Hint
         // click." With the 0.4 floor, p_accept ~ 0.35 and counter(+10%) (clamped up to the
         // fallback band's 4000 floor) scores ev ~ +698, beating both accept and reject_silent.
-        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
         Recommendation rec = algorithm.run(tankerAtBerth1(1000.0, 0, 0.0));
         assertNotEquals(RecommendationCandidate.REJECT_SILENT, rec.action(),
                 "round-1 offer below marginal cost must not collapse to reject_silent (the urgency-floor bug)");
@@ -54,22 +59,34 @@ class RecommendationAlgorithmTest {
     }
 
     /**
-     * Audit P1-9: the urgency time budget is the LIVE {@code Settings.timeLimitSeconds}, not a
-     * constant. Pins the behaviour that actually changed on the Assistant side — the pure
-     * {@code UrgencyCalculator} cases cannot, since that function was never edited.
+     * S14 (ADR-18): the urgency time term is the vessel's VISIBLE conversation counter — elapsed
+     * against total, carried by the snapshot — not a Settings window. Pins the behaviour on the
+     * Assistant side; the pure {@code UrgencyCalculator} cases cannot, that function is unchanged.
      */
     @Test
-    void theConfiguredTimeWindowChangesTheRecommendationsUrgency() {
-        // 15 elapsed real seconds is half of a 30s window but a twelfth of a 180s one, so the same
-        // dialogue is materially more urgent under the tighter deadline. Urgency scales p_accept,
+    void theVisibleCounterChangesTheRecommendationsUrgency() {
+        // 15 elapsed real seconds is half of a 30 s counter but a twelfth of a 180 s one, so the
+        // same dialogue is materially more urgent on the shorter counter. Urgency scales p_accept,
         // which scales a counter candidate's EV.
-        WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 1, 15.0);
-        double tightEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS, 30).run(snapshot).ev();
-        double looseEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS, 180).run(snapshot).ev();
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
+        WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 1, 0.0);
+        double tightEv = algorithm.run(snapshot.withTime(15.0, 30.0)).ev();
+        double looseEv = algorithm.run(snapshot.withTime(15.0, 180.0)).ev();
 
         assertTrue(tightEv > looseEv,
-                "a 30s window must price this counter above a 180s one (" + tightEv + " vs "
-                        + looseEv + ") - if these are equal the time term is dead again");
+                "15 s into a 30 s counter must price this counter above 15 s into a 180 s one ("
+                        + tightEv + " vs " + looseEv + ") - if these are equal the time term is dead again");
+    }
+
+    /** A snapshot with no counter on it adds no time pressure — it never reads as "out of time". */
+    @Test
+    void aSnapshotWithoutACounterAddsNoTimePressure() {
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
+        WalkInDialogueSnapshot noCounter = tankerAtBerth1(1000.0, 1, 45.0); // elapsed, but no total
+        assertEquals(WalkInDialogueSnapshot.NO_TIME_LIMIT, noCounter.timeLimitSec());
+
+        assertEquals(algorithm.run(noCounter.withTime(0.0, 180.0)).ev(), algorithm.run(noCounter).ev(), 1e-9,
+                "no counter must price exactly like a counter that has not started running");
     }
 
     /**
@@ -83,8 +100,8 @@ class RecommendationAlgorithmTest {
         // left. The tighter budget must price the same counter higher, exactly as the tighter
         // deadline does above — if these are equal, the injected limit is not being read.
         WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 2, 0.0);
-        double tightEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 2, WINDOW).run(snapshot).ev();
-        double looseEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 8, WINDOW).run(snapshot).ev();
+        double tightEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 2).run(snapshot).ev();
+        double looseEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 8).run(snapshot).ev();
 
         assertTrue(tightEv > looseEv,
                 "a 2-round budget must price this counter above an 8-round one (" + tightEv
@@ -103,9 +120,9 @@ class RecommendationAlgorithmTest {
      */
     @Test
     void theFinalRoundIsEquallyUrgentAtEveryConfiguredLimit() {
-        double atFinalOfTwo = new RecommendationAlgorithm(new MarketHistoryArtifact(), 2, WINDOW)
+        double atFinalOfTwo = new RecommendationAlgorithm(new MarketHistoryArtifact(), 2)
                 .run(tankerAtBerth1(1000.0, 2, 0.0)).ev();
-        double atFinalOfEight = new RecommendationAlgorithm(new MarketHistoryArtifact(), 8, WINDOW)
+        double atFinalOfEight = new RecommendationAlgorithm(new MarketHistoryArtifact(), 8)
                 .run(tankerAtBerth1(1000.0, 8, 0.0)).ev();
 
         assertEquals(atFinalOfTwo, atFinalOfEight, 1e-9,
@@ -116,14 +133,14 @@ class RecommendationAlgorithmTest {
 
     @Test
     void theDefaultConstructorUsesTheLiveSettingsBudgets() {
-        // Honest limit: on its own this cannot separate "reads Settings" from "hard-codes numbers
-        // that happen to equal defaults.json". What makes the group meaningful is the two siblings
-        // above, which prove both constructor arguments are genuinely live — given that, this pins
-        // the production path to the same budgets the player sees.
-        WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 1, 15.0);
+        // Honest limit: on its own this cannot separate "reads Settings" from "hard-codes a number
+        // that happens to equal defaults.json". What makes the group meaningful is the round-limit
+        // siblings above, which prove the constructor argument is genuinely live — given that, this
+        // pins the production path to the same budget the player sees.
+        WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 1, 15.0).withTime(15.0, WINDOW);
         Recommendation viaSettings = new RecommendationAlgorithm(new MarketHistoryArtifact()).run(snapshot);
         Recommendation viaExplicit = new RecommendationAlgorithm(new MarketHistoryArtifact(),
-                Settings.load().roundLimit(), Settings.load().timeLimitSeconds()).run(snapshot);
+                Settings.load().roundLimit()).run(snapshot);
 
         assertEquals(viaExplicit.ev(), viaSettings.ev(), 1e-9,
                 "the production constructor must behave exactly as the live Settings budgets");
@@ -132,7 +149,7 @@ class RecommendationAlgorithmTest {
 
     @Test
     void deterministicGivenSameInputs() {
-        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
         WalkInDialogueSnapshot snapshot = tankerAtBerth1(6000.0, 1, 60.0);
         Recommendation first = algorithm.run(snapshot);
         Recommendation second = algorithm.run(snapshot);
@@ -146,7 +163,7 @@ class RecommendationAlgorithmTest {
     void incompatibleBerthOnlyLeavesRejectSilent() {
         // Same fixture PrologQueriesTest proves incompatible: tanker draft 14 exceeds berth_4's
         // max draft (the ferry berth) — no candidate that "involves" this berth may survive.
-        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
         WalkInDialogueSnapshot snapshot = new WalkInDialogueSnapshot("tanker_1", "tanker", 14.0, 140.0, 20000,
                 "liquid_bulk", "berth_4", 6, 6000.0, 0.0, 1, 0.0, false);
         Recommendation rec = algorithm.run(snapshot);
@@ -165,13 +182,13 @@ class RecommendationAlgorithmTest {
         // threatened) -> ev ~ -207; counter(+20%) clamps to the band edge 2200 with
         // p_accept~0.12 -> ev ~ -302. Even at max urgency, gambling on a counter is dominated
         // by the -500 withdrawal-penalty risk.
-        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
-        // "fully elapsed" = timeUsedSec at the shipped 60-real-second window the one-arg
-        // RecommendationAlgorithm constructor reads from Settings (audit P1-9 rescaled this from
-        // the deleted 600-sim-second constant; the resulting urgency is 1.0 either way).
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
+        // "fully elapsed" = a conversation counter that has run all the way down (S14: the time
+        // term is the snapshot's own counter; audit P1-9 had rescaled this from the deleted
+        // 600-sim-second constant; the resulting urgency is 1.0 either way).
         WalkInDialogueSnapshot snapshot = new WalkInDialogueSnapshot("cargo_1", "cargo_vessel", 8.0, 150.0, 30000,
                 "general_cargo", "berth_3", 5, 1900.0, 0.0,
-                ROUNDS, Settings.load().timeLimitSeconds(), true);
+                ROUNDS, WINDOW, true).withTime(WINDOW, WINDOW);
         Recommendation rec = algorithm.run(snapshot);
         assertEquals(RecommendationCandidate.ACCEPT, rec.action());
         assertEquals(1900.0, rec.price(), 1e-9);
@@ -190,7 +207,7 @@ class RecommendationAlgorithmTest {
         // longer constructible with cargo, and ferry is the type whose cost L1 did not move.
         // counter(+10%) and counter(+20%) both clamp to the same 1100 floor here (both raw
         // values undercut it), so they tie; the algorithm picks the first (+10%).
-        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
         WalkInDialogueSnapshot snapshot = new WalkInDialogueSnapshot("ferry_2", "ferry", 5.0, 120.0, 12000,
                 "general_cargo", "berth_4", 5, 400.0, 0.0, 3, 0.0, false);
         Recommendation rec = algorithm.run(snapshot);
@@ -201,7 +218,7 @@ class RecommendationAlgorithmTest {
 
     @Test
     void lowSampleCountUsesIncomeRulesFallback() {
-        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
         Recommendation rec = algorithm.run(tankerAtBerth1(6000.0, 1, 60.0));
         assertTrue(rec.marketStats().lowConfidence(), "empty market history must be low-confidence");
         assertEquals(0, rec.marketStats().sampleCount());
@@ -210,7 +227,7 @@ class RecommendationAlgorithmTest {
     @Test
     void chosenCandidateNeverHasLowerEvThanRejectSilent() {
         // reject_silent (ev=0) is always a candidate; the argmax must never pick something worse.
-        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
         Recommendation rec = algorithm.run(tankerAtBerth1(4500.0, 2, 120.0));
         assertTrue(rec.ev() >= 0.0, "chosen action's EV must be >= reject_silent's 0.0; got " + rec.ev());
     }

@@ -31,6 +31,7 @@ import it.unige.portcommand.ontology.Deal;
 import it.unige.portcommand.ontology.Position;
 import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.prolog.PrologQueries;
+import it.unige.portcommand.util.ConversationClock;
 import jade.core.AID;
 import jade.core.Agent;
 import jade.core.behaviours.CyclicBehaviour;
@@ -241,17 +242,18 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
 
         // Real urgency inputs since 2026-08-10 (audit P1-9); all three used to be hard-coded.
         //
-        // timeUsedSec: elapsed REAL seconds since this dialogue opened, measured off the shared
-        // SimClock conversion the tab's "~Ns remaining" countdown uses, against the same PUBLIC
-        // nominal window (Settings.timeLimitSeconds). One clock, two consumers. Real seconds, not
-        // sim: the term is normalised by a pacing-invariant window, and elapsed SIM seconds
-        // against the old 600-sim-second constant saturated ~2 wall-seconds in at 300 s/day,
-        // which would have swapped a dead term for a permanently-maxed one. This deliberately
-        // tracks the OBSERVABLE window and never the vessel's hidden maxWaitMinutes (P-04).
-        long openedAt = hm.negotiationOpenedAt()
-                .computeIfAbsent(dialogueId, id -> hm.simClock().nowSimMillis());
-        double timeUsedSec = hm.simClock()
-                .realSecondsForSimMillis(Math.max(0L, hm.simClock().nowSimMillis() - openedAt));
+        // timeUsedSec / timeLimitSec, S14 (ADR-18): the dialogue's CONVERSATION clock — the same
+        // elapsed and total the tab's live m:ss counter is drawn from, read here under one lock.
+        // One clock, two consumers: the Assistant's urgency reasons from exactly what the player
+        // watches. It replaces the P1-9 nominal window (elapsed sim time against
+        // Settings.timeLimitSeconds), which matched nothing a vessel actually did. The vessel
+        // opens its conversation BEFORE sending the opening offer, so the view is there by the
+        // time this runs; a dialogue with no conversation on the clock (a hand-built IT vessel)
+        // carries NO_TIME_LIMIT and the urgency time term stays neutral — never "out of time".
+        Optional<ConversationClock.View> counter = hm.simClock().conversationClock().view(dialogueId);
+        double timeUsedSec = counter.map(v -> v.elapsedMillis() / 1000.0).orElse(0.0);
+        double timeLimitSec = counter.map(v -> v.totalMillis() / 1000.0)
+                .orElse(WalkInDialogueSnapshot.NO_TIME_LIMIT);
         double lastPlayerOffer = hm.negotiationPlayerOffers().getOrDefault(dialogueId, 0.0);
         // threatenedWithdrawal, live since 2026-08-10 (audit P1-9 follow-up), DERIVED rather than
         // taken off the wire: the dialogue is on its last round when roundLimit + 1 - roundsUsed
@@ -270,7 +272,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         // dispatch arrives with task 17, matching every other EventBus consumer today.
         WalkInDialogueSnapshot snapshot = WalkInDialogueSnapshot.of(
                 spec.vesselId(), spec, berthId, hours, price, lastPlayerOffer, roundsUsed,
-                timeUsedSec, finalRound);
+                timeUsedSec, finalRound).withTime(timeUsedSec, timeLimitSec);
         hm.eventBus().publish(new NegotiationOpenedEvent(dialogueId, snapshot));
         log.info("{}: {} forwarded (round {}, berth {}, price {})",
                 spec.vesselId(), roundsUsed == 1 ? "opening offer" : "counter", roundsUsed, berthId, price);
@@ -526,7 +528,6 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
     private static void forgetDialogue(HarbourMasterAgent hm, String dialogueId) {
         hm.negotiationBerths().remove(dialogueId);
         hm.negotiationRounds().remove(dialogueId);
-        hm.negotiationOpenedAt().remove(dialogueId);
         hm.negotiationPlayerOffers().remove(dialogueId);
     }
 

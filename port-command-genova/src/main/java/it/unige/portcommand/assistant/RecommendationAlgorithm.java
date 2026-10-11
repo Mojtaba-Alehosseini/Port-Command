@@ -29,31 +29,25 @@ public final class RecommendationAlgorithm {
 
     private final MarketHistoryArtifact marketHistory;
     private final int roundLimit;
-    private final double timeLimitSec;
 
     /**
-     * Production: BOTH urgency budgets come from live {@code Settings} — the round limit (2..8,
-     * default 4) and the time window (30..180 s, default 60), the same two public figures the
-     * negotiation tab already renders as "Round N of M" and the countdown.
+     * Production: the round budget comes from live {@code Settings} (2..8, default 6) — the figure
+     * the negotiation tab renders as "Round N of M". The TIME budget is no longer a setting
+     * (S14, ADR-18): it is the vessel's own conversation counter, carried by each snapshot.
      */
     public RecommendationAlgorithm(MarketHistoryArtifact marketHistory) {
-        this(marketHistory, Settings.load().roundLimit(), Settings.load().timeLimitSeconds());
+        this(marketHistory, Settings.load().roundLimit());
     }
 
     /**
-     * Explicit-budget overload, so both urgency terms are testable across their configured ranges
+     * Explicit-budget overload, so the round term is testable across its configured range
      * without mutating {@code Settings}' JVM-lifetime cache. Settings stays a static classpath
      * read (INVARIANTS: never threaded through the bootstrap constructor chain) — the one-arg
      * constructor above self-reads it.
-     *
-     * <p>Three args rather than a second two-arg overload: {@code roundLimit} and
-     * {@code timeLimitSeconds} are both {@code int}, so {@code (artifact, int)} would be
-     * ambiguous and, worse, silently bind to whichever overload the compiler picked.
      */
-    public RecommendationAlgorithm(MarketHistoryArtifact marketHistory, int roundLimit, int timeLimitSeconds) {
+    public RecommendationAlgorithm(MarketHistoryArtifact marketHistory, int roundLimit) {
         this.marketHistory = Objects.requireNonNull(marketHistory, "marketHistory");
         this.roundLimit = roundLimit;
-        this.timeLimitSec = timeLimitSeconds;
     }
 
     public Recommendation run(WalkInDialogueSnapshot snapshot) {
@@ -67,8 +61,14 @@ public final class RecommendationAlgorithm {
         // DEFAULT_ROUND_LIMIT while ForwardWalkInToPlayerBehaviour derived its finalRound flag
         // from Settings.roundLimit() — the same figure from two sources, which is exactly the
         // drift the time-limit injection removed one session earlier.
+        // S14 (ADR-18): the time term is the vessel's VISIBLE conversation counter — elapsed against
+        // total, exactly what the player's tab shows — instead of a nominal Settings window. A
+        // snapshot that carries no counter adds no time pressure (and UrgencyCalculator rejects a
+        // non-positive limit, so the branch is here rather than inside it).
+        boolean hasCounter = snapshot.timeLimitSec() > 0.0;
         double urgency = UrgencyCalculator.compute(snapshot.roundsUsed(), roundLimit,
-                snapshot.timeUsedSec(), timeLimitSec, snapshot.threatenedWithdrawal());
+                hasCounter ? snapshot.timeUsedSec() : 0.0, hasCounter ? snapshot.timeLimitSec() : 1.0,
+                snapshot.threatenedWithdrawal());
         double marginalCost = ExpenseRules.marginalCost(snapshot.vesselType(), snapshot.cargoClass(),
                 snapshot.durationHours(), snapshot.tonnage());
 

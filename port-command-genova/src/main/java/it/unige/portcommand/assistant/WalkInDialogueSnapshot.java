@@ -20,6 +20,13 @@ import it.unige.portcommand.ontology.VesselSpec;
  * Reading them here would be the exact oral-exam attack rehearsed in job5 §5.4 Q2.
  * {@link WalkInDialogueSnapshotPrivacyTest} guards this reflectively.
  *
+ * <p><b>The conversation clock (S14, ADR-18).</b> {@code timeUsedSec} and {@code timeLimitSec} are
+ * the vessel's live counter exactly as the player's tab shows it: real seconds the conversation
+ * has run, and the total it will run (elapsed + remaining, bonuses included). How long a vessel
+ * waits is therefore ON SCREEN now — a deliberate S14 decision — and the Assistant may reason from
+ * the same number the player sees. The price and personality beliefs behind it stay hidden; this
+ * type still carries none of them. {@link #NO_TIME_LIMIT} means "no counter is known".
+ *
  * <p><b>{@code vesselName} (task 16-M2)</b> is observable, NOT a hidden belief: a vessel's name
  * is painted on the hull, broadcast over AIS, and spoken in the vessel's own radio hail
  * ("Harbour Master, this is MV Genoa Star…"). The 16-M2 DCG resolves vocatives and definite
@@ -41,7 +48,11 @@ public record WalkInDialogueSnapshot(
         int roundsUsed,
         double timeUsedSec,
         boolean threatenedWithdrawal,
-        String vesselName) {
+        String vesselName,
+        double timeLimitSec) {
+
+    /** {@code timeLimitSec} when no conversation counter is known (hand-built snapshots, tests). */
+    public static final double NO_TIME_LIMIT = 0.0;
 
     public WalkInDialogueSnapshot {
         Objects.requireNonNull(vesselId, "vesselId");
@@ -62,6 +73,29 @@ public record WalkInDialogueSnapshot(
                                   boolean threatenedWithdrawal) {
         this(vesselId, vesselType, draft, length, tonnage, cargoClass, berthId, durationHours, lastVesselOffer,
                 lastPlayerOffer, roundsUsed, timeUsedSec, threatenedWithdrawal, vesselId);
+    }
+
+    /** The pre-S14 named form: no conversation counter ({@link #NO_TIME_LIMIT}). */
+    public WalkInDialogueSnapshot(String vesselId, String vesselType, double draft, double length, int tonnage,
+                                  String cargoClass, String berthId, int durationHours, double lastVesselOffer,
+                                  double lastPlayerOffer, int roundsUsed, double timeUsedSec,
+                                  boolean threatenedWithdrawal, String vesselName) {
+        this(vesselId, vesselType, draft, length, tonnage, cargoClass, berthId, durationHours, lastVesselOffer,
+                lastPlayerOffer, roundsUsed, timeUsedSec, threatenedWithdrawal, vesselName, NO_TIME_LIMIT);
+    }
+
+    /** A copy with the player's standing offer replaced — every other field, the counter included. */
+    public WalkInDialogueSnapshot withLastPlayerOffer(double playerOffer) {
+        return new WalkInDialogueSnapshot(vesselId, vesselType, draft, length, tonnage, cargoClass, berthId,
+                durationHours, lastVesselOffer, playerOffer, roundsUsed, timeUsedSec, threatenedWithdrawal,
+                vesselName, timeLimitSec);
+    }
+
+    /** A copy with the conversation counter replaced: elapsed and total, in real seconds (S14). */
+    public WalkInDialogueSnapshot withTime(double usedSec, double limitSec) {
+        return new WalkInDialogueSnapshot(vesselId, vesselType, draft, length, tonnage, cargoClass, berthId,
+                durationHours, lastVesselOffer, lastPlayerOffer, roundsUsed, usedSec, threatenedWithdrawal,
+                vesselName, limitSec);
     }
 
     /** The round-1 opening move: the vessel has proposed, the player has not countered yet. */

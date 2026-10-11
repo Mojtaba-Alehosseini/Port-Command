@@ -36,6 +36,10 @@ public final class WalkInVesselAgent extends BaseVesselAgent {
     private RandomSource randomSource;
     private final AtomicReference<WalkInState> stateRef = new AtomicReference<>();
     private final AtomicBoolean concluded = new AtomicBoolean(false);
+    /** S14 (ADR-18): this dialogue's patience on the conversation clock — set by the opening
+     * proposal, extended by the counter-eval, watched by the timeout. Null until the opening. */
+    private final AtomicReference<it.unige.portcommand.util.ConversationClock.Conversation> conversationRef =
+            new AtomicReference<>();
     private String conversationId;
 
     @Override
@@ -102,6 +106,10 @@ public final class WalkInVesselAgent extends BaseVesselAgent {
         Personality personality = template.samplePersonality(r);
         double min = template.sampleMinAcceptablePrice(r);
         double target = template.sampleTargetPrice(r);
+        // S14 (ADR-18): this draw no longer decides anything — patience is conversation time
+        // (PatiencePolicy), not these sim-minutes. It is still TAKEN, and still carried in
+        // WalkInState and the save, because the "vessel-"+id stream is replay-pinned: skipping
+        // the draw would shift the hours draw below and change every seeded walk-in's stay.
         int wait = template.sampleMaxWaitMinutes(r);
         int hours = 6 + r.nextInt(13); // 6..18 sim-hours of desired service
         // Task 23: scenario-pinned beliefs (optional args entry, found by type) REPLACE the
@@ -128,9 +136,11 @@ public final class WalkInVesselAgent extends BaseVesselAgent {
         // Isolated substream (task 19 STEP 1): a fresh draw here must never shift the
         // "vessel-"+id stream's own sequence, which other tests/replication already depend on.
         double openingRoll = randomSource.forStream("opening-" + spec.vesselId()).nextDouble();
-        addBehaviour(new OpeningProposalBehaviour(this, stateRef, conversationId, concluded, openingRoll));
-        addBehaviour(new EvaluateCounterOfferBehaviour(this, stateRef, engine, conversationId, concluded));
-        addBehaviour(new TimeoutWithdrawalBehaviour(this, simClock(), stateRef, conversationId, concluded));
+        addBehaviour(new OpeningProposalBehaviour(this, stateRef, conversationRef, conversationId, concluded,
+                openingRoll));
+        addBehaviour(new EvaluateCounterOfferBehaviour(this, stateRef, conversationRef, engine, conversationId,
+                concluded));
+        addBehaviour(new TimeoutWithdrawalBehaviour(this, conversationRef, stateRef, conversationId, concluded));
     }
 
     // --- hidden-belief accessors: package-private only; never public, never in ACL content ---

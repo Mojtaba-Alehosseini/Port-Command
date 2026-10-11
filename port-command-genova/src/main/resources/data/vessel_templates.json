@@ -17,6 +17,11 @@
 //                               (scheduled, impatient) < container (brisk) < tanker = cruise <
 //                               cargo (pragmatic, most patient) — the task-07 relative ordering,
 //                               preserved. §7.5 price columns untouched.
+// S14 (2026-10-11, ADR-18): max_wait_minutes_range NO LONGER DECIDES ANYTHING. Walk-in patience is
+//   conversation time in real seconds (negotiation/PatiencePolicy, same ordering), and
+//   Settings.timeLimitSeconds is retired. The ranges stay, and the value is still drawn and saved,
+//   only because the draw sits in the replay-pinned "vessel-"+id RNG stream ahead of the stay-length
+//   draw: removing either would change every seeded walk-in. Do not tune these expecting an effect.
 // Task 19b (§7.3 duration bargaining):
 //   min_duration_range         = the draw range of the HIDDEN cargo-handling floor (hours). The
 //                               spawn clamps the draw to the vessel's announced preferred stay

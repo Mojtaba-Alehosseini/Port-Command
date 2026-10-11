@@ -93,8 +93,8 @@ class SaveLoadMidTransitIT {
         // instant — a task-23 daily contracted arrival mid-grant, or a task-24 Poisson walk-in with
         // an open, unanswered negotiation ("Finish the current negotiation with WALKIN-1 before
         // saving"). The contracted grant clears in well under a sim minute; the walk-in does NOT —
-        // nothing here answers it, so it blocks until its patience runs out. See
-        // WALK_IN_PATIENCE_HEADROOM_MS for the arithmetic and why the old 15 s budget was wrong.
+        // nothing here answers it, so it blocks until its patience runs out. See saveNowRetrying
+        // for how the helper lets that patience run out (S14: it is real conversation time now).
         Path saved = saveNowRetrying(session, WALK_IN_PATIENCE_HEADROOM_MS);
         GameState savedState = new SaveLoadManager(tempDir).load(saved);
         double walletAtSave = savedState.wallet();
@@ -365,10 +365,22 @@ class SaveLoadMidTransitIT {
      * spawn in the window; once one did it failed on a clean tree as readily as on a modified one
      * (reproduced both ways, 2026-08-10). {@link #WALK_IN_PATIENCE_HEADROOM_MS} covers the top of
      * that range with margin. The wait stays bounded with an explicit deadline (design rule 5).
+     *
+     * <p><b>S14 (2026-10-11, ADR-18): waiting the patience out is no longer possible, so the helper
+     * lets it run out.</b> A walk-in's patience stopped being game time. It is conversation time —
+     * 90-270 REAL seconds by vessel type and personality ({@code PatiencePolicy}), the same at any
+     * game pace — so the top of the range is now well past the 150 s budget above, and no pacing
+     * shortens it. Nothing in this test answers a Poisson walk-in, so on each refusal the helper
+     * plays the player who lets the offer lapse: ten minutes pass on the conversation clock
+     * (directly — NOT through {@code SimClock.advance}, so game time and every flow deadline this
+     * test measures stay where they are), the vessel's own 250 ms poll sees its patience gone and
+     * withdraws with {@code "timeout"}, and a retry a few hundred wall-ms later finds no open
+     * dialogue. A vessel whose deal already closed has no conversation left on the clock and is
+     * untouched — WT5 in the queue case below stays queued.
      */
-    /** Long enough to outlast an unanswered walk-in's full patience at this test's pacing:
-     * the widest template range is 480 sim-minutes, which is 100 wall-seconds at 300 s/game-day.
-     * Only ever waited out when a Poisson walk-in actually spawns into the save window. */
+    /** The retry budget. Sized (2026-08-10) to outlast an unanswered walk-in's patience when that
+     * was game time; since S14 the helper ends the negotiation itself, so this is headroom over a
+     * wait that is normally under a second. */
     private static final long WALK_IN_PATIENCE_HEADROOM_MS = 150_000L;
 
     private Path saveNowRetrying(GameSession session, long timeoutMs) throws Exception {
@@ -380,6 +392,7 @@ class SaveLoadMidTransitIT {
                 if (System.currentTimeMillis() >= deadline) {
                     throw transientRefusal;
                 }
+                boot.getSimClock().conversationClock().advance(600_000L);
                 Thread.sleep(100);
             }
         }

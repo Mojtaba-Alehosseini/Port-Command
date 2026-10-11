@@ -9,8 +9,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import it.unige.portcommand.agents.BaseVesselAgent;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.negotiation.PatiencePolicy;
 import it.unige.portcommand.negotiation.Personality;
 import it.unige.portcommand.negotiation.WalkInState;
+import it.unige.portcommand.util.ConversationClock;
 import jade.core.AID;
 import jade.core.Agent;
 import jade.core.behaviours.OneShotBehaviour;
@@ -24,12 +26,17 @@ import org.slf4j.LoggerFactory;
  * javadoc) and the desired duration to the HarbourMaster, and stamp the negotiation
  * start time. Only price / hours / vessel_spec go on the wire — the hidden beliefs
  * stay in {@link WalkInState}.
+ *
+ * <p>S14 (ADR-18): it also starts the dialogue's conversation clock — the vessel's patience, in
+ * real seconds ({@link PatiencePolicy}) — and hands the handle to its sibling behaviours through
+ * {@code conversationRef}.
  */
 public final class OpeningProposalBehaviour extends OneShotBehaviour {
 
     private static final Logger log = LoggerFactory.getLogger(OpeningProposalBehaviour.class);
 
     private final AtomicReference<WalkInState> stateRef;
+    private final AtomicReference<ConversationClock.Conversation> conversationRef;
     private final String conversationId;
     private final AtomicBoolean concluded;
     private final double openingRoll;
@@ -42,9 +49,11 @@ public final class OpeningProposalBehaviour extends OneShotBehaviour {
      *                    function with no {@code java.util.Random} dependency here.
      */
     public OpeningProposalBehaviour(Agent agent, AtomicReference<WalkInState> stateRef,
+                                    AtomicReference<ConversationClock.Conversation> conversationRef,
                                     String conversationId, AtomicBoolean concluded, double openingRoll) {
         super(agent);
         this.stateRef = stateRef;
+        this.conversationRef = conversationRef;
         this.conversationId = conversationId;
         this.concluded = concluded;
         this.openingRoll = openingRoll;
@@ -74,6 +83,11 @@ public final class OpeningProposalBehaviour extends OneShotBehaviour {
         propose.addReceiver(harbourMaster.get());
         propose.setConversationId(conversationId);
         propose.setContent(TerminalJson.write(content));
+        // S14 (ADR-18): patience starts BEFORE the offer leaves. The HarbourMaster reads this
+        // conversation's view the moment it forwards the offer (the snapshot's counter), on its
+        // own thread — opening after the send would let it find nothing there.
+        conversationRef.set(vessel.simClock().conversationClock().open(conversationId,
+                PatiencePolicy.budgetMillis(vessel.spec().vesselType(), state.personality())));
         myAgent.send(propose);
 
         stateRef.set(state.markStarted(vessel.simClock().nowSimMillis())

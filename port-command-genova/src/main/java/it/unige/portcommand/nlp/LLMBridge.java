@@ -165,6 +165,13 @@ public final class LLMBridge {
      * with {@link LLMTimeoutException}; on any other HTTP/parse failure, with {@link
      * NlpServiceException}.
      */
+    /** The longest {@link #explain} may take before its future fails with a timeout — resolved
+     * at construction from {@code -Dllm.timeout_ms} / {@code defaults.json}. S14: the Hint's
+     * patience freeze sizes its lease from this, so the two can never disagree. */
+    public Duration timeout() {
+        return timeout;
+    }
+
     public CompletableFuture<LLMResponse> explain(LLMRequest request) {
         Objects.requireNonNull(request, "request");
         HttpRequest httpRequest;

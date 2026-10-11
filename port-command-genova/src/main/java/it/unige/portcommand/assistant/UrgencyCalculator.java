@@ -6,8 +6,9 @@ package it.unige.portcommand.assistant;
  * [0.4, 1.0] factor that scales each counter candidate's acceptance probability.
  *
  * <p><b>Units (settled 2026-08-10, audit P1-9):</b> {@code timeUsedSec} and {@code timeLimitSec}
- * are both REAL seconds — the same pacing-invariant scale the negotiation tab's "~Ns remaining"
- * countdown uses. See the note where the old sim-second constant used to live.
+ * are both REAL seconds. Since S14 (ADR-18) they are the vessel's visible conversation counter —
+ * elapsed, and elapsed plus remaining — exactly the {@code m:ss} figure on the negotiation tab.
+ * See the note where the old sim-second constant used to live.
  */
 public final class UrgencyCalculator {
 
@@ -39,6 +40,12 @@ public final class UrgencyCalculator {
     // maxWaitMinutes (P-04), so the Assistant reasons from what the player can see, not from
     // privileged state. No fallback constant survives: Settings.load() falls back to
     // Settings.defaults() internally, so a "Settings unavailable" case does not exist.
+    //
+    // S14 (2026-10-11, ADR-18): that nominal window is gone too. Patience became real
+    // conversation time with a live per-vessel counter on the tab, so the caller now passes the
+    // counter itself — timeUsedSec = elapsed, timeLimitSec = elapsed + remaining — and
+    // Settings.timeLimitSeconds was retired. The principle above is unchanged and stronger: the
+    // term is exactly the number the player is looking at.
 
     private UrgencyCalculator() {
     }

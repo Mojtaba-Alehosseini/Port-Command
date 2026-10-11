@@ -41,7 +41,7 @@ class WalkInDialogueSnapshotPrivacyTest {
         // changes, and has to consciously re-check the privacy constraint above.
         List<String> expected = List.of("vesselId", "vesselType", "draft", "length", "tonnage", "cargoClass",
                 "berthId", "durationHours", "lastVesselOffer", "lastPlayerOffer", "roundsUsed", "timeUsedSec",
-                "threatenedWithdrawal", "vesselName");
+                "threatenedWithdrawal", "vesselName", "timeLimitSec");
         List<String> actual = List.of(WalkInDialogueSnapshot.class.getRecordComponents()).stream()
                 .map(RecordComponent::getName)
                 .toList();
