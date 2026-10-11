@@ -4,6 +4,7 @@ import java.awt.Rectangle;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -69,5 +70,122 @@ class PauseOverlayTest {
 
         assertFalse(overlay.contains(-1, 400));
         assertFalse(overlay.contains(640, 801));
+    }
+
+    // ==================== S14: the chat passes through, so the player can type while paused ====================
+
+    /** A stand-in for the chat panel: the middle column of the window, below the HUD. */
+    private static final Rectangle CHAT = new Rectangle(600, 60, 360, 700);
+
+    private static PauseOverlay overlayWithChat() {
+        PauseOverlay overlay = new PauseOverlay(() -> { }, () -> MENU_BAR, () -> CHAT);
+        overlay.setBounds(0, 0, 1280, 800);
+        overlay.doLayout(); // gives the PAUSED box its real bounds (the test below needs them)
+        return overlay;
+    }
+
+    @Test
+    void clicksOnTheChatFallThroughSoThePlayerCanTypeWhilePaused() {
+        PauseOverlay overlay = overlayWithChat();
+
+        assertFalse(overlay.contains(700, 740), "the chat input row must be reachable while paused");
+        assertFalse(overlay.contains(601, 61), "the chat's corner counts too");
+        assertFalse(overlay.contains(40, 8), "and the menu bar still passes through");
+    }
+
+    @Test
+    void everythingElseStaysBlockedWhilePaused() {
+        PauseOverlay overlay = overlayWithChat();
+
+        assertTrue(overlay.contains(200, 400), "the map stays blocked");
+        assertTrue(overlay.contains(1100, 400), "the comm log stays blocked");
+        assertTrue(overlay.contains(200, 40), "the HUD strip stays blocked");
+        assertTrue(overlay.contains(599, 400), "one pixel left of the chat is still blocked");
+    }
+
+    @Test
+    void theOverlaysOwnPausedBoxStaysClickableWhereItOverlapsTheChat() {
+        // The box is centred on the window and is not moved for the chat (a UI redesign follows);
+        // wherever it lands, its Resume button must not fall through to the chat underneath.
+        PauseOverlay overlay = overlayWithChat();
+        javax.swing.JButton resume = null;
+        for (java.awt.Component child : overlay.getComponents()) {
+            if (child instanceof javax.swing.JButton button) {
+                resume = button;
+            }
+        }
+        assertTrue(resume != null, "fixture: the overlay has its Resume button");
+        Rectangle button = resume.getBounds();
+        assertFalse(button.isEmpty(), "fixture: the button was laid out");
+        int x = button.x + button.width / 2;
+        int y = button.y + button.height / 2;
+        assertTrue(CHAT.contains(x, y), "fixture: this layout really does put the button over the chat ("
+                + button + ")");
+
+        assertTrue(overlay.contains(x, y), "a click on Resume must reach the overlay, not the chat");
+    }
+
+    @Test
+    void theClickBlockingPatchIsTheWholeCaptionBoxNotJustTheButton() {
+        // Caption, hint line and Resume button are one group with a margin: a click anywhere on
+        // "PAUSED" must not type into the chat underneath it.
+        PauseOverlay overlay = overlayWithChat();
+        Rectangle box = overlay.captionBox();
+        assertFalse(box.isEmpty(), "fixture: the group was laid out");
+        Rectangle overChat = box.intersection(CHAT);
+        assertFalse(overChat.isEmpty(), "fixture: this layout puts part of the group over the chat");
+
+        assertTrue(overlay.contains(overChat.x + overChat.width - 1, overChat.y + 1),
+                "the group's far corner over the chat is still the overlay's");
+        assertFalse(overlay.contains(box.x + box.width + 5, box.y + 1),
+                "just outside the group, the chat passes through again");
+    }
+
+    @Test
+    void theCaptionStaysDimmedOverTheChatSoItsWhiteTextIsLegible() {
+        // The chat is left undimmed so it can be read — but the PAUSED group straddles the
+        // map | chat boundary at the default dividers, and white text on a white transcript is
+        // not a pause indicator (adversarial review, S14). Painted for real, headless.
+        PauseOverlay overlay = overlayWithChat();
+        Rectangle box = overlay.captionBox();
+        java.awt.image.BufferedImage image =
+                new java.awt.image.BufferedImage(1280, 800, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = image.createGraphics();
+        try {
+            g.setColor(java.awt.Color.WHITE);
+            g.fillRect(0, 0, 1280, 800);
+            overlay.paint(g);
+        } finally {
+            g.dispose();
+        }
+        int white = 0xFFFFFF;
+        // The padded corner of the group: inside the box, inside the chat, on none of the children.
+        int cornerX = box.x + box.width - 3;
+        int cornerY = box.y + 3;
+        assertTrue(CHAT.contains(cornerX, cornerY), "fixture: the sampled corner is over the chat");
+
+        assertTrue((image.getRGB(cornerX, cornerY) & 0xFFFFFF) != white,
+                "behind the PAUSED group the scrim must stay, even over the chat");
+        assertEquals(white, image.getRGB(CHAT.x + CHAT.width - 10, CHAT.y + 10) & 0xFFFFFF,
+                "the rest of the chat is left undimmed");
+        assertTrue((image.getRGB(100, 400) & 0xFFFFFF) != white, "the map is dimmed as before");
+        assertEquals(white, image.getRGB(100, 10) & 0xFFFFFF, "the menu strip is left undimmed as before");
+    }
+
+    @Test
+    void withNoChatRegionTheTwoArgOverlayBehavesExactlyAsBefore() {
+        PauseOverlay overlay = overlay(MENU_BAR);
+
+        assertTrue(overlay.contains(700, 740), "no chat region supplied: that area is blocked as it always was");
+    }
+
+    @Test
+    void showingTheOverlayHeadlessDoesNotThrow() {
+        // setVisible consults the focus owner to decide whether to take focus; with no window
+        // and no focus owner (the test lane) that must simply fall back to the old behaviour.
+        PauseOverlay overlay = overlayWithChat();
+        overlay.setVisible(true);
+        overlay.setVisible(false);
+        assertFalse(overlay.isVisible());
     }
 }
