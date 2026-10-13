@@ -181,4 +181,65 @@ class EndOfDaySummaryModelTest {
         org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
                 () -> summary.performativeCounts().put("REQUEST", 1));
     }
+
+    // ---- S17b (ADR-22, decision E8): the report and the score card are one window ----
+
+    private static EndOfDaySummary scored(int day, double income, double expense, double target,
+                                          String scenarioName) {
+        var score = new it.unige.portcommand.harbourmaster.financial.DayScore(
+                day, income - expense, target, 2, 3, 0, 1, 1.0);
+        return new EndOfDaySummary(day, income, expense, 50_000.0, 51, performatives(), score, scenarioName);
+    }
+
+    @Test
+    void anOrdinaryEndOfDayHasTheScoreBlockAndOneButton() {
+        EndOfDaySummaryModel model = model(scored(3, 8_840.0, 5_200.0, 5_000.0, null), List.of());
+
+        assertEquals("DAY 3 SUMMARY", model.title());
+        assertEquals(List.of(EndOfDaySummaryModel.CONTINUE), model.buttons());
+        assertEquals(List.of("Continue"), model.buttons());
+        assertEquals(List.of(
+                "SCORE 75 / 100",
+                "  Money       18.2 / 25   net €3,640 of the €5,000 target",
+                "  Walk-ins    16.7 / 25   2 deals of 3 ships",
+                "  Safety      25.0 / 25   unsafe moves 0 · blocked: 1",
+                "  Reputation  15.0 / 25   +1 today"), model.scoreLines());
+        List<String> lines = model.lines();
+        assertEquals("SCORE 75 / 100", lines.get(2), "the score comes first, under the title");
+        assertTrue(lines.indexOf("SCORE 75 / 100") < lines.indexOf(
+                lines.stream().filter(l -> l.startsWith("Total income:")).findFirst().orElseThrow()));
+    }
+
+    /** One window at the scenario's first midnight: its name, its score, and the two ways on. */
+    @Test
+    void aScenariosEndIsTitledWithTheScenarioAndOffersFreePlayOrClose() {
+        EndOfDaySummaryModel model = model(
+                scored(1, 7_500.0, 3_966.67, 3_500.0, "Tutorial — Calm Morning"), List.of());
+
+        assertTrue(model.endsScenario());
+        assertEquals("TUTORIAL — CALM MORNING — FINISHED", model.title());
+        assertEquals(List.of("Continue in free play", "Close"), model.buttons());
+        assertEquals("TUTORIAL — CALM MORNING — FINISHED", model.lines().get(0));
+    }
+
+    /** Decision E4: the day is measured against the target it was played for, not the global one. */
+    @Test
+    void theTargetLineUsesTheTargetTheDayWasScoredAgainst() {
+        // Net 3,533: over the tutorial's 3,500, under the 5,000 the dialog is handed as a fallback.
+        EndOfDaySummaryModel model = model(
+                scored(1, 7_500.0, 3_966.67, 3_500.0, "Tutorial — Calm Morning"), List.of());
+
+        assertTrue(model.targetMet());
+        assertTrue(joined(model).contains("€3,500  ✓ MET"), joined(model));
+    }
+
+    @Test
+    void aSummaryWithoutAScoreRendersAsBefore() {
+        EndOfDaySummaryModel model = model(summary(2, 1_000.0, 5_200.0, 50), List.of());
+
+        assertEquals(List.of(), model.scoreLines());
+        assertEquals(List.of("Continue"), model.buttons());
+        assertEquals("", model.lines().get(1));
+        assertTrue(model.lines().get(2).startsWith("Total income:"), "no empty score block");
+    }
 }

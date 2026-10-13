@@ -160,6 +160,8 @@ public final class MainWindow extends JFrame {
     private JMenuItem saveItem;
     private JMenuItem loadItem;
     private JMenuItem settingsItem;
+    /** S17b (PT8): Game ▸ Call Next Ship. */
+    private JMenuItem callNextShipItem;
     /** True while a load worker thread owns the world — menus disabled, no re-entry. */
     private boolean loadInProgress;
     /** True from the moment {@link #saveGame()} starts its worker until the worker's
@@ -284,6 +286,15 @@ public final class MainWindow extends JFrame {
         this.endOfDayDialog.addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentHidden(java.awt.event.ComponentEvent e) {
+                // S17b (decision E8): Close on a scenario's end. The scenario is over and the
+                // player does not want to carry on in free play: the game stays paused and the
+                // New Game dialog opens. Cancelling that leaves the finished day on screen,
+                // paused - Resume (or Esc) is then "continue in free play" after all.
+                if (endOfDayDialog.takeCloseRequested()) {
+                    pausedForEndOfDay = false;
+                    chooseAndStartGame();
+                    return;
+                }
                 if (pausedForEndOfDay) {
                     pausedForEndOfDay = false;
                     lifecycle.resumeIfPaused();
@@ -461,9 +472,14 @@ public final class MainWindow extends JFrame {
         quitItem.addActionListener(e -> confirmQuit());
         JMenuItem exit = new JMenuItem("Exit");
         exit.addActionListener(e -> shutdownAndExit(onClose));
+        // S17b (playtest 2, PT8): the same request as the top bar's "Next ship" button.
+        callNextShipItem = new JMenuItem("Call Next Ship");
+        callNextShipItem.addActionListener(
+                e -> eventBus.publish(new it.unige.portcommand.gui.events.CallNextShipEvent()));
         game.add(pauseItem);
         game.add(resumeItem);
         game.add(buildSpeedMenu(eventBus));
+        game.add(callNextShipItem);
         game.addSeparator();
         game.add(saveItem);
         game.add(loadItem);
@@ -571,6 +587,18 @@ public final class MainWindow extends JFrame {
             item.setEnabled(!locked);
             item.setToolTipText(locked ? GameSpeedModel.SCRIPT_LOCK_TOOLTIP : null);
         }
+        reflectCallNextShip();
+    }
+
+    /** S17b (PT8): "Call Next Ship" needs a running game whose scenario script is done. */
+    private void reflectCallNextShip() {
+        if (callNextShipItem == null) {
+            return;
+        }
+        boolean running = lifecycle.mode() == GameMode.RUNNING;
+        boolean locked = speedControl.scriptPending();
+        callNextShipItem.setEnabled(!loadInProgress && running && !locked);
+        callNextShipItem.setToolTipText(locked ? "The scenario's own ships are still arriving" : null);
     }
 
     /** Settings → Settings…: opens the four-knob dialog seeded with the current live values (day
@@ -889,6 +917,21 @@ public final class MainWindow extends JFrame {
         }
     }
 
+    /**
+     * S17b (adversarial review): the Debug menu re-shows the latest settled day as a REPORT. If
+     * that day ended a scenario, the live window had "Continue in free play" and "Close"; showing
+     * it again an hour into free play would be the scenario's end a second time, with a Close
+     * that opens New Game over a running game. Same figures and score, an ordinary day's window.
+     */
+    private static EndOfDaySummary asAnOrdinaryDay(EndOfDaySummary summary) {
+        if (!summary.endsScenario()) {
+            return summary;
+        }
+        return new EndOfDaySummary(summary.gameDay(), summary.income(), summary.totalExpense(),
+                summary.endingWallet(), summary.endingReputation(), summary.performativeCounts(),
+                summary.score(), null);
+    }
+
     /** One place maps {@link GameMode} → overlay visibility + menu enablement. */
     private void reflectMode() {
         GameMode mode = lifecycle.mode();
@@ -908,6 +951,7 @@ public final class MainWindow extends JFrame {
         boolean loadable = mode != GameMode.LOADING;
         loadItem.setEnabled(!loadInProgress && loadable);
         settingsItem.setEnabled(settingsAvailableIn(mode)); // S15: not in the empty shell
+        reflectCallNextShip();
     }
 
     /**
@@ -920,7 +964,8 @@ public final class MainWindow extends JFrame {
         JMenu debug = new JMenu("Debug");
         JMenuItem showEod = new JMenuItem("Show End-of-Day Summary (latest)");
         showEod.addActionListener(e ->
-                endOfDayDialog.show(latestSummary != null ? latestSummary : syntheticSummary(), leaderboard));
+                endOfDayDialog.show(latestSummary != null ? asAnOrdinaryDay(latestSummary) : syntheticSummary(),
+                        leaderboard));
         debug.add(showEod);
         debug.addSeparator();
         // Checkpoint-#5 request: storms are rare by design (steady-state ≈4%) — these force the

@@ -59,6 +59,8 @@ public final class EndOfDaySummaryDialog extends JDialog {
     /** True while a {@link #DEFER_MS} defer is pending, so the timer and the focus-lost listener
      * (whichever fires first) reveal the dialog exactly once. */
     private boolean deferArmed;
+    /** S17b (E8): the player pressed Close on a scenario's end - read once by the window. */
+    private boolean closeRequested;
 
     /**
      * Registers the dialog's own listener. Construction does NOT show anything — the dialog opens
@@ -142,10 +144,18 @@ public final class EndOfDaySummaryDialog extends JDialog {
         report.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         report.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
 
+        // S17b (decision E8): an ordinary end of day has one button, Continue. A scenario's end
+        // has two: carry on in free play, or close the scenario and choose what to play next.
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
-        JButton continueButton = new JButton("Continue");
-        continueButton.addActionListener(e -> setVisible(false));
-        buttons.add(continueButton);
+        closeRequested = false;
+        for (String label : model.buttons()) {
+            JButton button = new JButton(label);
+            button.addActionListener(e -> {
+                closeRequested = EndOfDaySummaryModel.CLOSE.equals(label);
+                setVisible(false);
+            });
+            buttons.add(button);
+        }
         // [Save & Quit] and [View Leaderboard] are planning/20 §20.5's other two buttons. Save is
         // task 22's SaveLoadManager (not built) and the leaderboard screen is task 21's secondary
         // screens — wiring dead buttons that silently do nothing would be worse than omitting them.
@@ -154,6 +164,16 @@ public final class EndOfDaySummaryDialog extends JDialog {
         content.add(new JScrollPane(report), BorderLayout.CENTER);
         content.add(buttons, BorderLayout.SOUTH);
         return content;
+    }
+
+    /**
+     * S17b: whether the window was left with Close (only a scenario's end offers it). Reading it
+     * resets it, so one press is acted on once; closing the window by its title bar is Continue.
+     */
+    public boolean takeCloseRequested() {
+        boolean requested = closeRequested;
+        closeRequested = false;
+        return requested;
     }
 
     @Override

@@ -31,14 +31,57 @@ public final class EndOfDaySummaryModel {
     private final double dailyTargetEur;
     private final List<ScoreRecord> leaderboard;
 
+    /** The one button of an ordinary end of day, and the two of a scenario's end (S17b, E8). */
+    public static final String CONTINUE = "Continue";
+    public static final String CONTINUE_IN_FREE_PLAY = "Continue in free play";
+    public static final String CLOSE = "Close";
+
+    /**
+     * @param dailyTargetEur the target to measure the day against when the summary carries no
+     *                       score of its own (a synthetic summary); a settled day brings its own
+     *                       - the session's, which for a scenario is the scenario's (S17b, E4)
+     */
     public EndOfDaySummaryModel(EndOfDaySummary summary, double dailyTargetEur, List<ScoreRecord> leaderboard) {
         this.summary = summary;
-        this.dailyTargetEur = dailyTargetEur;
+        this.dailyTargetEur = summary.score() != null ? summary.score().targetEur() : dailyTargetEur;
         this.leaderboard = leaderboard == null ? List.of() : List.copyOf(leaderboard);
     }
 
+    /**
+     * "DAY 3 SUMMARY" - or, at a scenario's first midnight, the scenario and that it is over
+     * (S17b, decision E8): the end-of-day report and the score card are one window.
+     */
     public String title() {
+        if (summary.endsScenario()) {
+            return summary.scenarioName().toUpperCase(Locale.ROOT) + " — FINISHED";
+        }
         return "DAY " + summary.gameDay() + " SUMMARY";
+    }
+
+    /** Whether this window ends a scenario - it then offers free play or closing the game. */
+    public boolean endsScenario() {
+        return summary.endsScenario();
+    }
+
+    /** The window's buttons, left to right. */
+    public List<String> buttons() {
+        return endsScenario() ? List.of(CONTINUE_IN_FREE_PLAY, CLOSE) : List.of(CONTINUE);
+    }
+
+    /**
+     * The score block: the total, then the four parts with the figures behind them - the same
+     * four lines the top bar shows on hover. Empty for a summary that carries no score.
+     */
+    public List<String> scoreLines() {
+        if (summary.score() == null) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        out.add("SCORE " + summary.score().total() + " / 100");
+        for (String line : HUDModel.scoreLines(summary.score())) {
+            out.add("  " + line);
+        }
+        return List.copyOf(out);
     }
 
     /** {@code true} when the day's net margin met or beat the target. */
@@ -51,6 +94,10 @@ public final class EndOfDaySummaryModel {
         List<String> out = new ArrayList<>();
         out.add(title());
         out.add("");
+        if (!scoreLines().isEmpty()) {
+            out.addAll(scoreLines());
+            out.add("");
+        }
         out.add(pad("Total income:") + euro(summary.income()));
         out.add(pad("Total expenses:") + euro(summary.totalExpense()));
         out.add(pad("Net margin:") + euro(summary.net()));
