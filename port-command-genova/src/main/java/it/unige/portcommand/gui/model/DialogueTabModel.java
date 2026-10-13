@@ -3,7 +3,9 @@ package it.unige.portcommand.gui.model;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
+import it.unige.portcommand.assistant.HintCard;
 import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.ontology.Deal;
@@ -24,8 +26,11 @@ public final class DialogueTabModel {
      *
      * @param tag S15 (2026-10-12): the small grey note shown after a PLAYER message saying how it
      *            was read — {@code (DCG)} / {@code (Rasa 0.97)}, see {@link ParseTag}. Empty for
-     *            every other speaker and for a player message nothing has been said about yet
-     *            (the parse is still running, or the turn was not routed). Never {@code null}.
+     *            a player message nothing has been said about yet (the parse is still running, or
+     *            the turn was not routed). S17a (ADR-21): on the ASSISTANT entry of a Hint that
+     *            came with a card it is the card's details line ({@link HintCard#details()}),
+     *            drawn under the hint's text in the same small grey — the one other entry that
+     *            carries a note. Empty for every other entry. Never {@code null}.
      */
     public record ChatEntry(Speaker speaker, String text, String tag) {
         public ChatEntry {
@@ -58,6 +63,14 @@ public final class DialogueTabModel {
      * may replace. The transcript never removes or reorders entries, so the index stays valid. */
     private long latestHintId = AssistantChatEvent.NO_HINT;
     private int latestHintIndex = -1;
+    /** S17a (ADR-21): the newest Hint's recommendation as data — what the tab's hint row offers
+     * as "Use this" — or {@code null} when that Hint came without one (or no Hint was shown yet).
+     * It belongs to {@link #latestHintId}: a newer Hint replaces it, a revision of the text leaves
+     * it alone. Whether it still answers the offer on the table is NOT stored here; it is asked of
+     * the card each time ({@link HintCard#describes}), against the snapshot as it is then. */
+    private HintCard hintCard;
+    /** S17a: true once the player has sent what {@link #hintCard} recommends. One card, one send. */
+    private boolean hintCardUsed;
     /** S13 (F-7): chat PROPOSEs not yet known to have passed the gate, in send order. Bounded by
      * the negotiation's own length (one entry per send); the gate judges commands in send order,
      * so a refusal also settles every older entry — see {@link #refusePendingOffer}. */
@@ -226,12 +239,26 @@ public final class DialogueTabModel {
      * @return false (nothing shown) once the tab is closed — advice for a finished negotiation
      */
     public boolean appendHint(long hintId, String text) {
+        return appendHint(hintId, text, null);
+    }
+
+    /**
+     * S17a (ADR-21): as {@link #appendHint(long, String)}, with the Hint's card. The card's
+     * details line goes onto the hint's own entry (its {@link ChatEntry#tag}), and the card
+     * becomes the one the hint row offers — unused, whatever happened to the card before it. A
+     * Hint without a card ({@code null}) takes the previous card away all the same: the row
+     * always speaks for the newest Hint, never for one the transcript has moved past.
+     * @return false (nothing shown, the previous card kept) once the tab is closed
+     */
+    public boolean appendHint(long hintId, String text, HintCard card) {
         if (closed) {
             return false;
         }
-        transcript.add(new ChatEntry(Speaker.ASSISTANT, text));
+        transcript.add(new ChatEntry(Speaker.ASSISTANT, text, card == null ? "" : card.details()));
         latestHintId = hintId;
         latestHintIndex = transcript.size() - 1;
+        hintCard = card;
+        hintCardUsed = false;
         return true;
     }
 
@@ -240,13 +267,33 @@ public final class DialogueTabModel {
      * Refused (false, nothing changed) when the tab is closed, or when {@code hintId} is not the
      * newest Hint this tab showed: a late answer never overwrites a newer hint, and an id from
      * another world (a reload recreates the same dialogue id) matches nothing.
+     *
+     * <p>S17a (ADR-21): only the TEXT is replaced. The details line under it and the card behind
+     * the hint row are the recommendation itself — the model rewords the sentence, it does not
+     * recompute anything — so both stay exactly as the template brought them.
      */
     public boolean reviseHint(long hintId, String text) {
         if (closed || hintId == AssistantChatEvent.NO_HINT || hintId != latestHintId) {
             return false;
         }
-        transcript.set(latestHintIndex, new ChatEntry(Speaker.ASSISTANT, text));
+        transcript.set(latestHintIndex,
+                new ChatEntry(Speaker.ASSISTANT, text, transcript.get(latestHintIndex).tag()));
         return true;
+    }
+
+    /**
+     * S17a (ADR-21): the newest Hint's card while the player can still act on it — empty when no
+     * Hint brought one, or once it has been used ({@link #useHintCard}). A closed tab still
+     * answers with the card it had; whether a row is drawn for it is {@link HintRow}'s decision.
+     */
+    public Optional<HintCard> hintCard() {
+        return hintCardUsed ? Optional.empty() : Optional.ofNullable(hintCard);
+    }
+
+    /** S17a (ADR-21): the player sent what the card recommends — it is used up, and
+     * {@link #hintCard()} is empty until the next Hint brings a new one. */
+    public void useHintCard() {
+        hintCardUsed = true;
     }
 
     public boolean isClosed() {

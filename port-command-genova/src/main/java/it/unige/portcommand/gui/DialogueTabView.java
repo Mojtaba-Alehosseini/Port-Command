@@ -13,9 +13,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 
+import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -32,7 +32,9 @@ import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.HintButtonEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
+import it.unige.portcommand.gui.events.TakeOverEvent;
 import it.unige.portcommand.gui.model.DialogueTabModel;
+import it.unige.portcommand.gui.model.HintRow;
 import it.unige.portcommand.gui.model.InputExamples;
 import it.unige.portcommand.gui.model.NegotiationTabRegistry;
 import it.unige.portcommand.gui.model.OfferLine;
@@ -76,13 +78,32 @@ import jade.lang.acl.ACLMessage;
  * "→ …" echo and the parse note. The five-button quick-action bar they replace published its
  * commands directly, skipping all four — and three of its buttons (make an offer, check status,
  * talk to the assistant) only duplicated the input field, a typed {@code status}, and Hint.
+ *
+ * <p><b>S17a (ADR-21) — who is negotiating here, and what the Assistant suggested.</b> Two rows
+ * may appear between the transcript and the input row, the first above the second; they are never
+ * both on screen, because each belongs to one answer to "whose tab is this?":
+ * <ul>
+ *   <li><b>The Assistant's</b> (the autopilot is on and the player has not taken this negotiation
+ *       over — {@code AutopilotOwnershipEvent}, read through {@link #assistantOwns}): a marker row,
+ *       {@code Assistant is negotiating…} with a {@code Take over} button, and the tab is locked.
+ *       The input swallows keystrokes, Send, Accept and Reject are disabled, Hint and the example
+ *       are gone, and {@link #sendText} sends nothing. Before S17a the player and the autopilot
+ *       could both answer the same offer, and the deal closed at whichever price reached the
+ *       vessel first (decision A2). {@code Take over} asks the Assistant to let go
+ *       ({@link TakeOverEvent}); the tab does not unlock itself — it unlocks when the Assistant's
+ *       next ownership statement says the tab is the player's, so there is never a moment in
+ *       which both think it is theirs.</li>
+ *   <li><b>The player's</b>, after a Hint: a hint row, {@code Assistant suggests: counter at
+ *       €1580 for 6h} with a {@code Use this} button ({@link HintRow}). Like Accept and Reject the
+ *       button types for the player — {@code deal}, {@code no}, or the price and hours — so the
+ *       move gets the pipeline, the echo and the parse note. One card, one send. If the vessel has
+ *       countered since the Hint, the button reads {@code Outdated — press Hint again} and cannot
+ *       be pressed: the advice was about an offer that is no longer on the table (decision A3).</li>
+ * </ul>
+ * A closed tab shows neither row, and a tab that is the player's with no Hint asked for looks and
+ * behaves exactly as it did before S17a.
  */
 final class DialogueTabView extends JPanel {
-
-    /** S13 (F-7): ids for the PROPOSEs whose terms the strip shows before the Prolog gate's verdict.
-     * JVM-wide, like the Assistant's hint ids: a refusal still in flight across a load must not
-     * match the next world's same-id dialogue. */
-    private static final AtomicLong COMMAND_IDS = new AtomicLong();
 
     /** Component name of the live counter, so a test (and the coming redesign) can find it. */
     static final String COUNTER_NAME = "dialogue-counter";
@@ -99,6 +120,21 @@ final class DialogueTabView extends JPanel {
     static final String ACCEPT_LABEL = "Accept";
     static final String REJECT_LABEL = "Reject";
 
+    /** S17a (ADR-21): the marker row of a tab the Assistant is negotiating in — its label, and the
+     * button that asks for the tab back. */
+    static final String ASSISTANT_NEGOTIATING_TEXT = "Assistant is negotiating…";
+    static final String TAKE_OVER_LABEL = "Take over";
+    /** S17a (ADR-21): the hint row's one button — while the card still answers the offer on the
+     * table, and once the vessel has countered since. */
+    static final String USE_THIS_LABEL = "Use this";
+    static final String OUTDATED_LABEL = "Outdated — press Hint again";
+    /** S17a: the line the transcript gets, once, when the player presses {@link #TAKE_OVER_LABEL}. */
+    static final String TAKING_OVER_LINE = "→ Taking over from the Assistant.";
+    /** S17a: component names of the two rows, so a test can find them (and tell them apart from
+     * the input and action rows, which have none). */
+    static final String MARKER_ROW_NAME = "dialogue-assistant-marker";
+    static final String HINT_ROW_NAME = "dialogue-hint-row";
+
     private final String dialogueId;
     /** S15: the vessel this tab talks to, fixed when the tab is built ({@code null} only if the
      * registry had no model for it yet — never the case for a tab {@code ChatPanel} adds). Held
@@ -109,11 +145,18 @@ final class DialogueTabView extends JPanel {
     private final EventBus eventBus;
     private final ChatInputProcessor processor;
     private final SimClock simClock;
-    /** Live Channel-B autopilot state (task 21): the parent {@code ChatPanel} owns the flag and
-     * updates it on {@code SettingsChangedEvent}; the Hint button hides while autopilot is on.
-     * Read live rather than off the static {@code Settings.load()} so the toggle takes effect at
-     * once instead of only reflecting the {@code defaults.json} value. */
-    private final BooleanSupplier autopilotEnabled;
+    /** S17a (ADR-21, decisions A2 and A10): whether the Assistant — not the player — is negotiating
+     * in THIS tab, as the Assistant last said ({@code AutopilotOwnershipEvent.assistantOwns}). The
+     * parent {@code ChatPanel} keeps that statement and re-renders every tab when a new one
+     * arrives; the tab only asks, each time it renders and each time it is about to send. Before
+     * S17a this supplier answered "is the autopilot switch on?" from a copy of the Settings toggle
+     * the panel kept itself — a second source, which a load left wrong (backlog R-07) and which
+     * knew nothing of a single tab the player had taken over. */
+    private final BooleanSupplier assistantOwns;
+    /** S17a (adversarial review): the same question about ANY dialogue. A line typed here can be
+     * addressed to another vessel by name ("Stella Maris: deal"), and the lock that matters then
+     * is the one on HER tab, not on this one. */
+    private final java.util.function.Predicate<String> assistantOwnsDialogue;
     private final JTextPane transcriptPane = new JTextPane();
     /** S15: the offer line's two rows — theirs above, yours and the round below. */
     private final JLabel theirOfferLabel = new JLabel();
@@ -126,6 +169,21 @@ final class DialogueTabView extends JPanel {
     private final JButton hintButton = new JButton(HINT_LABEL);
     private final JButton acceptButton = new JButton(ACCEPT_LABEL);
     private final JButton rejectButton = new JButton(REJECT_LABEL);
+    /** S17a (ADR-21): the marker row — on screen exactly while the Assistant owns this open tab. */
+    private final JPanel markerRow = new JPanel(new BorderLayout(4, 0));
+    private final JLabel markerLabel = elasticLabel();
+    private final JButton takeOverButton = new JButton(TAKE_OVER_LABEL);
+    /** S17a: true from the click on {@link #TAKE_OVER_LABEL} until the tab is seen to be the
+     * player's again. While it is set the request is not repeated and its transcript line is not
+     * written a second time; the button is greyed, so the click is seen to have registered in
+     * the moment before the Assistant answers. */
+    private boolean takeOverRequested;
+    /** S17a (ADR-21): the hint row — on screen while the player owns this open tab and the newest
+     * Hint's card has not been used ({@link HintRow}). */
+    private final JPanel hintRow = new JPanel(new BorderLayout(4, 0));
+    private final JLabel suggestionLabel = elasticLabel();
+    /** One button, two texts: {@link #USE_THIS_LABEL} or {@link #OUTDATED_LABEL}. */
+    private final JButton useThisButton = new JButton(USE_THIS_LABEL);
 
     /** S15: the offer line as last rendered ({@code null} before the first render). */
     private OfferLine shownOfferLine;
@@ -136,7 +194,8 @@ final class DialogueTabView extends JPanel {
     /**
      * S15: told whenever a re-render of THIS tab changed what its counter shows. The one-second
      * timer is not the only thing that re-reads the conversation clock — every {@link #refresh()}
-     * does (a send, a system line, an Assistant message, a settings change), and those land
+     * does (a send, a system line, an Assistant message, and since S17a a change of who is
+     * negotiating in the tab — before that, a change of the autopilot setting), and those land
      * between two ticks. Without this the "Waiting for you" list would keep the previous tick's
      * number, and across 0:30 or 0:10 the previous colour, for the rest of that second.
      * ({@code ChatPanel} answers by having EVERY tab re-read, so the list sorts like with like.)
@@ -145,9 +204,15 @@ final class DialogueTabView extends JPanel {
     /** False while the constructor runs: the tab is not on the strip yet, nobody shows its counter. */
     private boolean built;
 
+    /**
+     * @param assistantOwnsDialogue S17a: whether the Assistant is negotiating in the tab of the
+     *                      given dialogue right now ({@code AutopilotOwnershipEvent.assistantOwns}).
+     *                      Asked on the EDT only: about this tab at every render and before every
+     *                      send, and about the ADDRESSEE's tab before a move is dispatched.
+     */
     DialogueTabView(String dialogueId, NegotiationTabRegistry registry, EventBus eventBus,
-                    ChatInputProcessor processor, SimClock simClock, BooleanSupplier autopilotEnabled,
-                    Runnable onCounterChanged) {
+                    ChatInputProcessor processor, SimClock simClock,
+                    java.util.function.Predicate<String> assistantOwnsDialogue, Runnable onCounterChanged) {
         super(new BorderLayout(4, 4));
         this.onCounterChanged = onCounterChanged;
         this.dialogueId = dialogueId;
@@ -155,7 +220,8 @@ final class DialogueTabView extends JPanel {
         this.eventBus = eventBus;
         this.processor = processor;
         this.simClock = simClock;
-        this.autopilotEnabled = autopilotEnabled;
+        this.assistantOwnsDialogue = assistantOwnsDialogue;
+        this.assistantOwns = () -> assistantOwnsDialogue.test(dialogueId);
         DialogueTabModel born = registry.tab(dialogueId);
         this.vesselId = born == null ? null : born.vesselId();
 
@@ -168,6 +234,8 @@ final class DialogueTabView extends JPanel {
         // S15: the two buttons send what the player could have typed (see quickMove).
         acceptButton.addActionListener(e -> quickMove(InputExamples.ACCEPT_UTTERANCE, "accept"));
         rejectButton.addActionListener(e -> quickMove(InputExamples.REJECT_UTTERANCE, "reject"));
+        takeOverButton.addActionListener(e -> onTakeOver());
+        useThisButton.addActionListener(e -> onUseThis());
 
         // S15: two rows, not one. Four default-margin buttons beside the field left it about
         // 70 px wide at the column's 380 px minimum; on a row of their own the three action
@@ -189,9 +257,37 @@ final class DialogueTabView extends JPanel {
         actionRow.add(Box.createRigidArea(new Dimension(4, 0)));
         actionRow.add(rejectButton); // last, and never a default button: it ends the negotiation
 
-        JPanel south = new JPanel(new BorderLayout(0, 4));
-        south.add(inputRow, BorderLayout.CENTER);
-        south.add(actionRow, BorderLayout.SOUTH);
+        JPanel inputBlock = new JPanel(new BorderLayout(0, 4));
+        inputBlock.add(inputRow, BorderLayout.CENTER);
+        inputBlock.add(actionRow, BorderLayout.SOUTH);
+
+        // S17a (ADR-21): the marker row and the hint row, directly above the input row — marker
+        // first. Each is a label that gives way (see elasticLabel) and ONE button, so neither can
+        // widen the tab past the column's 380 px minimum the way a second button would; at that
+        // width the label is cut with an ellipsis and the button keeps its size.
+        //
+        // Neither button can take the keyboard focus (like the comm log's toggles and the top
+        // bar's speed toggles): a click on one must not pull the typing focus out of the input,
+        // and a button that held the focus at the moment its row is hidden — which is exactly
+        // what pressing it leads to — would have AWT hand the focus to whatever it picks next.
+        // The labels and the two panels are told so too: nothing in these rows takes focus.
+        markerLabel.setText(ASSISTANT_NEGOTIATING_TEXT);
+        markerLabel.setToolTipText(ASSISTANT_NEGOTIATING_TEXT);
+        takeOverButton.setFocusable(false);
+        useThisButton.setFocusable(false);
+        buildRow(markerRow, MARKER_ROW_NAME, markerLabel, takeOverButton);
+        buildRow(hintRow, HINT_ROW_NAME, suggestionLabel, useThisButton);
+
+        // BorderLayout leaves an invisible child out of both the layout and the sizes, so with
+        // both rows hidden this panel is zero high and the input block sits exactly where it did
+        // before S17a. The 4 px under a row are the row's own border: the gap comes and goes with it.
+        JPanel aboveInput = new JPanel(new BorderLayout());
+        aboveInput.add(markerRow, BorderLayout.NORTH);
+        aboveInput.add(hintRow, BorderLayout.SOUTH);
+
+        JPanel south = new JPanel(new BorderLayout());
+        south.add(aboveInput, BorderLayout.NORTH);
+        south.add(inputBlock, BorderLayout.CENTER);
 
         // The offer rows give way before anything else does: their box reports no minimum width,
         // so a long line is cut with an ellipsis (the tooltip has it whole) instead of widening
@@ -263,12 +359,85 @@ final class DialogueTabView extends JPanel {
         // focus, and the keystrokes fell through to the comm-log Performative filter combo, whose
         // type-ahead then changed the filter. Send is still disabled and Enter is guarded in
         // sendText, so a closed tab is inert.
-        inputField.setEditable(!closed);
-        sendButton.setEnabled(!closed);
-        hintButton.setVisible(!closed && !autopilotEnabled.getAsBoolean());
-        // S15: Accept and Reject are never hidden or disabled. On a closed tab they answer in
-        // the transcript that there is nothing left to act on (quickMove) — a button that goes
-        // grey the instant a vessel walks away, under the pointer, explains nothing.
+        //
+        // S17a (ADR-21, decision A2): a tab the Assistant is negotiating in is locked the same
+        // way, for the same reason — the field stays enabled and focusable and swallows what is
+        // typed — and it shows no example either (PlaceholderTextField paints one only on an
+        // editable field: a prompt would invite typing into a field that ignores it). Ownership
+        // is asked only of an OPEN tab: once the negotiation is over nobody is negotiating in it,
+        // and a closed tab looks the same whoever was.
+        boolean locked = !closed && assistantOwns.getAsBoolean();
+        boolean playerCanSend = !closed && !locked;
+        inputField.setEditable(playerCanSend);
+        sendButton.setEnabled(playerCanSend);
+        hintButton.setVisible(playerCanSend);
+        // S15: Accept and Reject are never hidden, and on a closed tab never disabled: there they
+        // answer in the transcript that there is nothing left to act on (quickMove) — a button
+        // that goes grey the instant a vessel walks away, under the pointer, explains nothing.
+        // S17a: they ARE disabled while the Assistant owns the tab, and that explains itself —
+        // the marker row right above them says who is negotiating and how to take the tab back.
+        acceptButton.setEnabled(!locked);
+        rejectButton.setEnabled(!locked);
+        if (!locked) {
+            takeOverRequested = false; // the tab is the player's (or over): any request is settled
+        }
+        takeOverButton.setEnabled(!takeOverRequested);
+        showRow(markerRow, locked);
+        showHintRow(HintRow.of(tab, locked));
+    }
+
+    /**
+     * S17a (ADR-21, decision A3): the hint row as the model describes it right now. Called from
+     * every {@link #refresh()}, so the button turns to {@link #OUTDATED_LABEL} in the same render
+     * that shows the vessel's counter in the transcript — the freshness is never a stored flag,
+     * it is asked of the card against the tab's current snapshot each time.
+     */
+    private void showHintRow(HintRow row) {
+        if (row.visible()) {
+            suggestionLabel.setText(row.suggestion());
+            // The whole suggestion, for a column narrow enough to cut the label short.
+            suggestionLabel.setToolTipText(row.suggestion());
+            useThisButton.setText(row.fresh() ? USE_THIS_LABEL : OUTDATED_LABEL);
+            useThisButton.setEnabled(row.fresh());
+        }
+        showRow(hintRow, row.visible());
+    }
+
+    /** S17a: shows or hides one of the two rows above the input, and has the tab laid out again
+     * when that changed. Swing asks for a new layout by itself when a component is shown, not
+     * when it is hidden — and a hidden row that kept its place would leave a blank band above
+     * the input until something else happened to lay the tab out. */
+    private void showRow(JPanel row, boolean visible) {
+        if (row.isVisible() != visible) {
+            row.setVisible(visible);
+            revalidate();
+            repaint();
+        }
+    }
+
+    /** S17a: gives one of the two rows above the input its name, its label and its one button.
+     * Born hidden; {@link #refresh()} shows whichever applies. */
+    private static void buildRow(JPanel row, String name, JLabel label, JButton button) {
+        row.setName(name);
+        row.setFocusable(false);
+        row.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0)); // the gap to the input row below
+        row.add(label, BorderLayout.CENTER);
+        row.add(button, BorderLayout.EAST);
+        row.setVisible(false);
+    }
+
+    /** S17a: a label for the rows above the input that gives way before anything else does. Like
+     * the offer rows' box it reports no minimum width, so in a narrow column its text is cut with
+     * an ellipsis (the tooltip has it whole) and the button beside it keeps its size. */
+    private static JLabel elasticLabel() {
+        JLabel label = new JLabel() {
+            @Override
+            public Dimension getMinimumSize() {
+                return new Dimension(0, getPreferredSize().height);
+            }
+        };
+        label.setFocusable(false);
+        return label;
     }
 
     /** Re-renders ONLY the offer line — a refused PROPOSE puts the previous offer back (S13, F-7)
@@ -370,12 +539,65 @@ final class DialogueTabView extends JPanel {
         sendText(utterance);
     }
 
+    /**
+     * S17a (ADR-21, decision A2): {@code Take over}. Asks the Assistant to hand this negotiation
+     * to the player ({@link TakeOverEvent}) and says so in the transcript — once: the request is
+     * not repeated while it is pending, and the button is greyed until it is answered.
+     *
+     * <p>The tab stays locked. It unlocks in the render that follows the Assistant's next
+     * {@code AutopilotOwnershipEvent}, if that names this dialogue as taken over; unlocking here
+     * would open a window in which the Assistant — which may have a move a moment from being
+     * sent — and the player both hold the tab, the very thing the lock exists to stop.
+     */
+    private void onTakeOver() {
+        DialogueTabModel tab = registry.tab(dialogueId);
+        if (tab == null || tab.isClosed() || takeOverRequested || !assistantOwns.getAsBoolean()) {
+            return;
+        }
+        takeOverRequested = true;
+        eventBus.publish(new TakeOverEvent(dialogueId));
+        appendSystem(TAKING_OVER_LINE); // re-renders: the button greys with the line's arrival
+    }
+
+    /**
+     * S17a (ADR-21, decision A3): {@code Use this}. Sends what the newest Hint's card recommends,
+     * as the words the player could have typed ({@link HintRow#utteranceFor}), through
+     * {@link #sendText} — so it gets the pipeline's reading, the world-identity guard, the "→ …"
+     * echo and the parse note, exactly as Accept and Reject do.
+     *
+     * <p>The card is looked at again HERE, not trusted from the last render: a click that finds
+     * it stale (or gone, or the tab no longer the player's) sends nothing and re-renders, which
+     * is what turns the button to {@link #OUTDATED_LABEL}. And it is marked used BEFORE the send,
+     * because the send re-renders — the row must already be gone in that render, or a second
+     * click could send the same advice twice.
+     */
+    private void onUseThis() {
+        DialogueTabModel tab = registry.tab(dialogueId);
+        if (tab == null) {
+            return;
+        }
+        HintRow row = HintRow.of(tab, assistantOwns.getAsBoolean());
+        if (!row.fresh()) {
+            refresh();
+            return;
+        }
+        tab.useHintCard();
+        sendText(row.utterance());
+    }
+
     /** Package-private so a headless test can drive a send without simulating real
      * JTextField/ActionEvent plumbing. */
     void sendText(String text) {
         DialogueTabModel tab = registry.tab(dialogueId);
         if (tab == null || tab.isClosed()) {
             return; // #9: Enter on a closed tab's (non-editable) field must not send.
+        }
+        if (assistantOwns.getAsBoolean()) {
+            // S17a (ADR-21, decision A2): the Assistant is negotiating here. The field is not
+            // editable and the buttons are disabled, but Enter still reaches this method (as on a
+            // closed tab), and so does any caller that holds the view. Nothing is sent, nothing
+            // is echoed, and a draft the player had typed before the lock stays in the field.
+            return;
         }
         inputField.setText("");
         // S15: the bubble's place in the transcript — the handle the parse note is written back
@@ -487,6 +709,20 @@ final class DialogueTabView extends JPanel {
             handleUnroutableRequest(routed);
             return;
         }
+        // S17a (ADR-21, decision A2; adversarial review): the lock is on the VESSEL the move is
+        // for, and it is asked HERE, where the move would leave - sendText's own check covers the
+        // tab that was typed into at the moment of typing, which is not enough twice over. A line
+        // typed in a tab the player owns can be addressed to another vessel by name, and reach a
+        // negotiation the Assistant is in the middle of; and a parse that was still running when
+        // the Assistant took this very tab arrives after the check. Either way two answers would
+        // go to one offer - the thing the lock exists to stop. Nothing is sent, and the line says
+        // why and what to do.
+        String targetDialogueId = registry.dialogueIdForVessel(targetVesselId).orElse(null);
+        if (targetDialogueId != null && assistantOwnsDialogue.test(targetDialogueId)) {
+            appendSystem(assistantIsNegotiatingLine(displayNameFor(targetVesselId),
+                    targetVesselId.equals(typingVesselId)));
+            return;
+        }
         @SuppressWarnings("unchecked")
         Map<String, Object> frameElements =
                 (Map<String, Object>) TerminalJson.readOrNull(routed.msg().getContent(), Map.class);
@@ -500,9 +736,12 @@ final class DialogueTabView extends JPanel {
             // feedback is the vessel's own reply ("they need at least Nh" on a floor pushback —
             // see the registry's offerSummary). S13 (F-7): the HarbourMaster's Prolog gate has not
             // judged the send yet, so it carries an id; a refusal names it and the registry puts
-            // the previous offer back on the strip.
+            // the previous offer back on the strip. S17a (ADR-21): the id comes from the ONE
+            // JVM-wide source the autopilot's moves draw from too (PlayerCommandEvent.nextCommandId)
+            // — with a counter of its own here, a refusal of the autopilot's move number N would
+            // have matched this tab's send number N and rolled its offer line back.
             Integer proposedHours = content.get("hours") instanceof Number n ? n.intValue() : null;
-            long sendId = COMMAND_IDS.incrementAndGet();
+            long sendId = PlayerCommandEvent.nextCommandId();
             commandId = sendId;
             registry.dialogueIdForVessel(targetVesselId)
                     .ifPresent(id -> registry.recordPlayerOffer(id, price.doubleValue(), proposedHours, sendId));
@@ -515,6 +754,14 @@ final class DialogueTabView extends JPanel {
         // quick-action buttons skipped this; their label bubble was the only trace they left.)
         appendSystem(interpretationEcho(kind, content, displayNameFor(targetVesselId),
                 targetVesselId.equals(typingVesselId)));
+    }
+
+    /** S17a: what a move that was not sent says - the Assistant is negotiating with that vessel. */
+    static String assistantIsNegotiatingLine(String vesselName, boolean thisTab) {
+        return thisTab
+                ? "The Assistant is negotiating here now \u2014 nothing was sent. Press Take over first."
+                : "The Assistant is negotiating with " + vesselName
+                        + " \u2014 nothing was sent. Press Take over in that tab first.";
     }
 
     /** S8 (GOAL 3): the echo names the ADDRESSEE by its display name where a dialogue knows one
@@ -809,15 +1056,29 @@ final class DialogueTabView extends JPanel {
     }
 
     /** Test-only (S15): the text on every button the tab is offering right now — hidden buttons
-     * left out, disabled ones included — in reading order. */
+     * left out, disabled ones included — in reading order. S17a: that is top to bottom, so
+     * {@code Take over} or {@code Use this} comes first while its row is on screen; a button
+     * whose ROW is hidden is hidden too, whatever its own flag says. */
     List<String> buttonLabelsForTest() {
         List<String> labels = new ArrayList<>();
         for (JButton button : labelledButtons()) {
-            if (button.isVisible()) {
+            if (visibleInTab(button)) {
                 labels.add(button.getText());
             }
         }
         return List.copyOf(labels);
+    }
+
+    /** Whether {@code component} would be on screen if this tab were: it and every container
+     * between it and the tab are visible. ({@code isShowing()} cannot answer that in a headless
+     * test — it also wants a window.) */
+    private boolean visibleInTab(Component component) {
+        for (Component c = component; c != null && c != this; c = c.getParent()) {
+            if (!c.isVisible()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Test-only (S15): the button with that text, hidden or not.
@@ -838,10 +1099,30 @@ final class DialogueTabView extends JPanel {
      * a mistake in the test and fails loudly. */
     void clickForTest(String label) {
         JButton button = buttonForTest(label);
-        if (!button.isVisible()) {
+        if (!visibleInTab(button)) {
             throw new IllegalStateException("the \"" + label + "\" button is hidden — a player could not click it");
         }
         button.doClick(0);
+    }
+
+    /** Test-only (S17a): whether the "Assistant is negotiating…" marker row is on screen. */
+    boolean markerRowVisibleForTest() {
+        return visibleInTab(markerRow);
+    }
+
+    /** Test-only (S17a): the marker row's label as shown, or the empty string while the row is hidden. */
+    String markerTextForTest() {
+        return visibleInTab(markerRow) ? markerLabel.getText() : "";
+    }
+
+    /** Test-only (S17a): whether the hint row ("Assistant suggests: …") is on screen. */
+    boolean hintRowVisibleForTest() {
+        return visibleInTab(hintRow);
+    }
+
+    /** Test-only (S17a): the hint row's label as shown, or the empty string while the row is hidden. */
+    String suggestionTextForTest() {
+        return visibleInTab(hintRow) ? suggestionLabel.getText() : "";
     }
 
     /** Test-only (S15): the example the input field is showing right now, or the empty string

@@ -19,6 +19,7 @@ import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
+import it.unige.portcommand.gui.events.AutopilotOwnershipEvent;
 import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.HintButtonEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
@@ -26,7 +27,6 @@ import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
 import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
-import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.gui.model.DialogueTabModel;
@@ -808,9 +808,9 @@ class ChatPanelTest {
         ChatPanel panel = new ChatPanel(bus, (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")));
         openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
 
-        // Settings.load()'s classpath default has autopilotEnabled=false — the ON case has no
-        // injection seam today (AssistantAgent's live AtomicBoolean has no GUI-reachable getter;
-        // task 21 owns wiring a real toggle), so only the OFF/default case is exercisable here.
+        // Settings.load()'s classpath default has autopilotEnabled=false, and that is what a panel
+        // starts from until the Assistant has said who is negotiating where. S17a (ADR-21): the ON
+        // case is the AutopilotOwnershipEvent path — the test after next, and ChatPanelOwnershipTest.
         assertTrue(panel.viewForTest("nego-A").hintButtonVisibleForTest());
     }
 
@@ -830,33 +830,36 @@ class ChatPanelTest {
     }
 
     /**
-     * Task 21: the Settings screen's autopilot toggle hides/re-shows the Hint button LIVE — the
-     * ON case the task-19 test noted had "no injection seam" is now the {@link SettingsChangedEvent}
-     * path. Also the leak guard: after {@code removeNotify()} the settings subscription is cancelled,
-     * so a later event must not touch the detached panel's tabs.
+     * S17a (ADR-21, decisions A2 and A10): the Hint button follows the Assistant's own statement
+     * of who is negotiating in the tab ({@link AutopilotOwnershipEvent}), LIVE. Task 21 had it
+     * follow the Settings screen's toggle through a copy the panel kept; that copy is gone, and
+     * {@code ChatPanelOwnershipTest} pins that the toggle alone now changes nothing here. Also the
+     * leak guard: after {@code removeNotify()} the ownership subscription is cancelled, so a later
+     * statement must not touch the detached panel's tabs.
      */
     @Test
     @Timeout(5)
-    void autopilotSettingTogglesHintButtonLiveAndUnsubscribesOnRemoveNotify() throws Exception {
+    void theAssistantsOwnershipTogglesTheHintButtonLiveAndUnsubscribesOnRemoveNotify() throws Exception {
         EventBus bus = new EventBus();
         ChatPanel panel = new ChatPanel(bus, (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")));
         openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
         DialogueTabView view = panel.viewForTest("nego-A");
         assertTrue(view.hintButtonVisibleForTest(), "hint visible under the default autopilot=off");
 
-        bus.publish(new SettingsChangedEvent("NORMAL", 300L, true, "microsoft/Phi-4-mini-instruct"));
+        bus.publish(AutopilotOwnershipEvent.initial(true));
         SwingUtilities.invokeAndWait(() -> { });
-        assertFalse(view.hintButtonVisibleForTest(), "autopilot on hides the Hint button live");
+        assertFalse(view.hintButtonVisibleForTest(), "the Assistant negotiating here hides the Hint button live");
 
-        bus.publish(new SettingsChangedEvent("NORMAL", 300L, false, "microsoft/Phi-4-mini-instruct"));
+        bus.publish(AutopilotOwnershipEvent.initial(false));
         SwingUtilities.invokeAndWait(() -> { });
-        assertTrue(view.hintButtonVisibleForTest(), "autopilot off re-shows it");
+        assertTrue(view.hintButtonVisibleForTest(), "the tab being the player's again re-shows it");
 
         panel.removeNotify();
-        bus.publish(new SettingsChangedEvent("NORMAL", 300L, true, "microsoft/Phi-4-mini-instruct"));
+        bus.publish(AutopilotOwnershipEvent.initial(true));
         SwingUtilities.invokeAndWait(() -> { });
         assertTrue(view.hintButtonVisibleForTest(),
-                "removeNotify() must cancel the settings subscription — no update on a detached panel");
+                "removeNotify() must cancel the ownership subscription — no update on a detached panel");
+        assertTrue(view.inputFieldForTest().isEditable(), "and the detached tab was not locked either");
     }
 
     // ==================== Tab close bracket ====================

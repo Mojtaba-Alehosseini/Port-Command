@@ -20,13 +20,21 @@ import it.unige.portcommand.gui.model.DialogueTabModel.ChatEntry;
  * stage of the NLP pipeline read it — {@code (DCG)} or {@code (Rasa 0.97)} (the text comes from
  * {@code ParseTag}; this class only draws it). The note sits inside the same right-aligned line as
  * the bubble, so it stays with its own message however the transcript wraps. An entry with no tag
- * renders exactly as it did before S15, byte for byte; a tag on any other speaker's entry is not
+ * renders exactly as it did before S15, byte for byte; a tag on a vessel's or a system line is not
  * drawn (only a player's message is ever parsed).
+ *
+ * <p>S17a (ADR-21, decision A3): an Assistant entry may carry a details line — the numbers and the
+ * checks behind a Hint ({@code EV €640 · chance 62% · R7 ✓}), which the hint's own sentence now
+ * leaves out. It travels in the same {@code tag} field and is drawn in the same small grey, but
+ * UNDER the text and inside the Assistant's block: it belongs to that advice, and when the model's
+ * wording later replaces the sentence above it, it stays where it is. An Assistant entry without
+ * one renders exactly as it did before S17a, byte for byte.
  */
 public final class ChatMessageRenderer {
 
     /** The note's style: smaller than the 11px body text and mid grey, so it reads as a remark
-     * about the message and not as part of what the player said. */
+     * about the message and not as part of what the player said. S17a: the details line under a
+     * Hint is drawn in it too — the same kind of remark, about the Assistant's sentence. */
     private static final String TAG_STYLE = "color:#888888;font-size:9px";
 
     private ChatMessageRenderer() {
@@ -47,7 +55,7 @@ public final class ChatMessageRenderer {
             case PLAYER -> bubble("right", "#cce5ff", text, tagNote(entry.tag()));
             case VESSEL -> bubble("left", "#e0e0e0", text, "");
             case ASSISTANT -> "<div style=\"margin:4px\"><span style=\"background:#fff3b0;padding:4px 8px;"
-                    + "border-radius:8px;display:block\">" + text + "</span></div>";
+                    + "border-radius:8px;display:block\">" + text + detailsLine(entry.tag()) + "</span></div>";
             case SYSTEM -> "<div style=\"text-align:center;margin:4px;color:#883333;font-style:italic\">"
                     + text + "</div>";
         };
@@ -68,6 +76,18 @@ public final class ChatMessageRenderer {
             return "";
         }
         return " <span style=\"" + TAG_STYLE + "\">" + escape(tag) + "</span>";
+    }
+
+    /** S17a (ADR-21): the details line under an Assistant entry's text — a line break, then the
+     * details in the note's small grey, still inside the Assistant's own block. The empty string
+     * when there are none, which is what keeps an ordinary Assistant message's HTML identical to
+     * the pre-S17a output. Escaped like any other text: the line is built by the Assistant from
+     * figures and rule ids, but nothing that reaches the transcript is trusted to be HTML-safe. */
+    private static String detailsLine(String details) {
+        if (details == null || details.isEmpty()) {
+            return "";
+        }
+        return "<br><span style=\"" + TAG_STYLE + "\">" + escape(details) + "</span>";
     }
 
     private static String escape(String text) {

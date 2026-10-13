@@ -6,6 +6,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
+import it.unige.portcommand.assistant.HintCard;
+import it.unige.portcommand.assistant.RecommendationCandidate;
 import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
@@ -356,6 +358,141 @@ class NegotiationTabRegistryTest {
                 () -> new AssistantChatEvent("nego-W001", "text", AssistantChatEvent.NO_HINT, true));
         assertFalse(new AssistantChatEvent("nego-W001", "text").isHint());
         assertTrue(AssistantChatEvent.hintTemplate("nego-W001", 9L, "text").isHint());
+    }
+
+    // ==================== S17a (ADR-21, decision A3): the hint card ====================
+
+    private static final String DETAILS = "EV €640 · chance 62% · R7 ✓";
+
+    /** A card recommending a counter at €1580, made for round {@code round} of a vessel asking
+     * {@code vesselOffer} for 6h — the terms {@link #opened} builds a tab with. */
+    private static HintCard counterCard(int round, double vesselOffer) {
+        return new HintCard(RecommendationCandidate.COUNTER, 1580.0, 6, round, vesselOffer,
+                "counter at €1580 for 6h", DETAILS);
+    }
+
+    @Test
+    void aHintTemplateWithACardStoresTheCardAndPutsItsDetailsOnTheHintsOwnEntry() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        DialogueTabModel tab = registry.tab("nego-W001");
+        assertEquals(Optional.empty(), tab.hintCard(), "no Hint asked for yet");
+        HintCard card = counterCard(1, 1500.0);
+
+        Optional<String> routed = registry.onAssistantChat(
+                AssistantChatEvent.hintTemplate("nego-W001", 7L, "Counter at €1580 for 6h.", card));
+
+        assertEquals(Optional.of("nego-W001"), routed);
+        assertEquals(Optional.of(card), tab.hintCard());
+        List<DialogueTabModel.ChatEntry> transcript = tab.transcript();
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.ASSISTANT,
+                "Counter at €1580 for 6h.", DETAILS), transcript.get(transcript.size() - 1),
+                "the details ride on the hint's own entry, so they are drawn with it and nowhere else");
+        assertTrue(transcript.subList(0, transcript.size() - 1).stream().allMatch(e -> e.tag().isEmpty()),
+                "and on no other line: " + transcript);
+    }
+
+    @Test
+    void aRevisionReplacesTheHintsTextOnlyTheDetailsAndTheCardStay() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        DialogueTabModel tab = registry.tab("nego-W001");
+        HintCard card = counterCard(1, 1500.0);
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 7L, "template", card));
+        int hintIndex = tab.transcript().size() - 1;
+
+        // The model's wording arrives: a revision carries no card (it rewords, it recomputes nothing).
+        AssistantChatEvent revision = AssistantChatEvent.hintRevision("nego-W001", 7L, "model wording");
+        assertEquals(null, revision.card(), "setup: a revision brings no card of its own");
+        assertEquals(Optional.of("nego-W001"), registry.onAssistantChat(revision));
+
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.ASSISTANT, "model wording", DETAILS),
+                tab.transcript().get(hintIndex), "the sentence changed; the details under it did not");
+        assertEquals(Optional.of(card), tab.hintCard(), "and the row still offers the same card");
+    }
+
+    @Test
+    void aNewHintReplacesTheCardWhetherOrNotItBringsOne() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        DialogueTabModel tab = registry.tab("nego-W001");
+        HintCard first = counterCard(1, 1500.0);
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 1L, "first", first));
+        int firstIndex = tab.transcript().size() - 1;
+
+        HintCard second = new HintCard(RecommendationCandidate.ACCEPT, 1500.0, 6, 1, 1500.0,
+                "accept €1500 for 6h", "EV €410 · chance 100% · R7 ✓");
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 2L, "second", second));
+        assertEquals(Optional.of(second), tab.hintCard(), "the row speaks for the newest Hint");
+        assertEquals(DETAILS, tab.transcript().get(firstIndex).tag(),
+                "the first hint keeps its own details in the transcript — they were true of it");
+
+        // A Hint with no card (the pre-S17a event shape) still becomes the newest Hint: the row
+        // must not go on offering advice the transcript has moved past.
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 3L, "third, no card"));
+        assertEquals(Optional.empty(), tab.hintCard());
+        assertEquals("", tab.transcript().get(tab.transcript().size() - 1).tag());
+
+        // A late revision of a superseded hint changes neither the text nor the card (S12's rule).
+        assertEquals(Optional.empty(),
+                registry.onAssistantChat(AssistantChatEvent.hintRevision("nego-W001", 2L, "late")));
+        assertEquals(Optional.empty(), tab.hintCard());
+    }
+
+    @Test
+    void aUsedCardIsGoneUntilTheNextHintBringsANewOne() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        DialogueTabModel tab = registry.tab("nego-W001");
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 1L, "template", counterCard(1, 1500.0)));
+
+        tab.useHintCard();
+        assertEquals(Optional.empty(), tab.hintCard(), "one card, one send");
+        // The model's wording for that same hint must not bring the card back.
+        registry.onAssistantChat(AssistantChatEvent.hintRevision("nego-W001", 1L, "model wording"));
+        assertEquals(Optional.empty(), tab.hintCard());
+        assertEquals(DETAILS, tab.transcript().get(tab.transcript().size() - 1).tag(),
+                "what was used up is the button, not the explanation in the transcript");
+
+        HintCard next = counterCard(2, 1700.0);
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 2, 1700.0));
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 2L, "template", next));
+        assertEquals(Optional.of(next), tab.hintCard(), "a new Hint's card is unused, whatever happened to the last");
+    }
+
+    @Test
+    void noCardLandsInAClosedTabAndTheOneItHadIsNotReplaced() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        DialogueTabModel tab = registry.tab("nego-W001");
+        HintCard card = counterCard(1, 1500.0);
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 1L, "template", card));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
+        List<DialogueTabModel.ChatEntry> before = tab.transcript();
+
+        assertEquals(Optional.empty(), registry.onAssistantChat(
+                AssistantChatEvent.hintTemplate("nego-W001", 2L, "late template", counterCard(1, 1500.0))));
+
+        assertEquals(before, tab.transcript(), "advice for a finished negotiation must not appear in its tab");
+        assertEquals(Optional.of(card), tab.hintCard(), "a refused Hint changes nothing, the card included");
+        assertEquals(HintRow.State.HIDDEN, HintRow.of(tab, false).state(),
+                "and a closed tab draws no row for it (HintRowTest has the rest)");
+    }
+
+    @Test
+    void anOrdinaryAssistantMessageNeitherCarriesDetailsNorTouchesTheCard() {
+        // The autopilot's narration and the gate's refusals are AssistantChatEvents too.
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        DialogueTabModel tab = registry.tab("nego-W001");
+        HintCard card = counterCard(1, 1500.0);
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 1L, "template", card));
+
+        registry.onAssistantChat(new AssistantChatEvent("nego-W001", "berth_3 is incompatible with a ferry [R7]"));
+
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.ASSISTANT,
+                "berth_3 is incompatible with a ferry [R7]"), tab.transcript().get(tab.transcript().size() - 1));
+        assertEquals(Optional.of(card), tab.hintCard());
     }
 
     // ==================== audit C-07: closed tabs leave the strip after a dwell ====================
@@ -860,7 +997,8 @@ class NegotiationTabRegistryTest {
 
     /** P-04: neither this registry nor the tab model may ever read a walk-in's hidden
      * beliefs — mirrors {@code DialogueCtxTest}'s own source-text grep gate. S15 (2026-10-12):
-     * the pure models that read a tab or its snapshot for the chat column are held to it too. */
+     * the pure models that read a tab or its snapshot for the chat column are held to it too.
+     * S17a (ADR-21): and {@code HintRow}, which reads the tab's snapshot to tell a stale card. */
     @Test
     void neitherRegistryNorTabModelReadsAHiddenBelief() throws IOException {
         List<String> forbidden = List.of(".minAcceptablePrice(", ".targetPrice(", ".maxWaitMinutes(",
@@ -871,7 +1009,8 @@ class NegotiationTabRegistryTest {
                 Path.of("src/main/java/it/unige/portcommand/gui/model/OfferLine.java"),
                 Path.of("src/main/java/it/unige/portcommand/gui/model/InputExamples.java"),
                 Path.of("src/main/java/it/unige/portcommand/gui/model/ParseTag.java"),
-                Path.of("src/main/java/it/unige/portcommand/gui/model/OpenDialogue.java"))) {
+                Path.of("src/main/java/it/unige/portcommand/gui/model/OpenDialogue.java"),
+                Path.of("src/main/java/it/unige/portcommand/gui/model/HintRow.java"))) {
             String source = Files.readString(file);
             for (String accessor : forbidden) {
                 assertFalse(source.contains(accessor),

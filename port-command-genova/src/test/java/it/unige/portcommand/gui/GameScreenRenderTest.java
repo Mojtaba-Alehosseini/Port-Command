@@ -177,6 +177,76 @@ class GameScreenRenderTest {
         }
     }
 
+    /**
+     * S17a (ADR-21): the two things a chat tab gained, painted so they can be LOOKED AT -
+     * {@code build/gui-renders/s17a-hint-card.png} (the player's tab after a Hint: the plain
+     * sentence, the details line under it, and the "Assistant suggests ... Use this" row) and
+     * {@code s17a-assistant-negotiating.png} (the same tab while the autopilot owns it: the marker
+     * row with "Take over", the input locked, and the autopilot's own line in the transcript).
+     * The assertions only say the rows are there; how they look is what the pictures are for.
+     */
+    @Test
+    @Timeout(120)
+    void rendersTheHintCardAndTheAssistantsLock() throws Exception {
+        GameScreen[] built = new GameScreen[1];
+        try {
+            HeadlessSwing.onEdt(() -> built[0] = new GameScreen(bus, portState,
+                    (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")),
+                    clock, new GameSpeedControl(clock, bus, () -> false)));
+            GameScreen screen = built[0];
+            seedAGameInProgress();
+            // The autopilot is off and the player pressed Hint in Genoa Star's tab, in a storm.
+            bus.publish(new it.unige.portcommand.gui.events.AutopilotOwnershipEvent(false, java.util.Set.of()));
+            bus.publish(it.unige.portcommand.gui.events.AssistantChatEvent.hintTemplate("nego-W003", 9_001L,
+                    "Counter at €1580 for 6h.",
+                    new it.unige.portcommand.assistant.HintCard("counter", 1579.6, 6, 1, 1436.0,
+                            "counter at €1580 for 6h",
+                            "EV €640 · chance 62% · R7 ✓ · ship will wait: sea state stormy [R19]")));
+            for (int i = 0; i < 3; i++) {
+                HeadlessSwing.flushEdt();
+            }
+            HeadlessSwing.onEdt(() -> {
+                Files.createDirectories(OUTPUT_DIR);
+                show(screen, 1280, 800);
+                write(HeadlessSwing.paint(screen), "s17a-hint-card.png");
+                assertTrue(shownRows(screen, DialogueTabView.HINT_ROW_NAME) >= 1, "the hint row is on a tab");
+                assertEquals(0, shownRows(screen, DialogueTabView.MARKER_ROW_NAME), "nobody but the player negotiates");
+            });
+
+            // Now the autopilot is switched on: the Assistant negotiates in every tab, and has moved once.
+            bus.publish(new it.unige.portcommand.gui.events.AutopilotOwnershipEvent(true, java.util.Set.of()));
+            bus.publish(new it.unige.portcommand.gui.events.AssistantChatEvent("nego-W003",
+                    it.unige.portcommand.assistant.AssistantWording.AUTOPILOT_PREFIX + "countered at €1580."));
+            for (int i = 0; i < 3; i++) {
+                HeadlessSwing.flushEdt();
+            }
+            HeadlessSwing.onEdt(() -> {
+                show(screen, 1280, 800);
+                write(HeadlessSwing.paint(screen), "s17a-assistant-negotiating.png");
+                assertEquals(2, shownRows(screen, DialogueTabView.MARKER_ROW_NAME), "both open tabs are the Assistant's");
+                assertEquals(0, shownRows(screen, DialogueTabView.HINT_ROW_NAME), "and neither offers the player a card");
+            });
+        } finally {
+            HeadlessSwing.onEdt(() -> {
+                if (built[0] != null) {
+                    built[0].removeNotify();
+                }
+            });
+        }
+    }
+
+    /** How many components named {@code name} under {@code root} are set visible (a tab that is
+     * not the selected one still counts: its row is there the moment the tab is brought forward). */
+    private static int shownRows(Component root, String name) {
+        int count = name.equals(root.getName()) && root.isVisible() ? 1 : 0;
+        if (root instanceof java.awt.Container container) {
+            for (Component child : container.getComponents()) {
+                count += shownRows(child, name);
+            }
+        }
+        return count;
+    }
+
     // --- the game in progress -----------------------------------------------------------------------
 
     /** Publishes, from this (non-EDT) thread like an agent would, what a running game would have

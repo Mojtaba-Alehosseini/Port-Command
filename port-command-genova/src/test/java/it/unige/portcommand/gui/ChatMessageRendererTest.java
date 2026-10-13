@@ -105,8 +105,11 @@ class ChatMessageRendererTest {
     }
 
     @Test
-    void aTagOnANonPlayerEntryIsIgnored() {
-        for (Speaker speaker : List.of(Speaker.VESSEL, Speaker.ASSISTANT, Speaker.SYSTEM)) {
+    void aTagOnAVesselOrSystemEntryIsIgnored() {
+        // S17a (ADR-21): the Assistant left this list — its entry's tag is the details line of a
+        // Hint, and it IS drawn (the tests at the end of this class). A vessel's and a system
+        // line still have nothing to carry: nobody parses them and nobody advises on them.
+        for (Speaker speaker : List.of(Speaker.VESSEL, Speaker.SYSTEM)) {
             String tagged = ChatMessageRenderer.renderEntry(new ChatEntry(speaker, "Opens at €1500", "(DCG)"));
             String untagged = ChatMessageRenderer.renderEntry(new ChatEntry(speaker, "Opens at €1500"));
             assertEquals(untagged, tagged, speaker + " lines are never parsed, so they never show a note");
@@ -132,5 +135,63 @@ class ChatMessageRendererTest {
         assertEquals(1, html.split("\\(DCG\\)", -1).length - 1, "exactly one message is tagged: " + html);
         assertTrue(html.indexOf("1900 for 6h") < html.indexOf("(DCG)")
                 && html.indexOf("(DCG)") < html.indexOf("Demanding"), "and the note sits with that message: " + html);
+    }
+
+    // ==================== S17a (ADR-21): the details line under a Hint ====================
+
+    private static final String HINT_TEXT = "Counter at €1580 for 6h.";
+    private static final String HINT_DETAILS = "EV €640 · chance 62% · R7 ✓";
+
+    /** An Assistant block exactly as it was rendered before S17a — the baseline an entry without
+     * details must still match byte for byte. */
+    private static final String ASSISTANT_BLOCK_WITHOUT_DETAILS = "<div style=\"margin:4px\">"
+            + "<span style=\"background:#fff3b0;padding:4px 8px;border-radius:8px;display:block\">"
+            + HINT_TEXT + "</span></div>";
+
+    @Test
+    void anAssistantEntryWithDetailsShowsThemUnderItsTextInTheNotesGreyStyle() {
+        String html = ChatMessageRenderer.renderEntry(new ChatEntry(Speaker.ASSISTANT, HINT_TEXT, HINT_DETAILS));
+
+        // The text, a line break, the details in the parse note's own small grey — and only then
+        // does the Assistant's yellow block close: the details belong to that advice.
+        assertEquals("<div style=\"margin:4px\">"
+                + "<span style=\"background:#fff3b0;padding:4px 8px;border-radius:8px;display:block\">"
+                + HINT_TEXT + "<br><span style=\"color:#888888;font-size:9px\">" + HINT_DETAILS + "</span>"
+                + "</span></div>", html);
+        assertEquals(1, html.split("<div", -1).length - 1, "one block, not a second one under it: " + html);
+        // The very style a player's parse note is drawn in, not a look-alike.
+        String parseNote = ChatMessageRenderer.renderEntry(new ChatEntry(Speaker.PLAYER, "deal", "(DCG)"));
+        assertTrue(parseNote.contains("<span style=\"color:#888888;font-size:9px\">(DCG)</span>"), parseNote);
+    }
+
+    @Test
+    void anAssistantEntryWithoutDetailsRendersExactlyAsBefore() {
+        assertEquals(ASSISTANT_BLOCK_WITHOUT_DETAILS,
+                ChatMessageRenderer.renderEntry(new ChatEntry(Speaker.ASSISTANT, HINT_TEXT)));
+        assertEquals(ASSISTANT_BLOCK_WITHOUT_DETAILS,
+                ChatMessageRenderer.renderEntry(new ChatEntry(Speaker.ASSISTANT, HINT_TEXT, "")));
+        assertEquals(ASSISTANT_BLOCK_WITHOUT_DETAILS,
+                ChatMessageRenderer.renderEntry(new ChatEntry(Speaker.ASSISTANT, HINT_TEXT, null)),
+                "null details are no details");
+    }
+
+    @Test
+    void theDetailsAreEscaped() {
+        String html = ChatMessageRenderer.renderEntry(
+                new ChatEntry(Speaker.ASSISTANT, HINT_TEXT, "wind <b>32</b> kn & rising [R15]"));
+        assertFalse(html.contains("<b>"), "details must never be able to inject markup: " + html);
+        assertTrue(html.contains(">wind &lt;b&gt;32&lt;/b&gt; kn &amp; rising [R15]</span>"), html);
+    }
+
+    @Test
+    void theDetailsTravelThroughAWholeTranscriptWithTheirOwnHint() {
+        String html = ChatMessageRenderer.renderTranscript(List.of(
+                new ChatEntry(Speaker.VESSEL, "Opens at €1500"),
+                new ChatEntry(Speaker.ASSISTANT, HINT_TEXT, HINT_DETAILS),
+                new ChatEntry(Speaker.ASSISTANT, "🤖 Assistant (autopilot): countered at €1580."),
+                new ChatEntry(Speaker.SYSTEM, "→ Demanding €1580 for 6h.")));
+        assertEquals(1, html.split("chance 62%", -1).length - 1, "exactly one entry has details: " + html);
+        assertTrue(html.indexOf(HINT_TEXT) < html.indexOf(HINT_DETAILS)
+                && html.indexOf(HINT_DETAILS) < html.indexOf("autopilot"), "and they sit under their own hint: " + html);
     }
 }

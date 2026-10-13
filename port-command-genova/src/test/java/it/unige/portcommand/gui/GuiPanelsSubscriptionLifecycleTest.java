@@ -9,6 +9,7 @@ import it.unige.portcommand.agents.TugStatus;
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
+import it.unige.portcommand.gui.events.AutopilotOwnershipEvent;
 import it.unige.portcommand.gui.events.CommLogEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
@@ -131,6 +132,40 @@ class GuiPanelsSubscriptionLifecycleTest {
         SwingUtilities.invokeAndWait(() -> { });
         assertEquals(3, panel.registry().tab("dlg-1").transcript().size(),
                 "removeNotify() must cancel the subscription");
+    }
+
+    /**
+     * S17a (ADR-21): the chat column's newest subscription — the Assistant's statement of who is
+     * negotiating in which tab ({@link AutopilotOwnershipEvent}), which replaced the panel's
+     * {@code SettingsChangedEvent} subscription. Live from construction (a tab is locked by it),
+     * cancelled in {@code removeNotify()} (a detached panel's tab is not unlocked by a later one).
+     */
+    @Test
+    @Timeout(5)
+    void chatPanelOwnershipSubscriptionCancelsOnRemoveNotify() throws Exception {
+        EventBus bus = new EventBus();
+        ChatPanel panel = new ChatPanel(bus, (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")));
+        WalkInDialogueSnapshot snapshot = WalkInDialogueSnapshot.of("W001",
+                new VesselSpec("W001", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L),
+                "berth_1", 6, 1500.0, 0.0, 1, 0.0, false);
+        bus.publish(AutopilotOwnershipEvent.initial(false));
+        bus.publish(new NegotiationOpenedEvent("dlg-1", snapshot));
+        SwingUtilities.invokeAndWait(() -> { });
+        DialogueTabView view = panel.viewForTest("dlg-1");
+        assertTrue(view.inputFieldForTest().isEditable(), "precondition: the tab is the player's");
+
+        bus.publish(AutopilotOwnershipEvent.initial(true));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertFalse(view.inputFieldForTest().isEditable(),
+                "constructor subscription must be live (positive control: the Assistant's tab is locked)");
+        assertTrue(view.markerRowVisibleForTest());
+
+        panel.removeNotify();
+        bus.publish(AutopilotOwnershipEvent.initial(false));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertFalse(view.inputFieldForTest().isEditable(),
+                "removeNotify() must cancel the ownership subscription");
+        assertTrue(view.markerRowVisibleForTest());
     }
 
     @Test

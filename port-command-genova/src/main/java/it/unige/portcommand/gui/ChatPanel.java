@@ -20,11 +20,11 @@ import javax.swing.Timer;
 
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
+import it.unige.portcommand.gui.events.AutopilotOwnershipEvent;
 import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
-import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.gui.model.NegotiationTabRegistry;
@@ -57,6 +57,13 @@ import it.unige.portcommand.util.Subscription;
  * and the tab cannot disagree, and the one-second counter timer here stays the only clock on
  * screen) and brings a tab forward on a click; the comm log follows the selected tab's vessel.
  * GUI to GUI, so plain listeners run on the EDT — not bus events, which are the agents' boundary.
+ *
+ * <p><b>S17a (ADR-21, decisions A2 and A10): who is negotiating in a tab has one source.</b> The
+ * panel keeps the Assistant's latest {@link AutopilotOwnershipEvent} — the autopilot switch and
+ * the dialogues the player took over — and every tab asks it "is the Assistant negotiating in
+ * me?". A tab it owns is locked and says so; a tab the player owns offers Hint. Nothing else
+ * feeds that answer: not the Settings toggle (which the Assistant hears and then restates, with
+ * the per-tab part only it knows), and not a load — see {@link #ownership}.
  */
 public final class ChatPanel extends JPanel implements DialogueDirectory {
 
@@ -102,14 +109,27 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
     private final Subscription<AssistantChatEvent> assistantSubscription;
     private final Subscription<PlayerCommandRefusedEvent> refusedSubscription;
     private final Subscription<SimClockTickEvent> clockSubscription;
-    private final Subscription<SettingsChangedEvent> settingsSubscription;
+    private final Subscription<AutopilotOwnershipEvent> ownershipSubscription;
     private final Subscription<it.unige.portcommand.persistence.events.GameLoadedEvent> loadedSubscription;
 
-    /** Live Channel-B autopilot state (task 21): seeded from the {@code defaults.json} value and
-     * updated on {@link SettingsChangedEvent}; every tab's Hint button follows it. The tabs read
-     * it through a {@code BooleanSupplier} so a toggle re-hides/re-shows Hint on the next refresh
-     * without threading the flag through every {@link DialogueTabView} field. */
-    private boolean autopilotEnabled = Settings.load().autopilotEnabled();
+    /**
+     * S17a (ADR-21, decisions A2 and A10): who is negotiating in which tab, as the Assistant last
+     * said it — the whole state, replaced whole by each {@link AutopilotOwnershipEvent}. Every
+     * tab reads it through a {@code BooleanSupplier} ({@code assistantOwns(dialogueId)}), so a tab
+     * that opens later is right from its first render.
+     *
+     * <p>Until the Assistant has spoken, the panel starts from what the Assistant itself boots
+     * from: the session's autopilot setting, with nothing taken over.
+     *
+     * <p>Before S17a this was a {@code boolean} copy of the Settings toggle, kept in step by
+     * hand — updated on {@code SettingsChangedEvent}, and set to {@code false} on every load on
+     * the belief that a respawned Assistant boots with the autopilot off. It boots with the
+     * SAVED value. After loading an autopilot-ON save the window showed Hint and a free input
+     * while the Assistant was negotiating in the same tab (backlog R-07). The copy is gone: a
+     * load does not touch this field, and the respawned Assistant states the new world's
+     * ownership itself when it boots.
+     */
+    private AutopilotOwnershipEvent ownership = AutopilotOwnershipEvent.initial(Settings.load().autopilotEnabled());
 
     /** Set while expired tabs are being removed: removing a tab at or before the selected one
      * re-fires the pane's change event, and the focus hop it triggers must not steal focus from
@@ -157,9 +177,12 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         // cancelled like every other subscription (adversarial finding 5 — it was the odd one out).
         this.loadedSubscription = eventBus.subscribe(it.unige.portcommand.persistence.events.GameLoadedEvent.class,
                 this::onGameLoaded, DeliveryMode.EDT);
-        // Task 21: the Settings screen toggles autopilot live — update the flag and re-render open
-        // tabs so the Hint button appears/disappears at once (#9's live-visibility half).
-        this.settingsSubscription = eventBus.subscribe(SettingsChangedEvent.class, this::onSettingsChanged, DeliveryMode.EDT);
+        // S17a (ADR-21): the Assistant says who is negotiating in which tab; every open tab is
+        // re-rendered when it does, so a lock, an unlock after "Take over" and the Hint button all
+        // follow at once. (Task 21 had the panel listen to SettingsChangedEvent for this. That
+        // subscription is gone — the Assistant hears the toggle and restates the ownership.)
+        this.ownershipSubscription = eventBus.subscribe(AutopilotOwnershipEvent.class,
+                this::onOwnershipChanged, DeliveryMode.EDT);
         // #9: keep keystrokes in the tab the player is looking at — focusing an open tab's field
         // makes it ready to type; focusing a CLOSED tab's (non-editable) field makes it swallow
         // input rather than letting focus fall through to the comm-log filter combo.
@@ -180,8 +203,10 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         add(waitingPlaceholder, BorderLayout.CENTER);
     }
 
-    private void onSettingsChanged(SettingsChangedEvent event) {
-        autopilotEnabled = event.autopilotEnabled();
+    /** S17a (ADR-21): the Assistant restated who is negotiating where. The event is the whole
+     * state, so it simply replaces the last one; every tab then re-renders against it. */
+    private void onOwnershipChanged(AutopilotOwnershipEvent event) {
+        ownership = event;
         views.values().forEach(DialogueTabView::refresh);
     }
 
@@ -199,10 +224,12 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         views.clear();
         tabbedPane.removeAll();
         showWaitingPlaceholder();
-        // The respawned AssistantAgent boots autopilot OFF; keep this mirror in step so a walk-in
-        // after the load shows its Hint button (adversarial finding 4 — else the GUI stayed "ON"
-        // and hid Hint while the agent did nothing).
-        autopilotEnabled = false;
+        // S17a (ADR-21, decision A10 / backlog R-07): the ownership is NOT reset here. This used
+        // to set the panel's autopilot copy to "off" (the respawned AssistantAgent was believed
+        // to boot with the autopilot off; it boots with the SAVED value), so after loading an
+        // autopilot-ON save the next walk-in's tab offered Hint and a free input while the
+        // Assistant negotiated in it. The respawned Assistant states the loaded world's ownership
+        // itself; until that arrives the last statement stands, which is never worse than a guess.
         revalidate();
         repaint();
         // S15: the old world's tabs are gone — nobody is selected, nobody is waiting.
@@ -298,8 +325,10 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         // refreshCounters, not a bare announcement: the list SORTS by these numbers, and one
         // tab's fresh reading against the others' up-to-a-second-old ones could put the wrong
         // vessel first for the rest of that second. Every tab re-reads, then the list is told.
+        // S17a (ADR-21): the tab asks, at every render and before every send, whether the Assistant
+        // is negotiating in it — of the ownership as it stands THEN (the field, not a copy of it).
         DialogueTabView view = new DialogueTabView(dialogueId, registry, eventBus, processor, simClock,
-                () -> autopilotEnabled, this::refreshCounters);
+                id -> ownership.assistantOwns(id), this::refreshCounters);
         views.put(dialogueId, view);
         tabbedPane.addTab(tabTitle(event), view);
         revalidate();
@@ -468,7 +497,7 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         assistantSubscription.cancel();
         refusedSubscription.cancel();
         clockSubscription.cancel();
-        settingsSubscription.cancel();
+        ownershipSubscription.cancel();
         loadedSubscription.cancel();
     }
 

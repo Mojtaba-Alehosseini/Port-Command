@@ -155,9 +155,10 @@ public final class NegotiationTabRegistry {
         if (!tab.refusePendingOffer(event.commandId())) {
             return Optional.empty();
         }
-        // The HM's price, not this tab's memory of the strip: an id-less autopilot counter
-        // dispatched between the send and this refusal is in the HM's record but was never in
-        // this tab's (review finding, S13). The model has already put the hours back.
+        // The HM's price, not this tab's memory of the strip: an autopilot counter dispatched
+        // between the send and this refusal is in the HM's record but was never in this tab's
+        // (review finding, S13; since S17a the autopilot's moves carry ids of their own, which
+        // never match a send of this tab). The model has already put the hours back.
         tab.updateSnapshot(withPlayerOffer(tab.snapshot(), event.standingPlayerPrice()));
         onChange.run();
         return Optional.of(event.dialogueId());
@@ -193,6 +194,13 @@ public final class NegotiationTabRegistry {
      * S12: a Hint reply goes through {@link DialogueTabModel#appendHint}/{@link
      * DialogueTabModel#reviseHint}, which refuse closed tabs and stale revisions; the check and
      * the change happen here in one EDT step, on the state that gets rendered.
+     *
+     * <p>S17a (ADR-21, decision A3): a Hint's template may carry its card
+     * ({@link AssistantChatEvent#card()}) — the recommendation as data. It is stored on the tab
+     * with that Hint's id: its details line shows under the hint's text, and the tab's hint row
+     * offers it as "Use this" ({@link HintRow}). A revision carries no card and needs none — it
+     * replaces the text of the hint entry only, so the card and its details stay. The next Hint
+     * replaces the card, whether or not it brings one of its own.
      * @return the routed tab's dialogue id, or empty if nothing was shown or changed. */
     public Optional<String> onAssistantChat(AssistantChatEvent event) {
         DialogueTabModel tab = tabs.get(event.dialogueId());
@@ -206,7 +214,7 @@ public final class NegotiationTabRegistry {
         } else if (event.revision()) {
             shown = tab.reviseHint(event.hintId(), event.text());
         } else {
-            shown = tab.appendHint(event.hintId(), event.text());
+            shown = tab.appendHint(event.hintId(), event.text(), event.card());
         }
         if (!shown) {
             return Optional.empty();
