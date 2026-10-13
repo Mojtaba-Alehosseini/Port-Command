@@ -8,7 +8,8 @@ REM thing that matters here: on Ctrl-C it asks "Terminate batch job (Y/N)?" and,
 REM every remaining line - so a cmd-only teardown block leaks two servers holding :5005 and
 REM :5006, and the next launch then talks to the OLD ones. PowerShell's try/finally runs.
 REM
-REM   start.bat                          sandbox; Game - New Game... picks a scenario
+REM   start.bat                          the window opens on the New Game dialog (S15): pick
+REM                                      a scenario or Free play (the sandbox); nothing runs before
 REM   start.bat -Scenario busy_day       boot straight into a scenario
 REM   start.bat -Profile                 record logs/profile.jfr for 15 minutes
 REM   start.bat -NoServices              game only (services already running)

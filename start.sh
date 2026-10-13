@@ -17,7 +17,8 @@
 # traps re-raise into it), so a single Ctrl-C stops all three. stop.sh is the manual escape
 # hatch if this shell is ever killed with -9.
 #
-#   ./start.sh                       sandbox; Game - New Game... picks a scenario
+#   ./start.sh                       the window opens on the New Game dialog (S15): pick a
+#                                    scenario or Free play (the sandbox); nothing runs before
 #   ./start.sh --scenario busy_day   boot straight into a scenario
 #   ./start.sh --profile             record logs/profile.jfr for 15 minutes
 #   ./start.sh --no-services         game only (services already running)

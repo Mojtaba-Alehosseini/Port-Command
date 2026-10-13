@@ -28,7 +28,8 @@ param(
     [switch]$Profile,
     # Seconds of JFR recording; ignored unless -Profile.
     [int]$ProfileSeconds = 900,
-    # tutorial | busy_day | storm. Omitted = a running sandbox (Game - New Game... in-game).
+    # tutorial | busy_day | storm. Omitted = the window opens on the New Game dialog and no game
+    # runs until one is chosen there (the three scenarios, or Free play = the sandbox). S15.
     [string]$Scenario = '',
     # JADE Main Container port. 1099 is also the default Windows RMI registry port; if something
     # else holds it, pass e.g. -JadePort 11099 (see docs/TROUBLESHOOTING.md).

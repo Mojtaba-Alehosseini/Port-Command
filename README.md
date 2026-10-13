@@ -60,16 +60,29 @@ start.bat
 ./start.sh
 ```
 
-**6. Start the tutorial.** The window opens on a running sandbox game: choose **Game → New Game… →
-Tutorial — Calm Morning → Start** and follow the five steps (or launch straight into it with
-`start.bat -Scenario tutorial` / `./start.sh --scenario tutorial`). The first boot after a reboot
-can spend a few minutes loading Rasa's model; the console says `still loading rasa...` meanwhile.
+**6. Start the tutorial.** The window opens on the **New Game** dialog, and no game runs until you
+choose one there: pick **Tutorial — Calm Morning**, press **Start**, and follow the five steps (or
+launch straight into it with `start.bat -Scenario tutorial` / `./start.sh --scenario tutorial`).
+The dialog's fourth choice, **Free play**, is the open-ended sandbox. Cancel leaves an empty
+window; **Game → New Game…** or **Load Game…** starts a game from there. The first boot after a
+reboot can spend a few minutes loading Rasa's model; the console says `still loading rasa...`
+meanwhile.
 
-**Pace.** A sandbox game day is 60 real minutes at ×1; switch to ×2 or ×4 from the HUD or with
-Ctrl+1 / Ctrl+2 / Ctrl+4, and set the day length itself (5 minutes to 2 hours) in Settings. A
-walk-in waits for your answer in real seconds — its chat tab shows a live counter that no speed
-setting changes — and **Esc** pauses the game but leaves the chat usable, so you can stop the
-clock, read, think and type.
+**The window.** Three columns of text under the top bar — there is no map. Left: **Waiting for
+you**, the vessels negotiating with you, the one closest to leaving first (click a line to open
+its chat tab), and the **Port** table — who holds each berth and until when, the berth queue, the
+tugs and the weather. Middle: one chat tab per walk-in, with both sides' offers above the
+conversation, a grey example of what you can type in the empty input, and **Send / Hint / Accept /
+Reject**; a small `(DCG)` or `(Rasa 0.97)` after each of your messages shows which parser read it.
+Right: the **comm log**, every message the HarbourMaster sent or received, with the filters
+**All / This vessel / Rules / Weather**, a **Raw** switch that shows the real FIPA fields, and
+clickable rule ids such as `[R7]` that show the rule in plain words. The column borders drag.
+
+**Pace.** A Free play game day is 60 real minutes at ×1; switch to ×2 or ×4 from the top bar or
+with Ctrl+1 / Ctrl+2 / Ctrl+4, and set the day length itself (5 minutes to 2 hours) in Settings. A
+walk-in waits for your answer in real seconds — its chat tab and its line under *Waiting for you*
+show a live counter that no speed setting changes — and **Esc** pauses the game but leaves all
+three columns usable, so you can stop the clock, read, think and type.
 
 **Optional — the LLM.** The game runs fine without it, and the launcher checks: if the weights are
 not on this machine it says so and starts without the sidecar, and Assistant explanations fall back
