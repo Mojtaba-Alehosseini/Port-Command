@@ -27,19 +27,25 @@ import javax.swing.SwingUtilities;
  *
  * <p>While visible it also swallows mouse input (the empty {@code MouseAdapter} makes this
  * component the event target, so nothing beneath is clickable) — everywhere except the two
- * pass-through regions below. Esc still works because the resume binding sits on the root pane at
- * WHEN_IN_FOCUSED_WINDOW scope.
+ * pass-through regions below. What stays dimmed and blocked is the top bar, the notification
+ * strip, and the overlay's own PAUSED box. Esc still works because the resume binding sits on the
+ * root pane at WHEN_IN_FOCUSED_WINDOW scope.
  *
- * <h2>The chat is NOT swallowed either (S14, 2026-10-11)</h2>
+ * <h2>The three columns are NOT swallowed either (S14 the chat, S15 all three)</h2>
  * A paused game freezes the vessels' patience (ADR-18), and the whole point of that is to let the
  * player read, think and TYPE: a vessel's reply is message-driven and never waits on the game
- * clock. So the chat panel's rectangle passes mouse events through and is left undimmed, exactly
- * like the menu bar, and showing the overlay no longer pulls keyboard focus out of the chat
- * input. Everything else — the map, the comm log, the HUD — stays blocked as before. The overlay's
- * own PAUSED box stays where it was: {@link #captionBox()} — the caption, its hint line and the
- * Resume button, with a small margin — keeps both its dim and its clicks even where it overlaps
- * the chat, because white text on an undimmed transcript is not a pause indicator (adversarial
- * review, S14: at the default dividers the box straddles the map | chat boundary).
+ * clock. So S14 (2026-10-11) let the chat panel's rectangle pass mouse events through and left it
+ * undimmed, exactly like the menu bar, and showing the overlay no longer pulls keyboard focus out
+ * of the chat input. <b>S15 (2026-10-12)</b> widened that rectangle to the whole three-column
+ * area — waiting list and Port table, chat, comm log: the two outer columns are read-only views,
+ * a pause is exactly when the player wants to scroll the log or pick the next vessel from the
+ * waiting list, and a dimmed, unclickable list beside a live chat would only look broken.
+ *
+ * <p>The overlay's own PAUSED box stays where it was, centred on the window — which in the
+ * three-column layout puts it over the chat column: {@link #captionBox()} — the caption, its hint
+ * line and the Resume button, with a small margin — keeps both its dim and its clicks inside the
+ * pass-through area, because white text on an undimmed transcript is not a pause indicator
+ * (adversarial review, S14).
  *
  * <h2>The menu bar is deliberately NOT swallowed (audit C-04, 2026-07-27)</h2>
  * {@code JRootPane.RootLayout} sizes the glass pane to the ENTIRE root pane — which includes the
@@ -63,9 +69,10 @@ final class PauseOverlay extends JPanel {
      * when there is nothing to pass through. Re-read on every hit-test and paint, so a menu bar
      * that changes height (look-and-feel, DPI) can never leave it stale. */
     private final transient Supplier<Rectangle> passThroughRegion;
-    /** S14: the chat panel's rectangle (in THIS component's coordinates), or empty. Re-read on
-     * every hit-test and paint, like the menu strip — the split panes move it. */
-    private final transient Supplier<Rectangle> chatRegion;
+    /** The three-column area's rectangle (in THIS component's coordinates), or empty — S14's chat
+     * rectangle, widened in S15 to all three columns. Re-read on every hit-test and paint, like
+     * the menu strip: a window resize changes it. */
+    private final transient Supplier<Rectangle> columnsRegion;
 
     PauseOverlay(Runnable onResume) {
         this(onResume, Rectangle::new);
@@ -75,10 +82,15 @@ final class PauseOverlay extends JPanel {
         this(onResume, passThroughRegion, Rectangle::new);
     }
 
-    PauseOverlay(Runnable onResume, Supplier<Rectangle> passThroughRegion, Supplier<Rectangle> chatRegion) {
+    /**
+     * @param passThroughRegion the menu-bar strip, in this component's coordinates
+     * @param columnsRegion     the three-column area, in this component's coordinates
+     *                          ({@code GameScreen.columnsBoundsIn(overlay)} in the real window)
+     */
+    PauseOverlay(Runnable onResume, Supplier<Rectangle> passThroughRegion, Supplier<Rectangle> columnsRegion) {
         super(new GridBagLayout());
         this.passThroughRegion = passThroughRegion;
-        this.chatRegion = chatRegion;
+        this.columnsRegion = columnsRegion;
         setOpaque(false);
         setFocusable(true);
         addMouseListener(new MouseAdapter() { });
@@ -103,19 +115,19 @@ final class PauseOverlay extends JPanel {
     }
 
     /**
-     * Solid everywhere EXCEPT the pass-through region (the menu-bar strip). Swing's lightweight
-     * dispatcher consults {@code contains} to pick the mouse-event target, so a false here lets
-     * the click reach the menu bar under the glass pane. Same mechanism as
-     * {@code TutorialOverlay.contains}.
+     * Solid everywhere EXCEPT the two pass-through regions (the menu-bar strip and the three
+     * columns). Swing's lightweight dispatcher consults {@code contains} to pick the mouse-event
+     * target, so a false here lets the click reach the component under the glass pane. Same
+     * mechanism as {@code TutorialOverlay.contains}.
      */
     @Override
     public boolean contains(int x, int y) {
         if (passThroughRegion.get().contains(x, y)) {
             return false;
         }
-        // S14: the chat passes through too — but never under the overlay's own PAUSED box, whose
-        // Resume button must stay clickable wherever the layout happens to put it.
-        if (chatRegion.get().contains(x, y) && !captionBox().contains(x, y)) {
+        // S14/S15: the columns pass through too — but never under the overlay's own PAUSED box,
+        // whose Resume button must stay clickable wherever the layout happens to put it.
+        if (columnsRegion.get().contains(x, y) && !captionBox().contains(x, y)) {
             return false;
         }
         return super.contains(x, y);
@@ -127,8 +139,8 @@ final class PauseOverlay extends JPanel {
     /**
      * The overlay's own PAUSED group — caption, hint line, Resume button — as one rectangle with
      * a margin, wherever the layout put it; empty before the first layout. The same rectangle
-     * decides what stays dimmed and what stays click-blocking inside the chat pass-through, so
-     * the two can never disagree.
+     * decides what stays dimmed and what stays click-blocking inside the columns' pass-through,
+     * so the two can never disagree.
      */
     Rectangle captionBox() {
         Rectangle box = null;
@@ -151,12 +163,13 @@ final class PauseOverlay extends JPanel {
         Rectangle skip = passThroughRegion.get();
         // Dim below the pass-through strip only: a dimmed-but-clickable menu bar would still read
         // as disabled, which is the half of C-04 that a hit-test fix alone does not answer. The
-        // chat hole (S14) is left clear for the same reason.
+        // columns' hole (S14 the chat, S15 all three) is left clear for the same reason — which
+        // leaves the scrim on the top bar, the notification strip and behind the PAUSED group.
         int top = skip.isEmpty() ? 0 : Math.max(0, skip.y + skip.height);
         Area scrim = new Area(new Rectangle(0, top, getWidth(), Math.max(0, getHeight() - top)));
-        Rectangle chat = chatRegion.get();
-        if (!chat.isEmpty()) {
-            scrim.subtract(new Area(chat));
+        Rectangle columns = columnsRegion.get();
+        if (!columns.isEmpty()) {
+            scrim.subtract(new Area(columns));
             // ...but not behind the PAUSED group itself: its white text needs the dim.
             scrim.add(new Area(captionBox().intersection(new Rectangle(0, top, getWidth(),
                     Math.max(0, getHeight() - top)))));
@@ -173,22 +186,23 @@ final class PauseOverlay extends JPanel {
     @Override
     public void setVisible(boolean visible) {
         super.setVisible(visible);
-        if (visible && !focusIsInChat()) {
-            // Pull focus out of whatever is now blocked (the comm-log filters, the map) — but NOT
-            // out of the chat input: the player may type while paused (S14).
+        if (visible && !focusIsInColumns()) {
+            // Pull focus out of whatever is now blocked — but NOT out of a component inside the
+            // pass-through columns, the chat input above all: the player may type while paused
+            // (S14), and since S15 nothing in the three columns is blocked at all.
             requestFocusInWindow();
         }
     }
 
-    /** Whether the keyboard focus owner sits inside the chat pass-through region. */
-    private boolean focusIsInChat() {
-        Rectangle chat = chatRegion.get();
+    /** Whether the keyboard focus owner sits inside the columns' pass-through region. */
+    private boolean focusIsInColumns() {
+        Rectangle columns = columnsRegion.get();
         Component owner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
-        if (chat.isEmpty() || owner == null || !owner.isShowing() || !isShowing()
+        if (columns.isEmpty() || owner == null || !owner.isShowing() || !isShowing()
                 || SwingUtilities.getWindowAncestor(owner) != SwingUtilities.getWindowAncestor(this)) {
             return false;
         }
         Point origin = SwingUtilities.convertPoint(owner, 0, 0, this);
-        return chat.contains(origin);
+        return columns.contains(origin);
     }
 }

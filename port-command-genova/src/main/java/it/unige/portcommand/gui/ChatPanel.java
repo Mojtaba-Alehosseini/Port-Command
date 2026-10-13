@@ -2,10 +2,14 @@ package it.unige.portcommand.gui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.function.Consumer;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -24,6 +28,7 @@ import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.gui.model.NegotiationTabRegistry;
+import it.unige.portcommand.gui.model.OpenDialogue;
 import it.unige.portcommand.nlp.ChatInputProcessor;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
@@ -43,8 +48,17 @@ import it.unige.portcommand.util.Subscription;
  * arrives paired with a {@link NegotiationClosedEvent} (see that event's own
  * javadoc), which is the one this panel actually acts on; the other two are the
  * HUD's (task 20) more specific signal.
+ *
+ * <p><b>S15 (2026-10-12): the middle column, and what the other two ask of it.</b> The chat is
+ * now the centre of a three-column screen, and it is the only place that knows which negotiations
+ * are open, what each tab's counter reads and which tab the player is looking at. The other
+ * columns get exactly that through {@link DialogueDirectory}, which this class implements: the
+ * "Waiting for you" list reads the open dialogues and each tab's SHOWN remaining time (so the list
+ * and the tab cannot disagree, and the one-second counter timer here stays the only clock on
+ * screen) and brings a tab forward on a click; the comm log follows the selected tab's vessel.
+ * GUI to GUI, so plain listeners run on the EDT — not bus events, which are the agents' boundary.
  */
-public final class ChatPanel extends JPanel {
+public final class ChatPanel extends JPanel implements DialogueDirectory {
 
     /**
      * Audit C-07: how long a closed negotiation's tab stays readable before it leaves the strip —
@@ -61,6 +75,12 @@ public final class ChatPanel extends JPanel {
     /** S14 (ADR-18): how often every tab's live counter is re-read. Conversation time is REAL
      * time, so it cannot ride the sim-minute tick (2.5 s apart at the default day length). */
     static final int COUNTER_REFRESH_MILLIS = 1_000;
+
+    /** S15: the narrowest the chat column is ever laid out, in pixels. A tab's own minimum width
+     * (its widest row is the three action buttons) must stay under it — {@code ChatPanelTest}
+     * pins that — so the screen's explicit column minimum is the one that binds, not whatever a
+     * {@code JTabbedPane} computes from its widest tab. */
+    public static final int MIN_COLUMN_WIDTH = 380;
 
     private final NegotiationTabRegistry registry = new NegotiationTabRegistry();
     private final EventBus eventBus;
@@ -95,6 +115,14 @@ public final class ChatPanel extends JPanel {
      * re-fires the pane's change event, and the focus hop it triggers must not steal focus from
      * wherever the player is (e.g. the comm-log filters). */
     private boolean removingExpiredTabs;
+
+    /** S15: the {@link DialogueDirectory} listeners. EDT-confined like everything else here; the
+     * interface has no way to remove one (its two users live and die with this panel). */
+    private final List<Runnable> dialoguesListeners = new ArrayList<>();
+    private final List<Consumer<String>> selectedVesselListeners = new ArrayList<>();
+    /** S15: the vessel id the selected-vessel listeners were last told — {@code null} for "no
+     * tab", which is also where a new panel starts. They hear a value only when it differs. */
+    private String announcedVesselId;
 
     /**
      * Headless-test convenience: a private frozen clock (nothing advances it, and no vessel has a
@@ -135,9 +163,14 @@ public final class ChatPanel extends JPanel {
         // #9: keep keystrokes in the tab the player is looking at — focusing an open tab's field
         // makes it ready to type; focusing a CLOSED tab's (non-editable) field makes it swallow
         // input rather than letting focus fall through to the comm-log filter combo.
+        // S15: the same event is where the selected vessel can change under the player's own
+        // click, so it is announced from here too — and skipped under the same guard, because
+        // mid-removal the pane's selection passes through states nobody should be told about;
+        // removeExpiredTabs announces the settled result itself.
         tabbedPane.addChangeListener(e -> {
             if (!removingExpiredTabs) {
                 focusSelectedTabInput();
+                announceSelectedVessel();
             }
         });
     }
@@ -172,6 +205,9 @@ public final class ChatPanel extends JPanel {
         autopilotEnabled = false;
         revalidate();
         repaint();
+        // S15: the old world's tabs are gone — nobody is selected, nobody is waiting.
+        announceSelectedVessel();
+        fireDialoguesChanged();
     }
 
     private void onClockTick(SimClockTickEvent event) {
@@ -179,9 +215,12 @@ public final class ChatPanel extends JPanel {
     }
 
     /** S14: every open tab re-reads its conversation clock. Package-private so a headless test
-     * can stand in for the timer. */
+     * can stand in for the timer. S15: then the dialogues listeners run — this is the tick the
+     * "Waiting for you" list moves on, AFTER the tabs have taken their new values, so the list
+     * always repeats what the tabs show. */
     void refreshCounters() {
         views.values().forEach(DialogueTabView::refreshCounter);
+        fireDialoguesChanged();
     }
 
     @Override
@@ -222,6 +261,12 @@ public final class ChatPanel extends JPanel {
         }
         revalidate();
         repaint();
+        // S15: only now, with the guard down and the strip settled, are the listeners told — the
+        // tab that took a removed one's place is the selected vessel, and a listener is free to
+        // select another dialogue from inside its callback (the guard would have swallowed the
+        // change event that does the focusing and the announcing).
+        announceSelectedVessel();
+        fireDialoguesChanged();
     }
 
     private void onNegotiationOpened(NegotiationOpenedEvent event) {
@@ -233,6 +278,9 @@ public final class ChatPanel extends JPanel {
             if (view != null) {
                 view.refresh();
             }
+            // S15: a later round re-reads the tab's counter (the vessel's reply may have moved
+            // it), so what the list repeats may have changed.
+            fireDialoguesChanged();
         }
     }
 
@@ -244,12 +292,23 @@ public final class ChatPanel extends JPanel {
             tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
             add(tabbedPane, BorderLayout.CENTER);
         }
+        // S15: the tab reports a counter it changed outside the one-second tick (its own
+        // re-render after a send, a system line, an Assistant message), so the dialogues
+        // listeners — the "Waiting for you" list — repeat the new number at once. The answer is
+        // refreshCounters, not a bare announcement: the list SORTS by these numbers, and one
+        // tab's fresh reading against the others' up-to-a-second-old ones could put the wrong
+        // vessel first for the rest of that second. Every tab re-reads, then the list is told.
         DialogueTabView view = new DialogueTabView(dialogueId, registry, eventBus, processor, simClock,
-                () -> autopilotEnabled);
+                () -> autopilotEnabled, this::refreshCounters);
         views.put(dialogueId, view);
         tabbedPane.addTab(tabTitle(event), view);
         revalidate();
         repaint();
+        // S15: the first tab of an empty strip selects itself (the pane's change event has
+        // already announced it; this is a no-op then). A later tab leaves the selection alone.
+        announceSelectedVessel();
+        // The new tab read the clock as it was built; the others re-read now, for the same reason.
+        refreshCounters();
     }
 
     private static String tabTitle(NegotiationOpenedEvent event) {
@@ -259,18 +318,21 @@ public final class ChatPanel extends JPanel {
 
     private void onNegotiationClosed(NegotiationClosedEvent event) {
         Optional<String> dialogueId = registry.onNegotiationClosed(event, simClock.nowSimMillis());
-        dialogueId.ifPresent(id -> {
-            DialogueTabView view = views.get(id);
-            if (view == null) {
-                return;
-            }
+        if (dialogueId.isEmpty()) {
+            return;
+        }
+        DialogueTabView view = views.get(dialogueId.get());
+        if (view != null) {
             view.refresh();
             int index = tabbedPane.indexOfComponent(view);
             if (index >= 0) {
                 tabbedPane.setForegroundAt(index, Color.GRAY);
                 tabbedPane.setTitleAt(index, tabbedPane.getTitleAt(index) + " (closed)");
             }
-        });
+        }
+        // S15: a closed negotiation is no longer waiting for the player, although its tab stays
+        // on the strip for its dwell (and, if it is the selected one, still names its vessel).
+        fireDialoguesChanged();
     }
 
     private void onAssistantChat(AssistantChatEvent event) {
@@ -290,6 +352,111 @@ public final class ChatPanel extends JPanel {
                 view.refreshStrip();
             }
         });
+    }
+
+    // ==================== S15 (2026-10-12): DialogueDirectory — EDT only ====================
+
+    /** The negotiations still open, in tab order. A closed tab is left out from the moment it
+     * closes, although it stays on the strip for its dwell. */
+    @Override
+    public List<OpenDialogue> openDialogues() {
+        return registry.openDialogues();
+    }
+
+    /**
+     * Brings that dialogue's tab forward and puts the keyboard focus in its input. Works for any
+     * tab still on the strip, a closed one included (its input then swallows keystrokes, #9).
+     *
+     * <p>The focus is requested here, not left to the pane's change listener: re-selecting the
+     * tab that is already selected fires no change event at all, and the listener stands down
+     * while expired tabs are being removed.
+     *
+     * @return {@code false} if no tab has that id — the caller's list is stale and should re-read
+     */
+    @Override
+    public boolean selectDialogue(String dialogueId) {
+        DialogueTabView view = dialogueId == null ? null : views.get(dialogueId);
+        if (view == null || tabbedPane.indexOfComponent(view) < 0) {
+            return false;
+        }
+        if (tabbedPane.getSelectedComponent() != view) {
+            tabbedPane.setSelectedComponent(view);
+        }
+        announceSelectedVessel(); // already done by the change listener, unless it stood down
+        SwingUtilities.invokeLater(view::focusInput);
+        return true;
+    }
+
+    /** What that tab's counter shows right now, in milliseconds; empty when it is blank (a closed
+     * tab, a dialogue the conversation clock does not know) or when there is no such tab. */
+    @Override
+    public OptionalLong shownRemainingMillis(String dialogueId) {
+        DialogueTabView view = dialogueId == null ? null : views.get(dialogueId);
+        return view == null ? OptionalLong.empty() : view.shownRemainingMillis();
+    }
+
+    /** Runs {@code listener}, on the EDT, each time the answer to {@link #openDialogues()} or
+     * {@link #shownRemainingMillis} may have changed: a tab was added, a vessel countered, a
+     * negotiation closed, expired tabs left the strip, the world was replaced — and on every
+     * one-second counter refresh. */
+    @Override
+    public void addDialoguesListener(Runnable listener) {
+        dialoguesListeners.add(Objects.requireNonNull(listener, "listener"));
+    }
+
+    /** Tells {@code listener}, on the EDT, the vessel id of the selected tab each time it changes
+     * — {@code null} once no tab is left. Not called at registration: a listener that needs the
+     * current value reads {@link #selectedVesselId()}. */
+    @Override
+    public void addSelectedVesselListener(Consumer<String> listener) {
+        selectedVesselListeners.add(Objects.requireNonNull(listener, "listener"));
+    }
+
+    /** S15: the dialogue id of the selected tab, or {@code null} when the strip is empty. EDT only. */
+    public String selectedDialogueId() {
+        DialogueTabView view = selectedView();
+        return view == null ? null : view.dialogueId();
+    }
+
+    /** S15: the vessel id of the selected tab, or {@code null} when the strip is empty. A closed
+     * tab that is still selected still reports its vessel. EDT only. */
+    public String selectedVesselId() {
+        DialogueTabView view = selectedView();
+        return view == null ? null : view.vesselId();
+    }
+
+    private DialogueTabView selectedView() {
+        // views is the truth about which tabs exist: a load clears it BEFORE it empties the pane,
+        // and in between the pane still holds the old world's pages.
+        if (views.isEmpty()) {
+            return null;
+        }
+        return tabbedPane.getSelectedComponent() instanceof DialogueTabView view ? view : null;
+    }
+
+    /** Tells the selected-vessel listeners whose tab is selected, if that differs from what they
+     * were last told. Selecting another tab of the SAME vessel id, a tab sliding along the strip
+     * when an earlier one is removed, or a re-selection all announce nothing. */
+    private void announceSelectedVessel() {
+        String vesselId = selectedVesselId();
+        if (Objects.equals(vesselId, announcedVesselId)) {
+            return;
+        }
+        announcedVesselId = vesselId;
+        for (Consumer<String> listener : List.copyOf(selectedVesselListeners)) {
+            if (!Objects.equals(announcedVesselId, vesselId)) {
+                // A listener changed the selection from inside its callback; that nested
+                // announcement already told every listener the newer vessel.
+                break;
+            }
+            listener.accept(vesselId);
+        }
+    }
+
+    private void fireDialoguesChanged() {
+        for (Runnable listener : List.copyOf(dialoguesListeners)) {
+            listener.run();
+        }
     }
 
     @Override

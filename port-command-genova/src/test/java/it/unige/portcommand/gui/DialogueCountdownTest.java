@@ -75,27 +75,27 @@ class DialogueCountdownTest {
     void theCounterShowsTheVesselsRealRemainingTimeAndTurnsOrangeThenRed() throws Exception {
         DialogueTabView view = openTab();
         assertEquals("4:00", view.counterTextForTest(), "the full budget the moment the tab opens");
-        assertEquals(DialogueTabView.COUNTER_NORMAL, view.counterColourForTest());
+        assertEquals(CounterColours.NORMAL, view.counterColourForTest());
 
         clock.advance(75_000);
         timerFires();
         assertEquals("2:45", view.counterTextForTest());
-        assertEquals(DialogueTabView.COUNTER_NORMAL, view.counterColourForTest());
+        assertEquals(CounterColours.NORMAL, view.counterColourForTest());
 
         clock.advance(136_000); // 29 s left
         timerFires();
         assertEquals("0:29", view.counterTextForTest());
-        assertEquals(DialogueTabView.COUNTER_WARNING, view.counterColourForTest(), "orange under 30 s");
+        assertEquals(CounterColours.WARNING, view.counterColourForTest(), "orange under 30 s");
 
         clock.advance(20_000); // 9 s left
         timerFires();
         assertEquals("0:09", view.counterTextForTest());
-        assertEquals(DialogueTabView.COUNTER_CRITICAL, view.counterColourForTest(), "red under 10 s");
+        assertEquals(CounterColours.CRITICAL, view.counterColourForTest(), "red under 10 s");
 
         clock.advance(60_000); // long past the end
         timerFires();
         assertEquals("0:00", view.counterTextForTest(), "clamped at zero");
-        assertEquals(DialogueTabView.COUNTER_CRITICAL, view.counterColourForTest());
+        assertEquals(CounterColours.CRITICAL, view.counterColourForTest());
     }
 
     @Test
@@ -110,7 +110,21 @@ class DialogueCountdownTest {
         String strip = view.offerStripTextForTest();
         assertFalse(strip.contains("remaining"), "the fake countdown is gone from the strip: " + strip);
         assertFalse(strip.toLowerCase(java.util.Locale.ROOT).contains("patience"), strip);
-        assertTrue(strip.contains("Round 1 of "), "the strip still carries the offers and the round: " + strip);
+        // S15 (2026-10-12): the strip is the two-row offer line now, and the round is lower-case.
+        assertTrue(strip.contains("round 1 of "), "the strip still carries the offers and the round: " + strip);
+        // S15: nothing else on the tab explains the number either — not the offer rows, not the
+        // input's example, not any button.
+        List<String> texts = new ArrayList<>(view.offerRowsForTest());
+        texts.add(view.placeholderForTest());
+        texts.addAll(view.buttonLabelsForTest());
+        for (String text : texts) {
+            String lower = text.toLowerCase(java.util.Locale.ROOT);
+            for (String word : List.of("patience", "remaining", "time", "wait", "seconds", "countdown")) {
+                assertFalse(lower.contains(word), "\"" + text + "\" explains the counter");
+            }
+        }
+        assertEquals(java.util.OptionalLong.of(BUDGET - 61_000L), panel.shownRemainingMillis(DIALOGUE),
+                "and the column reports the very number the counter shows (the waiting list repeats it)");
     }
 
     @Test
@@ -224,9 +238,9 @@ class DialogueCountdownTest {
         timerFires();
 
         assertEquals("0:25", panel.viewForTest("nego-A").counterTextForTest());
-        assertEquals(DialogueTabView.COUNTER_WARNING, panel.viewForTest("nego-A").counterColourForTest());
+        assertEquals(CounterColours.WARNING, panel.viewForTest("nego-A").counterColourForTest());
         assertEquals("2:25", panel.viewForTest("nego-B").counterTextForTest());
-        assertEquals(DialogueTabView.COUNTER_NORMAL, panel.viewForTest("nego-B").counterColourForTest());
+        assertEquals(CounterColours.NORMAL, panel.viewForTest("nego-B").counterColourForTest());
     }
 
     /**
@@ -244,7 +258,7 @@ class DialogueCountdownTest {
 
         clock.advance(60_000);
         conversation.extend(30_000L, 300_000L);
-        SwingUtilities.invokeAndWait(() -> view.clickClarificationForTest("request_help"));
+        SwingUtilities.invokeAndWait(() -> view.clickForTest("Hint"));
 
         assertEquals(1, hints.size());
         WalkInDialogueSnapshot snapshot = hints.get(0).snapshot();
@@ -261,7 +275,7 @@ class DialogueCountdownTest {
         bus.publish(openEvent(DIALOGUE, "V1"));
         flush();
 
-        SwingUtilities.invokeAndWait(() -> panel.viewForTest(DIALOGUE).clickClarificationForTest("request_help"));
+        SwingUtilities.invokeAndWait(() -> panel.viewForTest(DIALOGUE).clickForTest("Hint"));
 
         assertEquals(WalkInDialogueSnapshot.NO_TIME_LIMIT, hints.get(0).snapshot().timeLimitSec(),
                 "no counter on screen, so no time pressure for the Assistant to invent");

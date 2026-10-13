@@ -35,10 +35,12 @@ import it.unige.portcommand.util.Subscription;
  * pane is already the {@code PauseOverlay}), sized to the content pane and kept in sync on resize.
  *
  * <p><b>Highlight by component NAME, not pixels</b> (planning risk note): each step names a target
- * ({@code tutorial-map}/{@code -chat}/{@code -commlog}/{@code -hud}, set by {@code MainWindow}); the
- * cutout is recomputed from the live component bounds every paint, so it tracks resizes and never
- * drifts. A target that isn't showing (e.g. minimised, or a Hint button with no open tab) simply
- * yields no cutout — the scrim dims fully and the caption still explains the step.
+ * ({@code tutorial-port}/{@code -chat}/{@code -commlog}/{@code -hud}); the cutout is recomputed
+ * from the live component bounds every paint, so it tracks resizes and never drifts. A target that
+ * isn't showing (e.g. minimised, or a Hint button with no open tab) simply yields no cutout — the
+ * scrim dims fully and the caption still explains the step. The name constants, and the components
+ * that carry them, are {@link GameScreen}'s since S15 (2026-10-12), when the Port table became the
+ * first step's target.
  *
  * <p><b>Two drivers, one view — and two different endings.</b> The tutorial scenario fires
  * {@link TutorialStepAdvancedEvent} on the bus at scripted sim-times (this replaces the task-23
@@ -60,16 +62,17 @@ public final class TutorialOverlay extends JComponent {
     /** §3.13 canonical step texts — used for Help/first-launch paging (the scenario supplies its
      * own per-step text when it drives).
      *
-     * <p>Step 1's wording was corrected on 2026-07-27 (audit C-05): it used to say "vessels arrive
-     * and move here as the day runs", but the arrival/departure chip events never had a production
-     * publisher — the map genuinely shows berth occupancy, the four tug dots and the weather chip,
-     * so that is what the text promises. <b>S9 (2026-08-17) closed the loop the other way:</b> the
-     * two dead events and their whole render path were DELETED (Moji's recorded decision — remove,
-     * not wire; berth labels already show arrivals honestly), so the text below is no longer a
-     * workaround for missing publishers — it simply describes the map. {@code tutorial.json}'s
-     * step-1 string was corrected in the C-05 pass and stands unchanged. */
+     * <p><b>Step 1 describes the Port table (S15, 2026-10-12)</b>, which replaced the picture of
+     * the harbour the step used to point at: what a berth line says (who holds it, until when)
+     * and what the lines under the berths count. It says only what the table really shows — the
+     * rule this step has been held to since audit C-05 (2026-07-27), when its text promised
+     * vessel movements nothing ever drew. It deliberately says nothing about the "Waiting for you"
+     * list above the table, and no step text anywhere may: that list's number is the walk-in's
+     * time counter, which is never labelled or explained (INVARIANTS). {@code tutorial.json}'s
+     * step-1 sentence was reworded in the same session. */
     private static final String[] STEP_TEXT = {
-            "This is the map — berths fill as vessels dock, and the four tugs move as they escort.",
+            "This is the Port table — each berth shows the vessel holding it and until when; "
+                    + "the lines below count the queue and the tugs.",
             "When a walk-in vessel hails you, its negotiation opens as a chat tab here.",
             "Press the Hint button in a chat tab to ask the Assistant for a recommended counter-offer.",
             "Every agent message appears in the comm log here, colour-coded by FIPA performative.",
@@ -79,8 +82,8 @@ public final class TutorialOverlay extends JComponent {
     /** Component name each step highlights; steps 2 and 3 both point at the chat area (the Hint
      * button lives inside it, and has no stable single component to name across tabs). */
     private static final String[] STEP_TARGET = {
-            MainWindow.NAME_MAP, MainWindow.NAME_CHAT, MainWindow.NAME_CHAT,
-            MainWindow.NAME_COMMLOG, MainWindow.NAME_HUD,
+            GameScreen.NAME_PORT, GameScreen.NAME_CHAT, GameScreen.NAME_CHAT,
+            GameScreen.NAME_COMMLOG, GameScreen.NAME_HUD,
     };
 
     static final int TOTAL_STEPS = 5;
@@ -193,7 +196,7 @@ public final class TutorialOverlay extends JComponent {
         // no sixth; `advance()` (the only other route to dismiss()) fires solely on the Next/Done
         // BUTTON, which is the MANUAL driver's ending. So a scenario-driven tutorial parked itself
         // on step 5 forever: at 1800 real-seconds/day all five steps land inside the first ~31 real
-        // seconds, and the 60% black scrim then covered the map, chat and comm log for the whole
+        // seconds, and the 60% black scrim then covered every panel under it for the whole
         // rest of the session — including the storm beat and the EOD report. Clicks still passed
         // through (contains() is solid only over the card), so it was purely, and severely, visual.
         // Only the SCRIPTED path auto-dismisses: Help -> "Show tutorial" is the player paging at
@@ -237,6 +240,18 @@ public final class TutorialOverlay extends JComponent {
      * driver without synthesising an {@code ActionEvent} on a button that is never realized. */
     void advanceForTest() {
         advance();
+    }
+
+    /** Test-only (S15): the canonical text of step {@code step} (1..{@link #TOTAL_STEPS}) — what
+     * Help → "Show tutorial" and the first-launch cards say. */
+    static String canonicalStepTextForTest(int step) {
+        return STEP_TEXT[step - 1];
+    }
+
+    /** Test-only (S15): the component name step {@code step} (1..{@link #TOTAL_STEPS}) highlights,
+     * so a test can check that the real screen has a component by that name. */
+    static String stepTargetNameForTest(int step) {
+        return STEP_TARGET[step - 1];
     }
 
     /**

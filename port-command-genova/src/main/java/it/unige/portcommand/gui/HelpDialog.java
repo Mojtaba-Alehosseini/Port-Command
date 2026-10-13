@@ -71,7 +71,9 @@ public final class HelpDialog extends JDialog {
         body.add(twoColumn(SHORTCUTS));
         body.add(gap());
         body.add(sectionHeader("Talking to vessels"));
-        body.add(new JLabel("Type in a walk-in's chat tab, or use the quick-action buttons:"));
+        // S15 (2026-10-12): was "...or use the quick-action buttons". That row of buttons is gone;
+        // a chat tab now has Accept and Reject next to its input, which send "deal" and "no".
+        body.add(new JLabel("Type in a walk-in's chat tab — or press its Accept or Reject button:"));
         body.add(twoColumn(COMMANDS));
         body.add(gap());
         body.add(sectionHeader("Comm-log colour legend"));

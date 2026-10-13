@@ -45,6 +45,55 @@ class LogArchiverTest {
     }
 
     /**
+     * S15 (2026-10-12): {@code CommLogEvent} now carries the message's ontology, protocol and
+     * content for the comm log's Raw view, and the archiver serialises the record as it is — so
+     * each archived line gains those three keys with no change in this class. The content is the
+     * wire text held in ONE JSON string (not spliced in as a nested object): that stays valid for
+     * content that is not JSON at all, and it re-parses to exactly what was sent. A row with no
+     * message attached (the six-argument shape) writes JSON nulls, never a missing key.
+     */
+    @Test
+    void archivedLineCarriesTheRawFipaFields(@TempDir Path tempDir) throws Exception {
+        LogArchiver archiver = new LogArchiver(tempDir);
+        String content = "{\"berth_id\":\"berth_1\",\"price\":5200.0,\"hours\":8,\"reason\":\"compatible [R7]\"}";
+        archiver.archive(new CommLogEvent(29_643_000L, "harbour_master", List.of("vessel_c501"),
+                ACLMessage.ACCEPT_PROPOSAL, "Granted berth berth_1 (compatible [R7])", "berth-vessel_c501",
+                "port_command_v1", null, content));
+        archiver.archive(new CommLogEvent(0L, "weather_agent", List.of("harbour_master"), ACLMessage.INFORM,
+                "not json on the wire", null, "port_command_v1", "port-command-weather-alert", "plain \"text\""));
+        archiver.archive(new CommLogEvent(1_000L, "hm", List.of("tug_1"), ACLMessage.CFP, "no message attached", "c1"));
+
+        List<String> lines = Files.readAllLines(tempDir.resolve("commlog-archive-" + LocalDate.now() + ".jsonl"));
+        assertEquals(3, lines.size(), "still exactly one line per event — the content adds no line break");
+
+        JsonNode grant = MAPPER.readTree(lines.get(0));
+        for (String key : List.of("ontology", "protocol", "content")) {
+            assertTrue(grant.has(key), () -> "archived line must carry the key " + key);
+        }
+        assertEquals("port_command_v1", grant.get("ontology").asText());
+        assertTrue(grant.get("protocol").isNull(), "a message with no protocol archives a JSON null");
+        assertTrue(grant.get("content").isTextual(), "the content is one JSON string, not a nested object");
+        assertEquals(content, grant.get("content").asText(), "the wire text, character for character");
+        JsonNode reparsed = MAPPER.readTree(grant.get("content").asText());
+        assertEquals("compatible [R7]", reparsed.get("reason").asText(), "and it re-parses to what was sent");
+        assertEquals(5200.0, reparsed.get("price").asDouble());
+        // The six older keys are untouched.
+        assertEquals("Granted berth berth_1 (compatible [R7])", grant.get("paraphrase").asText());
+        assertEquals("berth-vessel_c501", grant.get("conversationId").asText());
+
+        JsonNode notJson = MAPPER.readTree(lines.get(1));
+        assertEquals("port-command-weather-alert", notJson.get("protocol").asText());
+        assertEquals("plain \"text\"", notJson.get("content").asText(), "non-JSON content survives the round trip");
+
+        JsonNode bare = MAPPER.readTree(lines.get(2));
+        for (String key : List.of("ontology", "protocol", "content")) {
+            assertTrue(bare.has(key), () -> "a row with no message attached must still write the key " + key);
+            assertTrue(bare.get(key).isNull(), () -> key + " must be a JSON null for a row with no message attached");
+        }
+        assertEquals("no message attached", bare.get("paraphrase").asText());
+    }
+
+    /**
      * Audit C-06 (2026-07-27). {@code CommLogModel.clear()} used to call {@link LogArchiver#archive}
      * once per entry — up to 500 sequential {@code createDirectories} + open + append + close calls
      * <b>on the EDT</b>, on every Load and every New Game, which is precisely what DEMO_SCRIPT

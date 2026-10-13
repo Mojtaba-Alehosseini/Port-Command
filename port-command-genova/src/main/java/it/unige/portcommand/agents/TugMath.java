@@ -4,8 +4,8 @@ import it.unige.portcommand.ontology.Position;
 
 /**
  * Pure unit-conversion + geometry for the tug fleet. The <strong>single documented
- * home</strong> of the two map/speed scale constants (task 08 §8.0):
- * {@link #PIXELS_PER_KM} (map pixels → km) and {@link #KNOT_TO_KMH} (knots → km/h).
+ * home</strong> of the two distance/speed scale constants (task 08 §8.0):
+ * {@link #PIXELS_PER_KM} (position pixels → km) and {@link #KNOT_TO_KMH} (knots → km/h).
  *
  * <p>Every tug cost/ETA/fuel/movement number routes through these methods, so the
  * bid ETA ({@code BidInCNPBehaviour}) and the per-tick transit movement
@@ -15,11 +15,11 @@ import it.unige.portcommand.ontology.Position;
  *
  * <p>Order of conversion, always and everywhere: (1) pixels→km via
  * {@link #PIXELS_PER_KM} at the single boundary, THEN (2) knots→km/h via
- * {@link #KNOT_TO_KMH}. Raw map pixels never reach a cost/ETA/fuel formula.
+ * {@link #KNOT_TO_KMH}. Raw pixels never reach a cost/ETA/fuel formula.
  */
 public final class TugMath {
 
-    /** Map scale: 10 map-pixels = 1&nbsp;km (demo value; defined ONLY here). */
+    /** Distance scale: 10 position pixels = 1&nbsp;km (demo value; defined ONLY here). */
     public static final double PIXELS_PER_KM = 10.0;
 
     /** 1 knot = 1.852&nbsp;km/h, exact (nautical mile ÷ 1000). */
@@ -32,7 +32,7 @@ public final class TugMath {
     }
 
     /**
-     * Straight-line map distance between two positions, converted pixels→km — the
+     * Straight-line distance between two positions, converted pixels→km — the
      * single conversion boundary. Downstream cost/ETA/fuel formulas take the km result.
      */
     public static double distanceKm(Position from, Position to) {

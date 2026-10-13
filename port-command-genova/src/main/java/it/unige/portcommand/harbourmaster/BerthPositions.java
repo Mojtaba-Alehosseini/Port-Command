@@ -9,9 +9,10 @@ import it.unige.portcommand.ontology.Position;
  * exists anywhere else in the repo ({@code BerthOccupancy}, {@code BerthSpec},
  * {@code PortOntology}, {@code port_ontology.pl} carry no x/y); ADR-07 already
  * commits the HarbourMaster to being authoritative for the {@code berth_position} a
- * tug's ACCEPT carries, so this is that table. Placeholder coordinates — task 18's
- * real map layout supersedes these (same placeholder spirit as
- * {@code AgentRoster.TUG_BASES}).
+ * tug's ACCEPT carries, so this is that table. Placeholder coordinates: they only
+ * have to be consistent with each other and with {@link TugBasePositions}, because all
+ * anyone derives from them is a tug's distance to a berth (S15, 2026-10-12: nothing
+ * draws them any more).
  */
 public final class BerthPositions {
 
@@ -31,8 +32,9 @@ public final class BerthPositions {
 
     /**
      * The full {@code berth_id -> Position} table — the single canonical source for both the
-     * berth id list and coordinates (task 18's {@code MapModel} seeds its initial berth
-     * rectangles from this rather than hardcoding {@code "berth_1".."berth_4"} a second time).
+     * berth id list and coordinates ({@code PortStatusSnapshot} takes the four berth ids of the
+     * Port table from its key set rather than hardcoding {@code "berth_1".."berth_4"} a second
+     * time).
      */
     public static Map<String, Position> all() {
         return BERTHS;

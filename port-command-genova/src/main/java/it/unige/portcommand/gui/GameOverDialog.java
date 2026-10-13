@@ -28,7 +28,7 @@ import it.unige.portcommand.util.Subscription;
  * headless-tested {@link GameOverModel}; this class cannot run in the test lanes at all
  * (HeadlessException). [Restart] is deliberately absent — restarting means re-running a scenario
  * boot, which is task 23's {@code NewGameDialog}; a dead button would be worse than none.
- * [Close] keeps the window open for a post-mortem look at the map/comm-log (the world is frozen
+ * [Close] keeps the window open for a post-mortem look at the Port table and the comm log (the world is frozen
  * at GAME_OVER); [Exit] leaves the game.
  */
 public final class GameOverDialog extends JDialog {

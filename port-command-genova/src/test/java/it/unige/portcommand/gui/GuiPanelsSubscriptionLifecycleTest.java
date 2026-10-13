@@ -12,6 +12,7 @@ import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.CommLogEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
+import it.unige.portcommand.gui.events.PortStatusEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WeatherChangeEvent;
 import it.unige.portcommand.nlp.PipelineResult;
@@ -35,57 +36,80 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * display is touched (a {@code JFrame} would throw under headless; a {@code JPanel} does not — see
  * build.gradle.kts's {@code java.awt.headless=true} test config).
  *
- * <p>{@code MapPanel} gets TWO lifecycle tests, not one: its {@link EventBus} subscriptions
- * (weather/vessel arrival/departure) cancel exactly like every other panel's, but its
- * {@link PortStateArtifact} subscription (berths/tugs) has no cancel API at all — that channel's
- * test proves the panel's own {@code active} flag ("poor-man's unsubscribe") stops it from acting
- * on further deltas instead, per {@code MapPanel}'s own javadoc.
+ * <p>{@code PortPanel} gets TWO lifecycle tests, not one (S15, 2026-10-12: it took the left
+ * column, and both update channels, over from the removed map panel): its {@link EventBus}
+ * subscriptions (port status / weather / world loaded) cancel exactly like every other panel's,
+ * but its {@link PortStateArtifact} subscription (tug statuses) has no cancel API at all — that
+ * channel's test proves the panel's own {@code active} flag ("poor-man's unsubscribe") stops it
+ * from acting on further deltas instead, per {@code PortPanel}'s own javadoc.
  */
 class GuiPanelsSubscriptionLifecycleTest {
 
     @Test
     @Timeout(5)
-    void mapPanelPortStateArtifactChannelStopsUpdatingModelAfterRemoveNotify() throws Exception {
+    void portPanelPortStateArtifactChannelStopsUpdatingModelAfterRemoveNotify() throws Exception {
         EventBus bus = new EventBus();
         PortStateArtifact portState = new PortStateArtifact();
-        MapPanel panel = new MapPanel(bus, portState);
+        PortPanel panel = new PortPanel(bus, portState);
+        assertEquals("—", panel.model().tugRow().value(),
+                "precondition: an empty artifact seeds no tug, so the first delta is visible in the model");
 
-        // Probe ids OUTSIDE the seeded fleet (tug_1..tug_4 are seeded at construction), so
-        // containsKey is meaningful. PortStateArtifact.emit() calls subscribers synchronously on
-        // the CALLING thread (never the EDT) -- asserting the model has NOT changed yet, before any
-        // invokeAndWait flush, proves MapPanel's subscriber lambda really does hop to the EDT rather
-        // than mutating inline (a no-op invokeLater wrap would make this assertion meaningless).
+        // PortStateArtifact.emit() calls subscribers synchronously on the CALLING thread (never the
+        // EDT); PortPanel hops to the EDT itself, so the delta lands once the EDT drains. That the
+        // hop is real -- nothing is applied on the calling thread -- is pinned by PortPanelTest
+        // with the EDT parked, where "not applied yet" is a fact rather than a race against the EDT
+        // (the assertion this test used to make before its first flush was exactly that race).
         portState.updateTug("tug_probe_a", new Position(10, 20, 0), TugStatus.IDLE);
-        assertFalse(panel.model().tugs().containsKey("tug_probe_a"),
-                "model must not update synchronously on the calling (non-EDT) thread");
-
         SwingUtilities.invokeAndWait(() -> { });
-        assertTrue(panel.model().tugs().containsKey("tug_probe_a"),
+        assertEquals("1 free · 0 busy", panel.model().tugRow().value(),
                 "constructor subscription must be live once the EDT drains (positive control)");
 
         panel.removeNotify();
-        portState.updateTug("tug_probe_b", new Position(99, 99, 0), TugStatus.IDLE);
+        portState.updateTug("tug_probe_b", new Position(99, 99, 0), TugStatus.ESCORTING);
         SwingUtilities.invokeAndWait(() -> { });
-        assertFalse(panel.model().tugs().containsKey("tug_probe_b"),
+        assertEquals("1 free · 0 busy", panel.model().tugRow().value(),
                 "removeNotify() must stop the panel acting on further PortStateArtifact deltas");
     }
 
     @Test
     @Timeout(5)
-    void mapPanelWeatherEventBusSubscriptionCancelsOnRemoveNotify() throws Exception {
+    void portPanelEventBusSubscriptionsCancelOnRemoveNotify() throws Exception {
         EventBus bus = new EventBus();
-        MapPanel panel = new MapPanel(bus, new PortStateArtifact());
+        PortPanel panel = new PortPanel(bus, new PortStateArtifact());
+        List<PortStatusEvent.BerthRow> allFree = List.of(
+                PortStatusEvent.BerthRow.free("berth_1"), PortStatusEvent.BerthRow.free("berth_2"),
+                PortStatusEvent.BerthRow.free("berth_3"), PortStatusEvent.BerthRow.free("berth_4"));
 
         bus.publish(new WeatherChangeEvent(22.0, "good", 1.0, "sunny", false));
+        bus.publish(new PortStatusEvent(1, allFree, List.of()));
         SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(22.0, panel.model().weather().orElseThrow().windKnots(), 0.0001,
-                "constructor subscription must be live (positive control)");
+        assertEquals("22 kn · sunny · visibility good", panel.model().weatherRow().value(),
+                "constructor subscription must be live (positive control: weather)");
+        assertEquals("free", panel.model().berthRows().get(0).occupant(),
+                "constructor subscription must be live (positive control: port status)");
 
+        bus.publish(new it.unige.portcommand.persistence.events.GameLoadedEvent(1, 44_800.0, 62));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals("—", panel.model().berthRows().get(0).occupant(),
+                "constructor subscription must be live (positive control: the world-loaded marker blanks the berths)");
+        bus.publish(new PortStatusEvent(1, allFree, List.of()));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals("free", panel.model().berthRows().get(0).occupant(), "sanity: the re-announced status is shown");
+        assertEquals("none", panel.model().queueRow().value());
+
+        // Detached panel: each of the three subscriptions gets an event that would visibly change
+        // the model -- new weather, a status with a queue, and the marker that blanks the berths.
         panel.removeNotify();
         bus.publish(new WeatherChangeEvent(40.0, "poor", 3.0, "stormy", true));
+        bus.publish(new PortStatusEvent(1, allFree, List.of("W001")));
+        bus.publish(new it.unige.portcommand.persistence.events.GameLoadedEvent(2, 0.0, 0));
         SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(22.0, panel.model().weather().orElseThrow().windKnots(), 0.0001,
-                "removeNotify() must cancel the EventBus subscription");
+        assertEquals("22 kn · sunny · visibility good", panel.model().weatherRow().value(),
+                "removeNotify() must cancel the weather subscription");
+        assertEquals("none", panel.model().queueRow().value(),
+                "removeNotify() must cancel the port-status subscription");
+        assertEquals("free", panel.model().berthRows().get(0).occupant(),
+                "removeNotify() must cancel the world-loaded subscription");
     }
 
     @Test
@@ -140,7 +164,7 @@ class GuiPanelsSubscriptionLifecycleTest {
     void commLogPanelClearsOnGameLoadedEventAndUnsubscribesOnRemoveNotify() throws Exception {
         EventBus bus = new EventBus();
         CommLogPanel panel = new CommLogPanel(bus);
-        SwingUtilities.invokeAndWait(() -> panel.setAtBottomOverrideForTest(true));
+        SwingUtilities.invokeAndWait(() -> panel.setFollowingTailForTest(true));
         assertFalse(panel.lastRenderAutoScrolledForTest(), "precondition: no render has run yet");
 
         bus.publish(new it.unige.portcommand.persistence.events.GameLoadedEvent(1, 44_800.0, 62));

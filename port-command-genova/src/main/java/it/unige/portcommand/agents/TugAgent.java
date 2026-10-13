@@ -34,7 +34,7 @@ import jade.lang.acl.MessageTemplate;
  * {@link PortStateArtifact} it publishes to is itself thread-safe for the GUI reader.
  *
  * <h2>Units</h2>
- * The map/{@link Position} are in pixels; all cost/ETA/fuel/movement math is in km via
+ * {@link Position} coordinates are in pixels; all cost/ETA/fuel/movement math is in km via
  * {@link TugMath} (the single conversion boundary). {@link #fuelState} is a 0..1
  * fraction; € is never computed here — {@code WalletLedger} (task 20) invoices fuel.
  */

@@ -1,6 +1,8 @@
 package it.unige.portcommand.gui;
 
 import java.awt.Container;
+import java.util.List;
+import java.util.Locale;
 
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
@@ -11,6 +13,7 @@ import it.unige.portcommand.util.EventBus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -22,10 +25,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code advance()}, which fires on the Next/Done <b>button</b> — the MANUAL driver's ending. So a
  * scenario-driven tutorial parked itself on step 5 permanently. At the tutorial's 1800
  * real-seconds/day pacing all five steps land within the first ~31 real seconds, and the 60 %
- * black scrim then covered the map, chat and comm log for the whole remaining session, including
+ * black scrim then covered every panel under it for the whole remaining session, including
  * the storm beat and the EOD report. Clicks still passed through, so it was purely — and
  * severely — visual, which is exactly the kind of thing a headless suite cannot see and a demo
  * audience cannot miss.
+ *
+ * <p>S15 (2026-10-12): the first step now points at the Port table. The last three cases pin the
+ * canonical texts and the highlight targets — that step 1 names the Port table and its
+ * {@code GameScreen} component, that every step's target is a name {@code GameScreen} really
+ * assigns ({@code GameScreenCompositionTest} checks the components exist), and that no step text
+ * explains the walk-in's time counter.
  *
  * <p>Headless throughout: {@code JComponent} construction is not gated by headless mode (only
  * top-level Window realization is), bus delivery is {@code DeliveryMode.EDT}, and every assertion
@@ -144,6 +153,50 @@ class TutorialOverlayTest {
         bus.publish(new GameLoadedEvent(1, 15_000.0, 50));
         SwingUtilities.invokeAndWait(() -> { });
         assertFalse(overlay.isShowingAStep(), "a load/scenario switch must dismiss the tutorial scrim");
+    }
+
+    // ==================== S15: what the five canonical steps say and point at ====================
+
+    @Test
+    void theFirstStepDescribesAndHighlightsThePortTable() {
+        assertEquals("This is the Port table — each berth shows the vessel holding it and until when; "
+                + "the lines below count the queue and the tugs.", TutorialOverlay.canonicalStepTextForTest(1));
+        assertEquals(GameScreen.NAME_PORT, TutorialOverlay.stepTargetNameForTest(1));
+        assertEquals("tutorial-port", GameScreen.NAME_PORT, "the name the Port table carries on screen");
+    }
+
+    @Test
+    void everyStepHighlightsAComponentTheScreenReallyNames() {
+        // The overlay finds its target by component NAME; a step whose name no component carries
+        // gets no cutout and the scrim silently dims everything. Step 1 pointed at such a name the
+        // moment its old target was removed, which is what this guards against happening again.
+        List<String> named = List.of(GameScreen.NAME_HUD, GameScreen.NAME_PORT, GameScreen.NAME_CHAT,
+                GameScreen.NAME_COMMLOG);
+        for (int step = 1; step <= TutorialOverlay.TOTAL_STEPS; step++) {
+            assertTrue(named.contains(TutorialOverlay.stepTargetNameForTest(step)),
+                    "step " + step + " targets '" + TutorialOverlay.stepTargetNameForTest(step) + "'");
+        }
+        assertEquals(List.of(GameScreen.NAME_PORT, GameScreen.NAME_CHAT, GameScreen.NAME_CHAT,
+                        GameScreen.NAME_COMMLOG, GameScreen.NAME_HUD),
+                List.of(TutorialOverlay.stepTargetNameForTest(1), TutorialOverlay.stepTargetNameForTest(2),
+                        TutorialOverlay.stepTargetNameForTest(3), TutorialOverlay.stepTargetNameForTest(4),
+                        TutorialOverlay.stepTargetNameForTest(5)),
+                "left column, chat, chat (the Hint button), comm log, top bar");
+    }
+
+    @Test
+    void noStepTextExplainsTheWalkInsTimeCounter() {
+        // INVARIANTS: the counter is a bare m:ss number plus a colour, never labelled or explained —
+        // not in a caption, not in a tooltip, and not in the tutorial. The waiting list sits right
+        // above the Port table the first step points at, so this is where the temptation is.
+        for (int step = 1; step <= TutorialOverlay.TOTAL_STEPS; step++) {
+            String text = TutorialOverlay.canonicalStepTextForTest(step).toLowerCase(Locale.ROOT);
+            // ("counter" alone would trip over step 3's "counter-offer".)
+            for (String forbidden : List.of("patience", "time counter", "countdown", "timer", "time left",
+                    "remaining", "walk away", "seconds", "m:ss")) {
+                assertFalse(text.contains(forbidden), "step " + step + " mentions '" + forbidden + "': " + text);
+            }
+        }
     }
 
     /** Bounded poll — fails by returning false at the deadline rather than hanging. */

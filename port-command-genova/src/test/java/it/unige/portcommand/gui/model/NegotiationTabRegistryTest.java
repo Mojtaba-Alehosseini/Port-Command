@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -596,15 +597,281 @@ class NegotiationTabRegistryTest {
         assertEquals(2100.0, registry.tab("nego-W001").snapshot().lastPlayerOffer(), 0.001);
     }
 
+    // ==================== S15 (2026-10-12): the orientation line ====================
+
+    @Test
+    void theOrientationLineNamesTheTwoButtonsAndQuotesNoPrice() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+
+        String orientation = registry.tab("nego-W001").transcript().get(0).text();
+
+        assertEquals("You are the Harbour Master — this vessel pays YOU for berth time. "
+                + "Type your price and hours, or press Accept or Reject.", orientation);
+        // A literal example price is wrong on most tabs and, copied onto a vessel already offering
+        // more, closes the deal far too cheaply — the worked example is the input field's
+        // placeholder, computed from this vessel's own offer (InputExamples).
+        assertFalse(orientation.matches(".*\\d.*"), "no number may be quoted here: " + orientation);
+        assertFalse(orientation.contains("Hint"),
+                "the model cannot know the Hint button is hidden while the autopilot is on");
+    }
+
+    // ==================== S15 (2026-10-12): the open dialogues, as the other columns see them ====================
+
+    private static NegotiationOpenedEvent openedNamed(String dialogueId, String vesselId, String type,
+                                                      String vesselName, int roundsUsed, double vesselOffer) {
+        VesselSpec named = new VesselSpec(vesselId, type, 9.0, 150.0, 30000, "general_cargo", 0L, vesselName);
+        return new NegotiationOpenedEvent(dialogueId, WalkInDialogueSnapshot.of(
+                vesselId, named, "berth_2", 6, vesselOffer, 0.0, roundsUsed, 0.0, false));
+    }
+
+    @Test
+    void openDialoguesIsEmptyBeforeAnyWalkIn() {
+        assertEquals(List.of(), new NegotiationTabRegistry().openDialogues());
+    }
+
+    @Test
+    void openDialoguesListsEachOpenTabWithItsVesselIdAndDisplayName() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationOpened(openedNamed("nego-W002", "W002", "tanker", "Carthago", 1, 6000.0));
+
+        assertEquals(List.of(
+                        new OpenDialogue("nego-W001", "W001", "W001"), // no name: the id stands in, as on the tab
+                        new OpenDialogue("nego-W002", "W002", "Carthago")),
+                registry.openDialogues());
+    }
+
+    @Test
+    void aVesselCounteringDoesNotMoveItsPlaceInTheList() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
+        registry.onNegotiationOpened(opened("nego-W003", "W003", "ferry", "berth_3", 1, 900.0));
+
+        // Round 2 from the FIRST vessel: the roster's recency moves it to the front...
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 2, 1700.0));
+        assertEquals("W001", registry.rosterSnapshots().get(0).vesselId(),
+                "setup: the roster did bump the countering vessel (anaphora needs that)");
+
+        // ...but its tab has not moved on the strip, so neither may its row in the list.
+        assertEquals(List.of("nego-W001", "nego-W002", "nego-W003"),
+                registry.openDialogues().stream().map(OpenDialogue::dialogueId).toList());
+    }
+
+    @Test
+    void aClosedTabLeavesTheListAtOnceAlthoughItsTabStaysForItsDwell() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
+
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
+
+        assertEquals(List.of(new OpenDialogue("nego-W002", "W002", "W002")), registry.openDialogues(),
+                "nobody is waiting on a finished negotiation");
+        assertTrue(registry.dialogueIds().contains("nego-W001"), "its tab is still on the strip, greyed");
+
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W002", "W002", Deal.Outcome.TIMEOUT), 0L);
+        assertEquals(List.of(), registry.openDialogues());
+    }
+
+    @Test
+    void aSweptDialogueThatReopensGoesToTheEndOfTheListLikeItsNewTab() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
+        registry.sweepClosed(DWELL, DWELL);
+
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+
+        assertEquals(List.of("nego-W002", "nego-W001"),
+                registry.openDialogues().stream().map(OpenDialogue::dialogueId).toList(),
+                "the view appends a fresh page for it, so it is last — and listed once");
+    }
+
+    @Test
+    void aResetEmptiesTheListAndTheNextWorldStartsItsOwnOrder() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
+
+        registry.reset();
+        assertEquals(List.of(), registry.openDialogues());
+
+        registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        assertEquals(List.of("nego-W002", "nego-W001"),
+                registry.openDialogues().stream().map(OpenDialogue::dialogueId).toList(),
+                "nothing of the old world's order survives a load");
+    }
+
+    @Test
+    void theListIsASnapshotTheCallerCannotChange() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        List<OpenDialogue> before = registry.openDialogues();
+
+        assertThrows(UnsupportedOperationException.class,
+                () -> before.add(new OpenDialogue("nego-X", "X", "X")));
+        registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
+        assertEquals(1, before.size(), "a list handed out earlier does not grow behind the caller's back");
+        assertEquals(2, registry.openDialogues().size());
+    }
+
+    // ==================== S15 (2026-10-12): the player's messages — index, tag, count ====================
+
+    private static DialogueTabModel freshTab(NegotiationTabRegistry registry) {
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        return registry.tab("nego-W001");
+    }
+
+    @Test
+    void appendingAPlayerMessageReturnsItsIndexAndCountsIt() {
+        DialogueTabModel tab = freshTab(new NegotiationTabRegistry());
+        assertEquals(0, tab.playerMessageCount(), "the orientation line and the opening are not the player's");
+
+        int first = tab.appendPlayerMessage("1900 for 6h");
+        tab.appendSystemMessage("→ You ask €1900 for 6h.");
+        int second = tab.appendPlayerMessage("deal");
+
+        assertEquals(2, first, "after the orientation line (0) and the vessel's opening (1)");
+        assertEquals(4, second);
+        assertEquals(2, tab.playerMessageCount());
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.PLAYER, "1900 for 6h"),
+                tab.transcript().get(first), "a message is born untagged — equal to the two-argument entry");
+        assertEquals("", tab.transcript().get(first).tag());
+    }
+
+    @Test
+    void taggingAPlayerMessageReplacesItWhereItStandsAndKeepsItsWords() {
+        DialogueTabModel tab = freshTab(new NegotiationTabRegistry());
+        int index = tab.appendPlayerMessage("1900 for 6h");
+        tab.appendSystemMessage("→ You ask €1900 for 6h."); // the echo arrives after the bubble
+        int sizeBefore = tab.transcript().size();
+
+        assertTrue(tab.tagPlayerMessage(index, "(DCG)"));
+
+        List<DialogueTabModel.ChatEntry> transcript = tab.transcript();
+        assertEquals(sizeBefore, transcript.size(), "a tag replaces, it never appends");
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.PLAYER, "1900 for 6h", "(DCG)"),
+                transcript.get(index));
+        assertNotEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.PLAYER, "1900 for 6h"),
+                transcript.get(index), "the tag is part of the entry");
+        assertEquals(DialogueTabModel.Speaker.SYSTEM, transcript.get(index + 1).speaker(),
+                "the later line stays where it was");
+        assertEquals(1, tab.playerMessageCount(), "tagging is not sending: the input example must not advance");
+    }
+
+    @Test
+    void onlyAPlayerMessageCanBeTagged() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        DialogueTabModel tab = freshTab(registry);
+        registry.onAssistantChat(new AssistantChatEvent("nego-W001", "Assistant: hold your price"));
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 7L, "template"));
+        int player = tab.appendPlayerMessage("deal");
+        List<DialogueTabModel.ChatEntry> before = tab.transcript();
+
+        for (int index = 0; index < before.size(); index++) {
+            if (index != player) {
+                assertFalse(tab.tagPlayerMessage(index, "(DCG)"),
+                        "a " + before.get(index).speaker() + " line said nothing the pipeline parsed");
+            }
+        }
+        assertFalse(tab.tagPlayerMessage(-1, "(DCG)"));
+        assertFalse(tab.tagPlayerMessage(before.size(), "(DCG)"), "one past the end");
+        assertFalse(tab.tagPlayerMessage(Integer.MAX_VALUE, "(DCG)"));
+
+        assertEquals(before, tab.transcript(), "a refused tag changes nothing");
+        for (DialogueTabModel.ChatEntry entry : tab.transcript()) {
+            assertEquals("", entry.tag(), "nobody has been tagged yet: " + entry);
+        }
+        // The hint's own in-place revision still lands on the hint, untouched by any of this.
+        assertEquals(Optional.of("nego-W001"),
+                registry.onAssistantChat(AssistantChatEvent.hintRevision("nego-W001", 7L, "model")));
+    }
+
+    @Test
+    void twoMessagesAreTaggedIndependentlyWhateverOrderTheirParsesFinishIn() {
+        DialogueTabModel tab = freshTab(new NegotiationTabRegistry());
+        int first = tab.appendPlayerMessage("so?");   // falls through to Rasa: the slow parse
+        int second = tab.appendPlayerMessage("deal"); // the grammar answers at once
+
+        assertTrue(tab.tagPlayerMessage(second, "(DCG)"));
+        assertEquals("", tab.transcript().get(first).tag(), "the first is still being read");
+        assertTrue(tab.tagPlayerMessage(first, "(Rasa 0.99)"));
+
+        assertEquals("(Rasa 0.99)", tab.transcript().get(first).tag());
+        assertEquals("so?", tab.transcript().get(first).text());
+        assertEquals("(DCG)", tab.transcript().get(second).tag());
+        assertEquals("deal", tab.transcript().get(second).text());
+    }
+
+    @Test
+    void aTagStillLandsOnAMessageSentJustBeforeTheTabClosed() {
+        // "This negotiation ended while I was reading that": the turn was routed, so it is tagged.
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        DialogueTabModel tab = freshTab(registry);
+        int index = tab.appendPlayerMessage("deal");
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.TIMEOUT), 0L);
+
+        assertTrue(tab.tagPlayerMessage(index, "(DCG)"));
+        assertEquals("(DCG)", tab.transcript().get(index).tag());
+    }
+
+    @Test
+    void anEmptyOrMissingTagLeavesTheMessageUntagged() {
+        DialogueTabModel tab = freshTab(new NegotiationTabRegistry());
+        int index = tab.appendPlayerMessage("deal");
+        DialogueTabModel.ChatEntry untagged = tab.transcript().get(index);
+
+        assertTrue(tab.tagPlayerMessage(index, ""), "a result with no stated source: nothing to show");
+        assertEquals(untagged, tab.transcript().get(index));
+
+        assertTrue(tab.tagPlayerMessage(index, "(DCG)"));
+        assertTrue(tab.tagPlayerMessage(index, null));
+        assertEquals(untagged, tab.transcript().get(index), "null is 'no tag', never a null field");
+        assertEquals("", new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.PLAYER, "deal", null).tag());
+    }
+
+    @Test
+    void playerHasOfferedFollowsTheStandingOfferIncludingARefusal() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        DialogueTabModel tab = freshTab(registry);
+        assertFalse(tab.playerHasOffered(), "the vessel has opened; the player has said nothing");
+
+        tab.appendPlayerMessage("what berths are free");
+        assertFalse(tab.playerHasOffered(), "a message is not an offer");
+
+        registry.recordPlayerOffer("nego-W001", 1900.0, 4, 7L);
+        assertTrue(tab.playerHasOffered());
+        assertTrue(registry.buildCtx("W001").standingOffer().playerOffer().isPresent(),
+                "the same fact the grammar's context is built from");
+
+        registry.onPlayerCommandRefused(refused("nego-W001", 7L, 0.0));
+        assertFalse(tab.playerHasOffered(), "the gate refused it: no offer of the player's ever stood");
+        assertFalse(registry.buildCtx("W001").standingOffer().playerOffer().isPresent());
+
+        // An offer the tab never saw (the autopilot's), stamped by the HarbourMaster on the next counter.
+        registry.onNegotiationOpened(new NegotiationOpenedEvent("nego-W001", WalkInDialogueSnapshot.of(
+                "W001", spec("W001", "cargo_vessel"), "berth_1", 6, 1700.0, 2100.0, 2, 0.0, false)));
+        assertTrue(tab.playerHasOffered());
+    }
+
     /** P-04: neither this registry nor the tab model may ever read a walk-in's hidden
-     * beliefs — mirrors {@code DialogueCtxTest}'s own source-text grep gate. */
+     * beliefs — mirrors {@code DialogueCtxTest}'s own source-text grep gate. S15 (2026-10-12):
+     * the pure models that read a tab or its snapshot for the chat column are held to it too. */
     @Test
     void neitherRegistryNorTabModelReadsAHiddenBelief() throws IOException {
         List<String> forbidden = List.of(".minAcceptablePrice(", ".targetPrice(", ".maxWaitMinutes(",
                 ".personality(", ".minDurationHours(");
         for (Path file : List.of(
                 Path.of("src/main/java/it/unige/portcommand/gui/model/NegotiationTabRegistry.java"),
-                Path.of("src/main/java/it/unige/portcommand/gui/model/DialogueTabModel.java"))) {
+                Path.of("src/main/java/it/unige/portcommand/gui/model/DialogueTabModel.java"),
+                Path.of("src/main/java/it/unige/portcommand/gui/model/OfferLine.java"),
+                Path.of("src/main/java/it/unige/portcommand/gui/model/InputExamples.java"),
+                Path.of("src/main/java/it/unige/portcommand/gui/model/ParseTag.java"),
+                Path.of("src/main/java/it/unige/portcommand/gui/model/OpenDialogue.java"))) {
             String source = Files.readString(file);
             for (String accessor : forbidden) {
                 assertFalse(source.contains(accessor),

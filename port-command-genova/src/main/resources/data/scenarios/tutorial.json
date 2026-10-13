@@ -37,7 +37,7 @@
   ],
   "events": [
     { "type": "TutorialStepAdvance", "simTimeSeconds": 0, "step": 1,
-      "text": "Welcome, Harbour Master! Your port is live. Watch the comm log — a contracted cargo vessel is inbound; the map fills in as it takes its berth." },
+      "text": "Welcome, Harbour Master! Your port is live. Watch the comm log — a contracted cargo vessel is inbound; the Port table fills in as it takes its berth." },
     { "type": "TutorialStepAdvance", "simTimeSeconds": 200, "step": 2,
       "text": "C501 arriving: the auto-flow requests a berth, Prolog checks compatibility, and tugs bid in a Contract Net. Follow it in the comm log." },
     { "type": "SpawnVessel", "simTimeSeconds": 300, "vesselType": "cargo_vessel", "channel": "contracted",

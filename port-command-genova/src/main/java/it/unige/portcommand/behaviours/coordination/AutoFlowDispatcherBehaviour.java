@@ -92,8 +92,8 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
     // before the vessel's REQUEST can lose this race — DF registration is async).
     private static final long DF_RETRY_WALL_MS = 1200L;
     // Placeholder "harbour entrance" point a vessel is escorted FROM — no live per-vessel
-    // position channel exists yet (ADR-07); task 18's real map supersedes this, same
-    // placeholder spirit as BerthPositions. Public since task 22 (was package-private for
+    // position channel exists yet (ADR-07); a placeholder coordinate, in the same spirit
+    // as BerthPositions. Public since task 22 (was package-private for
     // task 15's ForwardWalkInToPlayerBehaviour): the parent-package RestoreDispatchBehaviour
     // re-initiates load-interrupted Contract Nets from this same entrance point.
     public static final Position CHANNEL_ENTRY = new Position(700.0, 200.0, 180.0);

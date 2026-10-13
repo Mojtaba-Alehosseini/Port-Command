@@ -10,7 +10,7 @@ import it.unige.portcommand.ontology.Position;
  *
  * @param tugId          {@code tug_1}..{@code tug_4}
  * @param status         {@code TugStatus} name; BIDDING is normalised to IDLE at snapshot
- * @param position       live position (pixels — the map/Position convention)
+ * @param position       live position (pixels — the {@code Position} convention)
  * @param fuelState      0..1 tank fraction
  * @param job            the escort in progress, or null when idle. {@code client} (an AID)
  *                       is not persisted — it is always the HarbourMaster and is

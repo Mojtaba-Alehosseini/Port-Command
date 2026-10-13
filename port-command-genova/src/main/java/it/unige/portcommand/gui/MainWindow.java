@@ -12,6 +12,7 @@ import java.awt.event.WindowEvent;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.prefs.Preferences;
 
 import javax.swing.AbstractAction;
@@ -24,8 +25,8 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JRadioButtonMenuItem;
-import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
 import it.unige.portcommand.artifacts.PortStateArtifact;
@@ -34,9 +35,11 @@ import it.unige.portcommand.gui.events.DebugWeatherEvent;
 import it.unige.portcommand.gui.events.EndOfDayCompletedEvent;
 import it.unige.portcommand.gui.events.GameSpeedChangedEvent;
 import it.unige.portcommand.gui.events.GuiReadyEvent;
+import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.model.GameSpeedControl;
 import it.unige.portcommand.gui.model.GameSpeedModel;
+import it.unige.portcommand.gui.model.NewGameChoice;
 import it.unige.portcommand.harbourmaster.financial.EndOfDaySummary;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
 import it.unige.portcommand.harbourmaster.financial.PerformativeCounter;
@@ -52,11 +55,17 @@ import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
 
 /**
- * The Swing shell (task 17): a {@code JFrame} with five panel slots laid out
- * per planning/17 §Step 17.3 — HUD across the top, Map/Chat/CommLog sharing
- * the middle row (~50/25/25 width split), a notification strip along the
- * bottom. {@code GridBagLayout} is pinned (planning/17: "MigLayout ... keep
- * GridBagLayout").
+ * The Swing shell (task 17): the {@code JFrame}, its menu bar, its two overlays and its dialogs.
+ *
+ * <p><b>S15 (2026-10-12): the frame no longer lays the panels out itself.</b> Everything inside
+ * it — the top bar, the three columns (waiting list over Port table | chat | comm log) and the
+ * notification strip — is one {@link GameScreen}, a plain panel that can be built, measured and
+ * painted in a headless test, which a {@code JFrame} cannot. This class keeps what needs a real
+ * window: the menus, the glass pane, the window's size and position, the {@link Preferences} the
+ * two column dividers are remembered in, and the worker threads behind New Game, Save and Load.
+ * The window also opens BEFORE any game exists when {@code Main} asks for that (a plain
+ * {@code --gui} launch): it then offers the New Game dialog once, and until the player picks a
+ * game — or loads one — it shows the empty shell (mode MENU).
  *
  * <p>Task 24 additions: the Game menu drives {@link GameLifecycle}
  * (Pause/Resume/Quit — Quit is confirmed, then routed through
@@ -82,27 +91,38 @@ public final class MainWindow extends JFrame {
     private static final int DEFAULT_WIDTH = 1280;
     private static final int DEFAULT_HEIGHT = 800;
 
-    /** Below this the three-panel layout stops being usable; the clamp floors at it. */
-    private static final int MIN_WIDTH = 800;
+    /**
+     * Below this the three-column layout stops being usable; the clamp floors at it. S15
+     * (2026-10-12): 800 → 1000. The three columns have minimum widths of 180 / 380 / 380 px
+     * ({@link GameScreen}), which with the two dividers is {@link GameScreen#minimumColumnsWidth()}
+     * — 960 px under the default look-and-feel — and the frame's own borders come on top. A
+     * window narrower than that could not give every column its minimum. Package-private so
+     * {@code GameScreenCompositionTest} can pin the relation.
+     */
+    static final int MIN_WIDTH = 1000;
     private static final int MIN_HEIGHT = 600;
 
-    /** Minimum widths (px) that stop the map (#8: the 1280×800 "map sliver" report) or either side
-     * panel from being crushed to nothing by a splitter drag. */
-    private static final int MAP_MIN_WIDTH = 380;
-    private static final int SIDE_MIN_WIDTH = 240;
-
-    /** Component names the {@link TutorialOverlay} highlights by (never by pixels — #8/§21.3). */
-    /** S14: component name of the Game ▸ Speed submenu. */
+    /** S14: component name of the Game ▸ Speed submenu. (The names the {@link TutorialOverlay}
+     * highlights by moved to {@link GameScreen} in S15, with the panels they name.) */
     static final String NAME_SPEED_MENU = "menu-game-speed";
-    static final String NAME_HUD = "tutorial-hud";
-    static final String NAME_MAP = "tutorial-map";
-    static final String NAME_CHAT = "tutorial-chat";
-    static final String NAME_COMMLOG = "tutorial-commlog";
 
-    /** {@link Preferences} keys for the two splitter divider PROPORTIONS (window-size independent,
-     * so a restart at any size restores the same relative layout — #8). */
-    private static final String PREF_OUTER_DIVIDER = "mapChatDividerProportion";
-    private static final String PREF_INNER_DIVIDER = "chatLogDividerProportion";
+    /**
+     * {@link Preferences} keys for the two column-divider PROPORTIONS (window-size independent,
+     * so a restart at any size restores the same relative layout — #8). S15 (2026-10-12): NEW
+     * keys. The pre-S15 keys described a different layout (a wide left panel at 50 %), so a value
+     * stored under them would open the new layout with the narrow left column taking half the
+     * window; they are simply no longer read.
+     */
+    private static final String PREF_LEFT_DIVIDER = "leftColumnDividerProportion";
+    private static final String PREF_CHAT_DIVIDER = "chatCommLogDividerProportion";
+
+    /** S15: shown when the player closes the opening New Game dialog without choosing — the window
+     * is then an empty shell, and this says how to get out of it. */
+    static final String NO_GAME_RUNNING_TEXT =
+            "No game running — Game ▸ New Game… or Load Game… to start.";
+
+    /** The scenario whose own scripted cards ARE the tutorial (see {@link #maybeAutoOpenTutorial}). */
+    private static final String TUTORIAL_SCENARIO_KEY = "tutorial";
 
     private final EventBus eventBus;
     private final GameLifecycle lifecycle;
@@ -114,17 +134,21 @@ public final class MainWindow extends JFrame {
     private final TutorialOverlay tutorialOverlay;
     /** S14: the one applier behind both speed controls (HUD toggles, Game ▸ Speed). */
     private final GameSpeedControl speedControl;
-    /** S14: kept so the pause overlay can pass the chat's rectangle through (typing while paused). */
-    private ChatPanel chatPanel;
+    /** S15: everything inside the frame — top bar, three columns, notification strip. */
+    private final GameScreen screen;
     private final Preferences prefs = Preferences.userNodeForPackage(MainWindow.class);
-    private JSplitPane outerSplit;
-    private JSplitPane innerSplit;
+    /** S15: whether this window opened with no game running and must offer the New Game dialog. */
+    private final boolean offerNewGameOnOpen;
+    /** S15: set the first time {@link #maybeAutoOpenTutorial()} runs — the first-launch tutorial
+     * cards are considered once per process, whatever the answer was. EDT-only. */
+    private boolean tutorialAutoOpenConsidered;
     private JMenuItem newGameItem;
     private JMenuItem pauseItem;
     private JMenuItem resumeItem;
     private JMenuItem quitItem;
     private JMenuItem saveItem;
     private JMenuItem loadItem;
+    private JMenuItem settingsItem;
     /** True while a load worker thread owns the world — menus disabled, no re-entry. */
     private boolean loadInProgress;
     /** True from the moment {@link #saveGame()} starts its worker until the worker's
@@ -149,8 +173,8 @@ public final class MainWindow extends JFrame {
 
     /**
      * @param eventBus          the shared bus every panel subscribes through
-     * @param portStateArtifact the shared berth/tug state {@code MapPanel} (task 18) reads and
-     *                          subscribes to — the only panel that needs it
+     * @param portStateArtifact the shared tug state the Port table seeds from and subscribes
+     *                          to — the only panel that needs it
      * @param chatInputProcessor the NLP pipeline seam (task 19) {@code ChatPanel} calls on Send
      * @param lifecycle         the task-24 game-loop orchestrator this shell's menu drives; also
      *                          the read-only source of the shared {@code SimClock} for countdowns
@@ -159,29 +183,44 @@ public final class MainWindow extends JFrame {
      *                          scores the moment they land
      * @param onClose           clean-shutdown hook run before the window disposes and the JVM
      *                          exits (wired to {@code JadeBootstrap::shutdown} in {@code Main})
+     * @param offerNewGameOnOpen S15: {@code true} when the window opens on the empty shell (no
+     *                          game was started on the command line) — it then shows the New Game
+     *                          dialog once, as soon as it is up
      */
     public MainWindow(EventBus eventBus, PortStateArtifact portStateArtifact,
                       ChatInputProcessor chatInputProcessor, GameLifecycle lifecycle,
-                      Leaderboard leaderboard, GameSession session, Runnable onClose) {
+                      Leaderboard leaderboard, GameSession session, Runnable onClose,
+                      boolean offerNewGameOnOpen) {
         super("Port Command Genova");
         setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE); // we drive shutdown ourselves
         this.eventBus = eventBus;
         this.lifecycle = lifecycle;
         this.leaderboard = leaderboard;
         this.session = session;
+        this.offerNewGameOnOpen = offerNewGameOnOpen;
+        // S14: refused while a load owns the world — the loader applies the SAVED speed, and a
+        // click landing mid-load must not overwrite it (same guard as applySettings). S15: refused
+        // in MENU too. With the window open on the empty shell there is no game to speed up, and
+        // the next game start applies ITS settings' speed anyway — so an accepted ×4 would be
+        // silently discarded a moment later. Refusing re-announces the speed in force, which
+        // snaps the toggle back instead.
+        this.speedControl = new GameSpeedControl(lifecycle.simClock(), eventBus,
+                () -> lifecycle.mode() == GameMode.LOADING || lifecycle.mode() == GameMode.MENU);
+        this.screen = new GameScreen(eventBus, portStateArtifact, chatInputProcessor,
+                lifecycle.simClock(), speedControl);
         // Audit C-04: the glass pane covers the menu-bar strip too, so it is handed the menu bar's
         // live bounds (in glass-pane coordinates) to pass mouse events through and to skip when
         // painting the scrim. Computed lazily on every hit-test/paint — the menu bar does not exist
         // yet at this point in construction, and its height can change with the look-and-feel.
+        // S15: the second region it passes through is the whole three-column area (was the chat
+        // alone in S14) — the waiting list and the comm log are read-only views, and a paused
+        // game is exactly when the player wants to read them.
         this.pauseOverlay = new PauseOverlay(this::toggleMenuResume, this::menuBarBoundsInGlassPane,
-                this::chatBoundsInGlassPane);
+                this::columnsBoundsInGlassPane);
         setGlassPane(pauseOverlay);
-        // S14: refused while a load owns the world — the loader applies the SAVED speed, and a
-        // click landing mid-load must not overwrite it (same guard as applySettings).
-        this.speedControl = new GameSpeedControl(lifecycle.simClock(), eventBus,
-                () -> lifecycle.mode() == GameMode.LOADING);
         setJMenuBar(buildMenuBar(eventBus, onClose));
-        layOutPanels(eventBus, portStateArtifact, chatInputProcessor);
+        setLayout(new BorderLayout());
+        add(screen, BorderLayout.CENTER);
         installEscBinding();
 
         // Task 21: the tutorial scrim lives in the layered pane (the glass pane is already the
@@ -269,7 +308,7 @@ public final class MainWindow extends JFrame {
      * {@code usable} (never within the full screen — see the call site).
      *
      * <p>The minimum deliberately wins over the cap on a desktop too small for it: a window
-     * smaller than {@link #MIN_WIDTH}x{@link #MIN_HEIGHT} crushes the three-panel layout into
+     * smaller than {@link #MIN_WIDTH}x{@link #MIN_HEIGHT} crushes the three-column layout into
      * unusability, so overflowing a very small screen is the better failure — the user can still
      * move the window, and {@code setMinimumSize} would override us anyway.
      *
@@ -285,44 +324,9 @@ public final class MainWindow extends JFrame {
         return new Rectangle(x, y, width, height);
     }
 
-    private void layOutPanels(EventBus eventBus, PortStateArtifact portStateArtifact,
-                              ChatInputProcessor chatInputProcessor) {
-        setLayout(new BorderLayout());
-
-        HUDPanel hud = new HUDPanel(eventBus, speedControl);
-        hud.setName(NAME_HUD);
-
-        MapPanel map = new MapPanel(eventBus, portStateArtifact);
-        map.setName(NAME_MAP);
-        map.setMinimumSize(new Dimension(MAP_MIN_WIDTH, 0));
-
-        ChatPanel chat = new ChatPanel(eventBus, chatInputProcessor, lifecycle.simClock());
-        chat.setName(NAME_CHAT);
-        this.chatPanel = chat;
-        chat.setMinimumSize(new Dimension(SIDE_MIN_WIDTH, 0));
-
-        CommLogPanel commLog = new CommLogPanel(eventBus);
-        commLog.setName(NAME_COMMLOG);
-        commLog.setMinimumSize(new Dimension(SIDE_MIN_WIDTH, 0));
-
-        // #8: real splitters (was a fixed GridBag 0.5/0.25/0.25 that let a narrow window squeeze
-        // the map to a sliver). Minimum sizes forbid crushing the map or either side panel, and the
-        // divider positions persist (restoreDividers, on window-shown). Inner: chat | comm log;
-        // outer: map | (chat|comm log).
-        innerSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, chat, commLog);
-        innerSplit.setResizeWeight(0.5);
-        innerSplit.setContinuousLayout(true);
-        outerSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, map, innerSplit);
-        outerSplit.setResizeWeight(0.5);
-        outerSplit.setContinuousLayout(true);
-
-        add(hud, BorderLayout.NORTH);
-        add(outerSplit, BorderLayout.CENTER);
-        add(new NotificationStrip(eventBus), BorderLayout.SOUTH);
-    }
-
     /** Post-window-shown setup (#8 dividers need real split sizes; the overlay needs valid content
-     * bounds; first-launch needs the window up). Runs once from {@code windowOpened}. */
+     * bounds; the New Game offer and the first-launch tutorial need the window up). Runs once from
+     * {@code windowOpened}. */
     private void onWindowShown() {
         syncTutorialOverlayBounds();
         getContentPane().addComponentListener(new ComponentAdapter() {
@@ -332,9 +336,52 @@ public final class MainWindow extends JFrame {
             }
         });
         restoreDividers();
-        // First launch (no manual save yet): auto-open the tutorial. The always-available path is
-        // Help → Show tutorial (so a dev machine that already has saves can still see it).
-        if (session.saveLoadManager().isFirstLaunch()) {
+        if (offerNewGameOnOpen) {
+            // S15: the window opened on the empty shell — offer a game. Deferred one EDT turn so
+            // the window finishes opening (and is painted) before a modal dialog sits on top of
+            // it; the dialog's own event loop then keeps the shell behind it repainting.
+            SwingUtilities.invokeLater(this::offerNewGame);
+        } else {
+            // A game was started on the command line (--scenario / --load) and is already
+            // running: for the first-launch tutorial, "the first game has started" is now.
+            maybeAutoOpenTutorial();
+        }
+    }
+
+    /**
+     * S15: the one-time New Game offer of a window that opened with no game running. Cancel (or
+     * the dialog's ✕) is a legitimate answer — the player may want Load Game… instead — so it
+     * leaves the empty shell up and says where to go from there.
+     */
+    private void offerNewGame() {
+        if (!chooseAndStartGame()) {
+            eventBus.publish(new NotificationEvent(NO_GAME_RUNNING_TEXT, NotificationEvent.Severity.INFO,
+                    lifecycle.simClock().nowSimMillis()));
+        }
+    }
+
+    /**
+     * First launch (no manual save yet): open the five tutorial cards — once per process, and only
+     * once a game is running. The always-available path stays Help → Show tutorial (so a dev
+     * machine that already has saves can still see them).
+     *
+     * <p>S15 (2026-10-12) — why not at window-open any more. The window now opens BEFORE a game
+     * exists, and every game start publishes {@code GameLoadedEvent}, which dismisses the overlay
+     * (audit C-13): cards opened with the window would be wiped by the first game the player
+     * picks. So they open after that game has started — the completion callback of
+     * {@link #chooseAndStartGame} is queued behind the boot's own EDT deliveries, hence after that
+     * dismiss. And not at all when that game IS the tutorial scenario: its script drives the same
+     * overlay through the same {@code showStep}, so a scripted step would replace the card the
+     * player is paging, and its final step arms the auto-dismiss even over manual paging. The
+     * scenario counts as the tutorial having been offered.
+     */
+    private void maybeAutoOpenTutorial() {
+        if (tutorialAutoOpenConsidered) {
+            return;
+        }
+        tutorialAutoOpenConsidered = true;
+        if (session.saveLoadManager().isFirstLaunch()
+                && !TUTORIAL_SCENARIO_KEY.equals(session.activeScenarioKey())) {
             tutorialOverlay.startFromBeginning();
         }
     }
@@ -346,44 +393,34 @@ public final class MainWindow extends JFrame {
         tutorialOverlay.repaint();
     }
 
-    /** #8: restore each splitter's divider from its persisted PROPORTION (or a 50/50 default),
-     * then track drags. Called once the splits have real sizes (window shown), so
-     * {@code setDividerLocation(double)} lands correctly. */
+    /**
+     * #8: restore both column dividers from their persisted PROPORTIONS (or the defaults — a
+     * 20 % left column, chat and comm log sharing the rest), then start remembering drags. Called
+     * once the window is shown, so the split panes have real sizes.
+     *
+     * <p>S15: the arithmetic lives in {@link GameScreen} and {@code ColumnDividers}. A stored
+     * proportion is clamped there against the columns' minimum widths — Swing itself does not do
+     * that for a location set from code — and only a genuine drag is handed back to be stored (a
+     * window resize, which also moves the dividers, is not). Tracking starts AFTER the restore, so
+     * the restore itself is never re-persisted.
+     */
     private void restoreDividers() {
-        applyDivider(outerSplit, PREF_OUTER_DIVIDER);
-        applyDivider(innerSplit, PREF_INNER_DIVIDER);
-    }
-
-    private void applyDivider(JSplitPane split, String key) {
-        split.setDividerLocation(clampProportion(prefs.getDouble(key, 0.5)));
-        // Attached AFTER the restore so the restore itself is not re-persisted. Persist ONLY a
-        // genuine divider DRAG — detected by the split's width being unchanged since the previous
-        // event. On a window RESIZE the split re-lays-out to a new width and repositions the divider
-        // (resizeWeight 0.5), which would otherwise drift the stored proportion toward 50/50 across
-        // resize+restart cycles (adversarial finding 3); those events carry a changed width and are
-        // skipped, so only the ratio the player deliberately dragged is remembered.
-        int[] lastWidth = { split.getWidth() };
-        split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
-            int width = split.getWidth();
-            int span = width - split.getDividerSize();
-            if (width == lastWidth[0] && span > 0) {
-                prefs.putDouble(key, clampProportion(split.getDividerLocation() / (double) span));
-            }
-            lastWidth[0] = width;
-        });
-    }
-
-    private static double clampProportion(double proportion) {
-        return Math.max(0.1, Math.min(0.9, proportion));
+        screen.applyDividerProportions(
+                prefs.getDouble(PREF_LEFT_DIVIDER, GameScreen.DEFAULT_LEFT_PROPORTION),
+                prefs.getDouble(PREF_CHAT_DIVIDER, GameScreen.DEFAULT_CHAT_PROPORTION));
+        screen.trackDividerDrags(
+                proportion -> prefs.putDouble(PREF_LEFT_DIVIDER, proportion),
+                proportion -> prefs.putDouble(PREF_CHAT_DIVIDER, proportion));
     }
 
     private JMenuBar buildMenuBar(EventBus eventBus, Runnable onClose) {
         JMenuBar bar = new JMenuBar();
         JMenu game = new JMenu("Game");
-        // Task 23: scenario chooser. The current world (if any) is replaced — the dialog's
-        // explicit Start IS the confirmation, mirroring confirmAndLoad's dialog.
+        // Task 23: scenario chooser (S15: plus Free play). The current world (if any) is
+        // replaced — the dialog's explicit Start IS the confirmation, mirroring confirmAndLoad's
+        // dialog.
         newGameItem = new JMenuItem("New Game…");
-        newGameItem.addActionListener(e -> chooseAndStartScenario());
+        newGameItem.addActionListener(e -> chooseAndStartGame());
         game.add(newGameItem);
         game.addSeparator();
         pauseItem = new JMenuItem("Pause");
@@ -464,7 +501,8 @@ public final class MainWindow extends JFrame {
      * / Ctrl+4, mirroring the HUD toggles. Both go through {@link GameSpeedControl#set(int)} and
      * both follow {@link GameSpeedChangedEvent}, so they cannot disagree and a load re-selects the
      * saved speed. Left enabled in every mode: while paused the choice simply takes effect on
-     * resume, and while a load is in flight the control itself refuses.
+     * resume, and while a load is in flight — or (S15) no game is running at all — the control
+     * itself refuses and the selection snaps back.
      */
     private JMenu buildSpeedMenu(EventBus eventBus) {
         JMenu speedMenu = new JMenu("Speed");
@@ -495,12 +533,25 @@ public final class MainWindow extends JFrame {
      * default). */
     private JMenu buildSettingsMenu(EventBus eventBus) {
         JMenu settings = new JMenu("Settings");
-        JMenuItem open = new JMenuItem("Settings…");
-        open.addActionListener(e -> SettingsDialog.open(this, eventBus, Settings.load().difficulty(),
+        settingsItem = new JMenuItem("Settings…");
+        settingsItem.addActionListener(e -> SettingsDialog.open(this, eventBus, Settings.load().difficulty(),
                 lifecycle.simClock().realSecondsPerGameDay(), Settings.load().autopilotEnabled(),
                 Settings.load().llmModel()));
-        settings.add(open);
+        settings.add(settingsItem);
         return settings;
+    }
+
+    /**
+     * Whether the Settings dialog may be opened in {@code mode} (S15). Not in MENU: since S15 that
+     * is the window's opening state — an empty shell, no game. Every knob of the dialog belongs to
+     * a game: a new game starts from the defaults (or its scenario's settings) and a load from the
+     * saved ones, so whatever was set in the shell would be thrown away by the next start without
+     * a word; and an autopilot policy typed there would be confirmed as "active now" with no
+     * Assistant agent alive to register it. The player sets things up once a game is running —
+     * the dialog works while paused. Pure, for {@code MainWindowSettingsGateTest}.
+     */
+    static boolean settingsAvailableIn(GameMode mode) {
+        return mode != GameMode.MENU;
     }
 
     /** Help → Help… (read-only reference), Show tutorial (reopens the overlay from step 1 — the
@@ -546,6 +597,16 @@ public final class MainWindow extends JFrame {
         if (lifecycle.mode() == GameMode.LOADING) {
             eventBus.publish(new it.unige.portcommand.gui.events.NotificationEvent(
                     "Settings not applied — a game is loading. Re-open Settings once it finishes.",
+                    it.unige.portcommand.gui.events.NotificationEvent.Severity.WARNING,
+                    lifecycle.simClock().nowSimMillis()));
+            return;
+        }
+        // S15: nor with no game at all (see settingsAvailableIn). The menu item is disabled in
+        // MENU; this is for a dialog that was already open when the game under it went away (a
+        // load that failed back to the empty shell).
+        if (!settingsAvailableIn(lifecycle.mode())) {
+            eventBus.publish(new it.unige.portcommand.gui.events.NotificationEvent(
+                    "Settings not applied — no game is running. Start or load a game first.",
                     it.unige.portcommand.gui.events.NotificationEvent.Severity.WARNING,
                     lifecycle.simClock().nowSimMillis()));
             return;
@@ -637,41 +698,58 @@ public final class MainWindow extends JFrame {
     }
 
     /**
-     * Game → New Game… (task 23): modal scenario chooser, then the same worker-thread +
-     * {@code loadInProgress} pattern as {@link #confirmAndLoad} — {@code startScenario}
-     * is a teardown/rebuild that takes seconds and must never block the EDT. The GUI
-     * refreshes itself from the boot's events ({@code GameLoadedEvent} etc.).
+     * Game → New Game… (task 23), and (S15) the offer a window makes when it opens with no game
+     * running: the modal chooser — the three scenarios and Free play — then the same worker-thread
+     * + {@code loadInProgress} pattern as {@link #confirmAndLoad}. Starting a game is a
+     * teardown/rebuild that takes seconds and must never block the EDT. The GUI refreshes itself
+     * from the boot's events ({@code GameLoadedEvent} etc.).
+     *
+     * <p>Free play is {@code GameSession.startSandbox()}, NOT {@code startNewGame()}: the latter
+     * can only start the first world of a process (it tears nothing down and resets neither the
+     * clock nor the seed), while this menu item must work from the empty shell and as a
+     * replacement for a running, paused or ended game alike.
+     *
+     * @return whether a game start was launched — {@code false} when the player closed the
+     *         dialog without pressing Start, or a load already owns the world
      */
-    private void chooseAndStartScenario() {
+    private boolean chooseAndStartGame() {
         if (loadInProgress) {
-            return;
+            return false;
         }
-        java.util.Optional<String> key = NewGameDialog.choose(this,
-                session.scenarioRegistry().all());
-        if (key.isEmpty()) {
-            return;
+        Optional<NewGameChoice> choice = NewGameDialog.choose(this, session.scenarioRegistry().all());
+        if (choice.isEmpty()) {
+            return false;
         }
+        NewGameChoice chosen = choice.get();
         loadInProgress = true;
         reflectMode();
         Thread worker = new Thread(() -> {
             Exception failure = null;
             try {
-                session.startScenario(key.get());
+                if (chosen.isFreePlay()) {
+                    session.startSandbox();
+                } else {
+                    session.startScenario(chosen.scenarioKey());
+                }
             } catch (Exception e) {
                 failure = e;
             }
             Exception reported = failure;
-            javax.swing.SwingUtilities.invokeLater(() -> {
+            SwingUtilities.invokeLater(() -> {
                 loadInProgress = false;
                 reflectMode();
                 if (reported != null) {
                     JOptionPane.showMessageDialog(this, reported.getMessage(),
                             "New Game", JOptionPane.ERROR_MESSAGE);
+                } else {
+                    // S15: a game is running now — the moment the first-launch tutorial waits for.
+                    maybeAutoOpenTutorial();
                 }
             });
-        }, "scenario-starter");
+        }, "game-starter");
         worker.setDaemon(true);
         worker.start();
+        return true;
     }
 
     /**
@@ -700,15 +778,19 @@ public final class MainWindow extends JFrame {
         return javax.swing.SwingUtilities.convertRectangle(bar.getParent(), bar.getBounds(), pauseOverlay);
     }
 
-    /** S14: the chat panel's rectangle in the glass pane's coordinate space, or an empty one while
-     * it is not showing. The pause overlay lets input through there: patience is frozen while the
-     * game is paused (ADR-18), and the player may read, think and type. */
-    private java.awt.Rectangle chatBoundsInGlassPane() {
-        if (chatPanel == null || !chatPanel.isShowing() || chatPanel.getParent() == null) {
+    /**
+     * The three-column area's rectangle in the glass pane's coordinate space, or an empty one
+     * while the screen is not showing. The pause overlay lets input through there and leaves it
+     * undimmed. S14 opened the chat this way — patience is frozen while the game is paused
+     * (ADR-18), and the player may read, think and type; S15 (2026-10-12) widened it to all three
+     * columns, because the waiting list and the comm log are read-only views and a pause is when
+     * they get read.
+     */
+    private java.awt.Rectangle columnsBoundsInGlassPane() {
+        if (!screen.isShowing()) {
             return new java.awt.Rectangle();
         }
-        return javax.swing.SwingUtilities.convertRectangle(chatPanel.getParent(), chatPanel.getBounds(),
-                pauseOverlay);
+        return screen.columnsBoundsIn(pauseOverlay);
     }
 
     /** Esc toggles pause/resume — bound WHEN_IN_FOCUSED_WINDOW so it works from any panel. */
@@ -758,9 +840,15 @@ public final class MainWindow extends JFrame {
         quitItem.setEnabled(!loadInProgress && (mode == GameMode.RUNNING || mode == GameMode.PAUSED));
         boolean live = mode == GameMode.RUNNING || mode == GameMode.PAUSED;
         saveItem.setEnabled(!loadInProgress && live);
-        // Loading is legal from a live game AND from GAME_OVER (continue from the autosave slot).
-        boolean loadable = live || mode == GameMode.GAME_OVER;
+        // Loading is legal from a live game, from GAME_OVER (continue from the autosave slot) and
+        // — S15 — from MENU: the window can now be open with no game running (the New Game dialog
+        // was cancelled, or a boot failed), and a player who cancelled in order to load must not
+        // find Load greyed out. GameSession.loadGame handles the empty shell as it does any
+        // started container (MENU → LOADING is a legal edge; a failure lands back in MENU). Only
+        // LOADING itself refuses.
+        boolean loadable = mode != GameMode.LOADING;
         loadItem.setEnabled(!loadInProgress && loadable);
+        settingsItem.setEnabled(settingsAvailableIn(mode)); // S15: not in the empty shell
     }
 
     /**
@@ -778,8 +866,9 @@ public final class MainWindow extends JFrame {
         debug.addSeparator();
         // Checkpoint-#5 request: storms are rare by design (steady-state ≈4%) — these force the
         // WeatherAgent's snapshot so the full hold → clear → re-dispatch cascade can be shown on
-        // demand. Everything downstream (alerts, holds, chip, notifications) runs the REAL
-        // pipeline; the next broadcast tick (~3 s at default speed) picks the override up.
+        // demand. Everything downstream (alerts, holds, the Port table's weather line,
+        // notifications) runs the REAL pipeline; the next broadcast tick (~3 s at default speed)
+        // picks the override up.
         JMenuItem forceStorm = new JMenuItem("Force storm (42 kn, stormy)");
         forceStorm.addActionListener(e ->
                 eventBus.publish(new DebugWeatherEvent(42, "poor", 5.0, "stormy")));

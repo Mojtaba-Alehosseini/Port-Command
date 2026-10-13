@@ -7,11 +7,15 @@ import java.util.Locale;
 import javax.swing.JLabel;
 import javax.swing.SwingConstants;
 
+import it.unige.portcommand.bootstrap.AgentRoster;
+import it.unige.portcommand.gui.model.NewGameChoice;
 import it.unige.portcommand.scenario.Scenario;
 import it.unige.portcommand.scenario.ScenarioRegistry;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -21,6 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * its sizing lives in two package-private statics and this test measures plain {@code JLabel}s,
  * which construct and report preferred sizes headless. Measured against the SHIPPED scenarios, so
  * a longer description authored later is covered too.
+ *
+ * <p>S15 (2026-10-12): the dialog gained a fourth button, <b>Free play</b>. Its buttons are built
+ * from the pure {@code NewGameDialog.options(...)} list, so what the dialog offers — and what each
+ * button means when Start is pressed — is pinned here without the dialog.
  */
 class NewGameDialogTest {
 
@@ -83,5 +91,107 @@ class NewGameDialogTest {
         } finally {
             Locale.setDefault(Locale.Category.FORMAT, previous);
         }
+    }
+
+    // ==================== S15: Free play, the fourth choice ====================
+
+    @Test
+    void theDialogOffersTheThreeScenariosInRegistryOrderAndThenFreePlay() {
+        List<Scenario> scenarios = registry.all();
+        List<NewGameDialog.Option> options = NewGameDialog.options(scenarios);
+
+        assertEquals(3, scenarios.size(), "fixture: the registry ships three scenarios");
+        assertEquals(4, options.size(), "three scenarios and Free play");
+        for (int i = 0; i < scenarios.size(); i++) {
+            Scenario scenario = scenarios.get(i);
+            NewGameDialog.Option option = options.get(i);
+            assertEquals(scenario.displayName(), option.label(), "button " + (i + 1));
+            assertEquals(scenario.description(), option.tooltip());
+            assertEquals(NewGameDialog.detailHtml(scenario), option.detailHtml());
+            assertEquals(NewGameChoice.scenario(scenario.key()), option.choice());
+            assertFalse(option.choice().isFreePlay(), scenario.key() + " is a scenario, not free play");
+        }
+        assertEquals(ScenarioRegistry.KEYS,
+                options.subList(0, 3).stream().map(option -> option.choice().scenarioKey()).toList(),
+                "the scenario buttons keep the registry's order, the tutorial first");
+    }
+
+    @Test
+    void freePlayIsTheFourthOptionAndChoosingItIsNotAScenario() {
+        NewGameDialog.Option freePlay = NewGameDialog.options(registry.all()).get(3);
+
+        assertEquals("Free play", freePlay.label());
+        assertTrue(freePlay.choice().isFreePlay(), "choosing it must start the sandbox, not a scenario");
+        assertEquals(NewGameChoice.freePlay(), freePlay.choice());
+        assertNull(freePlay.choice().scenarioKey(), "free play is not a fourth scenario key");
+        assertFalse(ScenarioRegistry.KEYS.contains(freePlay.label()), "and the registry stays at its three keys");
+        assertEquals(NewGameDialog.freePlayDetailHtml(), freePlay.detailHtml());
+        assertEquals(NewGameDialog.FREE_PLAY_DESCRIPTION, freePlay.tooltip());
+    }
+
+    @Test
+    void freePlayStillComesLastWhenTheDialogIsGivenNoScenarios() {
+        // Not a production state (the registry always has its three) — but the list is a pure
+        // function, and "Free play is always there, always last" should not depend on that.
+        List<NewGameDialog.Option> options = NewGameDialog.options(List.of());
+
+        assertEquals(1, options.size());
+        assertTrue(options.get(0).choice().isFreePlay());
+    }
+
+    @Test
+    void theFreePlayDetailSaysWhatItIsAndWhatThePortStartsWith() {
+        String html = NewGameDialog.freePlayDetailHtml();
+
+        assertEquals("Open-ended sandbox: contracted vessels arrive every day, walk-ins hail at random. "
+                + "No script.", NewGameDialog.FREE_PLAY_DESCRIPTION);
+        assertEquals("<html><center>" + NewGameDialog.FREE_PLAY_DESCRIPTION
+                + "<br><i>Starts with €50,000 · reputation 70</i></center></html>", html);
+        // The two figures are the sandbox's real opening state, not numbers typed into the dialog.
+        assertEquals(50_000.0, AgentRoster.STARTING_WALLET, 0.0, "the line above quotes this");
+        assertEquals(70.0, AgentRoster.STARTING_REPUTATION, 0.0, "and this");
+    }
+
+    @Test
+    void theFreePlayDetailIgnoresTheDefaultLocale() {
+        Locale previous = Locale.getDefault(Locale.Category.FORMAT);
+        try {
+            Locale.setDefault(Locale.Category.FORMAT, Locale.GERMANY);
+            assertEquals("50.000", String.format("%,.0f", 50_000.0),
+                    "non-vacuity: the default locale now groups with '.'");
+
+            String html = NewGameDialog.freePlayDetailHtml();
+            assertTrue(html.contains("<br><i>Starts with €50,000 · reputation 70</i>"), html);
+        } finally {
+            Locale.setDefault(Locale.Category.FORMAT, previous);
+        }
+    }
+
+    @Test
+    void theDetailLabelReservesRoomForTheFreePlayDetailToo() {
+        List<Scenario> scenarios = registry.all();
+        JLabel detail = NewGameDialog.detailLabel(scenarios);
+        Dimension reserved = detail.getPreferredSize();
+        int oneLine = labelLike(detail, " ").getPreferredSize().height;
+
+        Dimension need = labelLike(detail, NewGameDialog.freePlayDetailHtml()).getPreferredSize();
+        assertTrue(need.height > oneLine, "non-vacuity: the Free play detail needs " + need.height
+                + " px, more than a one-line slot's " + oneLine);
+        assertTrue(reserved.width >= need.width && reserved.height >= need.height,
+                "Free play needs " + need + ", reserved " + reserved);
+
+        detail.setText(NewGameDialog.freePlayDetailHtml()); // what the fourth toggle's action does
+        assertEquals(reserved, detail.getPreferredSize(), "selecting Free play must not change the packed size");
+    }
+
+    @Test
+    void theReserveIsMeasuredOverFreePlayEvenWithNoScenarioToCompareWith() {
+        // With no scenario in the list the reserve can only have come from the Free play detail:
+        // this is what proves detailLabel() really measures it, whichever detail is the largest
+        // among the shipped ones.
+        JLabel detail = NewGameDialog.detailLabel(List.of());
+
+        Dimension need = labelLike(detail, NewGameDialog.freePlayDetailHtml()).getPreferredSize();
+        assertEquals(need, detail.getPreferredSize());
     }
 }

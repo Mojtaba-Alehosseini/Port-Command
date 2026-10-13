@@ -42,8 +42,23 @@ public final class NegotiationTabRegistry {
     public record OpenResult(String dialogueId, boolean isNewTab) {
     }
 
+    /** The orientation line every new tab opens with. S15 (2026-10-12): it no longer quotes an
+     * example price — a literal one copied onto a vessel already offering more would close the
+     * deal far too cheaply, so the worked example lives in the input field's placeholder, computed
+     * from THIS vessel's standing offer ({@link InputExamples}) — and it names the two buttons
+     * that replaced the typed 'deal' / 'reject' advice. Hint is not mentioned: the model cannot
+     * know the button is hidden while the autopilot is on. */
+    static final String ORIENTATION_LINE = "You are the Harbour Master — this vessel pays YOU for berth time. "
+            + "Type your price and hours, or press Accept or Reject.";
+
     private final LinkedHashMap<String, DialogueTabModel> tabs = new LinkedHashMap<>();
     private final Map<String, String> dialogueIdByVesselId = new LinkedHashMap<>();
+    /** S15 (2026-10-12): the dialogue ids in the order their tabs were FIRST opened — the order
+     * the tab strip shows them in. {@link #tabs} cannot answer that: a later round removes and
+     * re-puts its entry on purpose (the recency {@link #rosterSnapshots} needs), so its order
+     * changes every time a vessel counters. Kept in step with {@code tabs} at the three places a
+     * tab is created or dropped (open, sweep, reset). */
+    private final List<String> tabOrder = new ArrayList<>();
     private Runnable onChange = () -> { };
 
     public void setOnChange(Runnable onChange) {
@@ -60,12 +75,11 @@ public final class NegotiationTabRegistry {
         if (tab == null) {
             tab = new DialogueTabModel(dialogueId, snapshot);
             dialogueIdByVesselId.put(snapshot.vesselId(), dialogueId);
+            tabOrder.add(dialogueId);
             // Task 19 play-test feedback: orient the player — who pays whom, and what to type.
             // (Frame.java's commerce_sell contract: the player SELLS berth space and RECEIVES
-            // the money; the vessel is the buyer.)
-            tab.appendSystemMessage("You are the Harbour Master — this vessel pays YOU for berth time. "
-                    + "Counter with your fee (e.g. 'how about 6500 for 10 hours'), type 'deal' to accept "
-                    + "their offer, 'reject' to turn them away, or press Hint for advice.");
+            // the money; the vessel is the buyer.) ONE entry, always first in the transcript.
+            tab.appendSystemMessage(ORIENTATION_LINE);
         } else {
             // Fallback since 2026-08-10 (audit P1-9): the HM now DOES track the player's standing
             // offer and stamps it into the snapshot, so on the ordinary priced-counter path this
@@ -218,6 +232,7 @@ public final class NegotiationTabRegistry {
         for (String id : expired) {
             DialogueTabModel gone = tabs.remove(id);
             dialogueIdByVesselId.remove(gone.vesselId(), id); // two-arg: never drop a newer mapping
+            tabOrder.remove(id); // S15: the id leaves the strip order with its tab
         }
         if (!expired.isEmpty()) {
             onChange.run();
@@ -229,6 +244,7 @@ public final class NegotiationTabRegistry {
     public void reset() {
         tabs.clear();
         dialogueIdByVesselId.clear();
+        tabOrder.clear();
         onChange.run();
     }
 
@@ -236,13 +252,39 @@ public final class NegotiationTabRegistry {
         return tabs.get(dialogueId);
     }
 
-    /** Tab display order (insertion order — the order dialogues first opened in). */
+    /** Every tab's id, closed tabs included until they are swept, least-recently-updated first.
+     * That is the order the dialogues opened in only until one of them goes a second round — a
+     * round update re-inserts its entry in {@link #tabs}. S15 (2026-10-12): this comment used to
+     * call it the tab display order; {@link #openDialogues} is the view that keeps that order. */
     public List<String> dialogueIds() {
         return List.copyOf(tabs.keySet());
     }
 
     public Optional<String> dialogueIdForVessel(String vesselId) {
         return Optional.ofNullable(dialogueIdByVesselId.get(vesselId));
+    }
+
+    /**
+     * S15 (2026-10-12): the negotiations still open, in the order their tabs sit on the strip —
+     * what the rest of the window lists ("Waiting for you"), selects and follows. A closed tab is
+     * left out from the moment it closes, although its tab stays on the strip for its dwell: no
+     * one is waiting on a finished negotiation. A vessel countering does not move its entry
+     * (see {@link #tabOrder}), so the list cannot reshuffle under the player's cursor.
+     *
+     * <p>P-04: built from the snapshot's vessel id and display name only — both observable (the
+     * name is the tab's own title, and it is the id when the vessel has none).
+     */
+    public List<OpenDialogue> openDialogues() {
+        List<OpenDialogue> open = new ArrayList<>();
+        for (String dialogueId : tabOrder) {
+            DialogueTabModel tab = tabs.get(dialogueId);
+            if (tab == null || tab.isClosed()) {
+                continue;
+            }
+            WalkInDialogueSnapshot snapshot = tab.snapshot();
+            open.add(new OpenDialogue(dialogueId, snapshot.vesselId(), snapshot.vesselName()));
+        }
+        return List.copyOf(open);
     }
 
     /** Every OPEN dialogue's current snapshot, most-recently-updated first (a closed

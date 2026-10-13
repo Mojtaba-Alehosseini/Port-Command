@@ -20,8 +20,8 @@ import org.slf4j.LoggerFactory;
  * snapshot into its shared cell (CALLER_THREAD, so it lands synchronously here). The
  * next {@code PeriodicWeatherBroadcastBehaviour} tick (≤ 15 sim-min) then drives
  * threshold alerts, holds and re-dispatches through the REAL pipeline. The canonical
- * {@link WeatherChangeEvent} is additionally published immediately so the map overlay
- * and HUD chip react at the scripted instant rather than a tick later
+ * {@link WeatherChangeEvent} is additionally published immediately so the Port table's
+ * weather line reacts at the scripted instant rather than a tick later
  * ({@code thresholdCrossed=false} — genuine crossings stay the broadcast's call).
  *
  * <p>Vocabulary is the canonical task-09 {@code WeatherSnapshot} one: category

@@ -7,12 +7,12 @@ import it.unige.portcommand.ontology.Position;
 /**
  * Static {@code tug_id -> home-base Position} table — the tug-pier equivalent of
  * {@link BerthPositions}, and the single canonical source of the four tug bases. Extracted from
- * {@code AgentRoster}'s former private {@code TUG_BASES} array (byte-identical coordinates) so both
- * the bootstrap (which injects each base as a tug's initial position) and the GUI map (task 18,
- * which seeds an IDLE dot at each base so idle tugs are visible at boot — the tug pier next to the
- * breakwater, four berths stacked vertically, task 08 §8.6) read ONE table rather than duplicating
- * the coordinates. Placeholder coordinates — task 18's real map layout supersedes these (same
- * placeholder spirit as {@link BerthPositions}).
+ * {@code AgentRoster}'s former private {@code TUG_BASES} array (byte-identical coordinates) so that
+ * every boot path — a fresh fleet and a fleet respawned from a save — injects each tug's base from
+ * ONE table rather than duplicating the coordinates (the tug pier next to the breakwater, four
+ * bases stacked vertically, task 08 §8.6). Placeholder coordinates, in the same spirit as
+ * {@link BerthPositions}: since S15 (2026-10-12) nothing draws them, they only set how far a tug
+ * has to travel.
  */
 public final class TugBasePositions {
 

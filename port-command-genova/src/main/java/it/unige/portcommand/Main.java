@@ -3,6 +3,7 @@ package it.unige.portcommand;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 import javax.swing.SwingUtilities;
 
@@ -16,8 +17,8 @@ import it.unige.portcommand.smoke.SmokeRunner;
 
 /**
  * Application entry point. Builds the {@link GameSession} (which owns the JADE boot, the
- * fleet, the game lifecycle and — task 22 — save/load), starts a fresh run or loads a
- * save, and blocks; the shutdown hook tears JADE down cleanly on Ctrl+C.
+ * fleet, the game lifecycle and — task 22 — save/load), starts what the flags ask for (see
+ * {@link LaunchMode}), and blocks; the shutdown hook tears JADE down cleanly on Ctrl+C.
  *
  * <p>Flags: {@code --gui} opens the Swing shell (task 17); {@code --day-length
  * <seconds>} overrides how many real seconds one game day lasts (task 24 — maps to the
@@ -29,10 +30,55 @@ import it.unige.portcommand.smoke.SmokeRunner;
  * scripted scenarios ({@code tutorial | busy_day | storm}) — mutually exclusive with
  * {@code --load}; {@code --smoke} (task 26) runs {@link SmokeRunner#runAll()} headlessly and
  * exits with its failure count instead of starting a session at all.
+ *
+ * <p><b>S15 (2026-10-12): a plain {@code --gui} launch no longer starts a game.</b> It used to
+ * boot a sandbox and then open the window on it, so the player's first sight was a game already
+ * running that they had not chosen — and choosing one meant finding Game ▸ New Game…. Now the
+ * window opens on the empty shell ({@code GameSession.bootShell()}: bus, clock and services up,
+ * no agents, mode MENU) and shows the New Game dialog itself: the three scenarios or Free play.
+ * Nothing else changed: {@code --scenario} and {@code --load} still boot their world FIRST and
+ * open the window on it (the demo launchers rely on that), and without {@code --gui} the default
+ * is still a running headless sandbox — there is nobody to ask.
  */
 public final class Main {
 
     private Main() {
+    }
+
+    /** What a launch boots before anything else happens, decided from the flags alone (S15). */
+    enum LaunchMode {
+        /** {@code --load <path>}: boot from the save file, with or without a window. */
+        LOAD,
+        /** {@code --scenario <key>}: boot the scripted scenario, with or without a window. */
+        SCENARIO,
+        /** {@code --gui} alone: boot the empty shell; the window opens and offers New Game. */
+        WINDOW_THEN_NEW_GAME,
+        /** No flags: a running sandbox with no window — the pre-S15 default, kept. */
+        HEADLESS_SANDBOX
+    }
+
+    /**
+     * The launch mode for a combination of flags (S15). A world named on the command line wins:
+     * {@code --load} or {@code --scenario} boot that world whether or not a window was asked for.
+     * Only when neither is given does {@code --gui} decide — the window then opens first and asks
+     * the player, where a headless launch has to start something on its own.
+     *
+     * <p>Pure, and package-private for {@code MainLaunchModeTest}: the four-way branch in
+     * {@link #main} is otherwise reachable only by launching the program.
+     *
+     * @throws IllegalArgumentException for {@code --load} together with {@code --scenario}
+     */
+    static LaunchMode launchMode(boolean gui, boolean hasLoad, boolean hasScenario) {
+        if (hasLoad && hasScenario) {
+            throw new IllegalArgumentException("--load and --scenario are mutually exclusive");
+        }
+        if (hasLoad) {
+            return LaunchMode.LOAD;
+        }
+        if (hasScenario) {
+            return LaunchMode.SCENARIO;
+        }
+        return gui ? LaunchMode.WINDOW_THEN_NEW_GAME : LaunchMode.HEADLESS_SANDBOX;
     }
 
     public static void main(String[] args) throws Exception {
@@ -46,9 +92,8 @@ public final class Main {
         applyDayLengthOverride(argList);
         Path loadPath = loadPathArg(argList);
         String scenarioKey = scenarioArg(argList);
-        if (loadPath != null && scenarioKey != null) {
-            throw new IllegalArgumentException("--load and --scenario are mutually exclusive");
-        }
+        // Decided (and --load with --scenario refused) before anything is booted.
+        LaunchMode mode = launchMode(guiRequested, loadPath != null, scenarioKey != null);
 
         BootstrapConfig cfg = BootstrapConfig.fromSystemProperties();
         JadeBootstrap boot = new JadeBootstrap();
@@ -59,20 +104,31 @@ public final class Main {
         // same scores.json with diverging in-memory views).
         Leaderboard leaderboard = new Leaderboard();
         GameSession session = new GameSession(boot, cfg, new SaveLoadManager(), leaderboard);
-        if (loadPath != null) {
-            session.loadGame(loadPath); // SchemaVersion/CorruptSave surface on the console
-        } else if (scenarioKey != null) {
-            session.startScenario(scenarioKey); // task 23 — headless-testable scenario boot
-        } else {
-            // Sandbox boot (in-game New Game… opens the scenario dialog; task 23).
-            session.startNewGame();
+        switch (mode) {
+            // SchemaVersion/CorruptSave surface on the console.
+            case LOAD -> session.loadGame(loadPath);
+            // Task 23 — headless-testable scenario boot.
+            case SCENARIO -> session.startScenario(scenarioKey);
+            // S15: no world yet. The shell alone gives the window everything its constructor
+            // dereferences (lifecycle, bus, clock, port artifact, NLP pipeline); the player then
+            // picks a game in the New Game dialog the window opens with.
+            case WINDOW_THEN_NEW_GAME -> session.bootShell();
+            // Headless default, unchanged: a running sandbox (nobody to show a dialog to).
+            case HEADLESS_SANDBOX -> session.startNewGame();
         }
 
         if (guiRequested) {
             // S8 (D-05 two-step): an explicit implementation, NOT the old 2-arg method ref — the
             // 3-arg form must reach the pipeline's ctxByVesselId overload, or the interface
             // default would silently drop the resolver and the two-step could never fire.
-            final it.unige.portcommand.nlp.NLPPipeline nlp = boot.getNlpPipeline();
+            // S15: captured only HERE, after the boot above. The pipeline does not exist before
+            // JadeBootstrap.start — which every branch has now run, the shell-only one included —
+            // and a null captured into the processor would be permanent: the first Send would
+            // throw instead of parsing. It is one of the shared services that survive every later
+            // world swap, so one capture serves all the games of the session. Fail loudly at
+            // launch rather than on that first Send if this ever stops holding.
+            final it.unige.portcommand.nlp.NLPPipeline nlp = Objects.requireNonNull(boot.getNlpPipeline(),
+                    "the NLP pipeline must exist once the session has booted");
             it.unige.portcommand.nlp.ChatInputProcessor processor =
                     new it.unige.portcommand.nlp.ChatInputProcessor() {
                         @Override
@@ -88,9 +144,11 @@ public final class Main {
                             return nlp.processChatInput(text, ctx, ctxByVesselId);
                         }
                     };
+            // S15: with no world booted above, the window offers the New Game dialog as it opens.
+            boolean offerNewGameOnOpen = mode == LaunchMode.WINDOW_THEN_NEW_GAME;
             SwingUtilities.invokeLater(() -> new MainWindow(boot.getEventBus(), boot.getPortStateArtifact(),
                     processor, session.lifecycle(), leaderboard,
-                    session, boot::shutdown)
+                    session, boot::shutdown, offerNewGameOnOpen)
                     .setVisible(true));
         }
 

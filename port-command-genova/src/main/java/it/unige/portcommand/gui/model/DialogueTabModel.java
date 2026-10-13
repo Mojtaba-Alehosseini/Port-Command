@@ -19,10 +19,25 @@ public final class DialogueTabModel {
 
     public enum Speaker { PLAYER, VESSEL, ASSISTANT, SYSTEM }
 
-    public record ChatEntry(Speaker speaker, String text) {
+    /**
+     * One line of the transcript.
+     *
+     * @param tag S15 (2026-10-12): the small grey note shown after a PLAYER message saying how it
+     *            was read — {@code (DCG)} / {@code (Rasa 0.97)}, see {@link ParseTag}. Empty for
+     *            every other speaker and for a player message nothing has been said about yet
+     *            (the parse is still running, or the turn was not routed). Never {@code null}.
+     */
+    public record ChatEntry(Speaker speaker, String text, String tag) {
         public ChatEntry {
             Objects.requireNonNull(speaker, "speaker");
             Objects.requireNonNull(text, "text");
+            tag = tag == null ? "" : tag;
+        }
+
+        /** An untagged line — every entry is born this way. Kept as its own constructor so the
+         * pre-S15 two-argument form (and record equality against it) means exactly what it did. */
+        public ChatEntry(Speaker speaker, String text) {
+            this(speaker, text, "");
         }
     }
 
@@ -47,6 +62,11 @@ public final class DialogueTabModel {
      * the negotiation's own length (one entry per send); the gate judges commands in send order,
      * so a refusal also settles every older entry — see {@link #refusePendingOffer}. */
     private final List<PendingOffer> pendingOffers = new ArrayList<>();
+    /** S15 (2026-10-12): how many messages the player has sent in this tab — the index the input
+     * field's rotating example advances on ({@link InputExamples}). Counted here, at the append,
+     * because the transcript is the only witness: a send the pipeline later fails to understand
+     * is still a send. */
+    private int playerMessageCount;
 
     public DialogueTabModel(String dialogueId, WalkInDialogueSnapshot snapshot) {
         this.dialogueId = Objects.requireNonNull(dialogueId, "dialogueId");
@@ -140,8 +160,57 @@ public final class DialogueTabModel {
         transcript.add(new ChatEntry(Speaker.VESSEL, text));
     }
 
-    public void appendPlayerMessage(String text) {
+    /**
+     * Appends what the player sent.
+     *
+     * @return S15 (2026-10-12): the new entry's index in {@link #transcript()} — the handle
+     *         {@link #tagPlayerMessage} takes once the parse has come back. It stays valid for the
+     *         tab's whole life: the transcript never removes or reorders entries.
+     */
+    public int appendPlayerMessage(String text) {
         transcript.add(new ChatEntry(Speaker.PLAYER, text));
+        playerMessageCount++;
+        return transcript.size() - 1;
+    }
+
+    /**
+     * S15 (2026-10-12): says how the player's message at {@code index} was read, in place — the
+     * bubble is on screen before the parse finishes, so the note can only arrive afterwards
+     * ({@link #reviseHint} is the precedent for replacing an entry where it stands). The text of
+     * the message is untouched. A closed tab still takes a tag: a parse that finishes just after
+     * the negotiation ended was still read by one stage or the other.
+     *
+     * @param index the value {@link #appendPlayerMessage} returned for that message
+     * @param tag   the note to show ({@code null} or empty clears it)
+     * @return false (nothing changed) when {@code index} does not name a PLAYER entry — out of
+     *         range, or another speaker's line. A caller holding an index from another tab or
+     *         another world therefore cannot write a tag onto a vessel's or the Assistant's words.
+     */
+    public boolean tagPlayerMessage(int index, String tag) {
+        if (index < 0 || index >= transcript.size()) {
+            return false;
+        }
+        ChatEntry entry = transcript.get(index);
+        if (entry.speaker() != Speaker.PLAYER) {
+            return false;
+        }
+        transcript.set(index, new ChatEntry(Speaker.PLAYER, entry.text(), tag));
+        return true;
+    }
+
+    /** S15 (2026-10-12): how many messages the player has sent in this tab (never decreases). */
+    public int playerMessageCount() {
+        return playerMessageCount;
+    }
+
+    /**
+     * S15 (2026-10-12): whether the player has an offer standing — the same sentinel
+     * {@code DialogueCtx.StandingOffer.from} reads ({@code lastPlayerOffer > 0}), so the offer
+     * line, the input examples and the grammar's context always agree on it. It goes back to
+     * false when the Prolog gate refuses the player's first offer (the registry restores €0).
+     */
+    public boolean playerHasOffered() {
+        return snapshot.lastPlayerOffer() > 0;
     }
 
     public void appendAssistantMessage(String text) {

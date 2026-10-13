@@ -26,8 +26,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Sends the HarbourMaster a weather snapshot every 15 sim-minutes (audit P1-4 — it used to
  * address a {@code weather-subscriber} DF type nothing registers, so the channel was dead;
- * see {@link #broadcast}), publishes the GUI's {@link WeatherChangeEvent} (task 24 — the map's
- * weather chip goes live), and — when {@link WeatherAlertPolicy} reports a genuine
+ * see {@link #broadcast}), publishes the GUI's {@link WeatherChangeEvent} (task 24 — it feeds
+ * the Port table's weather line), and — when {@link WeatherAlertPolicy} reports a genuine
  * severity transition — sends the HarbourMaster an alert on the
  * {@code WEATHER_ALERT_PROTOCOL}, in BOTH directions:
  * <ul>

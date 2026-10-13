@@ -42,8 +42,8 @@ public final class TerminalAgent extends PortCommandAgent implements Mementoable
         SimClock simClock = argAt(2, SimClock.class);
 
         // Task 22 restore: adopt persisted occupancy (already reconciled by the loader
-        // against the restored vessel set) and push it to the shared artefact so the GUI
-        // map shows restored berths immediately — no placeholder state after a load.
+        // against the restored vessel set) and push it to the shared artefact so its berth
+        // state is the restored one immediately — no placeholder state after a load.
         TerminalStateDTO restored = optionalArgOfType(TerminalStateDTO.class);
         if (restored != null) {
             state.restoreOccupancies(restored.occupancies());

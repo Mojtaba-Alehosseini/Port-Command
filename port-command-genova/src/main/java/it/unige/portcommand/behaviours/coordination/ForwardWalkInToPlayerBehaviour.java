@@ -573,7 +573,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
      * DETERMINISTIC — every walk-in of a given class got the SAME berth (berth_1 for a
      * cargo_vessel). Two overlapping same-class walk-ins (which {@code busy_day} scripts at t=300)
      * were therefore both offered, and could both be granted, one berth: two vessels docked in it,
-     * with the map still painting it FREE. Nothing downstream catches that — a walk-in sends the
+     * with the port display still showing it FREE. Nothing downstream catches that — a walk-in sends the
      * terminal no berth REQUEST at all (ADR-09), so {@code TerminalState}'s {@code berth_busy}
      * guard never sees it and no {@code BerthOccupancyUpdate} is ever pushed.
      *
@@ -606,8 +606,8 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         if (free.isEmpty()) {
             // The residual A-02 case, made VISIBLE rather than silent (adversarial review, 2026-07-27):
             // when every compatible berth is held we fall back to the old pick, which reproduces the
-            // original collision. Logging it is one line and turns "two vessels in one berth, map
-            // still FREE" from invisible into greppable.
+            // original collision. Logging it is one line and turns "two vessels in one berth, the
+            // artifact still FREE" from invisible into greppable.
             //
             // AUDIT P1-12 WAS ATTEMPTED HERE AND REVERTED (2026-08-10). Refusing instead of falling
             // back looks obviously right and is not: `held` is every TRACKED vessel's assignedBerth,

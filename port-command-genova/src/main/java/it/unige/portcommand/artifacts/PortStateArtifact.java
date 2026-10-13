@@ -17,8 +17,9 @@ import org.slf4j.LoggerFactory;
  * Thread-safe shared port state: per-berth occupancy and per-tug status, plus a
  * publish/subscribe channel for deltas. One instance is created by
  * {@code JadeBootstrap} and constructor-injected (via the {@code Object[]} args
- * channel) into the terminal and tug agents — never a global static. The GUI map
- * (task 18) reads snapshots directly; task 08's escort behaviour subscribes.
+ * channel) into the terminal and tug agents — never a global static. The GUI's Port
+ * table (S15, 2026-10-12) seeds its tug line from {@link #tugSnapshot()} and subscribes
+ * for tug deltas; task 08's escort behaviour subscribes.
  */
 public final class PortStateArtifact {
 
@@ -44,7 +45,8 @@ public final class PortStateArtifact {
         return Optional.ofNullable(berthOccupancy.get(berthId));
     }
 
-    /** Immutable snapshot of all berth occupancy (GUI map reads this each animation tick). */
+    /** Immutable snapshot of all berth occupancy. (No GUI panel reads it since S15: a berth held
+     * by a walk-in is FREE here, so the Port table takes its berths from {@code PortStatusEvent}.) */
     public Map<String, BerthOccupancy> berthSnapshot() {
         return Map.copyOf(berthOccupancy);
     }
