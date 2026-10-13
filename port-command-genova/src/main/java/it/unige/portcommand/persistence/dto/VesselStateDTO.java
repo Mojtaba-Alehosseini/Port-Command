@@ -67,9 +67,19 @@ public record VesselStateDTO(
         // pre-S8 saves — every display surface falls back to the id.
         String vesselName) {
 
+    /** A copy with another escort list (the load-side reconciliation, S16). */
+    public VesselStateDTO withAssignedTugs(List<String> tugs) {
+        return new VesselStateDTO(id, vesselType, channel, draft, length, tonnage, cargoClass,
+                etaArrivalSimMillis, stage, currentPhase, phaseDeadlineSimMillis, assignedBerth,
+                dealPrice, dealHours, List.copyOf(tugs), blocked, weatherHeld, posX, posY, posHeading,
+                contractRef, personality, minAcceptablePrice, targetPrice, maxWaitMinutes,
+                minDurationHours, negotiationRound, negotiationStartedAtSimMillis, vesselName);
+    }
+
     public static final String CHANNEL_CONTRACTED = "contracted";
     public static final String CHANNEL_WALK_IN = "walk_in";
 
     /** {@code AWAITING_BERTH} added S5 (ADR-16) — additive within schema v1, like task-23's fields. */
-    public static final Set<String> PHASES = Set.of("AWAITING_BERTH", "TRANSIT", "DOCKED", "DEPARTING");
+    public static final Set<String> PHASES =
+            Set.of("AWAITING_BERTH", "AWAITING_CLEARANCE", "TRANSIT", "DOCKED", "DEPARTING");
 }

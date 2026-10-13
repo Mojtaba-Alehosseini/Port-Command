@@ -26,7 +26,7 @@
  {"id":"R22","module":"rules_customs","predicate":"needs_inspection/1","text":"Hazardous cargo needs a customs inspection."},
  {"id":"R23","module":"rules_customs","predicate":"inspection_probability/3","text":"The chance of a customs inspection is 80% for hazardous cargo and 20% for any other cargo."},
  {"id":"R24","module":"rules_customs","predicate":"high_risk/2","text":"A vessel and cargo pair is high-risk when its inspection chance is 50% or more."},
- {"id":"R25","module":"rules_priority","predicate":"priority_rank/2","text":"Priority ranks 1 to 6: emergency, medical, scheduled ferry, scheduled arrival, departure, maintenance."},
+ {"id":"R25","module":"rules_priority","predicate":"priority_rank/2","text":"Ranks: emergency 1, medical 2, scheduled ferry 3, scheduled arrival 4, walk-in and departure 5, maintenance 6."},
  {"id":"R26","module":"rules_priority","predicate":"priority_class_of/2","text":"A vessel's class is its override if it has one, else scheduled ferry for a ferry, else scheduled arrival."},
  {"id":"R27","module":"rules_priority","predicate":"higher_priority/2","text":"One priority class outranks another when its rank number is lower."},
  {"id":"R28","module":"rules_priority","predicate":"preempts/2","text":"A higher-priority class goes ahead of (preempts) a lower-priority one."},

@@ -49,7 +49,11 @@ public final class HandleCancelBehaviour extends CyclicBehaviour {
             return;
         }
         String cancelledVessel = vesselIdOf(msg);
-        if (tug.currentJob() == null && tug.activeMovement() == null) {
+        // S16 (adversarial review): "no job", whatever the tug is doing. A tug on its way home
+        // has a movement but no job - and since decision B3 it may bid from there, so a CANCEL can
+        // overtake an ACCEPT in that state too. It used to fall through to "abort", which only
+        // restarted the homeward leg and left the queued award to be honoured.
+        if (tug.currentJob() == null) {
             // S10 (bug hunt, hunter B finding 2): receive() is template-selective, so this
             // CANCEL can OVERTAKE the very ACCEPT_PROPOSAL it cancels — both sit queued (the
             // HM sent ACCEPT then CANCEL within one storm pass) and the scheduler rotation ran
@@ -72,7 +76,7 @@ public final class HandleCancelBehaviour extends CyclicBehaviour {
                         + "before it started", tug.tugId(), overtaken.getConversationId());
                 return;
             }
-            log.debug("{} CANCEL while idle — nothing to abort", tug.tugId());
+            log.debug("{} CANCEL with no job — nothing to abort", tug.tugId());
             return;
         }
         if (cancelledVessel != null && tug.currentJob() != null

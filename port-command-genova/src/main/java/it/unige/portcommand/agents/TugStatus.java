@@ -12,6 +12,8 @@ public enum TugStatus {
     IDLE,
     BIDDING,
     EN_ROUTE_TO_VESSEL,
+    /** S16 (ADR-20): at the ship, reported to the HarbourMaster, waiting for the escort order. */
+    ON_STATION,
     ESCORTING,
     RETURNING,
     REFUELING

@@ -96,8 +96,17 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             // Tug-originated flow reports carry an "event" field, not "intent" (checkpoint-#6
             // F1, fixed 2026-07-18): the escort_complete INFORM is the dock report this
             // tracking previously swallowed silently.
-            if ("escort_complete".equals(text(content, "event"))) {
+            String event = text(content, "event");
+            if ("escort_complete".equals(event)) {
                 advanceStage(hm, text(content, "vessel_id"), Stage.DOCKED);
+            } else if ("tug_on_station".equals(event)) {
+                // S16 (ADR-20): the tug has reached its ship and waits there for the order.
+                it.unige.portcommand.behaviours.MovementControl.onTugOnStation(hm,
+                        text(content, "vessel_id"), msg.getSender().getLocalName(),
+                        msg.getConversationId());
+            } else if ("tug_available".equals(event)) {
+                // S16: a tug is free again - a ship waiting for one is tendered at once.
+                it.unige.portcommand.behaviours.MovementControl.onTugAvailable(hm);
             }
             return; // anything else without an intent is not a walk-in negotiation message
         }
@@ -110,7 +119,16 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             // through to the "unrecognised" branch — the HM-side stage never left
             // AWAITING_TUG/IN_TRANSIT, so departures logged stale stages and the persisted
             // VesselStateDTO.stage contradicted the vessel's own currentPhase.
-            case "service_complete" -> advanceStage(hm, text(content, "vessel_id"), Stage.DEPARTING);
+            // S16 (ADR-20): service_complete is also the ship's REQUEST to leave. A departure is
+            // a movement: the gate clears it (the stage then advances to DEPARTING) or the ship
+            // stays at its berth until the weather allows.
+            case "service_complete" -> it.unige.portcommand.behaviours.MovementControl
+                    .onServiceComplete(hm, text(content, "vessel_id"));
+            // S16: the ship's own arrival report - the dock signal for a vessel with no escort
+            // (a ferry was never DOCKED in this tracking before), and for every other vessel
+            // whichever of this and the tug's escort_complete comes first.
+            case "docked" -> it.unige.portcommand.behaviours.MovementControl
+                    .onDocked(hm, text(content, "vessel_id"));
             case "departed" -> handleDeparted(hm, content);
             case "status_report" -> handleStatusReport(hm, msg, content);
             default -> log.debug("unrecognised walk-in intent '{}' from {}", intent, msg.getSender().getLocalName());
@@ -177,10 +195,13 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         if (removed != null) {
             log.info("{}: departed — tracking closed (was {}, {} tug(s) assigned)",
                     vesselId, removed.stage(), removed.assignedTugs().size());
+            // S16: a ship that leaves while the tracking still had it WAITING (its dock report
+            // never arrived) may have tugs on station; they are sent home, not left waiting.
+            it.unige.portcommand.behaviours.MovementControl.sendHomeWaitingEscort(hm, removed);
         }
-        // S5 housekeeping: a departure frees a berth and retires any priority escalation.
-        hm.priorityOverrides().remove(vesselId);
-        hm.berthWaitQueue().remove(vesselId); // defensive; a queued vessel cannot normally depart
+        // S5 housekeeping: a departure frees a berth and retires any priority escalation. S16:
+        // and the movement notebook's entries for it (MovementControl.forget is the one list).
+        it.unige.portcommand.behaviours.MovementControl.forget(hm, vesselId);
         releaseQueuedGrants(hm);
     }
 
@@ -370,7 +391,12 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
                 .map(VesselTracking::assignedBerth)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        return compatible.stream().filter(b -> !held.contains(b)).toList();
+        // S16 (C3): nor is a berth closed by a flood, until it reopens.
+        long now = hm.simClock().nowSimMillis();
+        return compatible.stream()
+                .filter(b -> !held.contains(b))
+                .filter(b -> !hm.movement().berthClosed(b, now))
+                .toList();
     }
 
     /**
@@ -404,25 +430,16 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         accept.setContent(TerminalJson.write(grantContent));
         hm.sendLogged(accept);
 
-        // Checkpoint-#6 F1 (fixed 2026-07-18): a vessel that needs no escort never awaits one —
-        // it starts its transit the moment the grant lands (AwaitBerthBehaviour attaches the
-        // transit unconditionally), so AWAITING_TUG was a from-the-start lie for 0-tug vessels
-        // (W9 departed still showing it). Stage the grant by what actually happens next.
-        int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());
-        Stage grantStage = tugsRequired > 0 ? Stage.AWAITING_TUG : Stage.IN_TRANSIT;
-        hm.activeVessels().put(vesselId, tracking.withStage(grantStage).withBerth(berthId));
+        // S16 (ADR-20): the grant RESERVES the berth and nothing more. Every granted ship is
+        // AWAITING_TUG - "granted, not moving" - and waits at the channel entry until
+        // MovementControl.tryProceed sends it. afterGrant asks customs to clear it (walk-ins too,
+        // since S16) and then holds it, hires its escort, or lets it proceed - the one decision
+        // point both grant pipelines share. Pre-S16 this method launched the Contract Net itself
+        // and wrote a 0-tug vessel IN_TRANSIT at once.
+        hm.activeVessels().put(vesselId, tracking.withStage(Stage.AWAITING_TUG).withBerth(berthId));
         log.info("{}: berth GRANTED {} (price {}, {}h{})", vesselId, berthId, price, hours,
                 reason == null ? "" : ", " + reason);
-
-        // Task 15: closes the walk-in CNP-dispatch gap ADR-08 left deliberately open —
-        // mirrors AutoFlowDispatcherBehaviour's own tugsRequired>0 gate exactly. Terminal/customs
-        // dispatch stays out of scope (a separate, larger parity gap — see ADR-09).
-        if (tugsRequired > 0) {
-            Position berthPosition = BerthPositions.position(berthId);
-            hm.cnpCoordinator().initiate(new CnpRequest(spec.vesselId(), vesselAid,
-                    AutoFlowDispatcherBehaviour.CHANNEL_ENTRY, berthPosition, tugsRequired,
-                    spec.vesselType()));
-        }
+        it.unige.portcommand.behaviours.MovementControl.afterGrant(hm, vesselId);
     }
 
     /**
@@ -481,9 +498,13 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
                 if (free.isEmpty()) {
                     continue;
                 }
-                PrologQueries.VesselPriority priority = PrologQueries.effectivePriority(
-                        tracking.spec().vesselType(),
-                        hm.priorityOverrides().get(candidate.vesselId()));
+                // S16 (C4): the class comes through MovementControl.priorityOf, which hands R26
+                // the walk_in_arrival class for a walk-in - ranked below every scheduled
+                // (contracted) arrival by a fact under R25. A contract queued for its pinned berth
+                // now wins it from a walk-in that arrived earlier; before, the two tied and FIFO
+                // decided.
+                PrologQueries.VesselPriority priority =
+                        it.unige.portcommand.behaviours.MovementControl.priorityOf(hm, tracking);
                 // R27 higher_priority/2 IS the comparator; arrival order breaks ties.
                 if (best == null || PrologQueries.higherPriority(
                         priority.priorityClass(), bestPriority.priorityClass())) {
@@ -537,9 +558,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             hm.activeVessels().remove(tracking.vesselId());
             // S5 finding 12: a withdrawing vessel leaves EVERY per-vessel side table, not just
             // the tracking — the override map has no self-healing sweep of its own.
-            hm.priorityOverrides().remove(tracking.vesselId());
-            hm.pendingContractGrants().remove(tracking.vesselId());
-            hm.berthWaitQueue().remove(tracking.vesselId());
+            it.unige.portcommand.behaviours.MovementControl.forget(hm, tracking.vesselId());
         }
         String dialogueId = msg.getConversationId();
         forgetDialogue(hm, dialogueId);

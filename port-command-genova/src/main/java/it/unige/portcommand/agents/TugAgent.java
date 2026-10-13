@@ -40,8 +40,12 @@ import jade.lang.acl.MessageTemplate;
  */
 public final class TugAgent extends PortCommandAgent implements it.unige.portcommand.persistence.Mementoable {
 
-    /** A leg consumes this many fuel units per km (200 km empties a full tank). */
-    public static final double FUEL_DECAY_PER_KM = 0.005;
+    /**
+     * A leg consumes this many fuel units per km. S16 (ADR-20): 0.005 x 6 = 0.03, scaled with
+     * {@code TugMath.PIXELS_PER_KM} (10 -> 60) so that a job across the same pixels burns the
+     * same third of a tank it always did (a full tank is now about 33 km).
+     */
+    public static final double FUEL_DECAY_PER_KM = 0.03;
     /** Bids are REFUSEd below this fuel fraction; also the refuel trigger threshold. */
     public static final double LOW_FUEL_THRESHOLD = 0.20;
 
@@ -144,6 +148,23 @@ public final class TugAgent extends PortCommandAgent implements it.unige.portcom
             // pickupTarget — the DTO's contract is "the pickup while EN_ROUTE_TO_VESSEL,
             // else null", and keeping it here re-persisted a stale pickup on the next save
             // (the same staleness HandleCancelBehaviour clears on the live path).
+            // S16 (ADR-20): a tug saved while waiting at its ship. It re-enters the first leg
+            // with its own position as the pickup, so it "arrives" on the first tick and reports
+            // tug_on_station again - the rebuilt HarbourMaster does not persist who is on station.
+            case ON_STATION -> {
+                // The pickup IS where the tug stands: until its first tick it is en route to its
+                // own position, and a save taken in that instant must be a coherent EN_ROUTE one
+                // (job + pickup), not the "incoherent -> idle, job dropped" case above.
+                this.pickupTarget = currentJob != null ? position : null;
+                if (currentJob != null) {
+                    this.status = TugStatus.EN_ROUTE_TO_VESSEL;
+                    TransitToVesselBehaviour leg = new TransitToVesselBehaviour(this, position);
+                    setActiveMovement(leg);
+                    addBehaviour(leg);
+                } else {
+                    this.status = TugStatus.IDLE;
+                }
+            }
             case ESCORTING -> {
                 this.pickupTarget = null;
                 if (currentJob != null) {
@@ -226,6 +247,24 @@ public final class TugAgent extends PortCommandAgent implements it.unige.portcom
         this.position = TugMath.moveToward(position, target, stepKm * TugMath.PIXELS_PER_KM);
         consumeFuel(stepKm);
         return TugMath.distanceKm(position, target) <= TugMath.ARRIVAL_EPS_KM;
+    }
+
+    /**
+     * S16 (ADR-20): tells the HarbourMaster this tug is free again - back at base, or refuelled.
+     * A ship whose Contract Net found every tug busy keeps waiting at the channel entry (it
+     * never sails without its escort), and this report is what gets it re-tendered at once
+     * instead of at the next periodic sweep. One INFORM per job; nothing if no HarbourMaster is
+     * registered (a tug-only test harness).
+     */
+    public void announceAvailable() {
+        getServiceLocator().findUnique("harbour-master").ifPresent(hm -> {
+            jade.lang.acl.ACLMessage inform = it.unige.portcommand.core.MessageFactory.create(
+                    jade.lang.acl.ACLMessage.INFORM);
+            inform.addReceiver(hm);
+            inform.setContent(it.unige.portcommand.core.TerminalJson.write(java.util.Map.of(
+                    "event", "tug_available", "tug_id", tugId)));
+            send(inform);
+        });
     }
 
     /** Publishes the current {position, status} to the shared artefact (task 08: every tick/status change). */
@@ -370,10 +409,15 @@ public final class TugAgent extends PortCommandAgent implements it.unige.portcom
         return fuelState;
     }
 
-    /** Audit catch-all union: the three permanent cyclic receivers, all registered at setup. */
+    /**
+     * Audit catch-all union: the three permanent cyclic receivers, all registered at setup, and
+     * (S16) the HarbourMaster's escort order, which the first leg polls for while the tug waits
+     * on station - without this arm the catch-all would eat the order before the leg saw it.
+     */
     @Override
     protected MessageTemplate handledTemplate() {
-        return MessageTemplate.or(BidInCNPBehaviour.TEMPLATE,
+        return MessageTemplate.or(
+                MessageTemplate.or(BidInCNPBehaviour.TEMPLATE, TransitToVesselBehaviour.BEGIN_ESCORT_TEMPLATE),
                 MessageTemplate.or(HandleAcceptRejectBehaviour.TEMPLATE, HandleCancelBehaviour.TEMPLATE));
     }
 

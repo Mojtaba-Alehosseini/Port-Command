@@ -100,6 +100,18 @@ public final class HarbourMasterAgent extends PortCommandAgent
      * reading arrives (the gate then checks compatibility only — bootstrap grace).
      */
     private volatile WeatherReading lastWeather;
+    /**
+     * S16 (ADR-20): what is known about ships waiting to move - tugs on station, hold rules,
+     * departure requests, inspections, closed berths. See {@link MovementBook}.
+     */
+    private final it.unige.portcommand.harbourmaster.MovementBook movement =
+            new it.unige.portcommand.harbourmaster.MovementBook();
+    /**
+     * S16 (ADR-20): whether this world has a customs office. Every production boot does; a
+     * HarbourMaster-only test harness does not, and must not make every ship wait for a
+     * clearance nobody will send.
+     */
+    private boolean customsOffice;
 
     /** The four fields every weather message carries, as one immutable cell. */
     public record WeatherReading(double windKnots, String visibility, double swell, String state) {
@@ -168,7 +180,18 @@ public final class HarbourMasterAgent extends PortCommandAgent
         // S5: the coordinator resolves priority overrides through the HM's escalation map, so a
         // storm-escalated vessel's re-dispatch CNP outranks queued ordinary sessions (R28/R30).
         this.cnpCoordinator = new RealCnpCoordinator(this, serviceLocator(), simClock,
-                priorityOverrides::get);
+                id -> it.unige.portcommand.behaviours.MovementControl.priorityOverrideFor(this, id));
+        // S16 (B7, ADR-20): the movement gate has a reading from the first instant. Before S16
+        // the reading was null until the first weather message - up to fifteen game minutes after
+        // every boot, and every load - and null meant "allow": a game loaded in mid-storm sent
+        // ships into it. The roster passes the weather the world opens on (the saved snapshot on
+        // a load); a harness that passes none starts on calm weather, stated in its init args.
+        this.customsOffice = init.customsOffice();
+        if (init.openingWeather() != null) {
+            WeatherSnapshot opening = init.openingWeather();
+            this.lastWeather = new WeatherReading(opening.wind(), opening.visibility(),
+                    opening.swell(), opening.state());
+        }
 
         // Task 22 restore: the loader appends a HarbourMasterRestoreState (found by type).
         // Ledger BALANCES arrived via HarbourMasterInitArgs; here the in-progress day's
@@ -185,6 +208,7 @@ public final class HarbourMasterAgent extends PortCommandAgent
             startingSpawnCount = restore.harbourMaster().walkInSpawnCount();
             restoredNameOffset = restore.harbourMaster().namePoolOffset();
             restoreTracking(restore.activeVessels());
+            movement.restoreClosedBerths(restore.harbourMaster().closedBerths());
         }
         // S8 (GOAL 3, ADR-17): the name-pool offset is rolled ONCE per game from the seeded
         // stream and then persisted — a real save carries the rolled value; a scenario-opening
@@ -215,7 +239,12 @@ public final class HarbourMasterAgent extends PortCommandAgent
         // Port table's feed) whenever the snapshot from portStatus() changed. Still ONE behaviour
         // in the uncounted package — it runs on this agent's thread, the only thread allowed to
         // read the berth wait queue, so no second ticker and no change to the catalogue count.
-        this.tickPublisher = new SimClockTickPublisherBehaviour(this, simClock, eventBus, this::portStatus);
+        // S16: the same once-a-sim-minute pass, on this agent's thread, first reopens any flooded
+        // berth whose closure has run out (and re-evaluates the ships that waited for it).
+        this.tickPublisher = new SimClockTickPublisherBehaviour(this, simClock, eventBus, () -> {
+            it.unige.portcommand.behaviours.MovementControl.reopenDueBerths(this);
+            return portStatus();
+        });
         addBehaviour(tickPublisher);
         if (restore != null) {
             addBehaviour(new RestoreDispatchBehaviour(this));
@@ -330,7 +359,8 @@ public final class HarbourMasterAgent extends PortCommandAgent
                 .forEach(e -> pendingSorted.put(e.getKey(), e.getValue()));
         return new it.unige.portcommand.persistence.dto.HarbourMasterStateDTO(
                 dayIncome, dayExpense, performativeCounter.snapshot(), pendingSorted,
-                poissonSpawn == null ? 0 : poissonSpawn.spawnCount(), namePoolOffset);
+                poissonSpawn == null ? 0 : poissonSpawn.spawnCount(), namePoolOffset,
+                movement.closedBerths());
     }
 
     /** S8 (GOAL 3): the session's rolled name-pool offset — see the field's javadoc. */
@@ -352,6 +382,7 @@ public final class HarbourMasterAgent extends PortCommandAgent
         walletLedger.restoreHistory(dto.dayIncome(), dto.dayExpense());
         performativeCounter.restore(dto.performativeCounts());
         pendingCustomsChecks.putAll(dto.pendingCustomsChecks());
+        movement.restoreClosedBerths(dto.closedBerths());
     }
 
     /**
@@ -441,9 +472,19 @@ public final class HarbourMasterAgent extends PortCommandAgent
         return priorityOverrides;
     }
 
-    /** S5 (Goal B): the last weather reading, or null before the first alert/snapshot. */
+    /** S5 (Goal B): the last weather reading. Since S16 never null in a production world (see onSetup). */
     public WeatherReading lastWeather() {
         return lastWeather;
+    }
+
+    /** S16 (ADR-20): the waiting-ship notebook. HarbourMaster thread writes; see {@link MovementBook}. */
+    public it.unige.portcommand.harbourmaster.MovementBook movement() {
+        return movement;
+    }
+
+    /** S16 (ADR-20): whether a customs office exists in this world to clear arriving ships. */
+    public boolean customsOffice() {
+        return customsOffice;
     }
 
     /** Written by {@code HandleWeatherAlertBehaviour} on every weather message it consumes. */
@@ -558,7 +599,9 @@ public final class HarbourMasterAgent extends PortCommandAgent
             queuedVesselIds.add(waiting.vesselId());
         }
         return PortStatusSnapshot.build(SimClock.gameDayOf(now), now, activeVessels.values(),
-                queuedVesselIds, this::dockedUntil);
+                queuedVesselIds, this::dockedUntil,
+                tracking -> it.unige.portcommand.behaviours.MovementControl.waitOf(this, tracking),
+                berthId -> movement.berthClosed(berthId, now));
     }
 
     /**

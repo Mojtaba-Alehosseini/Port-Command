@@ -124,9 +124,14 @@ class ScenarioLoaderTest {
         // at t=0) had been docked for six sim-minutes, so the storm scenario's whole reason to
         // exist — the CANCEL performative PROJECT_DEFINITION §13 assigns to it — never fired in a
         // real playthrough; `--smoke` found it. The spawn also moved to 960 so the first
-        // 15-sim-minute weather broadcast (t=900) can establish the alert baseline first:
-        // WeatherAlertPolicy.transition treats a null previous reading as "no transition", so a
-        // storm before that tick is silent no matter how it is timed.
+        // 15-sim-minute weather broadcast (t=900) could establish the alert baseline first.
+        //
+        // S16 (ADR-20) - still load-bearing, for a different reason, and with far more room. A
+        // granted ship now WAITS for its tugs (about half a game hour), and a hold covers every
+        // granted ship, waiting or moving; so the storm at 990 finds the tanker (granted at 960)
+        // with its escort on the way and cancels it - the CANCEL. The window is the tugs' whole
+        // approach, not 120 sim-seconds. The alert baseline no longer needs the t=900 broadcast
+        // either: the broadcast behaviour is seeded with the boot reading.
         List<WeatherChangeScriptedEvent> weather = eventsOf(s, WeatherChangeScriptedEvent.class);
         assertEquals(2, weather.size());
         assertEquals(990, weather.get(0).simTimeSeconds());

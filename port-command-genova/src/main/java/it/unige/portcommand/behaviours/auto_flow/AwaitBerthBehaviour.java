@@ -12,8 +12,9 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Waits for the HarbourMaster's berth decision on a given conversation id. On
- * ACCEPT_PROPOSAL it stores the granted {berth, price, hours} and transitions to
- * {@link TransitToBerthBehaviour}; on REFUSE it terminates (v1 — no retry).
+ * ACCEPT_PROPOSAL it stores the granted {berth, price, hours} and the vessel waits at the
+ * channel entry for the order to proceed (S16, ADR-20 — it used to start
+ * {@link TransitToBerthBehaviour} at once); on REFUSE it terminates (v1 — no retry).
  */
 public final class AwaitBerthBehaviour extends CyclicBehaviour {
 
@@ -48,9 +49,12 @@ public final class AwaitBerthBehaviour extends CyclicBehaviour {
         double price = num(grant, "price");
         int hours = (int) num(grant, "hours");
         vessel.setDeal(berthId, price, hours);
-
-        log.info("{}: berth GRANTED {} (price {}, {}h) -> transit", myAgent.getLocalName(), berthId, price, hours);
-        myAgent.addBehaviour(new TransitToBerthBehaviour(myAgent, vessel.simClock()));
+        log.info("{}: berth GRANTED {} (price {}, {}h) -> waiting at the channel entry for the "
+                + "order to proceed", myAgent.getLocalName(), berthId, price, hours);
+        // S16 (ADR-20): the grant reserves the berth; it does not start the ship. The channel
+        // leg begins on the HarbourMaster's proceed_to_berth (escort on station, customs
+        // cleared, berth open, weather safe) - see BaseVesselAgent.onBerthGranted.
+        vessel.onBerthGranted();
         myAgent.removeBehaviour(this); // MUST be last: removeBehaviour nulls myAgent
     }
 

@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p><strong>Which test actually guards what</strong> (the adversarial review measured this, so do
  * not conflate them): the real regression guard is
  * {@link #defaultDayArithmeticIsTheRecordedFigures}, which pins every figure exactly. The band test
- * is the §7.5 ACCEPTANCE, and it is deliberately loose — a 10,250 landing tolerates +1,750/−2,250,
+ * is the §7.5 ACCEPTANCE, and it is deliberately loose — a 9,950 landing tolerates +2,050/−1,950,
  * so a small band edit (the review moved the tanker ceiling 8,000→8,500) shifts income without
  * failing it. That is the acceptance working as intended, not a hole; the exact-figures test is
  * what catches the drift. Do not delete the exact pin and rely on the band alone.
@@ -32,10 +32,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       Both are game-design choices with no canonical source.</li>
  * </ul>
  * The mix below is modelled on the demo transcript's Day 1 (2 contracted + 4 walk-ins, one of
- * which withdraws) and the real {@code contracts.json}. It lands at <b>+€10,250</b>, near
+ * which withdraws) and the real {@code contracts.json}. It lands at <b>+€9,950</b>, near
  * mid-band — see the task-20 Done note in {@code planning/20_financial_dashboard.md}.
  * (History: 10,425 at task 20 → 10,225 when S5/D7 made contracted customs live → 10,250 at
- * S11 when the cargo walk-in's tug count was corrected to R11's 2.)
+ * S11 when the cargo walk-in's tug count was corrected to R11's 2 → 9,950 at S16 when customs
+ * started clearing walk-ins too, ADR-20: three dealt walk-ins × €100.)
  */
 class DefaultDayCalibrationTest {
 
@@ -85,8 +86,14 @@ class DefaultDayCalibrationTest {
      * EVERY contracted vessel — hazmat goes through inspection, clean cargo pre-clears, and both
      * cost the €100 clearance fee. The reserved customs line below is therefore live: two
      * contracted arrivals × €100 = €200/day, and the recorded landing moved 10,425 → 10,225 —
-     * still comfortably inside the §7.5 band. Walk-ins carry no customs line (the ADR-09
-     * terminal/customs parity gap: the walk-in grant pipeline dispatches neither).
+     * still comfortably inside the §7.5 band.
+     *
+     * <p><b>S16 (ADR-20, decision C5): walk-ins carry the customs line too.</b> This paragraph
+     * used to end "walk-ins carry no customs line (the ADR-09 terminal/customs parity gap)".
+     * That gap is closed: every granted ship is cleared by customs before it may move, and every
+     * clearance costs the same €100. Five dealt arrivals × €100 = €500/day, and the recorded
+     * landing moved 10,250 → 9,950. The band and the mix are untouched — this is the model
+     * following the game, not a retune.
      *
      * <p>A withdrawing walk-in earns nothing and consumes nothing — it withdraws during
      * negotiation, before any tug is dispatched. It is in the mix because a day where every vessel
@@ -137,10 +144,10 @@ class DefaultDayCalibrationTest {
         // forget — pre-S11 this was 18950's lesson; S11 added the cargo walk-in's (L1: cargo is a
         // 2-tug vessel over the whole template range).
         assertEquals(19_450.0, dayIncome(), EPS, "7000 contracted + 10450 walk-in mids + 2000 extra-tug");
-        assertEquals(4_000.0, dayVariableExpense(), EPS,
-                "8 tug jobs x EUR475 + 2 contracted customs clearances x EUR100 (S5/D7)");
+        assertEquals(4_300.0, dayVariableExpense(), EPS,
+                "8 tug jobs x EUR475 + 5 customs clearances x EUR100 (every dealt arrival, S16)");
         assertEquals(5_200.0, ExpenseRules.dailyFixed(), EPS);
-        assertEquals(10_250.0, dayIncome() - dayVariableExpense() - ExpenseRules.dailyFixed(), EPS);
+        assertEquals(9_950.0, dayIncome() - dayVariableExpense() - ExpenseRules.dailyFixed(), EPS);
     }
 
     /**
@@ -179,10 +186,10 @@ class DefaultDayCalibrationTest {
         double total = 0.0;
         for (Arrival arrival : DEFAULT_DAY) {
             total += arrival.tugs() * ExpenseRules.tugJob(ASSUMED_TUG_BID);
-            if (arrival.contractedFee() != null) {
-                // S5 (ADR-16 D7): every CONTRACTED grant pre-clears customs — €100 each,
-                // hazmat (inspection) and clean cargo (pre-clearance) alike. Walk-ins send
-                // no customs REQUEST (the ADR-09 parity gap), so they carry no line here.
+            if (arrival.deals()) {
+                // S16 (ADR-20, C5): every GRANTED ship is cleared by customs — €100 each,
+                // contracted or walk-in, inspected or pre-cleared alike. A walk-in that
+                // withdraws is never granted a berth, so it is never sent to customs.
                 total += ExpenseRules.customsClearance();
             }
         }

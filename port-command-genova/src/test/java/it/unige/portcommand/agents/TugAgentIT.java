@@ -154,8 +154,18 @@ class TugAgentIT {
         assertEquals("busy", node(refusal).get("reason").asText());
     }
 
+    /**
+     * S16 (ADR-20, decision B1 — tug side): the whole job, with the wait in the middle. The tug
+     * reaches the ship, says so ({@code tug_on_station}) and STAYS there until the HarbourMaster
+     * orders the escort to begin; only then does it take the ship to its berth.
+     *
+     * <p>Born red: before S16 the tug went from the pickup straight on to the berth, on its own,
+     * and reported {@code escort_complete} — whether or not the ship had moved, been cleared by
+     * customs or been held for weather. Here eight game hours pass with the tug on station and
+     * no order: it must still be there, and nothing must have been completed.
+     */
     @Test
-    void acceptDrivesTransitEscortThenReturnsIdle() throws Exception {
+    void acceptDrivesTransitWaitsOnStationThenEscortsOnOrderAndReturnsIdle() throws Exception {
         spawnTug("tug_1", BASES[0], 1.0);
 
         send(cfp("cnp-d", "tug_1"));
@@ -163,11 +173,53 @@ class TugAgentIT {
         assertEnvelope(proposal, ACLMessage.PROPOSE);
         sendAccept(proposal, "V1", BERTH);
 
+        // --- To the ship. ---
+        ACLMessage onStation = null;
+        for (int i = 0; i < 20 && onStation == null; i++) {
+            boot.getSimClock().advance(5_000); // 24 game minutes per step; the leg is about 27
+            onStation = pollEvent("tug_on_station", 300);
+        }
+        assertNotNull(onStation, "the tug must report that it has reached the ship");
+        assertEnvelope(onStation, ACLMessage.INFORM);
+        assertEquals("V1", node(onStation).get("vessel_id").asText());
+        assertEquals("cnp-d", onStation.getConversationId(),
+                "the report rides the job's conversation, which is how the order finds its way back");
+        PortStateUpdate.TugDelta waiting = awaitTug("tug_1", d -> d.status() == TugStatus.ON_STATION, 40);
+        assertNotNull(waiting, "on station is a status of its own");
+        assertTrue(distancePx(waiting.position(), TARGET) < 0.5, "and the tug is AT the ship");
+
+        // --- No order: no escort, however long it takes. ---
+        tugUpdates.clear();
+        for (int i = 0; i < 4; i++) {
+            boot.getSimClock().advance(25_000); // two game hours per step
+            assertNull(pollEvent("escort_complete", 300),
+                    "a tug that was never ordered to begin must not complete an escort");
+            PortStateUpdate.TugDelta d;
+            while ((d = tugUpdates.poll(20, TimeUnit.MILLISECONDS)) != null) {
+                if (d.tugId().equals("tug_1")) {
+                    assertEquals(TugStatus.ON_STATION, d.status(), "still on station, not escorting");
+                    assertTrue(distancePx(d.position(), TARGET) < 0.5, "and it has not left the ship");
+                }
+            }
+        }
+        // Committed while it waits: another tender is refused, the tug is not a free tug.
+        send(cfp("cnp-d2", "tug_1"));
+        ACLMessage busy = pollReply(5000);
+        assertEnvelope(busy, ACLMessage.REFUSE);
+        assertEquals("busy", node(busy).get("reason").asText());
+
+        // An order on some OTHER conversation is not this job's order.
+        sendBeginEscort("cnp-someone-else", "tug_1", "V1");
+        boot.getSimClock().advance(25_000);
+        assertNull(pollEvent("escort_complete", 500), "a stale order must not start the escort");
+
+        // --- The order: escort, complete, home. ---
+        sendBeginEscort("cnp-d", "tug_1", "V1");
         boolean escortComplete = false;
         TugStatus status = null;
         Position position = null;
         for (int i = 0; i < 60 && !(escortComplete && status == TugStatus.IDLE); i++) {
-            boot.getSimClock().advance(50_000); // ~4 sim-hours per step
+            boot.getSimClock().advance(5_000);
             PortStateUpdate.TugDelta d;
             while ((d = tugUpdates.poll(50, TimeUnit.MILLISECONDS)) != null) {
                 if (d.tugId().equals("tug_1")) {
@@ -187,6 +239,86 @@ class TugAgentIT {
         assertEquals(TugStatus.IDLE, status, "tug returns to IDLE after the job");
         assertNotNull(position);
         assertTrue(distancePx(position, BASES[0]) < 0.5, "tug ends at its home base");
+    }
+
+    /**
+     * S16 (decision B3): a tug that is cancelled, and wins a new job while it is still on its way
+     * home, does the new job.
+     *
+     * <p>Born red: the homeward leg was never stopped when the new job started. Two legs moved
+     * the same tug at once, and when the old one reached base it cleared the tug's job and set it
+     * idle — with the new ship still waiting for a tug the HarbourMaster had paid for and that
+     * would never report. That is the "tug lost from the fleet" of the S16 brief.
+     */
+    @Test
+    void aCancelledTugThatWinsANewJobOnItsWayHomeCompletesIt() throws Exception {
+        spawnTug("tug_1", BASES[0], 1.0);
+
+        send(cfp("cnp-old", "tug_1"));
+        ACLMessage first = pollReply(5000);
+        assertEnvelope(first, ACLMessage.PROPOSE);
+        sendAccept(first, "V1", BERTH);
+        assertNotNull(awaitTug("tug_1", d -> d.status() == TugStatus.EN_ROUTE_TO_VESSEL, 40));
+        // Most of the way out, so the way home is long enough to win a job on.
+        PortStateUpdate.TugDelta out = null;
+        for (int i = 0; i < 10 && out == null; i++) {
+            boot.getSimClock().advance(1_000);
+            PortStateUpdate.TugDelta d;
+            while ((d = tugUpdates.poll(50, TimeUnit.MILLISECONDS)) != null) {
+                if (d.tugId().equals("tug_1") && d.status() == TugStatus.EN_ROUTE_TO_VESSEL
+                        && distancePx(d.position(), BASES[0]) > 300.0) {
+                    out = d;
+                }
+            }
+        }
+        assertNotNull(out, "staging: the tug is well away from its base and not yet at the ship");
+        sendCancel("cnp-old", "tug_1");
+        assertNotNull(awaitTug("tug_1", d -> d.status() == TugStatus.RETURNING, 40),
+                "staging: cancelled, on its way home");
+
+        // The new job, won on the way home (no clock advance: the tug has not moved since).
+        inbox.clear();
+        send(cfp("cnp-new", "tug_1"));
+        ACLMessage second = pollReply(5000);
+        assertEnvelope(second, ACLMessage.PROPOSE);
+        sendAccept(second, "V2", BERTH);
+        assertNotNull(awaitTug("tug_1", d -> d.status() == TugStatus.EN_ROUTE_TO_VESSEL, 40),
+                "the new award is taken");
+
+        // To the new ship. The old homeward leg would have needed about 14 game minutes to reach
+        // base; these steps go well past that, and the tug must never be seen idle or at base.
+        ACLMessage onStation = null;
+        tugUpdates.clear();
+        for (int i = 0; i < 20 && onStation == null; i++) {
+            boot.getSimClock().advance(2_500); // 12 game minutes per step
+            onStation = pollEvent("tug_on_station", 300);
+            PortStateUpdate.TugDelta d;
+            while ((d = tugUpdates.poll(20, TimeUnit.MILLISECONDS)) != null) {
+                if (d.tugId().equals("tug_1")) {
+                    assertTrue(d.status() == TugStatus.EN_ROUTE_TO_VESSEL || d.status() == TugStatus.ON_STATION,
+                            "the superseded homeward leg must not move or idle the tug, saw " + d.status());
+                }
+            }
+        }
+        assertNotNull(onStation, "the tug must reach the new ship - the old leg did not take the job away");
+        assertEquals("V2", node(onStation).get("vessel_id").asText());
+        assertEquals("cnp-new", onStation.getConversationId());
+
+        // Still committed to V2 long after the old leg would have ended.
+        boot.getSimClock().advance(25_000);
+        send(cfp("cnp-probe", "tug_1"));
+        ACLMessage busy = pollReply(5000);
+        assertEnvelope(busy, ACLMessage.REFUSE);
+        assertEquals("busy", node(busy).get("reason").asText(), "the job was not cleared behind its back");
+
+        sendBeginEscort("cnp-new", "tug_1", "V2");
+        ACLMessage complete = null;
+        for (int i = 0; i < 20 && complete == null; i++) {
+            boot.getSimClock().advance(5_000);
+            complete = pollEvent("escort_complete", 300);
+        }
+        assertNotNull(complete, "and the new job is carried through to the berth");
+        assertEquals("V2", node(complete).get("vessel_id").asText());
     }
 
     @Test
@@ -299,6 +431,60 @@ class TugAgentIT {
     }
 
     /**
+     * S16 (adversarial review): the CANCEL-overtakes-ACCEPT guard also covers a tug that is on
+     * its way HOME. Since decision B3 such a tug may bid, so an award and its cancellation can
+     * reach it back to back there too. The handler used to treat "has a movement" as "has a job"
+     * and fell through to "abort": it restarted the homeward leg, left the queued award in the
+     * queue, and the tug then set off on a job the port had already called off. Like the two
+     * cases above this asserts the CONVERGED outcome - whichever message is read first, the tug
+     * never reaches the ship.
+     */
+    @Test
+    void cancelImmediatelyBehindAcceptNeverEscorts_alsoForATugOnItsWayHome() throws Exception {
+        spawnTug("tug_1", BASES[0], 1.0);
+
+        // Out, cancelled, on its way home with no job.
+        send(cfp("cnp-h1", "tug_1"));
+        ACLMessage first = pollReply(5000);
+        assertEnvelope(first, ACLMessage.PROPOSE);
+        sendAccept(first, "V1", BERTH);
+        assertNotNull(awaitTug("tug_1", d -> d.status() == TugStatus.EN_ROUTE_TO_VESSEL, 40));
+        boot.getSimClock().advance(3_000); // about 14 game minutes out
+        sendCancel("cnp-h1", "tug_1", "V1");
+        assertNotNull(awaitTug("tug_1", d -> d.status() == TugStatus.RETURNING, 40),
+                "staging: cancelled, returning, no job");
+
+        // A new award and its cancellation, back to back, while it is still returning.
+        inbox.clear();
+        send(cfp("cnp-h2", "tug_1"));
+        ACLMessage second = pollReply(5000);
+        assertEnvelope(second, ACLMessage.PROPOSE);
+        sendAccept(second, "V2", BERTH);
+        sendCancel("cnp-h2", "tug_1", "V2"); // no wait in between: the overtaking window
+
+        TugStatus status = null;
+        for (int i = 0; i < 20; i++) {
+            boot.getSimClock().advance(5_000);
+            PortStateUpdate.TugDelta d;
+            while ((d = tugUpdates.poll(50, TimeUnit.MILLISECONDS)) != null) {
+                if (d.tugId().equals("tug_1")) {
+                    status = d.status();
+                }
+            }
+            ACLMessage m = inbox.poll(20, TimeUnit.MILLISECONDS);
+            if (m != null) {
+                String event = node(m).path("event").asText();
+                assertTrue(!"tug_on_station".equals(event) && !"escort_complete".equals(event),
+                        "a cancelled award must not be carried out - the tug reported " + event);
+            }
+        }
+        assertEquals(TugStatus.IDLE, status, "the tug ends idle at its base whichever message was read first");
+        inbox.clear();
+        send(cfp("cnp-h3", "tug_1"));
+        assertEnvelope(pollReply(5000), ACLMessage.PROPOSE); // and it is free to bid again
+    }
+
+    /**
      * S11 (fix review, R1): the CANCEL is KEYED by vessel. One addressed to a vessel this tug
      * is NOT escorting targets a queued award, never the live escort — pre-S11 the busy branch
      * aborted on ANY CANCEL, so a hold CANCEL for a stale assignment would have stranded the
@@ -404,7 +590,7 @@ class TugAgentIT {
 
         // The bid-to-award window: the tank drains below LOW_FUEL_THRESHOLD (0.20).
         TugAgent tug = directory.byName("tug_1").map(TugAgent.class::cast).orElseThrow();
-        tug.consumeFuel(15.0); // 15 km * 0.005/km = 0.075 -> 0.175
+        tug.consumeFuel(2.5); // 2.5 km * 0.03/km (the S16 scale) = 0.075 -> 0.175
 
         inbox.clear();
         sendAccept(bid, "V1", BERTH);
@@ -458,6 +644,29 @@ class TugAgentIT {
         cancel.addReceiver(new AID(tugId, AID.ISLOCALNAME));
         cancel.setContent(TerminalJson.write(Map.of("reason", "weather_hold", "vessel_id", vesselId)));
         outbox.put(cancel);
+    }
+
+    /** S16: the HarbourMaster's order to a tug on station — begin the escort of this job. */
+    private void sendBeginEscort(String conversationId, String tugId, String vesselId) throws InterruptedException {
+        ACLMessage order = MessageFactory.create(ACLMessage.INFORM);
+        order.setConversationId(conversationId);
+        order.setProtocol(it.unige.portcommand.behaviours.coordination.TransitToVesselBehaviour.ESCORT_ORDER_PROTOCOL);
+        order.addReceiver(new AID(tugId, AID.ISLOCALNAME));
+        order.setContent(TerminalJson.write(Map.of("event", "begin_escort", "vessel_id", vesselId)));
+        outbox.put(order);
+    }
+
+    /** The next INFORM whose {@code event} is {@code wanted}, or null at the deadline. */
+    private ACLMessage pollEvent(String wanted, long timeoutMs) throws Exception {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            ACLMessage m = inbox.poll(50, TimeUnit.MILLISECONDS);
+            if (m != null && m.getPerformative() == ACLMessage.INFORM
+                    && wanted.equals(node(m).path("event").asText())) {
+                return m;
+            }
+        }
+        return null;
     }
 
     private void send(ACLMessage msg) throws InterruptedException {

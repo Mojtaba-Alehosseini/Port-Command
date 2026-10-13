@@ -1,5 +1,9 @@
 % rules_priority.pl — operation priority (R25–R30). Sources: references.md.
-% Order (highest first): emergency > medical > scheduled_ferry > scheduled_arrival > departure > maintenance.
+% Order (highest first): emergency > medical > scheduled_ferry > scheduled_arrival >
+%   walk_in_arrival = departure > maintenance.
+% S16 (ADR-20, C4): walk_in_arrival is a FACT under R25, handed in as a vessel's class override
+% by the HarbourMaster (R26 clause 1) for every walk-in. It makes a contracted arrival win a
+% berth queue from a walk-in, which is what gives R25-R30 a visible outcome. No new rule.
 
 :- dynamic vessel_priority_override/2.
 
@@ -8,6 +12,7 @@ priority_rank(emergency, 1).
 priority_rank(medical, 2).
 priority_rank(scheduled_ferry, 3).
 priority_rank(scheduled_arrival, 4).
+priority_rank(walk_in_arrival, 5).
 priority_rank(departure, 5).
 priority_rank(maintenance, 6).
 

@@ -233,6 +233,7 @@ class PrologQueriesTest {
             "medical,           2",
             "scheduled_ferry,   3",
             "scheduled_arrival, 4",
+            "walk_in_arrival,   5",
             "departure,         5",
             "maintenance,       6",
     })

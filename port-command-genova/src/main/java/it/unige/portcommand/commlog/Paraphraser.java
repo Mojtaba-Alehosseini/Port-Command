@@ -302,6 +302,8 @@ public final class Paraphraser {
                 case "withdraw" -> "withdrawal" + reasonSuffix(content);
                 case "departed" -> orVessel(content) + " has departed";
                 case "service_complete" -> "service complete for " + orVessel(content);
+                // S16 (ADR-20): the ship reports its own arrival at the berth.
+                case "docked" -> orVessel(content) + " docked at " + berthText(content);
                 default -> humanize(intent);
             };
         }
@@ -312,7 +314,22 @@ public final class Paraphraser {
                 case "escort_complete" -> "escort complete for " + orVessel(content);
                 case "flagged" -> "customs flag" + reasonSuffix(content);
                 case "routine_inspection" -> "routine inspection";
-                case "weather_hold" -> "weather hold (wind " + moneyText(content, "wind_knots") + "kn)";
+                // S16 (ADR-20): the hold says why - the gate's verdict with its rule ids - when the
+                // message carries one; the bare wind figure is the pre-S16 shape.
+                case "weather_hold" -> text(content, "reason") != null
+                        ? "weather hold: " + text(content, "reason")
+                        : "weather hold (wind " + moneyText(content, "wind_knots") + "kn)";
+                // S16: the movement orders and the reports they wait for. A ship moves only on
+                // proceed_to_berth, which goes out with its escort's begin_escort once every tug
+                // has reported tug_on_station, customs has cleared it and the weather allows.
+                case "proceed_to_berth" -> "proceed to " + berthText(content) + " for " + orVessel(content)
+                        + escortSuffix(content);
+                case "begin_escort" -> "begin the escort of " + orVessel(content);
+                case "tug_on_station" -> "on station at " + orVessel(content);
+                case "tug_available" -> "tug available";
+                case "cleared_to_depart" -> "cleared to depart: " + orVessel(content);
+                case "inspection_started" -> "customs inspection started" + reasonSuffix(content);
+                case "turned_away" -> orVessel(content) + " turned away" + reasonSuffix(content);
                 case "weather_threshold" ->
                         "weather alert (wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state") + ")"
                                 + reasonSuffix(content);
@@ -348,6 +365,18 @@ public final class Paraphraser {
             return prefix + "conditions: wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state");
         }
         return prefix + "an update";
+    }
+
+    /** {@code berth 1} for a {@code berth_id} of {@code berth_1}; "its berth" when absent. */
+    private static String berthText(JsonNode content) {
+        String berthId = text(content, "berth_id");
+        return berthId == null || berthId.isEmpty() ? "its berth" : berthId.replace('_', ' ');
+    }
+
+    /** {@code  (escort of 2 on station)} for a proceed order; nothing for a ship that needs no tug. */
+    private static String escortSuffix(JsonNode content) {
+        Double escort = numOrNull(content, "escort");
+        return escort == null || escort < 1 ? "" : " (escort of " + escort.intValue() + " on station)";
     }
 
     /** Every REFUSE/CANCEL/withdraw/tug_hold/flagged shape carries a plain {@code reason} string. */

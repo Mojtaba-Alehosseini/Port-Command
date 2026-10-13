@@ -185,6 +185,20 @@ public final class GameStateBuilder {
                         agent.flowPhase());
                 continue;
             }
+            if (tracking.stage() == Stage.IN_TRANSIT
+                    && agent.flowPhase() == BaseVesselAgent.FlowPhase.AWAITING_CLEARANCE) {
+                // S16 (ADR-20, adversarial review): the ORDER TO PROCEED is still on the wire —
+                // the HarbourMaster wrote IN_TRANSIT on send, the ship has not consumed it. The
+                // same rule as the grant above, for the same reason: a save here restores a ship
+                // that waits for an order the rebuilt HarbourMaster believes it already gave.
+                if (!dropNegotiating) {
+                    throw new SaveNotAllowedException(
+                            "Vessel " + tracking.vesselId() + " is between phases; try again in a moment.");
+                }
+                log.info("autosave: dropping {} (order to proceed still on the wire) from the "
+                        + "snapshot", tracking.vesselId());
+                continue;
+            }
             VesselStateDTO vesselSide = agent.snapshotDto();
             out.add(mergeTracking(vesselSide, tracking));
         }
@@ -415,6 +429,42 @@ public final class GameStateBuilder {
      * from the restored set (dropped negotiation, grant-limbo drop) loads as FREE. Keeps
      * "a berth is never leaked to a ghost" true by construction.
      */
+    /**
+     * Load-side reconciliation (S16, ADR-20): a ship that is WAITING for its escort keeps in
+     * {@code assignedTugs} only the tugs that really hold a job for it in this same save.
+     *
+     * <p>The HarbourMaster lists a tug the moment it awards it; the tug takes the job when the
+     * ACCEPT reaches it. A save between the two carries a ship "with" a tug that is saved idle,
+     * and since S16 a ship waits for every assigned tug to report on station - that one never
+     * would. Dropping it here makes the ship short again, so the restore sweep tenders for it.
+     * (The lost award's charge stays in the ledger: a cancelled tug job is not refunded.) Ships
+     * under way or moored are left alone - their list is history, not a condition.
+     */
+    public static List<VesselStateDTO> reconcileEscorts(GameState state) {
+        java.util.Map<String, Set<String>> tugsWithAJobFor = new java.util.HashMap<>();
+        for (it.unige.portcommand.persistence.dto.TugStateDTO tug : state.agents().tugs()) {
+            if (tug.job() != null && tug.job().vesselId() != null) {
+                tugsWithAJobFor.computeIfAbsent(tug.job().vesselId(), k -> new HashSet<>()).add(tug.tugId());
+            }
+        }
+        List<VesselStateDTO> out = new ArrayList<>();
+        for (VesselStateDTO vessel : state.agents().activeVessels()) {
+            if (!Stage.AWAITING_TUG.name().equals(vessel.stage()) || vessel.assignedTugs().isEmpty()) {
+                out.add(vessel);
+                continue;
+            }
+            Set<String> real = tugsWithAJobFor.getOrDefault(vessel.id(), Set.of());
+            List<String> kept = vessel.assignedTugs().stream().filter(real::contains).toList();
+            if (kept.size() != vessel.assignedTugs().size()) {
+                log.warn("load: {} lists tug(s) {} but only {} hold a job for it in this save - "
+                        + "the rest are dropped and tendered for again", vessel.id(),
+                        vessel.assignedTugs(), kept);
+            }
+            out.add(kept.size() == vessel.assignedTugs().size() ? vessel : vessel.withAssignedTugs(kept));
+        }
+        return out;
+    }
+
     public static List<TerminalStateDTO> reconcileTerminals(GameState state) {
         Set<String> restoredIds = new HashSet<>();
         for (VesselStateDTO v : state.agents().activeVessels()) {

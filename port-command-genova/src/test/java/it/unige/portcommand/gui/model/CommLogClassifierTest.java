@@ -46,7 +46,8 @@ class CommLogClassifierTest {
 
     // ---- the six kinds of weather traffic ------------------------------------------------------
 
-    /** PeriodicWeatherBroadcastBehaviour.broadcast — the routine check, ~96 a game day. */
+    /** PeriodicWeatherBroadcastBehaviour.broadcast — the routine check: 96 periodic ones a game
+     * day, plus (since S16) one for every hourly weather step that took effect. */
     private static CommLogEvent periodic() {
         return message(WEATHER, List.of(HM), ACLMessage.INFORM, null, CommLogClassifier.WEATHER_ALERT_PROTOCOL,
                 "{\"event\":\"weather_periodic\",\"wind_knots\":18,\"visibility\":\"good\",\"swell\":0.5,"
@@ -163,12 +164,33 @@ class CommLogClassifierTest {
                 "the sender alone (a row with no message attached)");
         assertTrue(CommLogClassifier.isWeather(message(HM, List.of("tug_1"), ACLMessage.INFORM, null,
                 CommLogClassifier.WEATHER_ALERT_PROTOCOL, null)), "the alert protocol alone");
-        assertTrue(CommLogClassifier.isWeather(message(HM, List.of("vessel_c501"), ACLMessage.INFORM, null,
-                CommLogClassifier.VESSEL_WEATHER_PROTOCOL, "not json")), "the vessel-weather protocol alone");
         assertTrue(CommLogClassifier.isWeather(message(HM, List.of("vessel_c501"), ACLMessage.INFORM, null, null,
                 "{\"event\":\"weather_hold\"}")), "a weather_ content event alone");
         assertTrue(CommLogClassifier.isWeather(message(HM, List.of("tug_1"), ACLMessage.CANCEL, null, null,
                 "{\"reason\":\"weather_hold\"}")), "the weather_hold reason alone");
+    }
+
+    /**
+     * S16 (ADR-20): the vessel-order protocol stopped being weather by itself. It used to carry
+     * only the hold and the resume; it now carries every order a ship is sent. An order to
+     * proceed or to leave under the Weather view would put routine movements among the storm
+     * lines the view exists to isolate. The two weather orders are still weather - by their
+     * event name, on the same protocol.
+     */
+    @Test
+    void aMovementOrderOnTheVesselOrderProtocolIsNotWeather() {
+        for (String event : List.of("proceed_to_berth", "cleared_to_depart", "turned_away")) {
+            CommLogEvent order = message(HM, List.of("vessel_c501"), ACLMessage.INFORM, null,
+                    CommLogClassifier.VESSEL_WEATHER_PROTOCOL,
+                    "{\"event\":\"" + event + "\",\"vessel_id\":\"C501\"}");
+            assertFalse(CommLogClassifier.isWeather(order), () -> "must NOT be weather: " + event);
+            assertFalse(CommLogClassifier.classify(order, KNOWN).weather(), () -> "classify() must agree: " + event);
+        }
+        assertFalse(CommLogClassifier.isWeather(message(HM, List.of("vessel_c501"), ACLMessage.INFORM, null,
+                CommLogClassifier.VESSEL_WEATHER_PROTOCOL, "not json")),
+                "the protocol alone no longer says weather");
+        assertTrue(CommLogClassifier.isWeather(hold()), "the hold on that protocol still is");
+        assertTrue(CommLogClassifier.isWeather(resume()), "and so is the resume");
     }
 
     @Test

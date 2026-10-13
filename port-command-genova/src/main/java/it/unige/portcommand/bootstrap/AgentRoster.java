@@ -109,14 +109,15 @@ public final class AgentRoster {
                                                PolicyRegistryArtifact policyRegistry,
                                                it.unige.portcommand.scenario.ScenarioRuntime scenarioRuntime) {
         spawner.spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
-                new HarbourMasterInitArgs(STARTING_WALLET, STARTING_REPUTATION),
+                new HarbourMasterInitArgs(STARTING_WALLET, STARTING_REPUTATION, defaultWeather(), true),
                 simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory,
                 null, directory, scenarioRuntime});
         spawner.spawn("weather_agent", WeatherAgent.class,
-                new Object[] {defaultWeatherInit(), randomSource, simClock, eventBus, directory});
+                weatherArgs(randomSource, simClock, eventBus, directory, null, scenarioRuntime));
         spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource, directory, simClock});
         spawner.spawn("assistant_agent", AssistantAgent.class,
-                assistantArgs(marketHistory, policyRegistry, llmBridge, eventBus, directory, simClock));
+                assistantArgs(marketHistory, policyRegistry, llmBridge, eventBus, directory, simClock,
+                        defaultWeather()));
 
         spawner.spawn("terminal_container", TerminalAgent.class, new Object[] {
                 new TerminalInitArgs("terminal_container", List.of("berth_2"), 4), portState, simClock,
@@ -132,7 +133,8 @@ public final class AgentRoster {
             // Base position from the canonical TugBasePositions table (one source of truth for
             // the four bases — no duplicated coordinates).
             spawner.spawn(id, TugAgent.class, new Object[] {
-                    new TugInitArgs(id, TugBasePositions.position(id), 350.0, 2.0, 12.0, 1.0),
+                    new TugInitArgs(id, TugBasePositions.position(id), TUG_BASE_FARE,
+                            TUG_FUEL_COST_PER_KM, TUG_TOP_SPEED_KNOTS, 1.0),
                     portState, simClock, directory});
         }
 
@@ -161,19 +163,21 @@ public final class AgentRoster {
         // Task 23: scenarioRuntime (found by type) re-arms the scripted-event engine with
         // the save's firedEventIds, so a reloaded mid-scenario game never replays.
         spawner.spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
-                new HarbourMasterInitArgs(state.wallet(), state.reputation()),
+                new HarbourMasterInitArgs(state.wallet(), state.reputation(),
+                        state.agents().weather().current(), true),
                 simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory,
                 hmReady, directory,
                 new HarbourMasterRestoreState(state.agents().harbourMaster(),
-                        state.agents().activeVessels()),
+                        it.unige.portcommand.persistence.GameStateBuilder.reconcileEscorts(state)),
                 scenarioRuntime});
-        spawner.spawn("weather_agent", WeatherAgent.class, new Object[] {
-                defaultWeatherInit(), randomSource, simClock, eventBus, directory,
-                state.agents().weather().current()});
+        spawner.spawn("weather_agent", WeatherAgent.class,
+                weatherArgs(randomSource, simClock, eventBus, directory,
+                        state.agents().weather().current(), scenarioRuntime));
         spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {
                 randomSource, directory, simClock, state.agents().customs()});
         spawner.spawn("assistant_agent", AssistantAgent.class,
-                assistantArgs(marketHistory, policyRegistry, llmBridge, eventBus, directory, simClock));
+                assistantArgs(marketHistory, policyRegistry, llmBridge, eventBus, directory, simClock,
+                        state.agents().weather().current()));
 
         spawner.spawn("terminal_container", TerminalAgent.class, new Object[] {
                 new TerminalInitArgs("terminal_container", List.of("berth_2"), 4), portState, simClock,
@@ -187,7 +191,8 @@ public final class AgentRoster {
         for (int i = 1; i <= 4; i++) {
             String id = "tug_" + i;
             spawner.spawn(id, TugAgent.class, new Object[] {
-                    new TugInitArgs(id, TugBasePositions.position(id), 350.0, 2.0, 12.0, 1.0),
+                    new TugInitArgs(id, TugBasePositions.position(id), TUG_BASE_FARE,
+                            TUG_FUEL_COST_PER_KM, TUG_TOP_SPEED_KNOTS, 1.0),
                     portState, simClock, directory, tugDtos.get(id)});
         }
 
@@ -284,6 +289,22 @@ public final class AgentRoster {
         return "vessel_" + spec.vesselId().toLowerCase().replaceAll("[^a-z0-9_]", "_");
     }
 
+    /** What a tug charges before distance: the floor of every Contract Net bid. */
+    public static final double TUG_BASE_FARE = 350.0;
+
+    /**
+     * Euro per km a tug adds to its bid for the run to the ship. S16 (ADR-20): 2.0 x 6 = 12.0,
+     * scaled with {@code TugMath.PIXELS_PER_KM} (10 -> 60) so a bid from base to the channel
+     * entry is still about EUR 480 - the map got six times smaller in km, the money did not move.
+     */
+    public static final double TUG_FUEL_COST_PER_KM = 12.0;
+
+    /**
+     * Every tug's top speed. Also the speed of the channel leg a ship makes under escort
+     * ({@code MovementControl.channelLegSimMillis}): ship and tugs travel together.
+     */
+    public static final double TUG_TOP_SPEED_KNOTS = 12.0;
+
     /**
      * The calm reading every free-play game opens on. Public since S15 (2026-10-12):
      * {@code GameStateBuilder.freshSandbox} writes this SAME snapshot into the opening
@@ -294,6 +315,32 @@ public final class AgentRoster {
      */
     public static WeatherSnapshot defaultWeather() {
         return new WeatherSnapshot(18, "good", 0.5, "sunny", 0L);
+    }
+
+    /**
+     * The weather agent's spawn args, built in ONE place for the fresh and the restore path
+     * (S16): the first four by position, then - found by type - the directory, the saved
+     * snapshot on a restore, and the scenario's scripted-weather window when it has one
+     * ({@code ScriptedWeatherWindow}: random steps are suspended inside it, decision B5). The
+     * window is a pure function of the scenario file, so a load passes the same one a fresh
+     * start does.
+     */
+    private static Object[] weatherArgs(RandomSource randomSource, SimClock simClock, EventBus eventBus,
+                                        AgentDirectory directory, WeatherSnapshot restoredOrNull,
+                                        it.unige.portcommand.scenario.ScenarioRuntime scenarioRuntime) {
+        List<Object> args = new java.util.ArrayList<>();
+        args.add(defaultWeatherInit());
+        args.add(randomSource);
+        args.add(simClock);
+        args.add(eventBus);
+        args.add(directory);
+        if (restoredOrNull != null) {
+            args.add(restoredOrNull);
+        }
+        it.unige.portcommand.scenario.ScriptedWeatherWindow
+                .of(scenarioRuntime == null ? null : scenarioRuntime.scenario())
+                .ifPresent(args::add);
+        return args.toArray();
     }
 
     /** Calm starting weather + the default Markov matrix, no scripted overrides. */
@@ -333,11 +380,22 @@ public final class AgentRoster {
      * the last entry is the game's conversation clock, which the Hint freeze needs and which
      * {@code AssistantAgent} refuses to boot without. Two hand-copied arrays were one edit away
      * from a load-only bug — the restore path is the one every scenario start and load takes.
+     *
+     * <p>S16 (B10): and the weather the world opens on, for the Hint's "she will wait outside"
+     * note. The bus announces the boot weather once the HarbourMaster is up, which can be before
+     * the Assistant has subscribed, and the next broadcast is fifteen game minutes away; handing
+     * the reading over here closes that gap. A world with no reading yet passes none.
      */
     private static Object[] assistantArgs(MarketHistoryArtifact marketHistory,
                                           PolicyRegistryArtifact policyRegistry, LLMBridge llmBridge,
-                                          EventBus eventBus, AgentDirectory directory, SimClock simClock) {
-        return new Object[] {marketHistory, policyRegistry, llmBridge, eventBus, directory,
-                simClock.conversationClock()};
+                                          EventBus eventBus, AgentDirectory directory, SimClock simClock,
+                                          WeatherSnapshot opening) {
+        List<Object> args = new java.util.ArrayList<>(java.util.Arrays.asList(marketHistory, policyRegistry,
+                llmBridge, eventBus, directory, simClock.conversationClock()));
+        if (opening != null) {
+            args.add(new it.unige.portcommand.harbourmaster.MovementGate.Reading(
+                    opening.wind(), opening.visibility(), opening.swell(), opening.state()));
+        }
+        return args.toArray();
     }
 }

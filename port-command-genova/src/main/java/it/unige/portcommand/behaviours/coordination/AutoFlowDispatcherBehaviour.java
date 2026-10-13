@@ -85,7 +85,7 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
                     MessageTemplate.MatchPerformative(ACLMessage.DISCONFIRM),
                     MessageTemplate.MatchProtocol(FLOOD_RETRACT_PROTOCOL)));
     public static final MessageTemplate TEMPLATE = MessageTemplate.or(REQUEST_TEMPLATE, TERMINAL_REPLY_TEMPLATE);
-    private static final int DF_RETRY_ATTEMPTS = 3;
+    public static final int DF_RETRY_ATTEMPTS = 3;
     // Must exceed ServiceLocator's 1 s DF-search cache TTL, or a retry inside that
     // window just replays the SAME stale "not found yet" result instead of a fresh
     // lookup (found by HarbourMasterAgentIT: a customs/terminal probe spawned just
@@ -146,7 +146,9 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
         // a berth-sharing future contract now queues instead of colliding. Known consequence,
         // recorded in ADR-16: the contracted fee fires at the GRANT, so a deferred contracted
         // grant defers its fee with it.
-        boolean pinnedBerthOccupied = hm.activeVessels().values().stream()
+        boolean pinnedBerthClosed = hm.movement().berthClosed(contract.berthId(),
+                hm.simClock().nowSimMillis());
+        boolean pinnedBerthOccupied = pinnedBerthClosed || hm.activeVessels().values().stream()
                 .filter(t -> t.stage().ordinal() >= Stage.AWAITING_TUG.ordinal())
                 .anyMatch(t -> contract.berthId().equals(t.assignedBerth()));
         if (pinnedBerthOccupied) {
@@ -156,8 +158,15 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
             hm.berthWaitQueue().enqueue(spec.vesselId(), contract.contractedFee(),
                     contract.contractedHours(), hm.simClock().nowSimMillis());
             hm.pendingContractGrants().put(spec.vesselId(), contract.contractId());
-            log.info("{}: pinned berth {} occupied — contracted grant queued [R7,R30]",
-                    spec.vesselId(), contract.berthId());
+            log.info("{}: pinned berth {} {} — contracted grant queued [R7,R30]",
+                    spec.vesselId(), contract.berthId(), pinnedBerthClosed ? "closed" : "occupied");
+            // S16 (C4): a queued contract used to be a log line only, while a queued walk-in was
+            // announced. Its fee is booked at the grant, so the player should know it is waiting.
+            hm.eventBus().publish(new NotificationEvent(
+                    spec.vesselId() + " (contract " + contract.contractId() + ") queued for berth "
+                            + contract.berthId().replace("berth_", "") + " — it is "
+                            + (pinnedBerthClosed ? "closed" : "occupied") + " [R7,R30]",
+                    NotificationEvent.Severity.INFO, hm.simClock().nowSimMillis()));
             return;
         }
 
@@ -203,28 +212,21 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
                 contract.contractedHours(), hm.simClock().nowSimMillis()));
 
         String vesselId = spec.vesselId();
-        // Checkpoint-#6 F1 (fixed 2026-07-18): mirror of the walk-in grant — a 0-tug vessel
-        // transits immediately, so its tracking starts IN_TRANSIT, never AWAITING_TUG.
+        // S16 (ADR-20): the grant RESERVES the berth and nothing more. Every granted ship is
+        // AWAITING_TUG - "granted, not moving" - whether or not it needs a tug: it waits at the
+        // channel entry until MovementControl.tryProceed sends it (escort on station, customs
+        // cleared, berth open, weather safe). The pre-S16 code launched the tug Contract Net
+        // from here, unconditionally, and wrote a 0-tug vessel IN_TRANSIT at once.
         int tugsRequired = PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length());
         hm.activeVessels().put(vesselId, VesselTracking
                 .arriving(vesselId, spec, Channel.CONTRACTED, vesselAid)
-                .withStage(tugsRequired > 0 ? Stage.AWAITING_TUG : Stage.IN_TRANSIT)
+                .withStage(Stage.AWAITING_TUG)
                 .withBerth(contract.berthId()));
-
-        if (tugsRequired > 0) {
-            Position berthPosition = BerthPositions.position(contract.berthId());
-            hm.cnpCoordinator().initiate(
-                    new CnpRequest(vesselId, vesselAid, CHANNEL_ENTRY, berthPosition, tugsRequired,
-                            spec.vesselType()));
-        }
-
         sendTerminalRequest(hm, spec, contract, DF_RETRY_ATTEMPTS);
 
-        // S5 (ADR-16 D7): pre-clearance for EVERY contracted arrival, not only hazmat. Required
-        // for the customs rules to be demonstrable at all — hazmat is always high-risk (R24), so
-        // the PreClear fast path and R23's roll could never fire on hazmat-only traffic. Costs
-        // €100/clearance for clean cargo too; DefaultDayCalibrationTest's model gained the line.
-        sendCustomsRequest(hm, spec, DF_RETRY_ATTEMPTS);
+        // Customs (every arrival since S16, walk-ins included) and the movement decision -
+        // hold, hire the escort, or proceed - are MovementControl's, for both grant pipelines.
+        it.unige.portcommand.behaviours.MovementControl.afterGrant(hm, vesselId);
 
         log.info("{}: ACCEPT berth {} (contract {}), tugsRequired={}",
                 vesselId, contract.berthId(), contract.contractId(), tugsRequired);
@@ -267,7 +269,12 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
         // i.e. some 8.3 hours EARLY. This is a strict no-op for the DAILY contract stream,
         // whose SpawnVesselEvent already builds the spec from the same already-absolute value.
         BerthRequest req = new BerthRequest(spec.vesselId(), spec.vesselType(), spec.draft(), spec.length(),
-                spec.tonnage(), contract.berthId(), spec.etaArrivalSimMillis(),
+                spec.tonnage(), contract.berthId(),
+                // S16 (C9): never earlier than NOW. On the announce path the spec's ETA is this
+                // instant (a vessel announces at its ETA), so nothing changes there; a grant
+                // released from the wait queue used to book from the ORIGINAL ETA, and the
+                // terminal freed the berth early by the whole time the ship had queued.
+                Math.max(spec.etaArrivalSimMillis(), hm.simClock().nowSimMillis()),
                 contract.contractedHours(), spec.cargoClass());
         ACLMessage request = MessageFactory.create(ACLMessage.REQUEST);
         terminals.forEach(request::addReceiver);
@@ -295,10 +302,10 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
                 String berthId = text(content, "berth_id");
                 log.warn("terminal DISCONFIRM: berth {} retracted <- {}",
                         berthId, reply.getSender().getLocalName());
-                hm.eventBus().publish(new NotificationEvent(
-                        "Berth " + (berthId == null ? "?" : berthId.replace('_', ' '))
-                                + " has been retracted by the terminal.",
-                        NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis()));
+                // S16 (C3): the retraction now MEANS something here. The berth is closed for a
+                // fixed time - nobody is granted it, a ship granted it waits, a ship moored there
+                // stays moored - and MovementControl tells the player until when.
+                it.unige.portcommand.behaviours.MovementControl.closeBerth(hm, berthId);
             }
             default ->
                     log.debug("terminal REFUSE ({}) <- {}", reply.getContent(), reply.getSender().getLocalName());
@@ -313,11 +320,16 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
      * vesselId (no reply here carries one). Retries like {@link #sendTerminalRequest}
      * for the same async-DF-registration reason.
      */
-    static void sendCustomsRequest(HarbourMasterAgent hm, VesselSpec spec, int attemptsLeft) {
+    public static void sendCustomsRequest(HarbourMasterAgent hm, VesselSpec spec, int attemptsLeft) {
         AID customsAid = hm.resolveCustomsAid();
         if (customsAid == null) {
             if (attemptsLeft <= 0) {
                 log.warn("no customs registered in DF after retries; skipping pre-clearance for {}", spec.vesselId());
+                // S16: the ship was marked "customs pending" at its grant and waits on that.
+                // With no customs agent to answer there is nothing to wait for.
+                hm.pendingCustomsChecks().remove(
+                        it.unige.portcommand.behaviours.MovementControl.customsConversation(spec.vesselId()));
+                it.unige.portcommand.behaviours.MovementControl.onCustomsCleared(hm, spec.vesselId());
                 return;
             }
             hm.addBehaviour(new WakerBehaviour(hm, DF_RETRY_WALL_MS) {

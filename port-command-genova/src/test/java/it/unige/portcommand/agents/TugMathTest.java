@@ -20,8 +20,8 @@ class TugMathTest {
 
     @Test
     void distanceKmConvertsPixelsAtTheScale() {
-        // 100 px horizontally at 10 px/km = 10 km.
-        assertEquals(10.0, TugMath.distanceKm(new Position(0, 0, 0), new Position(100, 0, 0)), 1e-9);
+        // 600 px horizontally at 60 px/km = 10 km (S16: the scale was 10 px/km until ADR-20).
+        assertEquals(10.0, TugMath.distanceKm(new Position(0, 0, 0), new Position(600, 0, 0)), 1e-9);
         assertEquals(602.0781 / TugMath.PIXELS_PER_KM,
                 TugMath.distanceKm(new Position(50, 100, 0), new Position(500, 500, 0)), 1e-3);
     }
@@ -39,7 +39,7 @@ class TugMathTest {
         // In one hour (3600 s) the tug covers exactly 12 kn * 1.852 = 22.224 km (literal).
         assertEquals(22.224, TugMath.stepKm(12.0, 3600.0), 1e-3);
         // And PIXELS_PER_KM is the pinned pixel scale.
-        assertEquals(10.0, TugMath.PIXELS_PER_KM, 0.0);
+        assertEquals(60.0, TugMath.PIXELS_PER_KM, 0.0);
     }
 
     @Test

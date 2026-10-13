@@ -45,9 +45,25 @@ public final class AutoAcceptHarbourMaster extends Agent {
                     grant.setContent(TerminalJson.write(Map.of(
                             "berth_id", berthId, "price", price, "hours", hours)));
                     myAgent.send(grant);
+                    // S16 (ADR-20): a grant no longer starts the ship; the order to proceed does.
+                    myAgent.send(order(msg, "proceed_to_berth"));
+                } else if (msg.getPerformative() == ACLMessage.INFORM && msg.getContent() != null
+                        && msg.getContent().contains("service_complete")) {
+                    // S16: service_complete is the ship's request to leave; this puppet always agrees.
+                    myAgent.send(order(msg, "cleared_to_depart"));
                 }
             }
         });
+    }
+
+    /** A movement order to the sender of {@code from}, on the protocol tag vessels match. */
+    private static ACLMessage order(ACLMessage from, String event) {
+        ACLMessage order = MessageFactory.create(ACLMessage.INFORM);
+        order.addReceiver(from.getSender());
+        order.setProtocol(
+                it.unige.portcommand.behaviours.auto_flow.HandleWeatherHoldBehaviour.VESSEL_WEATHER_PROTOCOL);
+        order.setContent(TerminalJson.write(Map.of("event", event)));
+        return order;
     }
 
     private void registerHarbourMaster() {

@@ -62,7 +62,15 @@ public final class RestoreDispatchBehaviour extends OneShotBehaviour {
     private void dispatchWhenFleetVisible(int attemptsLeft) {
         boolean tugsUp = !hm.serviceLocator().findAll("tug-escort").isEmpty();
         boolean customsUp = hm.resolveCustomsAid() != null;
-        if ((!tugsUp || !customsUp) && attemptsLeft > 0) {
+        // S16 (found by the gate): the restored SHIPS too. The loader spawns them after the
+        // fixed roster and each registers in the directory as the last step of its own setup,
+        // so on a fast boot the tugs and customs can be visible before a ship is. The sweep
+        // below then found "no restored agent" for a queued ship and dropped its tracking - a
+        // ship with a paid deal vanished from the loaded game. A ship that never registers is
+        // still dropped, once the retries are spent.
+        boolean vesselsUp = hm.directory() == null || restoredVesselsRegistered(
+                hm.activeVessels().values(), name -> hm.directory().byName(name).isPresent());
+        if ((!tugsUp || !customsUp || !vesselsUp) && attemptsLeft > 0) {
             hm.addBehaviour(new WakerBehaviour(hm, DF_RETRY_WALL_MS) {
                 @Override
                 protected void onWake() {
@@ -75,9 +83,25 @@ public final class RestoreDispatchBehaviour extends OneShotBehaviour {
             log.warn("restore dispatch: no tug visible in DF after retries — "
                     + "AWAITING_TUG vessels will rely on the CNP retry path");
         }
-        redispatchTugless();
         resendPendingCustoms();
         requeueAwaitingBerth();
+        // S16 (ADR-20): one sweep over the restored world with the reading the save carried
+        // (the HarbourMaster is seeded with it at boot - decision B7). It holds every waiting or
+        // moving ship the gate refuses, and for the rest tenders for the tugs they still lack -
+        // through the gate, where the pre-S16 redispatchTugless tendered without looking and
+        // treated a world loaded in mid-storm as calm for its first fifteen game minutes.
+        MovementControl.onWeather(hm);
+    }
+
+    /**
+     * Whether every tracked vessel's agent has registered under its local name. The restore
+     * sweep looks queued ships up in the directory and sends orders to the rest, so it must not
+     * run while one of them is still booting.
+     */
+    static boolean restoredVesselsRegistered(java.util.Collection<VesselTracking> tracked,
+                                             java.util.function.Predicate<String> registered) {
+        return tracked.stream().allMatch(vessel -> registered.test(
+                it.unige.portcommand.bootstrap.AgentRoster.vesselLocalName(vessel.spec())));
     }
 
     /**
@@ -109,7 +133,7 @@ public final class RestoreDispatchBehaviour extends OneShotBehaviour {
                 log.warn("restore dispatch: AWAITING_BERTH {} has no restored agent — dropping "
                         + "its tracking and queue entry", tracking.vesselId());
                 hm.activeVessels().remove(tracking.vesselId());
-                hm.pendingContractGrants().remove(tracking.vesselId());
+                MovementControl.forget(hm, tracking.vesselId()); // every side table, one list
                 continue;
             }
             hm.berthWaitQueue().enqueue(tracking.vesselId(), vessel.dealPrice(), vessel.dealHours(),
@@ -126,27 +150,6 @@ public final class RestoreDispatchBehaviour extends OneShotBehaviour {
         }
     }
 
-    private void redispatchTugless() {
-        List<VesselTracking> tugless = hm.activeVessels().values().stream()
-                .filter(v -> v.stage() == Stage.AWAITING_TUG)
-                .filter(v -> v.assignedTugs().isEmpty())
-                .filter(v -> !v.weatherHeld())
-                .sorted(java.util.Comparator.comparing(VesselTracking::vesselId))
-                .toList();
-        for (VesselTracking tracking : tugless) {
-            int tugsRequired = PrologQueries.tugsRequired(tracking.spec().vesselType(),
-                    tracking.spec().tonnage(), tracking.spec().length());
-            if (tugsRequired <= 0 || tracking.assignedBerth() == null) {
-                continue;
-            }
-            hm.cnpCoordinator().initiate(new CnpRequest(tracking.vesselId(), tracking.aid(),
-                    AutoFlowDispatcherBehaviour.CHANNEL_ENTRY,
-                    BerthPositions.position(tracking.assignedBerth()), tugsRequired,
-                tracking.spec().vesselType()));
-            log.info("restore dispatch: fresh CNP for {} ({} tug(s))", tracking.vesselId(), tugsRequired);
-        }
-    }
-
     private void resendPendingCustoms() {
         for (Map.Entry<String, String> pending : hm.pendingCustomsChecks().entrySet().stream()
                 .sorted(Map.Entry.comparingByKey()).toList()) {
@@ -155,20 +158,14 @@ public final class RestoreDispatchBehaviour extends OneShotBehaviour {
                 hm.pendingCustomsChecks().remove(pending.getKey());
                 continue; // the vessel did not survive the save — nothing to clear
             }
-            jade.core.AID customs = hm.resolveCustomsAid();
-            if (customs == null) {
-                log.warn("restore dispatch: customs not DF-visible — {} stays pending", pending.getValue());
-                continue;
-            }
-            ACLMessage request = MessageFactory.create(ACLMessage.REQUEST);
-            request.addReceiver(customs);
-            request.setConversationId(pending.getKey());
-            request.setProtocol(HandleEmergencyBehaviour.CUSTOMS_CLEARANCE_PROTOCOL);
-            request.setContent(TerminalJson.write(Map.of(
-                    "vessel_id", tracking.vesselId(),
-                    "vessel_type", tracking.spec().vesselType(),
-                    "cargo_class", tracking.spec().cargoClass())));
-            hm.sendLogged(request);
+            // S16 (adversarial review): through the live path's sender, which retries while the
+            // customs agent is still registering and - when it never does - clears the ship
+            // instead of leaving it "pending" for good. This loop used to give up after its own
+            // DF lookup with a log line; since S16 a pending check stops the ship, so a customs
+            // agent that failed to boot would have kept every such ship at the channel entry.
+            it.unige.portcommand.behaviours.coordination.AutoFlowDispatcherBehaviour.sendCustomsRequest(
+                    hm, tracking.spec(),
+                    it.unige.portcommand.behaviours.coordination.AutoFlowDispatcherBehaviour.DF_RETRY_ATTEMPTS);
             log.info("restore dispatch: customs pre-clearance re-sent for {}", tracking.vesselId());
         }
     }

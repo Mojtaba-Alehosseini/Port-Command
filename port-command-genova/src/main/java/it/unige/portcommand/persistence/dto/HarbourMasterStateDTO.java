@@ -41,5 +41,21 @@ public record HarbourMasterStateDTO(
         Map<String, Integer> performativeCounts,
         Map<String, String> pendingCustomsChecks,
         int walkInSpawnCount,
-        int namePoolOffset) {
+        int namePoolOffset,
+        Map<String, Long> closedBerths) {
+
+    public HarbourMasterStateDTO {
+        // S16 (ADR-20): additive within schema v1 - a save written before it existed has no such
+        // key and binds null, which reads as "no berth is closed".
+        closedBerths = closedBerths == null ? Map.of() : closedBerths;
+    }
+
+    /** The pre-S16 shape (no closed berths). */
+    public HarbourMasterStateDTO(List<IncomeEvent> dayIncome, List<ExpenseEvent> dayExpense,
+                                 Map<String, Integer> performativeCounts,
+                                 Map<String, String> pendingCustomsChecks,
+                                 int walkInSpawnCount, int namePoolOffset) {
+        this(dayIncome, dayExpense, performativeCounts, pendingCustomsChecks, walkInSpawnCount,
+                namePoolOffset, Map.of());
+    }
 }

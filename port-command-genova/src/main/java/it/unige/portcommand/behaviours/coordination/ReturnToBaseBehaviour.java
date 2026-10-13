@@ -34,6 +34,16 @@ public final class ReturnToBaseBehaviour extends SimTickerBehaviour {
 
     @Override
     protected void onSimTick() {
+        if (tug.activeMovement() != this) {
+            // S16 (B3, ADR-20): this leg was overtaken - the tug accepted a new job while still
+            // on its way home (a cancelled tug carries no job and may bid). Accepting removes
+            // this behaviour, so this line should never run; it is here because the alternative
+            // was the worst bug in the fleet: two legs pulling one tug in opposite directions,
+            // and this one, on arriving, clearing a job that was not its own - the escort never
+            // completed and the tug stayed busy for the rest of the game.
+            tug.removeBehaviour(this); // LAST: nulls myAgent
+            return;
+        }
         long now = simClock().nowSimMillis();
         double dtSimSeconds = (now - lastSimMillis) / 1000.0;
         lastSimMillis = now;
@@ -47,6 +57,7 @@ public final class ReturnToBaseBehaviour extends SimTickerBehaviour {
             tug.setStatus(TugStatus.IDLE);
             tug.clearJob();
             tug.setActiveMovement(null);
+            tug.announceAvailable(); // S16: a ship may be waiting for exactly this tug
             tug.removeBehaviour(this); // LAST: nulls myAgent
         }
     }

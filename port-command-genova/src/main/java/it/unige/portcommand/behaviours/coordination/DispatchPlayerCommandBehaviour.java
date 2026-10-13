@@ -135,10 +135,8 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
      * The binding gate itself — Prolog first, always (design rule 4). Null = pass. The
      * compatibility leg is belt-and-braces over the vessel's own R7 self-check (a walk-in
      * REFUSEs an incompatible berth too — this catches it BEFORE the wire, and catches the
-     * autopilot the same as a human typing "accept"); the weather leg is the new capability:
-     * the R15-R19 verdict over the latest reading, the same trio the storm cascade binds on.
-     * A null {@code lastWeather} is the bootstrap grace — no reading exists before the first
-     * broadcast (≤15 sim-minutes), so the gate is compatibility-only until one lands.
+     * autopilot the same as a human typing "accept"). S16 (B0a): the weather is NOT part of this
+     * gate - a deal is talk, and the weather rules gate movements (see the end of the method).
      */
     private String gateRefusal(PlayerCommand cmd, VesselTracking tracking) {
         VesselSpec spec = tracking.spec();
@@ -158,23 +156,12 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
                 spec.draft(), spec.length(), spec.tonnage()).isEmpty()) {
             return "no compatible berth exists for a " + spec.vesselType() + " [R8]";
         }
-        HarbourMasterAgent.WeatherReading w = hm.lastWeather();
-        if (w == null) {
-            return null;
-        }
-        // Weather refusals tell the player what to DO, not just why (adversarial finding 14):
-        // the command is dropped, not queued, so without the hint the storm walk-in reads as
-        // permanently unservable when one retry after the clearing would land it.
-        if (!PrologQueries.operationSafe(spec.vesselType(), w.windKnots(), w.visibility())) {
-            return "operations unsafe for a " + spec.vesselType() + " at " + w.windKnots()
-                    + " kn / " + w.visibility() + " visibility [R15,R16] — retry when conditions improve";
-        }
-        if (!PrologQueries.swellWithinLimit(w.swell())) {
-            return "swell " + w.swell() + " m over the harbour limit [R17] — retry when conditions improve";
-        }
-        if (PrologQueries.weatherStateUnsafe(w.state())) {
-            return "sea state '" + w.state() + "' forbids movements [R19] — retry when conditions improve";
-        }
+        // S16 (B0a, ADR-20): no weather leg here any more. Bad weather blocks MOVING, not
+        // TALKING: the player (and the autopilot) may negotiate and close a deal in a storm, and
+        // the ship then waits at the channel entry, held by the movement gate with its rule id
+        // (MovementControl.afterGrant). The old leg refused PROPOSE and ACCEPT under R15-R19 while
+        // the vessel's patience kept running - a storm cost the player the deal and a
+        // reputation point for a movement nobody had asked for yet.
         return null;
     }
 

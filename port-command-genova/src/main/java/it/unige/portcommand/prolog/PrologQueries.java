@@ -127,6 +127,30 @@ public final class PrologQueries {
     }
 
     /**
+     * True iff {@code windKnots} is under {@code vesselType}'s wind limit (RULE R15 alone).
+     * Added in S16 for {@code MovementGate}, which names the failing rule: {@link #operationSafe}
+     * (R20) folds R15 and R16 together and cannot say which of the two refused. Takes the type
+     * atom directly, so no transient vessel fact and no lock. Not cached: the wind is a
+     * continuous input (see {@link #windThresholdsCrossed}).
+     */
+    public static boolean windWithinLimit(String vesselType, double windKnots) {
+        return engine().hasSolution(
+                "wind_within_limit(" + quoteAtom(vesselType) + ", " + windKnots + ")");
+    }
+
+    /**
+     * The wind limit (knots) of {@code vesselType}: the {@code wind_limit/2} fact RULE R15
+     * compares against, read as data. Empty for a type the ontology does not know. Added in S16
+     * for {@code MovementGate}'s release margin, which is measured from this fact instead of a
+     * second copy of the five numbers in Java. Pure lookup over static facts, so cached.
+     */
+    public static java.util.OptionalDouble windLimit(String vesselType) {
+        return engine().oneSolutionCached("wind_limit(" + quoteAtom(vesselType) + ", L)")
+                .map(m -> java.util.OptionalDouble.of(PrologTerms.toDouble(m.get("L"))))
+                .orElse(java.util.OptionalDouble.empty());
+    }
+
+    /**
      * True iff {@code swellMetres} is within the operating limit (RULE R17). Takes no
      * vessel context — pure lookup against the static {@code max_swell/1} fact, so
      * (unlike {@link #operationSafe}) it is cached.

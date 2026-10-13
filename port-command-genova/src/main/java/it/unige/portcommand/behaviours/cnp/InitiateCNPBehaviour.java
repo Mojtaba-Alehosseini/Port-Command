@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import it.unige.portcommand.agents.HarbourMasterAgent;
+import it.unige.portcommand.behaviours.MovementControl;
 import it.unige.portcommand.bootstrap.ServiceLocator;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.Settings;
@@ -90,11 +91,25 @@ public final class InitiateCNPBehaviour extends OneShotBehaviour {
     @Override
     public void action() {
         HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
+        // S16 (ADR-20): the movement gate, asked AT THE LAUNCH. A session can sit in the
+        // coordinator's queue, or come back as a retry, long after it was asked for: the ship
+        // may have left, been held, been fully escorted meanwhile - or the weather may have
+        // turned, in which case mayTender holds the ship and no CFP goes out. Before S16 a
+        // Contract Net queued in good weather was launched into a storm.
+        if (!MovementControl.mayTender(hm, req.vesselId())) {
+            log.info("CNP for {} not launched — the vessel no longer needs (or may not have) an "
+                    + "escort now", req.vesselId());
+            MovementControl.tenderClosed(hm, req.vesselId());
+            hm.cnpCoordinator().completed();
+            return;
+        }
         List<AID> tugs = serviceLocator.findAll("tug-escort");
         if (tugs.isEmpty()) {
             log.warn("no tug-escort registered in DF; holding vessel {}", req.vesselId());
             holdVessel(hm, "no_tugs_registered");
             // Terminal path with no collector spawned — release the serialized-CNP queue (B2).
+            // S16: the vessel keeps waiting; the periodic sweep tenders again.
+            MovementControl.tenderClosed(hm, req.vesselId());
             hm.cnpCoordinator().completed();
             return;
         }

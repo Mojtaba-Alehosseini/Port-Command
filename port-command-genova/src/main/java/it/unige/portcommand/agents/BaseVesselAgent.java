@@ -44,7 +44,19 @@ public abstract class BaseVesselAgent extends PortCommandAgent
      * every manual save and made the EOD autosave DROP the vessel — tolerable while grants were
      * instantaneous, fatal once the berth wait-queue made the window minutes long.
      */
-    public enum FlowPhase { AWAITING_BERTH, TRANSIT, DOCKED, DEPARTING }
+    public enum FlowPhase {
+        AWAITING_BERTH,
+        /**
+         * S16 (ADR-20): the berth is granted and the ship waits at the channel entry for the
+         * HarbourMaster's {@code proceed_to_berth} — its escort to reach it, customs to clear it,
+         * the weather to allow it. No deadline. Before S16 the ship went straight from the grant
+         * into TRANSIT and was at its berth two sim-minutes later, tugs or no tugs.
+         */
+        AWAITING_CLEARANCE,
+        TRANSIT,
+        DOCKED,
+        DEPARTING
+    }
 
     protected VesselSpec spec;
     private SimClock simClock;
@@ -60,14 +72,19 @@ public abstract class BaseVesselAgent extends PortCommandAgent
     private volatile long phaseDeadlineSimMillis;
 
     /**
-     * B-01 (S8, ADR-17): the vessel-side MIRROR of the HarbourMaster's {@code weatherHeld}
-     * tracking flag — set/cleared by {@code HandleWeatherHoldBehaviour} from the protocol-tagged
-     * hold/resume INFORMs, seeded from the persisted DTO on restore. While true, the transit
-     * ticker SLIDES its deadline instead of counting down (progress frozen). Volatile: written
-     * on the agent thread, read by the ticker on the same thread today, but the snapshot walk
-     * reads cross-thread like the phase fields above.
+     * S16 (ADR-20): the channel leg in progress, kept so a hold can stop it. Null whenever the
+     * ship is not under way. Agent thread only.
      */
-    private volatile boolean weatherHeld;
+    private jade.core.behaviours.Behaviour activeTransit;
+    /**
+     * S16: a {@code proceed_to_berth} that overtook the berth grant. The two are separate
+     * messages on separate templates, and a ship that needs no escort is cleared in the very
+     * action that grants it — so the order can be consumed first. It is kept here (the leg's
+     * length in sim millis, -1 = none) and honoured the moment the grant lands.
+     */
+    private long pendingProceedSimMillis = -1L;
+    /** S16: the HarbourMaster has cleared this ship to leave its berth. Read by the service ticker. */
+    private volatile boolean departureCleared;
 
     @Override
     protected final void registerServices() {
@@ -115,10 +132,9 @@ public abstract class BaseVesselAgent extends PortCommandAgent
     private void restoreFrom(VesselStateDTO dto) {
         setDeal(dto.assignedBerth(), dto.dealPrice(), dto.dealHours());
         setPosition(new Position(dto.posX(), dto.posY(), dto.posHeading()));
-        // B-01 (S8, ADR-17): a held vessel restores HELD — the resumed transit ticker stays
-        // frozen until the rebuilt HarbourMaster's weather_resume (or the periodic release
-        // backstop) reaches it. The flag rides the DTO field that has persisted since task 22.
-        this.weatherHeld = dto.weatherHeld();
+        // S16 (ADR-20): no vessel-side "held" flag to seed any more. A ship that was held, or was
+        // waiting for tugs or customs, was saved in AWAITING_CLEARANCE and simply waits again;
+        // the rebuilt HarbourMaster re-evaluates it and sends the order when it may move.
         onRestore(dto);
         FlowPhase phase = FlowPhase.valueOf(dto.currentPhase());
         switch (phase) {
@@ -127,8 +143,14 @@ public abstract class BaseVesselAgent extends PortCommandAgent
             // AWAITING_BERTH sweep), so the ACCEPT this behaviour waits for will really arrive.
             case AWAITING_BERTH -> addBehaviour(
                     new AwaitBerthBehaviour(this, "berth-" + getLocalName()));
-            case TRANSIT -> addBehaviour(TransitToBerthBehaviour.resuming(this, simClock,
-                    dto.phaseDeadlineSimMillis()));
+            // Waiting at the channel entry needs no behaviour of its own: the permanent order
+            // receiver (HandleWeatherHoldBehaviour) starts the leg when the order comes.
+            case AWAITING_CLEARANCE -> reportPhase(FlowPhase.AWAITING_CLEARANCE, 0L);
+            case TRANSIT -> {
+                this.activeTransit = TransitToBerthBehaviour.resuming(this, simClock,
+                        dto.phaseDeadlineSimMillis());
+                addBehaviour(activeTransit);
+            }
             case DOCKED -> addBehaviour(DockAndServiceBehaviour.resuming(this, simClock,
                     dto.phaseDeadlineSimMillis()));
             case DEPARTING -> addBehaviour(DepartBehaviour.resuming(this, simClock,
@@ -238,14 +260,64 @@ public abstract class BaseVesselAgent extends PortCommandAgent
         return phaseDeadlineSimMillis;
     }
 
-    /** B-01 (S8): true while the HarbourMaster holds this vessel offshore — transit frozen. */
-    public boolean weatherHeld() {
-        return weatherHeld;
+    // --- S16 (ADR-20): the HarbourMaster's movement orders. Agent thread only: every caller is
+    // one of this agent's own behaviours (AwaitBerthBehaviour, HandleWeatherHoldBehaviour, the
+    // transit ticker).
+
+    /** The berth grant has landed ({@code AwaitBerthBehaviour}): wait for the order to proceed. */
+    public void onBerthGranted() {
+        if (pendingProceedSimMillis >= 0L) {
+            long leg = pendingProceedSimMillis;
+            pendingProceedSimMillis = -1L;
+            startTransit(leg);
+            return;
+        }
+        reportPhase(FlowPhase.AWAITING_CLEARANCE, 0L);
     }
 
-    /** Written by {@code HandleWeatherHoldBehaviour} (live) and {@code restoreFrom} (load). */
-    public void setWeatherHeld(boolean held) {
-        this.weatherHeld = held;
+    /** {@code proceed_to_berth}: start the channel leg, {@code transitSimMillis} long. */
+    public void onProceedToBerth(long transitSimMillis) {
+        if (flowPhase == FlowPhase.AWAITING_CLEARANCE) {
+            startTransit(transitSimMillis);
+        } else if (flowPhase == null || flowPhase == FlowPhase.AWAITING_BERTH) {
+            pendingProceedSimMillis = transitSimMillis; // overtook the grant; see the field
+        } else {
+            log.debug("{}: proceed order in phase {} — already past the channel entry, ignored",
+                    getLocalName(), flowPhase);
+        }
+    }
+
+    /**
+     * {@code weather_hold}: a ship under way goes back to the channel entry (its leg restarts
+     * when it is released, with its new escort); a ship that is waiting keeps waiting. A docked
+     * or departing ship is not moved by a hold — it is at its berth, or already leaving.
+     */
+    public void onHold() {
+        pendingProceedSimMillis = -1L;
+        if (flowPhase == FlowPhase.TRANSIT && activeTransit != null) {
+            removeBehaviour(activeTransit);
+            activeTransit = null;
+            reportPhase(FlowPhase.AWAITING_CLEARANCE, 0L);
+        }
+    }
+
+    /** {@code cleared_to_depart}: the service ticker, waiting at the berth, may now leave. */
+    public void onClearedToDepart() {
+        this.departureCleared = true;
+    }
+
+    public boolean departureCleared() {
+        return departureCleared;
+    }
+
+    /** The transit ticker reached the berth and is handing over to the service ticker. */
+    public void transitEnded() {
+        this.activeTransit = null;
+    }
+
+    private void startTransit(long transitSimMillis) {
+        this.activeTransit = new TransitToBerthBehaviour(this, simClock, transitSimMillis);
+        addBehaviour(activeTransit);
     }
 
     /**

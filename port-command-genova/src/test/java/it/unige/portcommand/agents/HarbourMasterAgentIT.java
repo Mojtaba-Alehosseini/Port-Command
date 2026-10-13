@@ -1033,7 +1033,9 @@ class HarbourMasterAgentIT {
     @Test
     void walkInFullLifecycle_trackingStageMonotone_endsTerminal() throws Exception {
         HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
-        VesselSpec spec = new VesselSpec("W101", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        // S16: 15,000 t -> one tug (R11); the 30,000 t fixture's two-tug escort could not be
+        // completed by this test's single tug probe.
+        VesselSpec spec = new VesselSpec("W101", "cargo_vessel", 9.0, 150.0, 15000, "general_cargo", 0L);
         Probe vessel = spawnProbe("t30_vessel", null);
         Probe tug = spawnProbe("t30_tug", "tug-escort");
         List<VesselTracking.Stage> observed = new java.util.ArrayList<>();
@@ -1051,6 +1053,11 @@ class HarbourMasterAgentIT {
         tug.outbox.put(bidReply(cfp, 100.0, 5.0, 0.9));
         assertNotNull(pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
                 "setup: the lone bidder must be awarded");
+        // S16 (ADR-20): hired is not arrived. The stage stays AWAITING_TUG until the tug reports
+        // on station; only the order to proceed makes it IN_TRANSIT.
+        assertEquals(VesselTracking.Stage.AWAITING_TUG, hm.activeVessels().get("W101").stage(),
+                "an award leaves the vessel at the channel entry");
+        tug.outbox.put(tugOnStation(hm, "W101", cfp.getConversationId()));
         observed.add(assertStageReached(hm, "W101", VesselTracking.Stage.IN_TRANSIT).stage());
 
         // The tug's delivery report — exactly EscortToBerthBehaviour's message shape
@@ -1369,18 +1376,19 @@ class HarbourMasterAgentIT {
     }
 
     /**
-     * S5 (audit P1-3), the Goal-B gate's weather leg — the genuinely NEW capability (the
-     * compatibility half was belt-and-braces over the vessel's own R7 self-check). An ACCEPT
-     * under an over-limit swell is refused citing R17 and nothing binds; when the sky clears,
-     * the SAME command passes. {@code lastWeather} is written by the real alert path — a
-     * weather probe's threshold message through HandleWeatherAlertBehaviour — not seeded.
+     * S16 (ADR-20, decision B0a) - the inversion of S5's weather leg. Bad weather blocks MOVING,
+     * not TALKING: an ACCEPT under an over-limit swell passes the player-command gate (it used to
+     * be refused citing R17 while the vessel's patience ran out), the deal closes, the berth is
+     * granted - and THEN the movement gate holds the ship at the channel entry, with the same
+     * rule id the refusal used to carry. {@code lastWeather} is written by the real alert path.
      */
     @Test
-    void bindingPlayerCommand_unsafeWeather_isRefusedUntilItClears() throws Exception {
+    void bindingPlayerCommand_unsafeWeather_isNotRefused_theShipIsHeldAfterTheDeal() throws Exception {
         HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         VesselSpec spec = new VesselSpec("W051", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
         Probe vessel = spawnProbe("t51_vessel", null);
         Probe weather = spawnProbe("t51_weather", "weather");
+        Probe tug = spawnProbe("t51_tug", "tug-escort");
 
         vessel.outbox.put(openingOffer(hm, spec, 4800.0, 6, "nego-W051"));
         assertNotNull(awaitEvent(NegotiationOpenedEvent.class,
@@ -1395,18 +1403,23 @@ class HarbourMasterAgentIT {
 
         DispatchPlayerCommandBehaviour dispatch = new DispatchPlayerCommandBehaviour(hm);
         dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.ACCEPT, "W051", Map.of()));
-        AssistantChatEvent refusal = awaitEvent(AssistantChatEvent.class,
-                e -> "nego-W051".equals(e.dialogueId()) && e.text().contains("[R17]"), 10_000);
-        assertNotNull(refusal, "an ACCEPT under an over-limit swell must be refused citing R17");
-        assertNeverArrives(vessel.inbox, ACLMessage.ACCEPT_PROPOSAL, 1_500);
-
-        weather.outbox.put(thresholdAlert(hm, 10, "good", 1.0, "sunny"));
-        assertTrue(pollUntilTrue(() -> hm.lastWeather() != null && hm.lastWeather().swell() == 1.0, 10_000),
-                "fixture: the clear reading must land");
-        dispatch.onPlayerCommand(new PlayerCommandEvent(PlayerCommandKind.ACCEPT, "W051", Map.of()));
         assertNotNull(pollUntil(vessel.inbox,
                         m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
-                "once the reading is safe again the same ACCEPT must pass the gate");
+                "the ACCEPT reaches the vessel: a deal is talk, and the weather does not forbid talk");
+        assertEventNeverPublished(PlayerCommandRefusedEvent.class, e -> true, 500);
+
+        vessel.outbox.put(dealConfirmed(hm, 4800.0, 6, "nego-W051"));
+        assertNotNull(pollUntil(vessel.inbox,
+                        m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "the deal closes and the berth is granted, storm or no storm");
+        ACLMessage hold = pollUntil(vessel.inbox, m -> isMovementOrder(m, "weather_hold"), 10_000);
+        assertNotNull(hold, "and the ship is held at the channel entry");
+        assertTrue(content(hold).get("reason").asText().contains("[R17]"),
+                "by the rule that used to refuse the deal - got " + content(hold).get("reason"));
+        VesselTracking held = pollTracking(hm, "W051", VesselTracking::weatherHeld, 10_000);
+        assertNotNull(held);
+        assertEquals(VesselTracking.Stage.AWAITING_TUG, held.stage());
+        assertNeverArrives(tug.inbox, ACLMessage.CFP, 1_500);
     }
 
     // ==================== Weather safety gate (v1.1: R15/16 + R17 + R19) ====================
@@ -1500,9 +1513,11 @@ class HarbourMasterAgentIT {
                         && m.getContent() != null && m.getContent().contains("weather_resume"), 10_000);
         assertNotNull(resume, "the vessel must be told the escort resumes");
 
+        // S16: the award hires; the vessel moves again when the fresh tug is on station.
+        scene.tug.outbox.put(tugOnStation(scene.hm, vesselId, cfp2.getConversationId()));
         VesselTracking resumed = pollTracking(scene.hm, vesselId,
                 t -> t.stage() == VesselTracking.Stage.IN_TRANSIT, 10_000);
-        assertNotNull(resumed, "the award must move the vessel back to IN_TRANSIT");
+        assertNotNull(resumed, "with the fresh tug on station the vessel is IN_TRANSIT again");
         assertFalse(resumed.weatherHeld(), "the held flag must clear on re-dispatch");
         assertEquals(List.of("t14_tug"), resumed.assignedTugs());
 
@@ -1630,10 +1645,10 @@ class HarbourMasterAgentIT {
         // got which tug depends on the clear-sweep's ConcurrentHashMap iteration order — assert
         // order-insensitively (the task-20 DF-order lesson: never couple to an unordered
         // collection's iteration).
-        VesselTracking v1 = pollTracking(hm, "T17V1",
-                t -> t.stage() == VesselTracking.Stage.IN_TRANSIT, 10_000);
-        VesselTracking v2 = pollTracking(hm, "T17V2",
-                t -> t.stage() == VesselTracking.Stage.IN_TRANSIT, 10_000);
+        // S16: an award hires a tug and leaves the vessel waiting for it (AWAITING_TUG), so the
+        // observable is the assignment itself.
+        VesselTracking v1 = pollTracking(hm, "T17V1", t -> t.assignedTugs().size() == 1, 10_000);
+        VesselTracking v2 = pollTracking(hm, "T17V2", t -> t.assignedTugs().size() == 1, 10_000);
         assertNotNull(v1);
         assertNotNull(v2);
         assertEquals(1, v1.assignedTugs().size(), "one tug per vessel");
@@ -1703,8 +1718,9 @@ class HarbourMasterAgentIT {
         JsonNode c = content(grant);
         assertEquals("berth_1", c.get("berth_id").asText());
         assertEquals(6100.0, c.get("price").asDouble(), "the queued deal's terms must survive the wait");
-        assertEquals("after_queue scheduled_arrival rank 4 [R25,R26,R27,R30]", c.get("reason").asText(),
-                "the release must cite the priority-module verdict");
+        assertEquals("after_queue walk_in_arrival rank 5 [R25,R26,R27,R30]", c.get("reason").asText(),
+                "the release must cite the priority-module verdict (S16, C4: a walk-in is ranked "
+                        + "below scheduled arrivals, by a fact under R25)");
     }
 
     /**
@@ -1715,10 +1731,16 @@ class HarbourMasterAgentIT {
      */
     @Test
     void queuedFerry_releaseCitesTheScheduledFerryClass() throws Exception {
+        // S16 (C4): the queued ferry is a CONTRACTED one. Until S16 this test queued a walk-in
+        // ferry, which R26 classed scheduled_ferry like any ferry; a walk-in is now a
+        // walk_in_arrival whatever its type (pinned in MovementControlIT), so R26's ferry clause
+        // is shown where it still decides - between scheduled arrivals.
         ServiceContract contract = new ServiceContract("CT-Q2", "FQ2", "ferry", "berth_4", 2500.0, 4, 0L);
-        HarbourMasterAgent hm = spawnHm(Map.of("CT-Q2", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        ServiceContract second = new ServiceContract("CT-Q2B", "FQ3", "ferry", "berth_4", 2500.0, 4, 0L);
+        HarbourMasterAgent hm = spawnHm(Map.of("CT-Q2", contract, "CT-Q2B", second),
+                CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         Probe contracted = spawnProbe("q2_contracted", null);
-        Probe walkIn = spawnProbe("q2_walkin", null);
+        Probe queued = spawnProbe("q2_queued", null);
 
         contracted.outbox.put(contractRequest(hm, "CT-Q2",
                 ScenarioVessels.contractedSpec(contract, 0L), "q2_contracted"));
@@ -1727,23 +1749,18 @@ class HarbourMasterAgentIT {
         assertNotNull(pollTracking(hm, "FQ2", t -> "berth_4".equals(t.assignedBerth()), 10_000),
                 "fixture: the contracted ferry must hold berth_4");
 
-        VesselSpec walkInSpec = new VesselSpec("WF2", "ferry", 6.5, 120.0, 15000, "vehicles", 0L);
-        assertEquals(List.of("berth_4"), PrologQueries.findCompatibleBerths("ferry", 6.5, 120.0, 15000),
-                "fixture sanity: a ferry's only compatible berth is berth_4 (R8)");
-        walkIn.outbox.put(openingOffer(hm, walkInSpec, 2000.0, 4, "nego-WF2"));
-        assertNotNull(awaitEvent(NegotiationOpenedEvent.class,
-                e -> "nego-WF2".equals(e.dialogueId()), 10_000));
-        walkIn.outbox.put(dealConfirmed(hm, 2100.0, 4, "nego-WF2"));
-        assertNotNull(pollTracking(hm, "WF2",
+        queued.outbox.put(contractRequest(hm, "CT-Q2B",
+                ScenarioVessels.contractedSpec(second, 0L), "q2_queued"));
+        assertNotNull(pollTracking(hm, "FQ3",
                         t -> t.stage() == VesselTracking.Stage.AWAITING_BERTH, 10_000),
-                "the ferry must queue behind the contracted holder");
+                "the second ferry must queue behind the holder of its pinned berth");
 
         ACLMessage departed = MessageFactory.create(ACLMessage.INFORM);
         departed.addReceiver(hm.getAID());
         departed.setContent(TerminalJson.write(Map.of("intent", "departed", "vessel_id", "FQ2")));
         contracted.outbox.put(departed);
 
-        ACLMessage grant = pollUntil(walkIn.inbox,
+        ACLMessage grant = pollUntil(queued.inbox,
                 m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000);
         assertNotNull(grant, "berth_4 freeing must release the queued ferry");
         assertEquals("after_queue scheduled_ferry rank 3 [R25,R26,R27,R30]",
@@ -1821,7 +1838,7 @@ class HarbourMasterAgentIT {
         ACLMessage grantA = pollUntil(walkInA.inbox,
                 m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000);
         assertNotNull(grantA, "the next departure must reach the ordinary waiter (nobody starves)");
-        assertEquals("after_queue scheduled_arrival rank 4 [R25,R26,R27,R30]",
+        assertEquals("after_queue walk_in_arrival rank 5 [R25,R26,R27,R30]",
                 content(grantA).get("reason").asText());
     }
 
@@ -1839,27 +1856,36 @@ class HarbourMasterAgentIT {
     void stormCascade_emergencyClassHeldFirstAndRedispatchedFirst() throws Exception {
         ServiceContract cA = new ServiceContract("CT-Q4A", "VQA", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
         ServiceContract cB = new ServiceContract("CT-Q4B", "VQB", "cargo_vessel", "berth_3", 5200.0, 8, 0L);
+        // S16: 15,000 t cargo vessels - ONE tug each (R11) - so the single tug probe is each
+        // one's whole escort and both can really be under way when the storm lands.
+        VesselSpec specA = new VesselSpec("VQA", "cargo_vessel", 9.0, 150.0, 15000, "general_cargo", 0L);
+        VesselSpec specB = new VesselSpec("VQB", "cargo_vessel", 9.0, 150.0, 15000, "general_cargo", 0L);
         HarbourMasterAgent hm = spawnHm(Map.of("CT-Q4A", cA, "CT-Q4B", cB), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         Probe vesselA = spawnProbe("q4a_vessel", null);
         Probe vesselB = spawnProbe("q4b_vessel", null);
         Probe tug = spawnProbe("q4_tug", "tug-escort");
 
-        // Two serialized CNP sessions; the single probe tug wins both (no busy guard in a probe).
-        vesselA.outbox.put(contractRequest(hm, "CT-Q4A", ScenarioVessels.contractedSpec(cA, 0L), "q4a_vessel"));
+        // Two serialized CNP sessions; the single probe tug wins both (no busy guard in a probe)
+        // and reports on station for each, so both vessels are ordered to proceed.
+        vesselA.outbox.put(contractRequest(hm, "CT-Q4A", specA, "q4a_vessel"));
         assertNotNull(pollUntil(vesselA.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000));
         ACLMessage cfpA = pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
         assertNotNull(cfpA, "fixture: session A's CFP");
         tug.outbox.put(bidReply(cfpA, 100.0, 5.0, 0.9));
         assertNotNull(pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
                 "fixture: session A's award");
+        tug.outbox.put(tugOnStation(hm, "VQA", cfpA.getConversationId()));
+        assertNotNull(pollTracking(hm, "VQA", t -> t.stage() == VesselTracking.Stage.IN_TRANSIT, 10_000),
+                "fixture: A under way");
 
-        vesselB.outbox.put(contractRequest(hm, "CT-Q4B", ScenarioVessels.contractedSpec(cB, 0L), "q4b_vessel"));
+        vesselB.outbox.put(contractRequest(hm, "CT-Q4B", specB, "q4b_vessel"));
         assertNotNull(pollUntil(vesselB.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000));
         ACLMessage cfpB = pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
         assertNotNull(cfpB, "fixture: session B's CFP");
         tug.outbox.put(bidReply(cfpB, 100.0, 5.0, 0.9));
         assertNotNull(pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
                 "fixture: session B's award");
+        tug.outbox.put(tugOnStation(hm, "VQB", cfpB.getConversationId()));
         assertNotNull(pollTracking(hm, "VQB", t -> t.stage() == VesselTracking.Stage.IN_TRANSIT, 10_000),
                 "fixture: both vessels in transit with tugs");
 
@@ -1876,24 +1902,39 @@ class HarbourMasterAgentIT {
                         && e.paraphrase().contains("weather hold"), 10_000);
         assertNotNull(holdB, "the cascade must hold the emergency-class vessel");
         assertNotNull(holdA, "the cascade must hold the ordinary vessel too");
+        assertTrue(holdA.paraphrase().contains("[R17]"), "S16: the hold names its rule - " + holdA.paraphrase());
         List<Event> published = EventBusProbe.published(boot.getEventBus());
         assertTrue(published.indexOf(holdB) < published.indexOf(holdA),
                 "R27: the cancel cascade must run in priority order (emergency first)");
 
-        // Stage the differential clearing state: the hold escalated BOTH (D9's producer);
-        // strip VQA's so the R29 partition has one emergency and one ordinary eligible.
+        // Stage the differential clearing state: the hold escalated BOTH - each was caught under
+        // way (D9's producer; S16: a ship held while merely waiting keeps its class) - so strip
+        // VQA's and the R29 partition has one emergency and one ordinary vessel to order.
         assertTrue(pollUntilTrue(() -> "emergency".equals(hm.priorityOverrides().get("VQA")), 10_000),
                 "fixture: the hold itself must have escalated VQA");
         hm.priorityOverrides().remove("VQA");
 
+        // S16 (B4): a released vessel hears weather_resume when its escort is HIRED, so the tug
+        // has to bid. The emergency vessel is tendered for first (R29), and its session is
+        // awarded before the ordinary one's CFP goes out (the coordinator serializes).
         weather.outbox.put(clearAlert(hm, 10, "good", 1.0, "sunny"));
+        ACLMessage cfp1 = pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
+        assertNotNull(cfp1, "the clear tenders for the released vessels");
+        assertEquals("VQB", content(cfp1).get("target_vessel_id").asText(),
+                "R29: the emergency partition is re-dispatched first");
+        tug.outbox.put(bidReply(cfp1, 100.0, 5.0, 0.9));
+        ACLMessage cfp2 = pollUntil(tug.inbox, m -> m.getPerformative() == ACLMessage.CFP, 15_000);
+        assertNotNull(cfp2, "then the ordinary vessel");
+        assertEquals("VQA", content(cfp2).get("target_vessel_id").asText());
+        tug.outbox.put(bidReply(cfp2, 100.0, 5.0, 0.9));
+
         CommLogEvent resumeB = awaitEvent(CommLogEvent.class,
                 e -> e.performative() == ACLMessage.INFORM && e.receivers().contains("q4b_vessel")
                         && e.paraphrase().contains("[R29]"), 10_000);
         assertNotNull(resumeB, "the emergency re-dispatch must render its R29 rationale");
         CommLogEvent resumeA = awaitEvent(CommLogEvent.class,
                 e -> e.performative() == ACLMessage.INFORM && e.receivers().contains("q4a_vessel")
-                        && e.paraphrase().contains("resuming escort"), 10_000);
+                        && e.paraphrase().contains("resuming escort"), 15_000);
         assertNotNull(resumeA, "the ordinary vessel must re-dispatch too");
         assertFalse(resumeA.paraphrase().contains("[R29]"),
                 "an ordinary resume must NOT claim the emergency partition");
@@ -1962,6 +2003,8 @@ class HarbourMasterAgentIT {
                 "an 80,000 t tanker needs an escort and no tug is registered here, so it waits for one");
         assertNull(holder.untilSimMillis(), "no vessel agent to ask in this harness, so no 'until'");
         assertFalse(holder.weatherHeld());
+        assertEquals(PortStatusEvent.Wait.TUGS, holder.waiting(),
+                "S16: the row says WHY a granted ship is not moving - here, no escort yet");
         assertEquals(3, granted.berths().stream().filter(PortStatusEvent.BerthRow::isFree).count(),
                 "the other three berths stay free: " + granted);
         assertEquals(List.of(), granted.queued());
@@ -2017,6 +2060,7 @@ class HarbourMasterAgentIT {
                 "a berth held by a WALK-IN is shown as held — the artifact would call it free");
         assertEquals("WPS1", newHolder.vesselName());
         assertEquals(VesselTracking.Stage.AWAITING_TUG, newHolder.stage());
+        assertEquals(PortStatusEvent.Wait.TUGS, newHolder.waiting());
         assertNull(newHolder.untilSimMillis());
         assertEquals(List.of(), released.queued(), "the queue is empty once the grant is released");
         assertTrue(released.berths().stream().noneMatch(r -> "TPS1".equals(r.vesselId())),
@@ -2074,7 +2118,8 @@ class HarbourMasterAgentIT {
         ServiceContract contract = new ServiceContract("CT-PS3", "FPS3", "ferry", "berth_4", 2500.0, 4, 0L);
         VesselSpec spec = ScenarioVessels.contractedSpec(contract, 0L);
         assertEquals(0, PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length()),
-                "fixture sanity: a ferry takes no tug, so the hub never hears it dock (R11)");
+                "fixture sanity: a ferry takes no tug (R11), so it is ordered to proceed at the grant - "
+                        + "and the puppet standing in for it never reports that it docked");
         AgentDirectory directory = new AgentDirectory();
         ContractedVesselAgent ferry = new ContractedVesselAgent();
         directory.register(AgentRoster.vesselLocalName(spec), ferry);
@@ -2104,7 +2149,8 @@ class HarbourMasterAgentIT {
         assertEquals(Long.valueOf(serviceEnd), berthRow(docked, "berth_4").untilSimMillis(),
                 "'until' is the vessel's own service-end deadline, exactly");
         assertEquals(VesselTracking.Stage.IN_TRANSIT, berthRow(docked, "berth_4").stage(),
-                "the hub's stage still says IN_TRANSIT — which is exactly why the vessel is asked");
+                "the hub's stage still says IN_TRANSIT (the puppet sent no 'docked' report) — which "
+                        + "is exactly why the vessel is asked");
 
         // Service over: the deadline now belongs to another phase and must leave the row.
         int beforeDeparting = portStatuses().size();
@@ -2120,12 +2166,22 @@ class HarbourMasterAgentIT {
 
     // ==================== Customs (task-09's deferred note) ====================
 
+    /**
+     * S16 (ADR-20, decision C5): a customs refusal turns the ship away. Before S16 the flag set a
+     * BLOCKED stage that nothing read — the ship docked, was served and left all the same, so
+     * R21 decided nothing. Now the ship is told to leave, its tracking is gone and its berth is
+     * free for the next one. (No shipped cargo is on the blacklist; the puppet customs agent is
+     * what makes the refusal reachable here.)
+     */
     @Test
-    void customsFlagged_marksBlockedAndNotifies() throws Exception {
+    void customsFlagged_turnsTheShipAwayAndReleasesItsBerth() throws Exception {
         ServiceContract contract = new ServiceContract("CONTRACT-CU1", "CU1", "cargo_vessel", "berth_1", 5200.0, 8, 0L);
         VesselSpec spec = new VesselSpec("CU1", "cargo_vessel", 9.0, 150.0, 30000, "hazmat_class_1", 0L);
         assertTrue(PrologQueries.isHazmat("hazmat_class_1"), "fixture sanity: hazmat_class_1 must be hazmat");
-        HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-CU1", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        // The port-status pace: this case reads the Port table, which rides the sim-minute tick
+        // (60 real seconds apart at the CNP-friendly pace), and no tug bids here.
+        HarbourMasterAgent hm = spawnHmWithCustoms(Map.of("CONTRACT-CU1", contract),
+                PORT_STATUS_REAL_SECONDS_PER_DAY);
         Probe vessel = spawnProbe("t13_vessel", null);
         Probe customs = spawnProbe("t13_customs", "customs");
 
@@ -2144,9 +2200,20 @@ class HarbourMasterAgentIT {
         flagged.addUserDefinedParameter("priority", "high");
         customs.outbox.put(flagged);
 
-        NotificationEvent notice = awaitEvent(NotificationEvent.class, e -> e.text().contains("CU1"), 10_000);
-        assertNotNull(notice, "a customs flag must publish a NotificationEvent");
+        NotificationEvent notice = awaitEvent(NotificationEvent.class,
+                e -> e.text().contains("CU1") && e.text().contains("turned away"), 10_000);
+        assertNotNull(notice, "a customs refusal must tell the player the ship was turned away");
         assertEquals(NotificationEvent.Severity.WARNING, notice.severity());
+
+        ACLMessage away = pollUntil(vessel.inbox, m -> isMovementOrder(m, "turned_away"), 10_000);
+        assertNotNull(away, "the ship itself is told to leave");
+        assertEquals("blacklisted", content(away).get("reason").asText());
+        assertTrue(pollUntilTrue(() -> !hm.activeVessels().containsKey("CU1"), 10_000),
+                "the refused ship is no longer tracked, so berth_1 is free again");
+        assertTrue(pollUntilTrue(() -> {
+            List<PortStatusEvent> all = portStatuses();
+            return !all.isEmpty() && berthRow(all.get(all.size() - 1), "berth_1").vesselId() == null;
+        }, 10_000), "the Port table shows berth_1 free again: " + portStatuses());
     }
 
     // ==================== End of day (detect-only) ====================
@@ -2192,12 +2259,22 @@ class HarbourMasterAgentIT {
     private record InTransitFixture(HarbourMasterAgent hm, Probe vessel, Probe tug) {
     }
 
-    /** Runs the contracted flow through CNP award so the vessel is IN_TRANSIT with one assigned tug. */
+    /**
+     * Runs the contracted flow until the vessel is REALLY in transit with one assigned tug.
+     *
+     * <p>S16 (ADR-20): that takes two things it did not take before. The vessel is a 15,000 t
+     * cargo ship, which R11 gives ONE tug — the old 30,000 t fixture needs two, and an escort of
+     * one where two are required no longer moves anybody. And the tug has to report itself on
+     * station: the award only hires it. The helper returns with the proceed order and the escort
+     * order already drained from the two inboxes.
+     */
     private InTransitFixture getVesselInTransit(String prefix) throws Exception {
         String contractId = "CONTRACT-" + prefix;
         String vesselId = "V-" + prefix;
         ServiceContract contract = new ServiceContract(contractId, vesselId, "cargo_vessel", "berth_1", 5200.0, 8, 0L);
-        VesselSpec spec = new VesselSpec(vesselId, "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        VesselSpec spec = new VesselSpec(vesselId, "cargo_vessel", 9.0, 150.0, 15000, "general_cargo", 0L);
+        assertEquals(1, PrologQueries.tugsRequired("cargo_vessel", 15000, 150.0),
+                "fixture sanity: R11 gives this vessel exactly one tug");
         HarbourMasterAgent hm = spawnHm(Map.of(contractId, contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
         Probe vessel = spawnProbe(prefix + "_vessel", null);
         Probe tug = spawnProbe(prefix + "_tug", "tug-escort");
@@ -2212,7 +2289,33 @@ class HarbourMasterAgentIT {
         assertNotNull(award, "setup: tug must be awarded");
         assertEquals(ACLMessage.ACCEPT_PROPOSAL, award.getPerformative(), "setup: the lone bidder must win");
 
+        tug.outbox.put(tugOnStation(hm, vesselId, cfp.getConversationId()));
+        assertNotNull(pollUntil(vessel.inbox, m -> isMovementOrder(m, "proceed_to_berth"), 10_000),
+                "setup: with its escort on station the vessel is ordered to proceed");
+        assertNotNull(pollUntil(tug.inbox, m -> isEscortOrder(m), 10_000),
+                "setup: and the tug is ordered to begin the escort");
+        assertNotNull(pollTracking(hm, vesselId, t -> t.stage() == VesselTracking.Stage.IN_TRANSIT, 10_000),
+                "setup: the vessel is in transit");
+
         return new InTransitFixture(hm, vessel, tug);
+    }
+
+    /** S16: a tug's report that it has reached its ship, on the conversation it was hired on. */
+    private static ACLMessage tugOnStation(HarbourMasterAgent hm, String vesselId, String conversationId) {
+        return flowReport(hm, Map.of("event", "tug_on_station", "vessel_id", vesselId), conversationId);
+    }
+
+    /** S16: a movement order to a vessel — the protocol tag plus the event name. */
+    private static boolean isMovementOrder(ACLMessage m, String event) {
+        return it.unige.portcommand.behaviours.auto_flow.HandleWeatherHoldBehaviour.VESSEL_WEATHER_PROTOCOL
+                .equals(m.getProtocol())
+                && m.getContent() != null && m.getContent().contains("\"" + event + "\"");
+    }
+
+    /** S16: the HarbourMaster's begin_escort order to a tug on station. */
+    private static boolean isEscortOrder(ACLMessage m) {
+        return it.unige.portcommand.behaviours.coordination.TransitToVesselBehaviour.ESCORT_ORDER_PROTOCOL
+                .equals(m.getProtocol());
     }
 
     /**
@@ -2240,12 +2343,19 @@ class HarbourMasterAgentIT {
                 "a scripted tanker's cargo class must be hazmat, or the whole customs leg is dead: "
                         + spec.cargoClass());
 
-        HarbourMasterAgent hm = spawnHm(Map.of("ST-901-T", contract), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        // 16 s per game day, and PAUSED. At this pace the 45 game minutes of an inspection are
+        // worth half a real second, so a wall-timed inspection would be over long before the
+        // waits below; and under a pause the inspection waits on game time alone, which moves
+        // only when this test jumps it (the S16 adversarial review showed that "advance an
+        // unpaused clock, then look" proves nothing: the wait just spends its wall budget). The
+        // Port table still ticks under a pause, every 11 real ms here.
+        HarbourMasterAgent hm = spawnHmWithCustoms(Map.of("ST-901-T", contract), 16L);
+        boot.getSimClock().pause();
         Probe vessel = spawnProbe("t29_vessel", null);
         // The REAL CustomsAgent, not a probe: the CONFIRM must be its decision, not the test's.
         // args[0] is the RandomSource ITSELF (the agent takes its own sub-stream) — passing a
         // forStream(...) here makes initArg's cast fail and the agent dies silently at setup.
-        // S5: the SimClock drives the inspection delay's wall clamp.
+        // S16: the SimClock times the inspection — 45 game minutes, moved on by hand below.
         boot.getSpawner().spawn("customs_agent", CustomsAgent.class,
                 new Object[] {boot.getRandomSource(), boot.getSimClock()});
 
@@ -2256,6 +2366,24 @@ class HarbourMasterAgentIT {
         CommLogEvent request = awaitEvent(CommLogEvent.class,
                 e -> e.performative() == ACLMessage.REQUEST && e.receivers().contains("customs_agent"), 10_000);
         assertNotNull(request, "a hazmat tanker must trigger a customs pre-clearance REQUEST");
+
+        // S16 (C5): hazmat is INSPECTED, and the inspection is 45 game minutes. The start is
+        // announced; nothing clears while the game clock stands still (this harness runs no
+        // clock of its own); the clearance follows once the 45 minutes are moved past.
+        assertNotNull(awaitEvent(CommLogEvent.class,
+                        e -> e.performative() == ACLMessage.INFORM && "customs_agent".equals(e.sender())
+                                && e.content() != null && e.content().contains("inspection_started"), 10_000),
+                "the inspection's start is announced to the HarbourMaster");
+        assertTrue(pollUntilTrue(() -> {
+            List<PortStatusEvent> all = portStatuses();
+            return !all.isEmpty() && berthRow(all.get(all.size() - 1), "berth_1").waiting()
+                    == PortStatusEvent.Wait.CUSTOMS;
+        }, 10_000), "the Port table says why the ship is not moving: " + portStatuses());
+        assertNull(awaitEvent(CustomsClearedEvent.class, e -> "T901T".equals(e.vesselId()), 2_000),
+                "no clearance while the inspection is still running: two real seconds, no game time");
+        boot.getSimClock().resume();
+        boot.getSimClock().advance(boot.getSimClock().simSecondsToWallMs(46 * 60L));
+        boot.getSimClock().pause();
 
         CustomsClearedEvent cleared = awaitEvent(CustomsClearedEvent.class,
                 e -> "T901T".equals(e.vesselId()), 10_000);
@@ -2327,6 +2455,24 @@ class HarbourMasterAgentIT {
         CompletableFuture<HarbourMasterAgent> selfRef = new CompletableFuture<>();
         boot.getSpawner().spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
                 new HarbourMasterInitArgs(10_000.0, 70.0),
+                boot.getSimClock(), boot.getRandomSource(), boot.getEventBus(),
+                contracts, boot.getSpawner(), boot.getMarketHistoryArtifact(), selfRef});
+        return selfRef.get(10, TimeUnit.SECONDS);
+    }
+
+    /**
+     * A HarbourMaster that sends every granted ship to customs, as the production roster does.
+     * {@link #spawnHm} is the harness form — no customs office, so the many cases here that are
+     * about something else are not made to wait for a clearance nobody would send.
+     */
+    private HarbourMasterAgent spawnHmWithCustoms(Map<String, ServiceContract> contracts,
+                                                  long realSecondsPerGameDay) throws Exception {
+        boot = new JadeBootstrap();
+        boot.start(new BootstrapConfig(TEST_PORT, false, "realtime", realSecondsPerGameDay));
+        CompletableFuture<HarbourMasterAgent> selfRef = new CompletableFuture<>();
+        boot.getSpawner().spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
+                new HarbourMasterInitArgs(10_000.0, 70.0,
+                        new it.unige.portcommand.agents.WeatherSnapshot(12, "good", 0.5, "sunny", 0L), true),
                 boot.getSimClock(), boot.getRandomSource(), boot.getEventBus(),
                 contracts, boot.getSpawner(), boot.getMarketHistoryArtifact(), selfRef});
         return selfRef.get(10, TimeUnit.SECONDS);

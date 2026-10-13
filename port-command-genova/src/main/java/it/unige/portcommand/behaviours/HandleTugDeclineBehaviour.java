@@ -132,59 +132,20 @@ public final class HandleTugDeclineBehaviour extends CyclicBehaviour {
         //    fire a CFP into the storm (nor may a blocked vessel, nor one already docked or
         //    departing: those have nothing to escort). The refund and escort-drop above stand
         //    regardless; only the re-tender defers to its owner.
-        if (updated.weatherHeld() || updated.blocked()
-                || updated.stage().ordinal() > VesselTracking.Stage.IN_TRANSIT.ordinal()) {
-            log.info("{}: declined award refunded, but no re-tender (held={} blocked={} stage={}) "
-                            + "— the owning sweep re-dispatches", vesselId,
-                    updated.weatherHeld(), updated.blocked(), updated.stage());
+        hm.movement().tugLeft(vesselId, tugId);
+        if (updated.stage() != VesselTracking.Stage.AWAITING_TUG) {
+            log.info("{}: declined award refunded, but no re-tender at stage {} - the vessel is "
+                    + "past the channel entry", vesselId, updated.stage());
             return;
         }
-        String berthId = tracking.assignedBerth();
-        if (berthId == null) {
-            log.warn("{}: declined award but no berth is assigned — cannot re-tender (the "
-                    + "zero-winner hold path owns this vessel now)", vesselId);
-            return;
-        }
-        // S10 (bug hunt, hunter B finding 3 — the decline window): a storm can cross BETWEEN
-        // the award and this decline, and the held/blocked guard above is vacuous for it —
-        // nothing ever set weatherHeld, because the hold sweep only sees IN_TRANSIT vessels
-        // WITH tugs. Re-tendering here would award a fresh escort INTO the storm. Prolog
-        // decides (design rule 4, the same R15/R17/R19 trio as every weather gate): under
-        // an unsafe current reading there is no re-tender. An emptied escort is put into the
-        // canonical hold shape (held flag + the B-01 vessel INFORM + emergency escalation) so
-        // the clear sweep owns its recovery; a surviving co-winner keeps IN_TRANSIT+tugs,
-        // which the next periodic sweep (≤15 sim-min) holds through the full holdVessel path.
-        HarbourMasterAgent.WeatherReading w = hm.lastWeather();
-        if (w != null && !(PrologQueries.operationSafe(updated.vesselType(), w.windKnots(), w.visibility())
-                && PrologQueries.swellWithinLimit(w.swell())
-                && !PrologQueries.weatherStateUnsafe(w.state()))) {
-            if (updated.assignedTugs().isEmpty()) {
-                ACLMessage hold = MessageFactory.create(ACLMessage.INFORM);
-                hold.addReceiver(updated.aid());
-                hold.setProtocol(it.unige.portcommand.behaviours.auto_flow
-                        .HandleWeatherHoldBehaviour.VESSEL_WEATHER_PROTOCOL);
-                hold.setContent(TerminalJson.write(java.util.Map.of(
-                        "event", "weather_hold", "wind_knots", w.windKnots(),
-                        "swell", w.swell(), "state", w.state())));
-                hm.sendLogged(hold);
-                hm.activeVessels().computeIfPresent(vesselId,
-                        (id, current) -> current.withWeatherHeld(true));
-                hm.priorityOverrides().put(vesselId, "emergency");
-                log.info("{}: declined award refunded; weather unsafe for a {} — held for the "
-                        + "clear sweep instead of re-tendering into the storm", vesselId,
-                        updated.vesselType());
-            } else {
-                log.info("{}: declined award refunded; weather unsafe for a {} — no re-tender, "
-                        + "the periodic sweep holds the surviving escort", vesselId,
-                        updated.vesselType());
-            }
-            return;
-        }
-        hm.cnpCoordinator().initiate(new CnpRequest(vesselId, tracking.aid(),
-                AutoFlowDispatcherBehaviour.CHANNEL_ENTRY, BerthPositions.position(berthId),
-                1, tracking.spec().vesselType()));
-        log.info("{} declined {}'s escort ({}) -> charge refunded, fresh 1-tug CNP toward {}",
-                tugId, vesselId, reason, berthId);
+        // S16 (ADR-20): the shortfall goes through the ONE decision point. evaluate() asks the
+        // movement gate (this handler used to carry its own copy of the three weather queries,
+        // and treated "no reading yet" as safe), holds the ship if the weather forbids, and
+        // otherwise tenders for however many tugs R11 says are still missing - not the fixed
+        // "1" that was written here.
+        it.unige.portcommand.behaviours.MovementControl.evaluate(hm, vesselId);
+        log.info("{} declined {}'s escort ({}) -> charge refunded, shortfall re-evaluated",
+                tugId, vesselId, reason);
     }
 
     private static String text(JsonNode node, String field) {

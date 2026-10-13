@@ -44,6 +44,7 @@ public record TugRefuelCompleteEvent(long simTimeSeconds, int tugId) implements 
                             if (tug.status() == TugStatus.IDLE || tug.status() == TugStatus.REFUELING) {
                                 tug.refuelFull();
                                 tug.setStatus(TugStatus.IDLE);
+                                tug.announceAvailable(); // S16: a ship may be waiting for a tug
                             }
                         }
                     });

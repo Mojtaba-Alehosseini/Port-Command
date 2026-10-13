@@ -73,6 +73,24 @@ public final class PortStatusSnapshot {
     public static PortStatusEvent build(int gameDay, long nowSimMillis, Collection<VesselTracking> tracked,
                                         List<String> queuedVesselIdsInArrivalOrder,
                                         Function<VesselTracking, OptionalLong> dockedUntil) {
+        return build(gameDay, nowSimMillis, tracked, queuedVesselIdsInArrivalOrder, dockedUntil,
+                vessel -> vessel.weatherHeld() ? new WaitInfo(PortStatusEvent.Wait.WEATHER, List.of()) : WaitInfo.NONE,
+                berthId -> false);
+    }
+
+    /**
+     * S16 (ADR-20): as above, and each holder's row says WHY it is not moving, each berth whether
+     * it is closed. Both answers come from the agent-side glue, like {@code dockedUntil}: the
+     * tracking alone cannot tell a ship waiting for its tugs from one waiting for customs.
+     *
+     * @param waitOf      why a berth holder is not moving ({@link WaitInfo#NONE} if it is, or is docked)
+     * @param berthClosed whether a berth is closed (a flood) at {@code nowSimMillis}
+     */
+    public static PortStatusEvent build(int gameDay, long nowSimMillis, Collection<VesselTracking> tracked,
+                                        List<String> queuedVesselIdsInArrivalOrder,
+                                        Function<VesselTracking, OptionalLong> dockedUntil,
+                                        Function<VesselTracking, WaitInfo> waitOf,
+                                        java.util.function.Predicate<String> berthClosed) {
         Map<String, VesselTracking> byVesselId = new HashMap<>();
         Map<String, VesselTracking> holderByBerth = new HashMap<>();
         if (tracked != null) {
@@ -90,9 +108,12 @@ public final class PortStatusSnapshot {
         List<BerthRow> berths = new ArrayList<>(BERTH_IDS.size());
         for (String berthId : BERTH_IDS) {
             VesselTracking holder = holderByBerth.get(berthId);
-            berths.add(holder == null
-                    ? BerthRow.free(berthId)
-                    : occupied(berthId, holder, nowSimMillis, dockedUntil));
+            boolean closed = berthClosed != null && berthClosed.test(berthId);
+            if (holder == null) {
+                berths.add(closed ? BerthRow.closedFree(berthId) : BerthRow.free(berthId));
+            } else {
+                berths.add(occupied(berthId, holder, nowSimMillis, dockedUntil, waitOf, closed));
+            }
         }
 
         List<String> queued = new ArrayList<>();
@@ -128,13 +149,32 @@ public final class PortStatusSnapshot {
     }
 
     private static BerthRow occupied(String berthId, VesselTracking holder, long nowSimMillis,
-                                     Function<VesselTracking, OptionalLong> dockedUntil) {
+                                     Function<VesselTracking, OptionalLong> dockedUntil,
+                                     Function<VesselTracking, WaitInfo> waitOf, boolean closed) {
         OptionalLong until = dockedUntil == null ? OptionalLong.empty() : dockedUntil.apply(holder);
         Long untilSimMillis = until != null && until.isPresent() && until.getAsLong() > nowSimMillis
                 ? Long.valueOf(until.getAsLong())
                 : null;
+        WaitInfo wait = waitOf == null ? null : waitOf.apply(holder);
+        if (wait == null) {
+            wait = WaitInfo.NONE;
+        }
         return new BerthRow(berthId, holder.vesselId(), displayName(holder.vesselId(), holder),
-                holder.channel(), holder.stage(), untilSimMillis, holder.weatherHeld());
+                holder.channel(), holder.stage(), untilSimMillis, wait.waiting(), wait.ruleIds(), closed);
+    }
+
+    /**
+     * Why a berth holder is not moving, and the rule ids behind it (S16). Built by the agent-side
+     * glue ({@code MovementControl.waitOf}); see {@link PortStatusEvent.Wait} for the order.
+     */
+    public record WaitInfo(PortStatusEvent.Wait waiting, List<String> ruleIds) {
+
+        public static final WaitInfo NONE = new WaitInfo(PortStatusEvent.Wait.NONE, List.of());
+
+        public WaitInfo {
+            waiting = waiting == null ? PortStatusEvent.Wait.NONE : waiting;
+            ruleIds = ruleIds == null ? List.of() : List.copyOf(ruleIds);
+        }
     }
 
     /** The vessel's name where it has one, its id otherwise (also for an id nobody tracks). */

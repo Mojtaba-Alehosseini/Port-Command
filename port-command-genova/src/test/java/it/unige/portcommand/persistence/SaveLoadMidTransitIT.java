@@ -114,11 +114,12 @@ class SaveLoadMidTransitIT {
         // (HM tracking DOCKED) — and prove a save taken there persists a stage that MATCHES the
         // vessel's phase. Pre-fix the tracking never advanced, so this save carried
         // stage IN_TRANSIT against currentPhase DOCKED (the W35 lie in the day-5 autosave).
-        // Budget: ≤6.5 sim-hours in 15-min steps. The vessel docks in ~2 sim-min, but the
-        // ESCORT is real distance at real speed: worst tug route ≈ base(50,100) →
-        // pickup(700,200) → berth_1(400,150) ≈ 96 km ≈ 5.2 sim-h at 10 kn (TugMath 10 px/km),
-        // and the 8 h service window comfortably contains it — a 4 h budget did NOT (the
-        // first full-suite run failed exactly there with tug_3/tug_4 still en route).
+        // Budget: ≤6.5 sim-hours in 15-min steps. S16 (ADR-20): the ship does not move until
+        // BOTH restored tugs have reached it (about half a game hour at the S16 tug scale) and
+        // customs has cleared it (45 game minutes when the 20% routine inspection is drawn -
+        // and a restored inspection starts again); then the escorted channel leg to berth_1
+        // takes about a quarter of an hour. The cap is far above that on purpose: this loop
+        // proves the restored world gets there at all, not how fast.
         boolean settledDocked = false;
         for (int i = 0; i < 26 && !settledDocked; i++) {
             clock.advance(clock.simSecondsToWallMs(900L));
@@ -133,6 +134,23 @@ class SaveLoadMidTransitIT {
                 return phaseDocked && tracking != null
                         && tracking.stage() == it.unige.portcommand.harbourmaster.VesselTracking.Stage.DOCKED;
             }, 500);
+        }
+        // One wait in the restored flow is not shortened by the clock jumps above: a customs
+        // inspection (drawn one time in five for this cargo, and started again by the load)
+        // spends the wall time its 45 game minutes are worth - about ten real seconds at this
+        // pace. The world's own clock is running, so if the loop ran out first the ship is given
+        // that long to finish what the jumps could not hurry.
+        if (!settledDocked) {
+            settledDocked = waitUntil(() -> {
+                it.unige.portcommand.harbourmaster.VesselTracking tracking = hm.activeVessels().get("C001");
+                return tracking != null && tracking.stage()
+                        == it.unige.portcommand.harbourmaster.VesselTracking.Stage.DOCKED
+                        && session.directory().byName("vessel_c001")
+                                .filter(it.unige.portcommand.agents.BaseVesselAgent.class::isInstance)
+                                .map(a -> ((it.unige.portcommand.agents.BaseVesselAgent) a).flowPhase()
+                                        == it.unige.portcommand.agents.BaseVesselAgent.FlowPhase.DOCKED)
+                                .orElse(false);
+            }, 30_000);
         }
         assertTrue(settledDocked, "the restored vessel must dock AND the restored tug's "
                 + "escort_complete must advance HM tracking to DOCKED — vessel phase: "
@@ -152,10 +170,18 @@ class SaveLoadMidTransitIT {
         assertEquals(dockedDto.currentPhase(), dockedDto.stage(),
                 "the persisted stage must match the vessel's phase at save time (checkpoint-#6 F1)");
 
-        // --- Resume: remaining service (8 h from docking) + departure (1 min). ---
+        // --- Resume: remaining service (8 h from docking), the request to leave, the
+        // clearance, and the departure (1 min). S16: a ship leaves only when the HarbourMaster
+        // clears it, and the gate that clears it reads the weather - which is live and seeded
+        // here. So after the service window the clock is walked on an hour at a time until the
+        // ship has gone, within a one-game-day cap, instead of assuming the tenth hour is calm.
         clock.advance(clock.simSecondsToWallMs(10 * 3_600L));
         // Keyed to C001, not isEmpty(): the live Poisson spawner may add walk-ins meanwhile.
-        boolean departed = waitUntil(() -> !hm.activeVessels().containsKey("C001"), 20_000);
+        boolean departed = waitUntil(() -> !hm.activeVessels().containsKey("C001"), 5_000);
+        for (int hour = 0; hour < 24 && !departed; hour++) {
+            clock.advance(clock.simSecondsToWallMs(3_600L));
+            departed = waitUntil(() -> !hm.activeVessels().containsKey("C001"), 2_000);
+        }
         assertTrue(departed, "the restored vessel must complete docking + service and depart");
 
         // --- The heart of the task: each awarded tug charged EXACTLY once, ever. ---
@@ -188,10 +214,20 @@ class SaveLoadMidTransitIT {
                         .filter(e -> e.simTime() > savedSimMillis).toList();
         List<ExpenseEvent> postSaveExpense = hm.walletLedger().expenseHistory().stream()
                 .filter(e -> e.simTime() > savedSimMillis).toList();
+        // S16: the customs clearance fee is charged when customs ANSWERS, and an inspection
+        // (45 game minutes) can still be running at the save - so that one line may land on
+        // either side of it. What must hold is that it lands exactly once on the whole
+        // timeline: the restored pending check is re-sent, never re-charged.
         assertTrue(postSaveIncome.stream().noneMatch(e -> "C001".equals(e.vesselId()))
-                        && postSaveExpense.stream().noneMatch(e -> "C001".equals(e.vesselId())),
-                "completing the restored flow moves no further C001 money (fee at grant, tug at "
-                        + "award — both are in the saved balance already)");
+                        && postSaveExpense.stream()
+                                .filter(e -> !ExpenseRules.SOURCE_CUSTOMS.equals(e.source()))
+                                .noneMatch(e -> "C001".equals(e.vesselId())),
+                "completing the restored flow moves no further C001 money apart from the customs "
+                        + "fee (contract fee at grant, tug at award — both are in the saved balance)");
+        assertEquals(1, hm.walletLedger().expenseHistory().stream()
+                        .filter(e -> ExpenseRules.SOURCE_CUSTOMS.equals(e.source()))
+                        .filter(e -> "C001".equals(e.vesselId())).count(),
+                "one customs clearance fee for C001 on the whole timeline, save and load included");
         double expectedBalance = walletAtSave
                 + postSaveIncome.stream().mapToDouble(
                         it.unige.portcommand.harbourmaster.IncomeEvent::amount).sum()
@@ -260,7 +296,10 @@ class SaveLoadMidTransitIT {
 
         // --- A tanker walk-in deals through the REAL wire path and must QUEUE. ---
         it.unige.portcommand.ontology.VesselSpec tanker = new it.unige.portcommand.ontology.VesselSpec(
-                "WT5", "tanker", 11.0, 200.0, 60_000, "crude_oil", 0L);
+                "WT5", "tanker", 11.0, 200.0, 60_000, "liquid_bulk", 0L);
+        // S16: "liquid_bulk", a class the kernel knows. This fixture used to say "crude_oil",
+        // which no rule ever read while customs saw contracted vessels only; customs sees every
+        // granted ship now, and an unknown class is refused [R21] and the ship turned away.
         it.unige.portcommand.bootstrap.AgentRoster.spawnWalkIn(
                 boot.getSpawner(), tanker, clock, boot.getMarketHistoryArtifact(),
                 boot.getRandomSource(),
@@ -325,9 +364,9 @@ class SaveLoadMidTransitIT {
         // --- S7 (audit P3, the open-ended-assertion fix): drive it all the way to DOCKED.
         // ">= AWAITING_TUG" and "!= AWAITING_BERTH" above are entry conditions, satisfiable by
         // a vessel stuck in transit forever. The completion claim is DOCKED on BOTH sides —
-        // HM tracking and vessel phase. Budget mirrors the docking round-trip above: the
-        // tanker's escort is real distance at tug speed (~5.2 sim-h worst route), advanced in
-        // 15-sim-minute steps within a 6.5 sim-hour cap.
+        // HM tracking and vessel phase. Budget mirrors the docking round-trip above: tugs to
+        // the ship, customs, then the escorted leg - advanced in 15-sim-minute steps within a
+        // 6.5 sim-hour cap.
         boolean docked = false;
         for (int i = 0; i < 26 && !docked; i++) {
             clock.advance(clock.simSecondsToWallMs(900L));
@@ -342,6 +381,17 @@ class SaveLoadMidTransitIT {
                         .orElse(false);
                 return stageDocked && phaseDocked;
             }, 500);
+        }
+        if (!docked) { // the same wall-timed inspection as in the case above
+            docked = waitUntil(() -> {
+                var t = hm2.activeVessels().get("WT5");
+                return t != null && t.stage() == it.unige.portcommand.harbourmaster.VesselTracking.Stage.DOCKED
+                        && session.directory().byName("vessel_wt5")
+                                .filter(it.unige.portcommand.agents.BaseVesselAgent.class::isInstance)
+                                .map(a -> ((it.unige.portcommand.agents.BaseVesselAgent) a).flowPhase()
+                                        == it.unige.portcommand.agents.BaseVesselAgent.FlowPhase.DOCKED)
+                                .orElse(false);
+            }, 30_000);
         }
         assertTrue(docked, "the restored queued vessel must actually DOCK — tracking: "
                 + hm2.activeVessels().get("WT5") + ", phase: "

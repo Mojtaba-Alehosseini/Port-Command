@@ -209,6 +209,67 @@ class PortStatusSnapshotTest {
         assertFalse(row(status, "berth_2").weatherHeld());
     }
 
+    // ---- S16 (ADR-20): why a granted ship is not moving, and closed berths --------------------
+
+    @Test
+    void theRowCarriesTheReasonAShipIsWaitingAndTheRulesBehindIt() {
+        VesselTracking weather = vessel("C501", null, Channel.CONTRACTED, Stage.AWAITING_TUG, "berth_1");
+        VesselTracking customs = vessel("C502", null, Channel.CONTRACTED, Stage.AWAITING_TUG, "berth_2");
+        VesselTracking tugs = vessel("C503", null, Channel.CONTRACTED, Stage.AWAITING_TUG, "berth_3");
+        VesselTracking leaving = vessel("C504", null, Channel.CONTRACTED, Stage.DOCKED, "berth_4");
+        Function<VesselTracking, PortStatusSnapshot.WaitInfo> waitOf = tracked -> switch (tracked.vesselId()) {
+            case "C501" -> new PortStatusSnapshot.WaitInfo(PortStatusEvent.Wait.WEATHER, List.of("R15", "R19"));
+            case "C502" -> new PortStatusSnapshot.WaitInfo(PortStatusEvent.Wait.CUSTOMS, List.of("R22", "R24"));
+            case "C503" -> new PortStatusSnapshot.WaitInfo(PortStatusEvent.Wait.TUGS, List.of());
+            default -> new PortStatusSnapshot.WaitInfo(PortStatusEvent.Wait.DEPARTURE_WEATHER, List.of("R16"));
+        };
+
+        PortStatusEvent status = PortStatusSnapshot.build(DAY, NOW, List.of(weather, customs, tugs, leaving),
+                List.of(), NOBODY_DOCKED, waitOf, berthId -> false);
+
+        assertEquals(PortStatusEvent.Wait.WEATHER, row(status, "berth_1").waiting());
+        assertEquals(List.of("R15", "R19"), row(status, "berth_1").ruleIds());
+        assertTrue(row(status, "berth_1").weatherHeld(), "the pre-S16 flag still reads a weather hold");
+        assertEquals(PortStatusEvent.Wait.CUSTOMS, row(status, "berth_2").waiting());
+        assertEquals(List.of("R22", "R24"), row(status, "berth_2").ruleIds());
+        assertEquals(PortStatusEvent.Wait.TUGS, row(status, "berth_3").waiting());
+        assertEquals(List.of(), row(status, "berth_3").ruleIds());
+        assertEquals(PortStatusEvent.Wait.DEPARTURE_WEATHER, row(status, "berth_4").waiting());
+        assertFalse(row(status, "berth_4").weatherHeld(),
+                "a moored ship waiting to leave is not 'held' - it is at its berth");
+    }
+
+    @Test
+    void aShipThatIsNotWaitingSaysSo_andANullAnswerIsNotAnError() {
+        VesselTracking moving = vessel("C501", null, Channel.CONTRACTED, Stage.IN_TRANSIT, "berth_1");
+
+        PortStatusEvent status = PortStatusSnapshot.build(DAY, NOW, List.of(moving), List.of(), NOBODY_DOCKED,
+                tracked -> null, null);
+
+        assertEquals(PortStatusEvent.Wait.NONE, row(status, "berth_1").waiting());
+        assertEquals(List.of(), row(status, "berth_1").ruleIds());
+        assertFalse(row(status, "berth_1").closed());
+    }
+
+    @Test
+    void aClosedBerthIsMarkedWhetherOrNotAShipHoldsIt() {
+        VesselTracking waitingForIt = vessel("C501", null, Channel.CONTRACTED, Stage.AWAITING_TUG, "berth_1");
+
+        PortStatusEvent status = PortStatusSnapshot.build(DAY, NOW, List.of(waitingForIt), List.of(), NOBODY_DOCKED,
+                tracked -> new PortStatusSnapshot.WaitInfo(PortStatusEvent.Wait.BERTH_CLOSED, List.of()),
+                berthId -> "berth_1".equals(berthId) || "berth_3".equals(berthId));
+
+        assertTrue(row(status, "berth_1").closed());
+        assertEquals("C501", row(status, "berth_1").vesselId(), "a closed berth keeps the ship it was granted to");
+        assertEquals(PortStatusEvent.Wait.BERTH_CLOSED, row(status, "berth_1").waiting());
+        assertTrue(row(status, "berth_3").closed());
+        assertTrue(row(status, "berth_3").isFree(), "closed and unheld: no vessel, but not available either");
+        assertEquals(BerthRow.closedFree("berth_3"), row(status, "berth_3"));
+        assertFalse(row(status, "berth_2").closed());
+        assertNotEquals(BerthRow.free("berth_3"), row(status, "berth_3"),
+                "closing a berth changes the snapshot, so the Port table is republished");
+    }
+
     @Test
     void dockedUntilIsAskedOnlyAboutVesselsThatHoldABerth() {
         VesselTracking holder = vessel("C501", null, Channel.CONTRACTED, Stage.DOCKED, "berth_1");

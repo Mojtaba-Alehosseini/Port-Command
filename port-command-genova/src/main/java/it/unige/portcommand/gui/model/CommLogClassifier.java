@@ -223,9 +223,13 @@ public final class CommLogClassifier {
             return true;
         }
         String protocol = event.protocol();
-        if (WEATHER_ALERT_PROTOCOL.equals(protocol) || VESSEL_WEATHER_PROTOCOL.equals(protocol)) {
+        if (WEATHER_ALERT_PROTOCOL.equals(protocol)) {
             return true;
         }
+        // S16 (ADR-20): the vessel-order protocol is no longer weather BY ITSELF. It used to carry
+        // only weather_hold and weather_resume; it now carries every movement order a ship is
+        // sent (proceed_to_berth, cleared_to_depart, ...). The two weather ones are still caught
+        // just below, by their event name; an order to proceed is not a weather message.
         String contentEvent = text(content, "event");
         if (contentEvent != null && contentEvent.startsWith(WEATHER_EVENT_PREFIX)) {
             return true;

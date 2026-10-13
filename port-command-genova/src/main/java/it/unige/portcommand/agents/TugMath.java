@@ -19,8 +19,19 @@ import it.unige.portcommand.ontology.Position;
  */
 public final class TugMath {
 
-    /** Distance scale: 10 position pixels = 1&nbsp;km (demo value; defined ONLY here). */
-    public static final double PIXELS_PER_KM = 10.0;
+    /**
+     * Distance scale: 60 position pixels = 1&nbsp;km (defined ONLY here).
+     *
+     * <p>S16 (2026-10-13, ADR-20): was 10. At 10 the harbour was 65 km across: a tug needed about
+     * 176 game minutes to reach a ship at the channel entry and a whole escort job tied it up
+     * for some six game hours, so three two-tug ships inside one afternoon exhausted the fleet.
+     * At 60 it is 11 km: a tug reaches the ship in about 29 game minutes, the channel leg takes
+     * 9 to 15, and a job is over in about an hour. The owner chose the factor (x6). Every
+     * per-km constant was scaled with it ({@code TugAgent.FUEL_DECAY_PER_KM}, the roster's
+     * {@code fuelCostPerKm}), so a bid and the fuel a job burns are exactly what they were;
+     * only the time changed.
+     */
+    public static final double PIXELS_PER_KM = 60.0;
 
     /** 1 knot = 1.852&nbsp;km/h, exact (nautical mile ÷ 1000). */
     public static final double KNOT_TO_KMH = 1.852;

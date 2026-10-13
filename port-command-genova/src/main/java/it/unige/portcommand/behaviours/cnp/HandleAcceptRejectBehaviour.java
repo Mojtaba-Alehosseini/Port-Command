@@ -93,6 +93,17 @@ public final class HandleAcceptRejectBehaviour extends CyclicBehaviour {
             berth = pickup;
         }
 
+        // S16 (B3, ADR-20): whatever movement is still running stops HERE, before the new leg
+        // starts. A tug that was cancelled is on its way home with no job - so it may bid, and
+        // win. Its return leg used to keep running beside the new transit: two tickers moving
+        // one tug in opposite directions, and the return leg, on reaching the base, cleared the
+        // NEW job (or, cancelled on the base-to-pickup line, neither leg ever arrived and the
+        // tug stayed "en route" until its tank was empty).
+        jade.core.behaviours.Behaviour running = tug.activeMovement();
+        if (running != null) {
+            tug.removeBehaviour(running);
+            tug.setActiveMovement(null);
+        }
         tug.setCurrentJob(new TugJob(vesselId, berth, msg.getSender(), conversationId));
         tug.clearPendingBids(); // now busy — any other outstanding bids are moot
         tug.setPickupTarget(pickup); // task 22: persisted so a save mid-leg can resume it

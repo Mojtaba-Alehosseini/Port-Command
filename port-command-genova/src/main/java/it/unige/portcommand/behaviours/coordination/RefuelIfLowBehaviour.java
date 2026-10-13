@@ -48,6 +48,7 @@ public final class RefuelIfLowBehaviour extends TickerBehaviour {
                 TugAgent t = (TugAgent) myAgent;
                 t.refuelFull();
                 t.setStatus(TugStatus.IDLE);
+                t.announceAvailable(); // S16: a tug that refused "low_fuel" can serve again
                 log.info("{} refuelled to full", t.tugId());
             }
         });

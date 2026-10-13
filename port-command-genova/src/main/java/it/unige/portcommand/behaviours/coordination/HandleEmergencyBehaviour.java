@@ -54,13 +54,25 @@ public final class HandleEmergencyBehaviour extends CyclicBehaviour {
             return;
         }
 
+        JsonNode content = TerminalJson.readTreeOrNull(msg.getContent());
+        String event = msg.getPerformative() == ACLMessage.INFORM ? text(content, "event") : null;
+        if ("inspection_started".equals(event)) {
+            // S16 (C5, ADR-20): customs is INSPECTING the ship. The clearance is still pending -
+            // the conversation stays in the map - and the ship waits at the channel entry for it;
+            // the Port table says so, with the rules customs cited.
+            String inspected = hm.pendingCustomsChecks().get(msg.getConversationId());
+            if (inspected != null) {
+                String reason = text(content, "reason");
+                hm.movement().inspectionStarted(inspected, ruleIdsIn(reason));
+                log.info("{}: customs INSPECTION started ({})", inspected, reason);
+            }
+            return;
+        }
         String vesselId = hm.pendingCustomsChecks().remove(msg.getConversationId());
         if (vesselId == null) {
             log.warn("customs reply on untracked conversation {} — ignoring", msg.getConversationId());
             return;
         }
-        JsonNode content = TerminalJson.readTreeOrNull(msg.getContent());
-
         if (msg.getPerformative() == ACLMessage.CONFIRM) {
             log.info("{}: customs CLEARED ({})", vesselId, text(content, "ref"));
             // Task 20: the €100 customs_clearance trigger. Published here, AFTER the
@@ -71,18 +83,33 @@ public final class HandleEmergencyBehaviour extends CyclicBehaviour {
             // conversation map because the CONFIRM's own content carries none.
             hm.eventBus().publish(new CustomsClearedEvent(
                     vesselId, text(content, "ref"), hm.simClock().nowSimMillis()));
+            // S16 (C5): the clearance was what the ship was waiting for (or one of the things).
+            it.unige.portcommand.behaviours.MovementControl.onCustomsCleared(hm, vesselId);
             return;
         }
-        String event = text(content, "event");
         if ("flagged".equals(event)) {
             hm.activeVessels().computeIfPresent(vesselId, (id, t) -> t.withBlocked(true));
-            hm.eventBus().publish(new NotificationEvent(
-                    "Customs flagged " + vesselId + " (" + text(content, "reason") + ")",
-                    NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis()));
-            log.info("{}: customs FLAGGED ({}) -> BLOCKED", vesselId, text(content, "reason"));
+            log.info("{}: customs FLAGGED ({}) -> refused", vesselId, text(content, "reason"));
+            // S16 (C5): a ship customs refuses does not enter. Before S16 "blocked" was a flag
+            // nothing read - the ship had docked long before the reply arrived.
+            it.unige.portcommand.behaviours.MovementControl.onCustomsRefused(hm, vesselId,
+                    text(content, "reason"));
         } else {
             log.info("{}: customs {} (non-blocking)", vesselId, event);
+            it.unige.portcommand.behaviours.MovementControl.onCustomsCleared(hm, vesselId);
         }
+    }
+
+    /** The rule ids named in a customs rationale such as {@code inspected [R22,R24]}. */
+    private static java.util.List<String> ruleIdsIn(String reason) {
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        if (reason != null) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("R\\d+").matcher(reason);
+            while (m.find()) {
+                ids.add(m.group());
+            }
+        }
+        return ids;
     }
 
     private static String text(JsonNode node, String field) {
