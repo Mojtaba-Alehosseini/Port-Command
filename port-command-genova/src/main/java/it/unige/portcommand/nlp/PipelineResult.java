@@ -18,12 +18,24 @@ public sealed interface PipelineResult {
      *                  or {@code null} for an unaddressed turn. Surfaced so the HarbourMaster / ChatPanel
      *                  can route between concurrent Busy-Day walk-ins (UI tabs are task 19); the ACL
      *                  itself carries the conversation id, this is the resolved routing target.
+     * @param provenance which stage produced this result and with what confidence (S15) — what
+     *                   the chat shows as {@code (DCG)} / {@code (Rasa 0.97)}. Reporting only;
+     *                   never {@code null} ({@link ParseProvenance#UNKNOWN} when not stated).
      */
-    record Routed(ACLMessage msg, String addressee) implements PipelineResult {
+    record Routed(ACLMessage msg, String addressee, ParseProvenance provenance) implements PipelineResult {
 
-        /** An unaddressed routed turn (no vocative). */
+        public Routed {
+            provenance = provenance == null ? ParseProvenance.UNKNOWN : provenance;
+        }
+
+        /** An unaddressed routed turn (no vocative), source not stated. */
         public Routed(ACLMessage msg) {
-            this(msg, null);
+            this(msg, null, ParseProvenance.UNKNOWN);
+        }
+
+        /** A routed turn whose source is not stated (test doubles, pre-S15 callers). */
+        public Routed(ACLMessage msg, String addressee) {
+            this(msg, addressee, ParseProvenance.UNKNOWN);
         }
     }
 

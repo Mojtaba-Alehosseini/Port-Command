@@ -328,6 +328,89 @@ public final class GameStateBuilder {
     }
 
     /**
+     * S15 (2026-10-12): the opening {@link GameState} of a <b>Free play</b> game — the sandbox
+     * with no scenario, built in the same save shape {@link #fromScenario} produces so that
+     * {@code GameSession.startSandbox} can boot it through the task-22 load path (validate →
+     * teardown → rebuild). That path is the only one that can REPLACE a running world, and the
+     * only one that resets everything a new game must reset; {@code GameSession.startNewGame()}
+     * (spawn straight into a fresh container) can do neither, which is why the New Game dialog's
+     * Free play choice comes here instead.
+     *
+     * <p>Field by field, against {@link #fromScenario}:
+     * <ul>
+     *   <li><b>settings</b> — the classpath defaults (never {@code Settings.load()}: that is the
+     *       live record and would leak the previous world's applied block, the S9 rule
+     *       {@code mergedSettings} states) with the day length set to the clock's, so the
+     *       settings block and the clock agree from the first save on. No override: there is
+     *       no scenario to supply one.</li>
+     *   <li><b>clock</b> — sim instant 0, i.e. Day 1 00:00 (scenarios open at 08:00), which is
+     *       where {@code startNewGame()} starts too: the day's first contracted arrival is
+     *       still some sim-hours away.</li>
+     *   <li><b>wallet / reputation</b> — {@link AgentRoster#STARTING_WALLET} and
+     *       {@link AgentRoster#STARTING_REPUTATION}, the same constants the directly-spawned
+     *       sandbox feeds {@code HarbourMasterInitArgs}; no bankruptcy streak.</li>
+     *   <li><b>market history, policies</b> — empty: a new game inherits neither the previous
+     *       world's deal records nor its autopilot policies.</li>
+     *   <li><b>activeScenario</b> — {@code null}, which is what makes every later save of the run
+     *       a sandbox save ({@code GameSession.runtimeFor}); no fired ids yet, so the daily
+     *       contracted stream starts from day 1.</li>
+     *   <li><b>HarbourMaster</b> — an empty in-progress day, spawn counter 0 (walk-in ids start at
+     *       {@code WALKIN-1}) and name-pool offset {@code -1}, the "roll fresh at boot" sentinel:
+     *       the HarbourMaster draws the offset from {@code seed}, so two Free play games with
+     *       different seeds meet differently named vessels.</li>
+     *   <li><b>weather</b> — {@link AgentRoster#defaultWeather()}, the calm reading
+     *       {@code startNewGame()} boots under; <b>customs</b> — clearance sequence 1.</li>
+     *   <li><b>tugs</b> — the four, IDLE with a full tank and no position (a null position
+     *       restores to the tug's base, {@code TugAgent.restoreFrom}).</li>
+     *   <li><b>terminals</b> — both, with their four berths FREE. The occupancies are stated
+     *       rather than omitted on purpose: each {@code TerminalAgent} pushes what it restores to
+     *       the session-stable {@code PortStateArtifact}, which has no clear — so these four
+     *       FREE records are what erases the replaced world's bookings.</li>
+     *   <li><b>vessels</b> — none.</li>
+     * </ul>
+     *
+     * @param seed                  the game's master seed — recorded here, hence in every save of
+     *                              the run; any {@code long} is valid, {@code 0} included
+     * @param realSecondsPerGameDay the ×1 pace ({@code BootstrapConfig.realSecondsPerGameDay()},
+     *                              i.e. the default or an explicit {@code --day-length})
+     * @param savedAt               ISO-8601 wall instant (the audit field)
+     */
+    public static GameState freshSandbox(long seed, long realSecondsPerGameDay, String savedAt) {
+        List<TugStateDTO> tugs = new ArrayList<>();
+        for (int i = 1; i <= 4; i++) {
+            tugs.add(new TugStateDTO("tug_" + i, "IDLE", null, 1.0, null, null));
+        }
+        // The berth-to-terminal split is AgentRoster's (terminal_container manages berth_2,
+        // terminal_general the other three) — the same one fromScenario derives from the berth id.
+        List<TerminalStateDTO> terminals = List.of(
+                new TerminalStateDTO("terminal_container", List.of(BerthOccupancy.free("berth_2"))),
+                new TerminalStateDTO("terminal_general", List.of(
+                        BerthOccupancy.free("berth_1"),
+                        BerthOccupancy.free("berth_3"),
+                        BerthOccupancy.free("berth_4"))));
+        return new GameState(
+                SaveLoadManager.SCHEMA_VERSION,
+                savedAt,
+                seed,
+                Settings.classpathDefaults().withRealSecondsPerGameDay(realSecondsPerGameDay),
+                new GameState.SimClockState(0L, realSecondsPerGameDay),
+                AgentRoster.STARTING_WALLET,
+                (int) Math.round(AgentRoster.STARTING_REPUTATION),
+                0, 0,
+                List.of(), List.of(),
+                null,
+                List.of(),
+                new GameState.AgentsState(
+                        new it.unige.portcommand.persistence.dto.HarbourMasterStateDTO(
+                                List.of(), List.of(), new java.util.LinkedHashMap<>(),
+                                new java.util.LinkedHashMap<>(), 0, -1),
+                        new it.unige.portcommand.persistence.dto.WeatherStateDTO(
+                                AgentRoster.defaultWeather()),
+                        new it.unige.portcommand.persistence.dto.CustomsStateDTO(1),
+                        List.copyOf(tugs), terminals, List.of()));
+    }
+
+    /**
      * Load-side reconciliation (task 22): berth occupancy that references a vessel absent
      * from the restored set (dropped negotiation, grant-limbo drop) loads as FREE. Keeps
      * "a berth is never leaked to a ghost" true by construction.

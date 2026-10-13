@@ -195,7 +195,11 @@ public final class NLPPipeline {
             return crossTalk;
         }
         ACLMessage msg = FrameToAcl.build(frame, null, ctx.activeNegotiationId());
-        return new PipelineResult.Routed(msg, addressee == null ? null : String.valueOf(addressee));
+        // S15 (2026-10-12): every frame that reaches this line came out of the grammar — the first
+        // parse and both two-step re-parses return through here — so this one site stamps them all
+        // (DCG). The stamp is written after routing is decided and nothing reads it to decide.
+        return new PipelineResult.Routed(msg, addressee == null ? null : String.valueOf(addressee),
+                ParseProvenance.DCG);
     }
 
     /** Tokeniser for the hook-2 prefix probe only (stateless; the parse path owns its own). */
@@ -350,10 +354,12 @@ public final class NLPPipeline {
      * live false-bind in the wild set — the floor caps the 0.85–0.95 band, it cannot touch the
      * incorrigible &ge;0.98 cluster; the explicit Accept button and the DCG path are the safe
      * routes for those. Below this the turn
-     * falls to clarification — the player confirms via the explicit "Accept the current
-     * offer" button, one click for the game's only irreversible move. The DCG accept path
-     * ({@code routeFrame}) and the Accept button (a direct {@code PlayerCommandEvent}) both
-     * bypass Rasa entirely and are unaffected.
+     * falls to clarification — the player confirms with the Accept button, one click for the
+     * game's only irreversible move. S15 (2026-10-12): that button no longer publishes a
+     * {@code PlayerCommandEvent} of its own — it sends the literal {@code deal} through this
+     * pipeline, which the grammar parses ({@code accept_phrase --> [deal]}), so it takes the DCG
+     * accept path ({@code routeFrame}). That path never reaches Rasa and is unaffected by this
+     * floor.
      */
     private static final double BINDING_ACCEPT_MIN_CONFIDENCE = 0.95;
 
@@ -371,15 +377,21 @@ public final class NLPPipeline {
         if (r.confidence() < ROUTE_MIN_CONFIDENCE) {
             return clarification();
         }
+        // S15 (2026-10-12): the confidence Rasa reported for THIS parse, carried on every result
+        // routed below so the chat can show "(Rasa 0.97)" under the player's message. It is handed
+        // to nothing but the result records: the wire floor above and the accept floor below still
+        // read `r.confidence()` themselves, and the switch still decides on `intent` alone.
+        ParseProvenance source = ParseProvenance.rasa(r.confidence());
         return switch (intent) {
             case "propose_offer", "counter_offer" -> clarification();
             case "accept_deal" -> r.confidence() >= BINDING_ACCEPT_MIN_CONFIDENCE
-                    ? routed(ACLMessage.ACCEPT_PROPOSAL, entitiesContent(text, r, extracted), ctx)
+                    ? routed(ACLMessage.ACCEPT_PROPOSAL, entitiesContent(text, r, extracted), ctx, source)
                     : clarification();
-            case "reject_deal" -> routed(ACLMessage.REJECT_PROPOSAL, entitiesContent(text, r, extracted), ctx);
+            case "reject_deal" ->
+                    routed(ACLMessage.REJECT_PROPOSAL, entitiesContent(text, r, extracted), ctx, source);
             // An 11th performative beyond the committed 10 (report note, per session brief).
-            case "query_status" -> routed(ACLMessage.QUERY_REF, entitiesContent(text, r, extracted), ctx);
-            case "set_constraint" -> routed(ACLMessage.REQUEST, entitiesContent(text, r, extracted), ctx);
+            case "query_status" -> routed(ACLMessage.QUERY_REF, entitiesContent(text, r, extracted), ctx, source);
+            case "set_constraint" -> routed(ACLMessage.REQUEST, entitiesContent(text, r, extracted), ctx, source);
             // Audit D-06 (2026-07-27): carries an explicit marker instead of Rasa's entities (which
             // for a bare "help" is an empty object, indistinguishable from set_constraint's). The
             // GUI needs to tell a HELP request apart from a fleet-wide instruction so it can route
@@ -389,11 +401,11 @@ public final class NLPPipeline {
             // is not merely unhelpful but false: a help request is not a fleet command. Nothing
             // consumed the entities on this path (there was no consumer at all), so dropping them
             // costs nothing. Same shape as set_policy's dedicated content below.
-            case "request_help" -> routed(ACLMessage.REQUEST, helpContent(), ctx);
+            case "request_help" -> routed(ACLMessage.REQUEST, helpContent(), ctx, source);
             // Raw text handed onward to PolicyParser (task 10); Rasa's entities are ignored
             // on this path — PolicyParser owns its own regex-DSL parse of the original text.
-            case "set_policy" -> routed(ACLMessage.REQUEST, policyContent(text), ctx);
-            case "cancel_action" -> routeCancelAction(ctx);
+            case "set_policy" -> routed(ACLMessage.REQUEST, policyContent(text), ctx, source);
+            case "cancel_action" -> routeCancelAction(ctx, source);
             // 2026-07-27 (task 26, decision b): the 10th canonical intent. A ROUTING LABEL, like
             // set_policy — it never becomes an ACL, it is the classifier saying "none of the nine
             // port moves", which is exactly the clarification path. Written explicitly rather than
@@ -417,24 +429,31 @@ public final class NLPPipeline {
      *   <li>active negotiation, nothing currently on the table -&gt; plain withdrawal -&gt;
      *       INFORM</li>
      * </ul>
+     *
+     * @param source S15 (2026-10-12): the Rasa parse this cancel came from — reported on the
+     *               result, never consulted here (the three branches read only {@code ctx})
      */
-    private PipelineResult routeCancelAction(DialogueCtx ctx) {
+    private PipelineResult routeCancelAction(DialogueCtx ctx, ParseProvenance source) {
         if (ctx.activeNegotiationId() == null) {
-            return routed(ACLMessage.CANCEL, "{}", ctx);
+            return routed(ACLMessage.CANCEL, "{}", ctx, source);
         }
         if (ctx.hasStandingOffer()) {
-            return routed(ACLMessage.REJECT_PROPOSAL, "{}", ctx);
+            return routed(ACLMessage.REJECT_PROPOSAL, "{}", ctx, source);
         }
-        return routed(ACLMessage.INFORM, "{}", ctx);
+        return routed(ACLMessage.INFORM, "{}", ctx, source);
     }
 
-    private static PipelineResult routed(int performative, String content, DialogueCtx ctx) {
+    /** The Rasa path's one construction site. S15 (2026-10-12): {@code source} is required here
+     * on purpose — a Rasa route cannot be built without saying how confident Rasa was, so a new
+     * intent added to the switch above cannot silently come out untagged. */
+    private static PipelineResult routed(int performative, String content, DialogueCtx ctx,
+                                         ParseProvenance source) {
         ACLMessage msg = MessageFactory.create(performative);
         if (ctx.activeNegotiationId() != null) {
             msg.setConversationId(ctx.activeNegotiationId());
         }
         msg.setContent(content);
-        return new PipelineResult.Routed(msg);
+        return new PipelineResult.Routed(msg, null, source);
     }
 
     /**

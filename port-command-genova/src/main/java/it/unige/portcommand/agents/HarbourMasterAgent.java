@@ -3,6 +3,7 @@ package it.unige.portcommand.agents;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -22,7 +23,9 @@ import it.unige.portcommand.bootstrap.JadeAgentSpawner;
 import it.unige.portcommand.bootstrap.ServiceLocator;
 import it.unige.portcommand.commlog.Paraphraser;
 import it.unige.portcommand.gui.events.CommLogEvent;
+import it.unige.portcommand.gui.events.PortStatusEvent;
 import it.unige.portcommand.harbourmaster.CnpCoordinator;
+import it.unige.portcommand.harbourmaster.PortStatusSnapshot;
 import it.unige.portcommand.harbourmaster.RealCnpCoordinator;
 import it.unige.portcommand.harbourmaster.ReputationLedger;
 import it.unige.portcommand.harbourmaster.VesselTracking;
@@ -124,6 +127,12 @@ public final class HarbourMasterAgent extends PortCommandAgent
     /** Task 23: the scenario engine + daily contracted stream; null only in stub harnesses
      * that pass no {@code ScenarioRuntime}. Snapshot reads it for {@code firedEventIds}. */
     private it.unige.portcommand.scenario.ScriptedEventBehaviour scriptedEvents;
+    /**
+     * S15 (2026-10-12): the sim-minute tick publisher, held so {@link #requestPortStatus()} can
+     * reach it. Volatile because that method is called from the session's and the GUI's threads,
+     * while the field is written once, on this agent's thread, in {@link #onSetup()}.
+     */
+    private volatile SimClockTickPublisherBehaviour tickPublisher;
 
     @Override
     protected void registerServices() {
@@ -202,7 +211,12 @@ public final class HarbourMasterAgent extends PortCommandAgent
         addBehaviour(poissonSpawn);
         // Task 24: the single SimClockTickEvent publisher (Option B) — uncounted parent-package
         // behaviour, so the 51-catalogue is untouched.
-        addBehaviour(new SimClockTickPublisherBehaviour(this, simClock, eventBus));
+        // S15 (2026-10-12): the same tick now also publishes the read-only PortStatusEvent (the
+        // Port table's feed) whenever the snapshot from portStatus() changed. Still ONE behaviour
+        // in the uncounted package — it runs on this agent's thread, the only thread allowed to
+        // read the berth wait queue, so no second ticker and no change to the catalogue count.
+        this.tickPublisher = new SimClockTickPublisherBehaviour(this, simClock, eventBus, this::portStatus);
+        addBehaviour(tickPublisher);
         if (restore != null) {
             addBehaviour(new RestoreDispatchBehaviour(this));
         }
@@ -517,6 +531,101 @@ public final class HarbourMasterAgent extends PortCommandAgent
         return agentDirectory();
     }
 
+    // --- S15 (2026-10-12): the read-only port status behind the Port table ---
+
+    /**
+     * Who holds which berth and who is waiting for one, right now — the snapshot the Port table
+     * shows. The rules live in the pure {@link PortStatusSnapshot}; this method only gathers its
+     * inputs from this agent's own state.
+     *
+     * <p><b>Call on this agent's thread only</b> (in production: the tick publisher's
+     * {@code onSimTick}). The {@code BerthWaitQueue} is thread-confined by design and is read
+     * here without a lock. Every other thread asks through {@link #requestPortStatus()} and
+     * receives the answer as a {@link PortStatusEvent} on the bus.
+     *
+     * <p><b>Read-only reporting.</b> It mutates nothing, sends nothing, queries no rule and
+     * decides nothing: design rule 4 is untouched because no binding message can follow from
+     * it. The grant and release paths keep reading {@link #activeVessels()} themselves.
+     *
+     * <p>It exists because the {@code PortStateArtifact} hears of berths from the terminal, and
+     * a walk-in never sends the terminal a berth REQUEST (ADR-09) — so a berth held by a walk-in
+     * reads free there, and the wait queue is in no artifact or event at all.
+     */
+    public PortStatusEvent portStatus() {
+        long now = simClock.nowSimMillis();
+        List<String> queuedVesselIds = new ArrayList<>();
+        for (var waiting : berthWaitQueue.inArrivalOrder()) {
+            queuedVesselIds.add(waiting.vesselId());
+        }
+        return PortStatusSnapshot.build(SimClock.gameDayOf(now), now, activeVessels.values(),
+                queuedVesselIds, this::dockedUntil);
+    }
+
+    /**
+     * Asks for the port status to be published once more on the next tick, even if nothing
+     * changed since the last one. <b>Safe from any thread</b> — it only raises a flag on the tick
+     * publisher; the snapshot is still built and published on this agent's thread.
+     *
+     * <p>Needed because the status is published only when it changes and the bus has no replay:
+     * a window that subscribes after the world booted ({@code --scenario}/{@code --load}), or a
+     * freshly started game whose first tick beat the GUI's reset, would otherwise show an empty
+     * table until the next real change. Called before setup finished it is a harmless no-op —
+     * a new publisher's first tick always announces.
+     */
+    public void requestPortStatus() {
+        SimClockTickPublisherBehaviour publisher = tickPublisher;
+        if (publisher != null) {
+            publisher.requestStatus();
+        }
+    }
+
+    /**
+     * Until when a berth holder stays docked: the vessel agent's own DOCKED-phase deadline
+     * ({@code DockAndServiceBehaviour}'s service end), or empty when it is not docked yet, when
+     * its agent is gone, or when this harness has no {@code AgentDirectory} (stub ITs).
+     *
+     * <p>Asked of the VESSEL, not of the tracking, because {@link VesselTracking.Stage} cannot
+     * say "docked": a vessel that needs no tug (every ferry) emits no dock report and stays
+     * IN_TRANSIT here until its {@code service_complete} (see {@code advanceStage}'s javadoc),
+     * and the HarbourMaster holds no service-end time for anyone. The deadline is exact, covers
+     * both channels, and survives a load — it is persisted in {@code VesselStateDTO} and
+     * re-reported when the flow resumes.
+     *
+     * <p><b>The cross-thread read.</b> The two fields are volatile but are written as a PAIR
+     * ({@code BaseVesselAgent.reportPhase}: phase first, then deadline) on the vessel's thread —
+     * the same cross-thread read {@code GameStateBuilder.snapshotVessels} already makes. Two
+     * guards keep a torn pair off the table:
+     * <ol>
+     *   <li>the deadline is read on BOTH sides of the phase; if it moved in between, a
+     *       transition is in flight and the answer is "not known this tick";</li>
+     *   <li>the residue — DOCKED already written, deadline still the transit's, and both reads
+     *       landing inside that gap — carries a transit deadline, and a vessel docks only once
+     *       that deadline has passed. The clock is therefore read AFTER the phase and a deadline
+     *       that is not in the future is dropped.</li>
+     * </ol>
+     * A miss costs one tick: the next snapshot differs and is published.
+     */
+    private OptionalLong dockedUntil(VesselTracking tracking) {
+        it.unige.portcommand.persistence.AgentDirectory directory = agentDirectory();
+        if (directory == null || tracking.spec() == null) {
+            return OptionalLong.empty();
+        }
+        BaseVesselAgent vessel = directory.byName(AgentRoster.vesselLocalName(tracking.spec()))
+                .filter(BaseVesselAgent.class::isInstance)
+                .map(BaseVesselAgent.class::cast)
+                .orElse(null);
+        if (vessel == null) {
+            return OptionalLong.empty();
+        }
+        long deadlineBefore = vessel.phaseDeadlineSimMillis();
+        BaseVesselAgent.FlowPhase phase = vessel.flowPhase();
+        long deadlineAfter = vessel.phaseDeadlineSimMillis();
+        if (phase != BaseVesselAgent.FlowPhase.DOCKED || deadlineBefore != deadlineAfter) {
+            return OptionalLong.empty();
+        }
+        return deadlineBefore > simClock.nowSimMillis() ? OptionalLong.of(deadlineBefore) : OptionalLong.empty();
+    }
+
     /**
      * Lazily resolves + caches the CustomsAgent's AID (DF registration is async
      * across the fleet). Used only to ADDRESS the pre-clearance REQUEST
@@ -565,8 +674,11 @@ public final class HarbourMasterAgent extends PortCommandAgent
         while (it.hasNext()) {
             receivers.add(((AID) it.next()).getLocalName());
         }
+        // S15: ontology, protocol and content ride along for the comm log's Raw view and its
+        // filters. Plain getters, no side effects on the message, nothing decided from them.
         eventBus.publish(new CommLogEvent(simClock.nowSimMillis(), sender, receivers,
-                message.getPerformative(), Paraphraser.paraphrase(message, sender), message.getConversationId()));
+                message.getPerformative(), Paraphraser.paraphrase(message, sender), message.getConversationId(),
+                message.getOntology(), message.getProtocol(), message.getContent()));
     }
 
     /**

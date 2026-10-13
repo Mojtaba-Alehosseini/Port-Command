@@ -17,6 +17,7 @@ import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.behaviours.coordination.DispatchPlayerCommandBehaviour;
 import it.unige.portcommand.behaviours.coordination.HandleEmergencyBehaviour;
 import it.unige.portcommand.behaviours.coordination.HandleWeatherAlertBehaviour;
+import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
 import it.unige.portcommand.core.MessageFactory;
@@ -33,6 +34,8 @@ import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
 import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
+import it.unige.portcommand.gui.events.PortStatusEvent;
+import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.TugJobAwardedEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.harbourmaster.ExpenseEvent;
@@ -42,6 +45,7 @@ import it.unige.portcommand.harbourmaster.financial.IncomeRules;
 import it.unige.portcommand.ontology.Deal;
 import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.ontology.VesselSpec;
+import it.unige.portcommand.persistence.AgentDirectory;
 import it.unige.portcommand.prolog.PrologEngine;
 import it.unige.portcommand.prolog.PrologQueries;
 import it.unige.portcommand.prolog.TugBid;
@@ -88,6 +92,12 @@ class HarbourMasterAgentIT {
     // three further ticks land in it — but 2.5 s each at 3600, so none would, and the "never
     // climbs past one" assertion would pass without observing a single extra tick.
     private static final long END_OF_DAY_REAL_SECONDS_PER_DAY = 300L;
+    // S15 (2026-10-12): the port-status cases' own pace, pinned for the same reason. The status
+    // rides the HarbourMaster's sim-minute ticker, whose WALL period is ~208 ms here — but a full
+    // 60 s at the CNP-friendly pace above, where every wait below would time out before the
+    // first tick. Nothing in those cases bids in a Contract Net (no tug is registered), so they
+    // do not need the long CNP window.
+    private static final long PORT_STATUS_REAL_SECONDS_PER_DAY = 300L;
 
     @BeforeAll
     static void initEngine() {
@@ -229,6 +239,12 @@ class HarbourMasterAgentIT {
         for (CommLogEvent e : commLog) {
             assertNotNull(e.paraphrase(), "every CommLogEvent must carry a paraphrase: " + e);
             assertFalse(e.paraphrase().isBlank(), "every CommLogEvent's paraphrase must be non-blank: " + e);
+            // S15 (2026-10-12): the event also carries the message's raw FIPA slots for the comm
+            // log's Raw view. This IT is the only proof that HarbourMasterAgent.publishCommLog
+            // really copies them off the live message — sent AND received rows alike — rather
+            // than leaving the 6-arg constructor's nulls (this one, and the two marked below).
+            assertEquals(MessageFactory.ONTOLOGY, e.ontology(),
+                    "every CommLogEvent must carry the message's own ontology slot: " + e);
         }
 
         List<Integer> performatives = commLog.stream().map(CommLogEvent::performative).toList();
@@ -241,6 +257,11 @@ class HarbourMasterAgentIT {
         // the rule that decided the grant.
         assertEquals("Granted berth berth_1 (compatible [R7])", commLog.get(1).paraphrase(),
                 "the berth grant paraphrase names the berth and the rule that decided it");
+        // S15: the grant row's raw content is the ACCEPT's wire JSON, rule id included — what the
+        // Raw view shows and what the Rules filter can match without re-reading the paraphrase.
+        assertNotNull(commLog.get(1).content(), "the berth grant row must carry the message's content");
+        assertEquals("compatible [R7]", MAPPER.readTree(commLog.get(1).content()).path("reason").asText(),
+                "the berth grant row's raw content must be the ACCEPT's own JSON, reason and rule id intact");
         assertEquals(List.of("cl_terminal"), commLog.get(2).receivers(), "3rd event addresses the terminal puppet");
         // Order-insensitive on purpose (2026-07-17, task 20): the CFP's receiver list is built from
         // ServiceLocator's DF search, whose result order JADE does not guarantee — asserting
@@ -251,6 +272,11 @@ class HarbourMasterAgentIT {
         assertEquals(Set.of("cl_tug1", "cl_tug2"), Set.copyOf(commLog.get(3).receivers()),
                 "4th event is the ONE CFP broadcast to both tugs (not two separate sends)");
         assertEquals(2, commLog.get(3).receivers().size(), "both tugs, each exactly once");
+        // S15: the CFP row carries the protocol slot. A LITERAL on purpose (the S7 oracle rule
+        // this file follows): asking InitiateCNPBehaviour.CNP_PROTOCOL would prove wiring, not
+        // that the tag on the wire is the FIPA Contract Net's.
+        assertEquals("fipa-contract-net", commLog.get(3).protocol(),
+                "the CFP row must carry the Contract Net protocol tag");
 
         // Tail: two PROPOSE receipts then two award sends, tug order not guaranteed (two real
         // agent threads race to bid) but each award must reuse its own bid's performative.
@@ -1886,6 +1912,212 @@ class HarbourMasterAgentIT {
                 "departure must clear the escalation");
     }
 
+    // ==================== Port status (S15, the Port table's feed) ====================
+
+    /**
+     * S15 (2026-10-12): the read-only {@link PortStatusEvent} end to end on the real hub — the
+     * fixture of {@link #walkInDeal_queuesWhenOnlyBerthHeld_grantedOnDeparture}, watched through
+     * the status stream instead of the wire. It pins the three things the {@code PortStateArtifact}
+     * could never show: the wait queue, a berth held by a WALK-IN, and that a walk-in which is
+     * still negotiating is NOT an occupant even though its tracking already names the berth (the
+     * dialogue's advisory candidate — here the very berth the tanker holds, {@code pickBerth}'s
+     * all-held fallback, so two tracked vessels name berth_1 at once).
+     *
+     * <p>This harness has no {@code AgentDirectory} and its vessels are probes, so no row can
+     * carry an "until" time — asserted as such. That half needs a vessel agent to ask and is
+     * {@link #portStatus_readsADockedVesselsServiceEndFromTheVesselAgent}'s.
+     */
+    @Test
+    void portStatus_followsGrantQueueAndDeparture() throws Exception {
+        ServiceContract contract = new ServiceContract("CT-PS1", "TPS1", "tanker", "berth_1", 9000.0, 10, 0L);
+        HarbourMasterAgent hm = spawnHm(Map.of("CT-PS1", contract), PORT_STATUS_REAL_SECONDS_PER_DAY);
+        Probe contracted = spawnProbe("ps1_contracted", null);
+        Probe walkIn = spawnProbe("ps1_walkin", null);
+
+        // A new world announces itself on its first tick: the four berths, all free, no queue.
+        PortStatusEvent empty = awaitEvent(PortStatusEvent.class, e -> true, 10_000);
+        assertNotNull(empty, "the first tick must publish the port status");
+        assertEquals(List.of("berth_1", "berth_2", "berth_3", "berth_4"),
+                empty.berths().stream().map(PortStatusEvent.BerthRow::berthId).toList(),
+                "always the port's four berths, in id order");
+        assertTrue(empty.berths().stream().allMatch(PortStatusEvent.BerthRow::isFree),
+                "nothing has been granted yet: " + empty);
+        assertEquals(List.of(), empty.queued());
+        assertEquals(1, empty.gameDay());
+
+        contracted.outbox.put(contractRequest(hm, "CT-PS1",
+                ScenarioVessels.contractedSpec(contract, 0L), "ps1_contracted"));
+        assertNotNull(pollUntil(contracted.inbox,
+                        m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "fixture: the contracted tanker must be granted");
+
+        PortStatusEvent granted = awaitEvent(PortStatusEvent.class,
+                e -> "TPS1".equals(berthRow(e, "berth_1").vesselId()), 10_000);
+        assertNotNull(granted, "the contracted grant must reach the port status within a tick");
+        PortStatusEvent.BerthRow holder = berthRow(granted, "berth_1");
+        assertEquals("TPS1", holder.vesselName(),
+                "a contracted vessel carries no display name, so its id stands in");
+        assertEquals(VesselTracking.Channel.CONTRACTED, holder.channel());
+        assertEquals(VesselTracking.Stage.AWAITING_TUG, holder.stage(),
+                "an 80,000 t tanker needs an escort and no tug is registered here, so it waits for one");
+        assertNull(holder.untilSimMillis(), "no vessel agent to ask in this harness, so no 'until'");
+        assertFalse(holder.weatherHeld());
+        assertEquals(3, granted.berths().stream().filter(PortStatusEvent.BerthRow::isFree).count(),
+                "the other three berths stay free: " + granted);
+        assertEquals(List.of(), granted.queued());
+
+        // The walk-in's ONLY compatible berth is the held one, so pickBerth's all-held fallback
+        // makes berth_1 its dialogue candidate: from here two tracked vessels name berth_1.
+        VesselSpec walkInSpec = new VesselSpec("WPS1", "tanker", 11.0, 200.0, 60000, "crude_oil", 0L);
+        walkIn.outbox.put(openingOffer(hm, walkInSpec, 6000.0, 8, "nego-WPS1"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class,
+                e -> "nego-WPS1".equals(e.dialogueId()), 10_000), "fixture: the dialogue must open");
+        assertNotNull(pollTracking(hm, "WPS1", t -> t.stage() == VesselTracking.Stage.NEGOTIATING
+                        && "berth_1".equals(t.assignedBerth()), 10_000),
+                "fixture: the negotiating walk-in's tracking must name berth_1, its advisory candidate");
+
+        // A snapshot taken NOW, while it negotiates. An unchanged port publishes nothing on its
+        // own — which is the point — so the request is what gives this step something to inspect.
+        int beforeRequest = portStatuses().size();
+        hm.requestPortStatus();
+        assertTrue(pollUntilTrue(() -> portStatuses().size() > beforeRequest, 10_000),
+                "the requested snapshot must be published on the next tick");
+        List<PortStatusEvent> duringNegotiation = portStatuses();
+        PortStatusEvent whileNegotiating = duringNegotiation.get(duringNegotiation.size() - 1);
+        assertEquals("TPS1", berthRow(whileNegotiating, "berth_1").vesselId(),
+                "an advisory candidate berth is not a grant: the tanker still holds berth_1");
+        assertEquals(List.of(), whileNegotiating.queued(), "a vessel still negotiating is not waiting for a berth");
+
+        walkIn.outbox.put(dealConfirmed(hm, 6100.0, 8, "nego-WPS1"));
+        PortStatusEvent queued = awaitEvent(PortStatusEvent.class, e -> e.queued().contains("WPS1"), 10_000);
+        assertNotNull(queued, "after deal_confirmed the walk-in must appear in the queue");
+        assertEquals(List.of("WPS1"), queued.queued(),
+                "queued by display name — the id, for a vessel that has none");
+        assertEquals(1, queued.queuedCount());
+        assertEquals("TPS1", berthRow(queued, "berth_1").vesselId(),
+                "the holder keeps its berth while the walk-in waits");
+
+        // Up to here the walk-in must never have been shown as an occupant — not while it
+        // negotiated with berth_1 as its candidate, and not while it queued.
+        for (PortStatusEvent status : portStatuses()) {
+            assertTrue(status.berths().stream().noneMatch(r -> "WPS1".equals(r.vesselId())),
+                    "a vessel without a grant must never occupy a berth row: " + status);
+        }
+
+        ACLMessage departed = MessageFactory.create(ACLMessage.INFORM);
+        departed.addReceiver(hm.getAID());
+        departed.setContent(TerminalJson.write(Map.of("intent", "departed", "vessel_id", "TPS1")));
+        contracted.outbox.put(departed);
+
+        PortStatusEvent released = awaitEvent(PortStatusEvent.class,
+                e -> "WPS1".equals(berthRow(e, "berth_1").vesselId()), 10_000);
+        assertNotNull(released, "the departure must hand berth_1 to the queued walk-in in the port status");
+        PortStatusEvent.BerthRow newHolder = berthRow(released, "berth_1");
+        assertEquals(VesselTracking.Channel.WALK_IN, newHolder.channel(),
+                "a berth held by a WALK-IN is shown as held — the artifact would call it free");
+        assertEquals("WPS1", newHolder.vesselName());
+        assertEquals(VesselTracking.Stage.AWAITING_TUG, newHolder.stage());
+        assertNull(newHolder.untilSimMillis());
+        assertEquals(List.of(), released.queued(), "the queue is empty once the grant is released");
+        assertTrue(released.berths().stream().noneMatch(r -> "TPS1".equals(r.vesselId())),
+                "the departed tanker is gone from every row: " + released);
+        // The status reports what really happened on the wire, not a guess ahead of it.
+        assertNotNull(pollUntil(walkIn.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "the released grant shown in the status must really have been sent to the vessel");
+    }
+
+    /**
+     * S15 (2026-10-12): publish-when-changed, and the one way round it. A quiet port must add
+     * nothing to the bus however often the sim-minute ticker fires (a per-tick stream would be
+     * ~5 Hz of identical events); {@code requestPortStatus()} must force exactly ONE re-announce,
+     * which is what a window opened after the world booted relies on — the bus has no replay.
+     *
+     * <p>"The ticker fired" is observed, not assumed from the wall clock: each tick is counted
+     * by the {@code SimClockTickEvent} its clock half publishes ({@link #awaitFurtherClockTicks}),
+     * so the silence asserted here is silence across ticks that demonstrably ran.
+     */
+    @Test
+    void portStatus_isSilentWhileNothingChanges_andAnswersARequest() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), PORT_STATUS_REAL_SECONDS_PER_DAY);
+
+        assertNotNull(awaitEvent(PortStatusEvent.class, e -> true, 10_000),
+                "a new world's first tick must announce the port");
+
+        assertTrue(awaitFurtherClockTicks(5, 10_000), "fixture: the sim-minute ticker must keep firing");
+        assertEquals(1, portStatuses().size(),
+                "an unchanged port must stay silent however often the ticker fires: " + portStatuses());
+
+        hm.requestPortStatus();
+        assertTrue(pollUntilTrue(() -> portStatuses().size() >= 2, 10_000),
+                "a request must be answered on the next tick, with the clock standing still");
+
+        assertTrue(awaitFurtherClockTicks(5, 10_000), "fixture: the ticker must keep firing after the request");
+        List<PortStatusEvent> statuses = portStatuses();
+        assertEquals(2, statuses.size(), "one request, exactly one re-announce: " + statuses);
+        assertEquals(statuses.get(0), statuses.get(1), "the re-announce repeats the unchanged snapshot");
+    }
+
+    /**
+     * S15 (2026-10-12): where a row's "until" comes from. The hub's own stage cannot say "docked"
+     * for a vessel that needs no tug — a ferry sends no dock report and stays IN_TRANSIT in the
+     * tracking until its {@code service_complete} — so the service end is read off the VESSEL
+     * agent's own flow phase, found through the session's {@code AgentDirectory} under the
+     * deterministic local name. The two cases above run without a directory (every other case in
+     * this file does); this one threads one in, the way {@code AgentRoster} does in a real game.
+     *
+     * <p>The vessel is an unbound {@link ContractedVesselAgent}: the hub reads nothing of it but
+     * the two fields {@code reportPhase} writes, so it needs no container — and the test, not a
+     * sim-time flow, decides exactly when it "docks".
+     */
+    @Test
+    void portStatus_readsADockedVesselsServiceEndFromTheVesselAgent() throws Exception {
+        ServiceContract contract = new ServiceContract("CT-PS3", "FPS3", "ferry", "berth_4", 2500.0, 4, 0L);
+        VesselSpec spec = ScenarioVessels.contractedSpec(contract, 0L);
+        assertEquals(0, PrologQueries.tugsRequired(spec.vesselType(), spec.tonnage(), spec.length()),
+                "fixture sanity: a ferry takes no tug, so the hub never hears it dock (R11)");
+        AgentDirectory directory = new AgentDirectory();
+        ContractedVesselAgent ferry = new ContractedVesselAgent();
+        directory.register(AgentRoster.vesselLocalName(spec), ferry);
+        HarbourMasterAgent hm = spawnHmWithDirectory(Map.of("CT-PS3", contract),
+                PORT_STATUS_REAL_SECONDS_PER_DAY, directory);
+        Probe contracted = spawnProbe("ps3_contracted", null);
+
+        contracted.outbox.put(contractRequest(hm, "CT-PS3", spec, "ps3_contracted"));
+        assertNotNull(pollUntil(contracted.inbox,
+                        m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "fixture: the contracted ferry must be granted");
+
+        PortStatusEvent arriving = awaitEvent(PortStatusEvent.class,
+                e -> "FPS3".equals(berthRow(e, "berth_4").vesselId()), 10_000);
+        assertNotNull(arriving, "the granted ferry must hold berth_4 in the port status");
+        assertEquals(VesselTracking.Stage.IN_TRANSIT, berthRow(arriving, "berth_4").stage());
+        assertNull(berthRow(arriving, "berth_4").untilSimMillis(),
+                "the vessel has reported no DOCKED phase yet, so there is no 'until' to show");
+
+        // 04:00 — the four contracted hours, counted from a grant at midnight (sim time stands at 0).
+        long serviceEnd = 14_400_000L;
+        ferry.reportPhase(BaseVesselAgent.FlowPhase.DOCKED, serviceEnd);
+
+        PortStatusEvent docked = awaitEvent(PortStatusEvent.class,
+                e -> berthRow(e, "berth_4").untilSimMillis() != null, 10_000);
+        assertNotNull(docked, "the vessel's DOCKED phase must surface as the row's 'until' within a tick");
+        assertEquals(Long.valueOf(serviceEnd), berthRow(docked, "berth_4").untilSimMillis(),
+                "'until' is the vessel's own service-end deadline, exactly");
+        assertEquals(VesselTracking.Stage.IN_TRANSIT, berthRow(docked, "berth_4").stage(),
+                "the hub's stage still says IN_TRANSIT — which is exactly why the vessel is asked");
+
+        // Service over: the deadline now belongs to another phase and must leave the row.
+        int beforeDeparting = portStatuses().size();
+        ferry.reportPhase(BaseVesselAgent.FlowPhase.DEPARTING, serviceEnd + 60_000L);
+        assertTrue(pollUntilTrue(() -> portStatuses().size() > beforeDeparting, 10_000),
+                "the phase change must republish the port status");
+        List<PortStatusEvent> all = portStatuses();
+        PortStatusEvent leaving = all.get(all.size() - 1);
+        assertNull(berthRow(leaving, "berth_4").untilSimMillis(), "only a DOCKED phase gives an 'until'");
+        assertEquals("FPS3", berthRow(leaving, "berth_4").vesselId(),
+                "the vessel keeps the berth until it reports departed");
+    }
+
     // ==================== Customs (task-09's deferred note) ====================
 
     @Test
@@ -2317,5 +2549,70 @@ class HarbourMasterAgentIT {
             }
             Thread.sleep(20);
         }
+    }
+
+    // ---- S15 (2026-10-12): port-status helpers ----
+
+    /**
+     * {@link #spawnHm} plus the session's {@link AgentDirectory}, appended AFTER the self-reference
+     * future: the directory is found by type, never by index ({@code optionalArgOfType}), exactly
+     * as {@code AgentRoster} threads it in a real game. Only the port status's "until" lookup needs
+     * it here; every other case keeps the directory-less harness.
+     */
+    private HarbourMasterAgent spawnHmWithDirectory(Map<String, ServiceContract> contracts,
+                                                    long realSecondsPerGameDay, AgentDirectory directory)
+            throws Exception {
+        boot = new JadeBootstrap();
+        boot.start(new BootstrapConfig(TEST_PORT, false, "realtime", realSecondsPerGameDay));
+        CompletableFuture<HarbourMasterAgent> selfRef = new CompletableFuture<>();
+        boot.getSpawner().spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
+                new HarbourMasterInitArgs(10_000.0, 70.0),
+                boot.getSimClock(), boot.getRandomSource(), boot.getEventBus(),
+                contracts, boot.getSpawner(), boot.getMarketHistoryArtifact(), selfRef, directory});
+        return selfRef.get(10, TimeUnit.SECONDS);
+    }
+
+    /** Every {@link PortStatusEvent} published so far, in publish order. */
+    private List<PortStatusEvent> portStatuses() {
+        return EventBusProbe.published(boot.getEventBus()).stream()
+                .filter(PortStatusEvent.class::isInstance)
+                .map(PortStatusEvent.class::cast)
+                .toList();
+    }
+
+    /** The row of {@code berthId}; every status carries all four berths, so a miss is a failure. */
+    private static PortStatusEvent.BerthRow berthRow(PortStatusEvent status, String berthId) {
+        return status.berths().stream()
+                .filter(row -> berthId.equals(row.berthId()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no row for " + berthId + " in " + status));
+    }
+
+    private long clockTicks() {
+        return EventBusProbe.published(boot.getEventBus()).stream()
+                .filter(SimClockTickEvent.class::isInstance)
+                .count();
+    }
+
+    /**
+     * Bounded wait until {@code count} FURTHER sim-minute ticks have fired, each one proven by the
+     * {@link SimClockTickEvent} it publishes. This harness runs no wall-clock advancer, so sim
+     * time stands still and the tick publisher's clock half — which is silent while the clock is
+     * — would publish nothing to count; nudging the clock by the poll interval on every poll (the
+     * pace a real advancer would keep) gives each tick a new instant to report. A tick's port
+     * status half runs right after its clock half, so once {@code count} further ticks are
+     * visible at least {@code count - 1} full status checks have completed.
+     */
+    private boolean awaitFurtherClockTicks(int count, long millis) throws InterruptedException {
+        long target = clockTicks() + count;
+        long deadline = System.currentTimeMillis() + millis;
+        while (System.currentTimeMillis() < deadline) {
+            boot.getSimClock().advance(20);
+            if (clockTicks() >= target) {
+                return true;
+            }
+            Thread.sleep(20); // bounded poll, the pattern of pollTracking/awaitEvent above
+        }
+        return false;
     }
 }

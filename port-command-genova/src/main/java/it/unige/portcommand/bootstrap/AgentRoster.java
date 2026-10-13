@@ -129,8 +129,8 @@ public final class AgentRoster {
             String id = "tug_" + i;
             // args[1]=portState, args[2]=simClock injected (not the serializable init record) —
             // same channel as the terminals, so the tug can publish position + drive sim-time motion.
-            // Base position from the canonical TugBasePositions table (task 18's map seeds idle
-            // dots from the same table — one source of truth, no duplicated coordinates).
+            // Base position from the canonical TugBasePositions table (one source of truth for
+            // the four bases — no duplicated coordinates).
             spawner.spawn(id, TugAgent.class, new Object[] {
                     new TugInitArgs(id, TugBasePositions.position(id), 350.0, 2.0, 12.0, 1.0),
                     portState, simClock, directory});
@@ -284,10 +284,22 @@ public final class AgentRoster {
         return "vessel_" + spec.vesselId().toLowerCase().replaceAll("[^a-z0-9_]", "_");
     }
 
+    /**
+     * The calm reading every free-play game opens on. Public since S15 (2026-10-12):
+     * {@code GameStateBuilder.freshSandbox} writes this SAME snapshot into the opening
+     * {@code GameState} of a Free play game, so the sandbox booted through the load path
+     * ({@code GameSession.startSandbox}) starts under exactly the weather the directly-spawned
+     * one ({@code GameSession.startNewGame}) does — one source of truth, no second copy of the
+     * four numbers to drift. A fresh record per call; {@code WeatherSnapshot} is immutable.
+     */
+    public static WeatherSnapshot defaultWeather() {
+        return new WeatherSnapshot(18, "good", 0.5, "sunny", 0L);
+    }
+
     /** Calm starting weather + the default Markov matrix, no scripted overrides. */
     private static WeatherInitArgs defaultWeatherInit() {
         return new WeatherInitArgs(
-                new WeatherSnapshot(18, "good", 0.5, "sunny", 0L),
+                defaultWeather(),
                 TransitionMatrix.defaults(),
                 List.of());
     }

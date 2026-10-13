@@ -6,6 +6,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -13,6 +14,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiPredicate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -375,5 +377,139 @@ class NLPPipelineTest {
 
         assertFalse(future.isDone(), "processChatInput must return before the slow Rasa call finishes");
         future.join();
+    }
+
+    // --- S15 (2026-10-12): a routed result says which stage produced it -------------------------
+    // Reporting only — the chat shows it as "(DCG)" / "(Rasa 0.97)" under the player's message.
+    // Every routing assertion above is unchanged; these add what the result now carries.
+
+    private static String rasaReply(String intent, double confidence) {
+        return "{\"intent\": {\"name\": \"" + intent + "\", \"confidence\": " + confidence + "}, \"entities\": []}";
+    }
+
+    @Test
+    void aDcgRouteCarriesDcgProvenance() throws IOException {
+        AtomicInteger rasaCalls = new AtomicInteger();
+        RasaBridge rasa = rasaAgainst(ex -> {
+            rasaCalls.incrementAndGet();
+            respond(ex, 200, rasaReply("reject_deal", 0.99));
+        });
+        DCGParser dcg = (text, ctx) -> Optional.of(new Frame("commerce_sell", Map.of(Frame.MOVE, "accept")));
+
+        PipelineResult result = await(pipeline(rasa, dcg, (f, t) -> true).processChatInput("deal", DialogueCtx.NONE));
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result);
+        assertEquals(ACLMessage.ACCEPT_PROPOSAL, routed.msg().getPerformative());
+        assertEquals(ParseProvenance.DCG, routed.provenance());
+        assertEquals(ParseProvenance.Stage.DCG, routed.provenance().stage());
+        assertTrue(Double.isNaN(routed.provenance().confidence()),
+                "a grammar parses or it does not — there is no confidence to report");
+        assertEquals(0, rasaCalls.get(), "and Rasa was never asked, so no Rasa number can leak in");
+    }
+
+    @Test
+    void aDcgRouteKeepsItsAddresseeAlongsideItsProvenance() throws IOException {
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200, rasaReply("reject_deal", 0.99)));
+        // A slot-less vocative ("Carthago: deal"): routes across tabs, addressee surfaced.
+        DCGParser dcg = (text, ctx) -> Optional.of(
+                new Frame("commerce_sell", Map.of(Frame.MOVE, "accept", "addressee", "T001")));
+
+        PipelineResult result = await(pipeline(rasa, dcg, (f, t) -> true)
+                .processChatInput("Carthago: deal", DialogueCtx.NONE));
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result);
+        assertEquals("T001", routed.addressee(), "the third component must not displace the second");
+        assertEquals(ParseProvenance.DCG, routed.provenance());
+    }
+
+    @Test
+    void aRasaRouteCarriesItsRealConfidence() throws IOException {
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200, rasaReply("reject_deal", 0.97)));
+
+        PipelineResult result = await(pipeline(rasa).processChatInput("not for me", DialogueCtx.NONE));
+
+        PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result);
+        assertEquals(ACLMessage.REJECT_PROPOSAL, routed.msg().getPerformative());
+        assertEquals(ParseProvenance.Stage.RASA, routed.provenance().stage());
+        assertEquals(0.97, routed.provenance().confidence(),
+                "the number Rasa reported for THIS parse, exactly — not a floor, not a constant");
+        assertEquals(ParseProvenance.rasa(0.97), routed.provenance());
+    }
+
+    @Test
+    void everyIntentRasaCanRouteCarriesTheConfidenceOfItsOwnParse() throws IOException {
+        // One server, one pipeline; the reply changes per turn so each route must report the
+        // confidence of its own parse (a value remembered from an earlier turn would show here).
+        AtomicReference<String> reply = new AtomicReference<>(rasaReply("out_of_scope", 0.99));
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200, reply.get()));
+        NLPPipeline pipeline = pipeline(rasa);
+        Map<String, Double> turns = new LinkedHashMap<>();
+        turns.put("accept_deal", 0.9997);    // the measured "so?" — above the 0.95 accept floor
+        turns.put("reject_deal", 0.86);      // just above the 0.85 wire floor
+        turns.put("query_status", 0.9);
+        turns.put("set_constraint", 0.93);
+        turns.put("request_help", 0.88);
+        turns.put("set_policy", 0.91);
+        turns.put("cancel_action", 0.96);
+
+        for (Map.Entry<String, Double> turn : turns.entrySet()) {
+            reply.set(rasaReply(turn.getKey(), turn.getValue()));
+
+            PipelineResult result = await(pipeline.processChatInput("anything the grammar misses", DialogueCtx.NONE));
+
+            PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class, result, turn.getKey());
+            assertEquals(ParseProvenance.rasa(turn.getValue()), routed.provenance(), turn.getKey());
+            assertEquals(null, routed.addressee(), "a Rasa route is never addressed: " + turn.getKey());
+        }
+    }
+
+    @Test
+    void aRasaCancelRouteCarriesItsConfidenceToo() throws IOException {
+        // cancel_action takes its own three-way branch on the dialogue context; each branch must
+        // hand the parse's confidence on, not just the first.
+        AtomicReference<String> reply = new AtomicReference<>(rasaReply("cancel_action", 0.9));
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200, reply.get()));
+        NLPPipeline pipeline = pipeline(rasa);
+
+        reply.set(rasaReply("cancel_action", 0.91));
+        PipelineResult.Routed cancel = assertInstanceOf(PipelineResult.Routed.class,
+                await(pipeline.processChatInput("cancel the tug", DialogueCtx.NONE)));
+        assertEquals(ACLMessage.CANCEL, cancel.msg().getPerformative());
+        assertEquals(ParseProvenance.rasa(0.91), cancel.provenance());
+
+        reply.set(rasaReply("cancel_action", 0.89));
+        Offer standingOffer = new Offer(2000, 5, "berth_3", "vessel_1", "harbour_master", 0L);
+        PipelineResult.Routed withdrawOffer = assertInstanceOf(PipelineResult.Routed.class,
+                await(pipeline.processChatInput("never mind", new DialogueCtx("conv-1", standingOffer, null))));
+        assertEquals(ACLMessage.REJECT_PROPOSAL, withdrawOffer.msg().getPerformative());
+        assertEquals(ParseProvenance.rasa(0.89), withdrawOffer.provenance());
+
+        reply.set(rasaReply("cancel_action", 0.87));
+        PipelineResult.Routed plainWithdrawal = assertInstanceOf(PipelineResult.Routed.class,
+                await(pipeline.processChatInput("never mind", new DialogueCtx("conv-1", null, null))));
+        assertEquals(ACLMessage.INFORM, plainWithdrawal.msg().getPerformative());
+        assertEquals(ParseProvenance.rasa(0.87), plainWithdrawal.provenance());
+    }
+
+    @Test
+    void carryingTheConfidenceDoesNotMoveEitherFloor() throws IOException {
+        // The provenance is built from the same number the floors read; it must not become a
+        // second way through them. 0.949 accept and 0.849 reject still clarify, and a clarified
+        // turn is not a routed one — it has nothing to tag.
+        AtomicReference<String> reply = new AtomicReference<>(rasaReply("accept_deal", 0.949));
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200, reply.get()));
+        NLPPipeline pipeline = pipeline(rasa);
+
+        assertInstanceOf(PipelineResult.NeedsClarification.class,
+                await(pipeline.processChatInput("so?", DialogueCtx.NONE)));
+
+        reply.set(rasaReply("reject_deal", 0.849));
+        assertInstanceOf(PipelineResult.NeedsClarification.class,
+                await(pipeline.processChatInput("hmm", DialogueCtx.NONE)));
+
+        reply.set(rasaReply("propose_offer", 0.99));
+        assertInstanceOf(PipelineResult.NeedsClarification.class,
+                await(pipeline.processChatInput("2000 for 5 hours", DialogueCtx.NONE)),
+                "Rasa never routes an offer, however sure it is");
     }
 }

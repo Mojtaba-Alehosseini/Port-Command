@@ -1,0 +1,35 @@
+// One plain-English line per rule of the 30-rule Prolog kernel (S15, 2026-10-12). Derived from
+// references.md ("Encodes" / "Value" columns) and the "% RULE Rn:" headers in prolog/rules_*.pl.
+// RuleCatalogueTest pins ids, modules and predicates to the kernel. One sentence, <= 110 chars.
+[
+ {"id":"R1","module":"rules_compatibility","predicate":"loa_fit/2","text":"The vessel must not be longer than the berth's maximum length."},
+ {"id":"R2","module":"rules_compatibility","predicate":"draft_fit/2","text":"The vessel's draft must not be deeper than the berth's maximum draft."},
+ {"id":"R3","module":"rules_compatibility","predicate":"beam_fit/2","text":"The beam (width) of the vessel's type must not exceed the berth's maximum beam."},
+ {"id":"R4","module":"rules_compatibility","predicate":"fender_fit/2","text":"The berth's fenders (light, medium or heavy) must be at least as strong as the vessel type needs."},
+ {"id":"R5","module":"rules_compatibility","predicate":"cargo_handling_fit/2","text":"The berth must provide every cargo-handling capability the vessel type needs."},
+ {"id":"R6","module":"rules_compatibility","predicate":"berth_provides/2","text":"A berth provides a capability, such as a container crane, when its berth class provides it."},
+ {"id":"R7","module":"rules_compatibility","predicate":"compatible/2","text":"A vessel fits a berth only if length, draft, beam, fenders and cargo handling all fit."},
+ {"id":"R8","module":"rules_compatibility","predicate":"find_compatible_berths/2","text":"Finds every berth that is compatible with the vessel."},
+ {"id":"R9","module":"rules_escort","predicate":"base_tugs/2","text":"Tugs by tonnage: 1 below 20,000 tonnes, 2 below 50,000 tonnes, otherwise 3."},
+ {"id":"R10","module":"rules_escort","predicate":"type_tug_minimum/2","text":"A tanker needs at least 2 tugs; other vessel types have no minimum of their own."},
+ {"id":"R11","module":"rules_escort","predicate":"tugs_required/2","text":"Tugs needed: the larger of the tonnage count and the type minimum, capped at 2; ferries need none."},
+ {"id":"R12","module":"rules_escort","predicate":"score_bid/2","text":"A tug's bid scores higher with more fuel, a lower cost and a shorter arrival time."},
+ {"id":"R13","module":"rules_escort","predicate":"best_n_bids/3","text":"The escort goes to the highest-scoring bids, as many as the vessel needs tugs."},
+ {"id":"R14","module":"rules_escort","predicate":"take_first_n/3, extract_tugs/2","text":"Helper steps for picking bids: keep the first N of the ranked list and read off the tug names."},
+ {"id":"R15","module":"rules_weather","predicate":"wind_within_limit/2","text":"Wind must be below the vessel type's limit: tanker 30, ferry and cruise 35, container 40, cargo 45 knots."},
+ {"id":"R16","module":"rules_weather","predicate":"visibility_ok/1","text":"Visibility must be good or fair for operations; poor visibility or fog is not enough."},
+ {"id":"R17","module":"rules_weather","predicate":"swell_within_limit/1","text":"Swell must not be higher than the 4.0 metre operating limit."},
+ {"id":"R18","module":"rules_weather","predicate":"threshold_crossed/2","text":"Tells which wind thresholds (30, 35, 40 and 45 knots) the current wind has reached."},
+ {"id":"R19","module":"rules_weather","predicate":"weather_state_unsafe/1","text":"Stormy weather is unsafe, whatever the wind reading says."},
+ {"id":"R20","module":"rules_weather","predicate":"operation_safe/3","text":"An operation is safe only if wind is under the vessel type's limit and visibility is adequate."},
+ {"id":"R21","module":"rules_customs","predicate":"clearance_ok/2","text":"Customs clears a vessel when its type and cargo are valid and the pair is not blacklisted."},
+ {"id":"R22","module":"rules_customs","predicate":"needs_inspection/1","text":"Hazardous cargo needs a customs inspection."},
+ {"id":"R23","module":"rules_customs","predicate":"inspection_probability/3","text":"The chance of a customs inspection is 80% for hazardous cargo and 20% for any other cargo."},
+ {"id":"R24","module":"rules_customs","predicate":"high_risk/2","text":"A vessel and cargo pair is high-risk when its inspection chance is 50% or more."},
+ {"id":"R25","module":"rules_priority","predicate":"priority_rank/2","text":"Priority ranks 1 to 6: emergency, medical, scheduled ferry, scheduled arrival, departure, maintenance."},
+ {"id":"R26","module":"rules_priority","predicate":"priority_class_of/2","text":"A vessel's class is its override if it has one, else scheduled ferry for a ferry, else scheduled arrival."},
+ {"id":"R27","module":"rules_priority","predicate":"higher_priority/2","text":"One priority class outranks another when its rank number is lower."},
+ {"id":"R28","module":"rules_priority","predicate":"preempts/2","text":"A higher-priority class goes ahead of (preempts) a lower-priority one."},
+ {"id":"R29","module":"rules_priority","predicate":"emergency_overrides_all/1","text":"An emergency goes ahead of every other priority class."},
+ {"id":"R30","module":"rules_priority","predicate":"effective_priority/2","text":"A vessel's effective priority is the rank of its class, after any override."}
+]

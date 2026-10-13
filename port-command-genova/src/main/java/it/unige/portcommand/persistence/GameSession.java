@@ -46,6 +46,13 @@ import org.slf4j.LoggerFactory;
  * validated BEFORE anything is torn down, so a corrupt file leaves the running game
  * untouched. A failure after teardown cannot half-boot: the container is shut down again
  * and the lifecycle lands in MENU (LOADING → MENU, the May-audit edge).
+ *
+ * <p><b>S15 (2026-10-12): the shell can exist without a world.</b> {@link #bootShell()} brings
+ * up the stable outer shell alone (mode MENU, no agents), so a {@code --gui} launch opens the
+ * window first and lets the player choose; {@link #startSandbox()} is the Free play choice — a
+ * sandbox built as a {@link GameState} and booted through the SAME teardown/rebuild body a load
+ * and a scenario use, so it works from the empty shell and as a replacement for a running
+ * world alike. {@link #startNewGame()} is unchanged and remains the headless default.
  */
 public final class GameSession {
 
@@ -65,6 +72,13 @@ public final class GameSession {
     private AutosaveCoordinator autosaveCoordinator;
     private boolean guiRefreshSubscribed;
     private volatile GameOverGuard gameOverGuard;
+    /**
+     * S15 (2026-10-12): the running world's scenario key — {@code null} in free play and while
+     * no world exists. Volatile because it is written on the thread that boots the world (under
+     * this session's lock) and read from the EDT, which must never wait on that lock: a boot
+     * holds it for seconds.
+     */
+    private volatile String activeScenarioKey;
 
     public GameSession(JadeBootstrap boot, BootstrapConfig bootConfig,
                        SaveLoadManager saveLoadManager, Leaderboard leaderboard) {
@@ -74,13 +88,46 @@ public final class GameSession {
         this.leaderboard = leaderboard;
     }
 
+    /**
+     * S15 (2026-10-12): boots the EMPTY SHELL and nothing else — the JADE container with
+     * {@code JadeBootstrap}'s shared services (bus, clock, artifacts, NLP stack) plus this
+     * session's own lifecycle, autosave subscriber and GUI-refresh subscription. No agent is
+     * spawned, no world exists, and the lifecycle stays in MENU. It is what a plain
+     * {@code --gui} launch calls, so the window can open FIRST and offer the New Game dialog
+     * instead of a sandbox having silently started behind it.
+     *
+     * <p>Afterwards everything the window's constructor dereferences is non-null
+     * ({@link #lifecycle()}, the bus, the clock, the port artifact, the NLP pipeline), and any
+     * of {@link #startSandbox()}, {@link #startScenario(String)} and {@link #loadGame(Path)}
+     * may follow: {@code bootWorld} treats the shell like any other started container — MENU →
+     * LOADING is a legal edge, there is no guard to close, and the restart kills a container
+     * that holds only the bootstrap probe.
+     *
+     * <p>Idempotent: a second call, or a call while a world is running, changes nothing. (The
+     * {@code isStarted()} test only spares the log {@code JadeBootstrap.start}'s "already
+     * started" warning; the bootstrap ignores a repeated start by itself.)
+     */
+    public synchronized void bootShell() {
+        if (!boot.isStarted()) {
+            boot.start(bootConfig);
+        }
+        ensureSessionServices();
+    }
+
     /** Boots the container + fleet and starts a fresh run (the pre-task-22 Main sequence).
      * Sandbox play — the scenario runtime still rides along (task 23) so the DAILY
      * contracted stream ({@code ContractSchedule}) spawns {@code contracts.json} arrivals
-     * from day 1: contracted fees are live income in free play, not just scenarios. */
+     * from day 1: contracted fees are live income in free play, not just scenarios.
+     *
+     * <p>S15 (2026-10-12): semantics unchanged — this stays the headless default and the
+     * boot the session ITs use. It can only START the first world: it tears nothing down
+     * (the fleet is spawned into whatever container is up, where a running world already
+     * owns every agent name) and it resets neither the clock, the seed nor the market
+     * history. The window's Free play choice is {@link #startSandbox()} for that reason. */
     public synchronized void startNewGame() {
         boot.start(bootConfig);
         ensureSessionServices();
+        this.activeScenarioKey = null; // S15: a plain sandbox runs no scenario
         // S9: a fresh sandbox game resets the effective settings to the classpath baseline —
         // the world-boundary discipline that keeps a previous load's applied block from
         // leaking into a new game (Settings.load() is the session's live holder now).
@@ -143,6 +190,49 @@ public final class GameSession {
             return scenarioRate;
         }
         return bootConfig.realSecondsPerGameDay();
+    }
+
+    /**
+     * S15 (2026-10-12): starts a <b>Free play</b> game on a fresh random seed — the New Game
+     * dialog's fourth choice. Same seed rule as a scenario that pins none: generated here,
+     * recorded in the opening state and so in every save of the run.
+     */
+    public synchronized void startSandbox() throws CorruptSaveException {
+        startSandbox(new java.util.Random().nextLong());
+    }
+
+    /**
+     * S15 (2026-10-12): starts a Free play game on {@code seed} (any {@code long}; tests pin one).
+     * Like {@link #startScenario} this is NOT a parallel boot path: the sandbox's opening
+     * {@link GameState} comes from {@code GameStateBuilder.freshSandbox}, passes the SAME
+     * invariant gate a save file passes, and is booted by the SAME teardown/rebuild body
+     * {@link #loadGame} uses. So it works from the empty shell ({@link #bootShell()}, MENU), as a
+     * REPLACEMENT for a running, paused or ended game, and on a cold session alike. Call OFF the
+     * EDT.
+     *
+     * <p>What that buys over {@link #startNewGame()}, which stays as it is for the headless
+     * default: the previous world is torn down first; the seed is this game's own instead of
+     * whatever the shared {@code RandomSource} was left holding (a first world there is always
+     * the same fixed boot seed); the clock goes back to Day 1 00:00 at the boot pace; market
+     * history and policies are cleared; the terminals push four FREE berths over the previous
+     * world's bookings; the GUI gets {@code GameLoadedEvent} and the synthetic wallet /
+     * reputation / clock / speed refresh; and the HarbourMaster's setup is awaited. The daily
+     * contracted stream runs from day 1 in both.
+     *
+     * <p>The pace is {@code bootConfig}'s — the sandbox default, or an explicit
+     * {@code --day-length}; a previous scenario's pacing override does not carry over.
+     */
+    public synchronized void startSandbox(long seed) throws CorruptSaveException {
+        GameState state = GameStateBuilder.freshSandbox(seed, bootConfig.realSecondsPerGameDay(),
+                Instant.now().toString());
+        saveLoadManager.validateState(state, "sandbox"); // fail BEFORE teardown (task-22 rule)
+        bootWorld(state, it.unige.portcommand.scenario.ScenarioRuntime.sandbox(Set.of()), "sandbox");
+        boot.getEventBus().publish(new it.unige.portcommand.gui.events.NotificationEvent(
+                "Free play started",
+                it.unige.portcommand.gui.events.NotificationEvent.Severity.INFO,
+                boot.getSimClock().nowSimMillis()));
+        log.info("free play started (seed {}, day length {}s)", seed,
+                state.simClock().realSecondsPerGameDay());
     }
 
     /**
@@ -259,14 +349,20 @@ public final class GameSession {
     }
 
     /**
-     * The shared teardown → rebuild body behind {@link #loadGame} and
-     * {@link #startScenario} (task 22's sequence, unchanged semantics — task 23 only
-     * threads the scenario runtime through). The caller has already validated
-     * {@code state}, so a failure past this point can only be a boot failure: the catch
-     * shuts the half-built world down and lands in MENU.
+     * The shared teardown → rebuild body behind {@link #loadGame},
+     * {@link #startScenario} and (S15) {@link #startSandbox(long)} (task 22's sequence,
+     * unchanged semantics — task 23 only threads the scenario runtime through). The caller
+     * has already validated {@code state}, so a failure past this point can only be a boot
+     * failure: the catch shuts the half-built world down and lands in MENU.
      */
     private void bootWorld(GameState state, it.unige.portcommand.scenario.ScenarioRuntime runtime,
                            String sourceLabel) {
+        // S15 (2026-10-12): "live" here means "a lifecycle and a started container exist" — which
+        // since bootShell() is also the EMPTY SHELL (mode MENU, no world). That case needs no
+        // branch of its own: MENU → LOADING is the very edge the cold start takes further down,
+        // closeWorld() finds no guard to close, and the shutdown below kills a container holding
+        // nothing but the bootstrap probe. A boot that fails from the shell lands back in MENU
+        // through the same catch as any other.
         boolean wasLive = lifecycle != null && boot.isStarted();
         if (wasLive) {
             lifecycle.beginLoading();
@@ -311,7 +407,7 @@ public final class GameSession {
                     boot.getLLMBridge(), boot.getEventBus(), directory,
                     boot.getPolicyRegistryArtifact(), state, GameStateBuilder.reconcileTerminals(state),
                     hmReady, runtime);
-            awaitHarbourMasterReady(hmReady);
+            HarbourMasterAgent hm = awaitHarbourMasterReady(hmReady);
 
             GameOverGuard guard = new GameOverGuard(boot.getEventBus(), lifecycle, leaderboard,
                     state.wallet(), state.reputation());
@@ -320,12 +416,16 @@ public final class GameSession {
             this.gameOverGuard = guard;
             autosaveCoordinator.resetAfterLoad();
 
-            publishRestoredState(state);
+            // S15: the new world's scenario (null = free play), set BEFORE the loaded-marker
+            // event so anything reacting to GameLoadedEvent already reads the new world's key.
+            this.activeScenarioKey = state.activeScenario();
+            publishRestoredState(state, hm);
             lifecycle.completeLoading();
         } catch (RuntimeException e) {
             // Never a half-boot: kill whatever came up, land in MENU, surface one error.
             log.error("boot of {} failed after teardown — shutting the half-built world down",
                     sourceLabel, e);
+            this.activeScenarioKey = null; // S15: the old world is gone and no new one came up
             try {
                 closeWorld();
                 if (boot.isStarted()) {
@@ -346,13 +446,20 @@ public final class GameSession {
 
     /**
      * Bounded wait for the rebuilt HarbourMaster's setup (the JadeBootstrap.awaitReady
-     * latch pattern — no sleeps): its completion guarantees the directory registration and
-     * the restored ledgers exist, so an immediate post-load save or IT read cannot race the
-     * async spawn (adversarial review #3).
+     * latch pattern — no sleeps): its completion guarantees the restored ledgers exist, so an
+     * immediate post-load read of the returned agent cannot race the async spawn (adversarial
+     * review #3). It does NOT guarantee the directory entry: since S11 an agent registers as
+     * the LAST step of {@code PortCommandAgent.setup()}, a few statements after
+     * {@code onSetup()} completes this future — so a by-name lookup right after a load can
+     * still miss for an instant (the ITs that do one wait for it).
+     *
+     * <p>S15 (2026-10-12): returns the agent the future completed with, so the caller can ask
+     * THIS world's HarbourMaster to re-announce the port status ({@link #publishRestoredState})
+     * without a second, racier lookup by name.
      */
-    private void awaitHarbourMasterReady(CompletableFuture<HarbourMasterAgent> hmReady) {
+    private HarbourMasterAgent awaitHarbourMasterReady(CompletableFuture<HarbourMasterAgent> hmReady) {
         try {
-            hmReady.get(10, TimeUnit.SECONDS);
+            return hmReady.get(10, TimeUnit.SECONDS);
         } catch (ExecutionException | TimeoutException e) {
             throw new IllegalStateException("rebuilt HarbourMaster did not finish setup", e);
         } catch (InterruptedException e) {
@@ -397,6 +504,9 @@ public final class GameSession {
             // contract. The three events still reach HUDPanel on the EDT exactly as before; the only
             // consequence is that the seed figures can land a few ms later, and HUDModel assigns
             // absolutes rather than accumulating deltas, so that self-corrects on the next event.
+            // S15 (2026-10-12): the handler now also asks the HarbourMaster to re-announce the port
+            // status — one flag write, still prompt. In the empty shell (bootShell, no world) it
+            // finds no HarbourMaster and publishes nothing; the first game's own boot seeds the GUI.
             boot.getEventBus().subscribe(it.unige.portcommand.gui.events.GuiReadyEvent.class,
                     e -> publishLiveHudState("gui_ready"), it.unige.portcommand.util.DeliveryMode.ASYNC);
             guiRefreshSubscribed = true;
@@ -415,6 +525,15 @@ public final class GameSession {
      * missing HUD seed rather than a crash. Skipping is the right response: the HUD keeps task
      * 18's "—" placeholder and self-corrects on the first real money event, which is exactly the
      * documented behaviour for "no figure published yet".
+     *
+     * <p>S15 (2026-10-12): this is also where the Port table gets its first rows on a world that
+     * was booted BEFORE the window existed ({@code --scenario}, {@code --load}, the headless-first
+     * orders). The HarbourMaster publishes {@code PortStatusEvent} only when the snapshot changes,
+     * and the bus has no replay — so a status announced before the window subscribed is simply
+     * gone, and a quiet port would show "—" until the next arrival. {@code requestPortStatus()}
+     * makes the next tick publish regardless. Asked LAST, after the three HUD seeds, so nothing
+     * about it can cost the HUD its figures; with no HarbourMaster (the empty shell) there is
+     * nothing to ask and the table correctly stays blank.
      */
     private void publishLiveHudState(String source) {
         directory.byName("harbour_master")
@@ -437,6 +556,7 @@ public final class GameSession {
                     boot.getEventBus().publish(new SimClockTickEvent(simMillis,
                             SimClock.gameDayOf(simMillis), boot.getSimClock().simHour(),
                             boot.getSimClock().simMinute()));
+                    hm.requestPortStatus(); // S15: re-announce for the window that just opened
                 });
     }
 
@@ -458,8 +578,15 @@ public final class GameSession {
      * GUI refresh after a load: the loaded-marker event (chat tabs clear on it), then
      * synthetic absolute wallet/reputation/clock events so the HUD shows restored figures
      * immediately — the ledgers publish only on MUTATION, and restoring is not one.
+     *
+     * <p>S15 (2026-10-12): and last, a port-status re-announce from {@code hm}, the rebuilt
+     * world's HarbourMaster. The Port table blanks itself on {@code GameLoadedEvent}; the new
+     * HarbourMaster's first sim-minute tick — which announces unprompted, having published
+     * nothing yet — can land BEFORE that event at fast paces (a 5 s day ticks every 3.5 ms while
+     * this thread is still building the guard), and the publisher then stays silent until
+     * something changes. Requesting after the marker guarantees one announce the table keeps.
      */
-    private void publishRestoredState(GameState state) {
+    private void publishRestoredState(GameState state, HarbourMasterAgent hm) {
         long simMillis = state.simClock().simMillis();
         boot.getEventBus().publish(new GameLoadedEvent(SimClock.gameDayOf(simMillis),
                 state.wallet(), state.reputation()));
@@ -472,6 +599,8 @@ public final class GameSession {
         // S14: the HUD toggles and the Game ▸ Speed menu re-select the restored speed.
         boot.getEventBus().publish(new it.unige.portcommand.gui.events.GameSpeedChangedEvent(
                 boot.getSimClock().speedMultiplier()));
+        // S15: served by the HarbourMaster's next tick, on its own thread — after everything above.
+        hm.requestPortStatus();
     }
 
     /**
@@ -487,9 +616,26 @@ public final class GameSession {
 
     // --- accessors for Main / MainWindow / tests ---
 
-    /** Null until the first {@link #startNewGame()} / {@link #loadGame(Path)} boots the shell. */
+    /** Null until the first {@link #bootShell()} / {@link #startNewGame()} /
+     * {@link #startSandbox()} / {@link #startScenario(String)} / {@link #loadGame(Path)} boots
+     * the shell. */
     public GameLifecycle lifecycle() {
         return lifecycle;
+    }
+
+    /**
+     * S15 (2026-10-12): the key of the scenario the running world belongs to ({@code "tutorial"},
+     * {@code "busy_day"}, {@code "storm"}), or {@code null} when it is free play — a
+     * {@link #startSandbox()} / {@link #startNewGame()} game, or a load of a sandbox save — and
+     * when no world is up at all (the empty shell, a failed boot). A loaded save reports the
+     * scenario it was saved in. The window reads it to decide whether the first-launch tutorial
+     * cards are still needed: not when the game that just started IS the tutorial scenario.
+     *
+     * <p>Lock-free (a volatile read), so the EDT may call it while a boot is in progress; it
+     * then still names the outgoing world until the new one is up.
+     */
+    public String activeScenarioKey() {
+        return activeScenarioKey;
     }
 
     public Leaderboard leaderboard() {
