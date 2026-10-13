@@ -47,7 +47,7 @@
     { "type": "SpawnVessel", "simTimeSeconds": 900, "vesselType": "cargo_vessel", "channel": "walk_in",
       "vesselId": "WALKIN-S1", "contractRef": null, "personality": "NEUTRAL", "minPrice": 1400, "targetPrice": 1900, "etaSimMillis": null, "vesselName": "Santa Lucia" },
     { "type": "TutorialStepAdvance", "simTimeSeconds": 1100, "step": 4,
-      "text": "Negotiate: use the structured buttons or type your offer. The vessel accepts a fee at or below its budget — push, but not too far." },
+      "text": "Negotiate: type your offer, or press Accept or Reject. The vessel accepts a fee at or below its budget — push, but not too far." },
     { "type": "TutorialStepAdvance", "simTimeSeconds": 1500, "step": 5,
       "text": "Well done — the port runs itself between arrivals. Watch the wallet against the daily target, and save any time from the Game menu." }
   ]

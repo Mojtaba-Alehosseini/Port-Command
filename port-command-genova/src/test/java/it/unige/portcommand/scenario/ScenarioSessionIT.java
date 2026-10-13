@@ -9,7 +9,10 @@ import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
 import it.unige.portcommand.gui.events.CommLogEvent;
+import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.ContractedFeeEarnedEvent;
+import it.unige.portcommand.gui.events.GameSpeedChangedEvent;
+import it.unige.portcommand.gui.events.ScriptedWaveEvent;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
 import it.unige.portcommand.persistence.GameSession;
 import it.unige.portcommand.persistence.GameState;
@@ -204,11 +207,13 @@ class ScenarioSessionIT {
     }
 
     /**
-     * S5 Goal C acceptance, storm: STORM-W1 spawns DURING the storm window, so the player
-     * stand-in's early accepts are refused by the Goal-B weather gate (R15-R19) — the retry
-     * after the scripted clear is exactly what a human at the chat would do — and the vessel
-     * still completes: deal after clearing, berth, dock, departure. T901's contracted flow
-     * (hold → re-dispatch) shares the same day.
+     * S5 Goal C acceptance, storm: STORM-W1 spawns DURING the storm window and still completes:
+     * deal, berth, dock, departure. T901's contracted flow (hold → re-dispatch) shares the day.
+     *
+     * <p>S16 (ADR-20, decision B0a): the deal is no longer refused for weather. A storm is not a
+     * reason not to agree a price - it is a reason not to MOVE - so the stand-in's first accept
+     * closes the deal, the ship is granted its berth and held at the channel entry [R16,R19],
+     * and it goes in when the sky clears. Before S16 the accept itself was refused until then.
      */
     @Test
     void stormWalkIn_completesAfterTheClearing() throws Exception {
@@ -226,9 +231,60 @@ class ScenarioSessionIT {
     }
 
     /**
+     * S16 (decision T7, PLAYABILITY_DECISIONS §10): while a scenario still has scripted events to
+     * come, the game runs at x1 - also after a load.
+     *
+     * <p>Born red: a scenario save taken at x4 loaded at x4. The script's events are a few game
+     * minutes apart on purpose (the storm breaks thirty game seconds after the tanker is
+     * granted); at x4 that story is a quarter as long in real time and the demo beats are gone.
+     * The speed control is locked while the script runs, but a save made before the lock existed,
+     * or edited by hand, still says x4 - so the load has to say x1 itself. A sandbox save keeps
+     * its speed across a load ({@code SettingsRoundTripIT}); this is about scripts only.
+     */
+    @Test
+    void aScenarioSavedAtFourTimesSpeedLoadsAtNormalSpeedWhileItsScriptIsPending() throws Exception {
+        boot = new JadeBootstrap();
+        // 3000 s/day: the storm's first scripted spawn is half a real minute away, so the save
+        // below is taken with nothing in flight and six of the seven events still to come.
+        GameSession session = new GameSession(boot,
+                new BootstrapConfig(TEST_PORT, false, "realtime", 3000),
+                new SaveLoadManager(tempDir), new Leaderboard(tempDir.resolve("scores.json")));
+        try {
+            session.startScenario("storm");
+            assertNotNull(awaitEvent(ScriptedWaveEvent.class, ScriptedWaveEvent::pending, 15_000),
+                    "a scenario boot announces that scripted events are pending - the speed control "
+                            + "and the day-length slider lock on exactly this");
+
+            Settings.applyLive(Settings.load().withGameSpeed(4));
+            boot.getSimClock().setSpeedMultiplier(4);
+            Path saved = awaitSave(session, 20_000);
+            GameState savedState = new SaveLoadManager(tempDir).load(saved);
+            assertEquals(4, savedState.settings().gameSpeed(), "fixture: the save really says x4");
+            assertTrue(savedState.firedEventIds().size() < 7,
+                    "fixture: the storm's script is still pending in the save: " + savedState.firedEventIds());
+
+            session.loadGame(saved);
+
+            assertEquals(1, boot.getSimClock().speedMultiplier(), "the loaded scenario runs at x1");
+            assertEquals(1, Settings.load().gameSpeed(), "and the live settings agree with the clock");
+            assertTrue(waitUntil(() -> publishedAfterLoad().stream()
+                            .anyMatch(e -> e instanceof GameSpeedChangedEvent speed && speed.speed() == 1), 10_000),
+                    "the speed controls are told x1");
+            assertTrue(waitUntil(() -> publishedAfterLoad().stream()
+                            .anyMatch(e -> e instanceof ScriptedWaveEvent wave && wave.pending()), 10_000),
+                    "and that the script is still pending, so they stay locked");
+            assertTrue(publishedAfterLoad().stream()
+                            .noneMatch(e -> e instanceof GameSpeedChangedEvent speed && speed.speed() != 1),
+                    "no x4 flicker on the way: the reset happens before the world boots");
+        } finally {
+            Settings.applyLive(Settings.classpathDefaults()); // do not leak x4 into the next case
+        }
+    }
+
+    /**
      * The player stand-in (S5): keep ACCEPTing every listed walk-in while its dialogue is open
-     * — a gate refusal (storm weather) simply retries on the next pass, a queued or granted
-     * vessel is left alone — until each one's DEPARTURE line is in the comm log. Bounded
+     * — a queued or granted vessel is left alone — until each one's DEPARTURE line is in the comm
+     * log. Bounded
      * (design rule 5); 100 ms cadence keeps the ACCEPT spam trivial at IT pacing.
      */
     private boolean driveWalkInsToDeparture(HarbourMasterAgent hm, List<String> vesselIds,

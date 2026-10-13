@@ -122,4 +122,120 @@ class GameSpeedControlTest {
         assertEquals(7, Settings.load().roundLimit());
         assertTrue(Settings.load().autopilotEnabled());
     }
+
+    // --- S16 (2026-10-13): the scenario-script lock --------------------------------------------------
+    //
+    // A scenario's scripted events are written for x1. While some are still to come the speed is
+    // held there: the window forwards the bus's ScriptedWaveEvent to setScriptPending, and that is
+    // all it does — everything that matters about the lock is in the control, and so here.
+
+    @Test
+    void theBaseSpeedIsTheSlowestOnOfferAndTheLockTooltipNamesIt() {
+        assertEquals(1, GameSpeedModel.base());
+        assertEquals("Speed is locked to ×1 while the scenario's scripted events are running",
+                GameSpeedModel.SCRIPT_LOCK_TOOLTIP);
+        assertTrue(GameSpeedModel.SCRIPT_LOCK_TOOLTIP.contains(GameSpeedModel.label(GameSpeedModel.base())));
+    }
+
+    @Test
+    void whileTheScriptIsPendingASpeedChangeIsRefusedAndTheSpeedInForceReAnnounced() {
+        assertFalse(control.scriptPending(), "a control starts unlocked");
+        control.setScriptPending(true);
+        assertTrue(control.scriptPending());
+        announced.clear();
+
+        assertFalse(control.set(4), "refused: the script is written for x1");
+        assertFalse(control.set(2));
+
+        assertEquals(1, clock.speedMultiplier(), "the game clock was not re-paced");
+        assertEquals(1, Settings.load().gameSpeed(), "and nothing was written to the settings");
+        assertEquals(List.of(1, 1), announced, "each refusal re-announces x1, so a control that moved snaps back");
+        assertEquals(1, control.current());
+    }
+
+    @Test
+    void onceTheScriptHasEndedASpeedChangeIsAcceptedAgain() {
+        control.setScriptPending(true);
+        assertFalse(control.set(4));
+
+        control.setScriptPending(false);
+
+        assertFalse(control.scriptPending());
+        assertTrue(control.set(4));
+        assertEquals(4, clock.speedMultiplier());
+        assertEquals(4, Settings.load().gameSpeed());
+    }
+
+    @Test
+    void engagingTheLockAboveTimesOneDropsToTimesOneFirstAndAnnouncesIt() {
+        // The session already boots a pending script at x1; this is the backstop for a world that
+        // reaches the lock faster than that.
+        control.set(4);
+        announced.clear();
+
+        control.setScriptPending(true);
+
+        assertEquals(1, clock.speedMultiplier(), "the lock never engages over a speed it would then forbid");
+        assertEquals(1, Settings.load().gameSpeed(), "the next save records what is really in force");
+        assertEquals(List.of(1), announced, "one announcement: the controls show x1, and re-read the lock");
+        assertTrue(control.scriptPending());
+        assertEquals(1, control.current());
+    }
+
+    @Test
+    void theDropToTimesOneDoesNotAskTheOtherLock() {
+        // The lock can arrive with a boot that is still LOADING — when the other lock refuses every
+        // click. A speed left above x1 behind disabled controls could not be put right by the player.
+        control.set(2);
+        locked.set(true);
+
+        control.setScriptPending(true);
+
+        assertEquals(1, clock.speedMultiplier());
+        assertEquals(1, Settings.load().gameSpeed());
+    }
+
+    @Test
+    void everyChangeOfTheLockIsAnnouncedAndARepeatIsSilent() {
+        // The top bar's toggles and the Game > Speed items re-read scriptPending() on every
+        // GameSpeedChangedEvent: a change of the lock that announced nothing would leave them
+        // enabled over a control that refuses, or disabled over one that would accept.
+        control.setScriptPending(true);
+        assertEquals(List.of(1), announced, "engaging at x1: the speed did not move, the lock did");
+
+        control.setScriptPending(true);
+        assertEquals(List.of(1), announced, "told the same thing again: nothing to announce");
+
+        control.setScriptPending(false);
+        assertEquals(List.of(1, 1), announced, "releasing is announced");
+
+        control.setScriptPending(false);
+        assertEquals(List.of(1, 1), announced,
+                "\"nothing pending\" on a game with no script (every free-play boot) is silent");
+    }
+
+    @Test
+    void releasingTheLockDoesNotBringTheOldSpeedBack() {
+        // x4 before the script, x1 during it — and x1 after it, until the player chooses again.
+        control.set(4);
+        control.setScriptPending(true);
+
+        control.setScriptPending(false);
+
+        assertEquals(1, clock.speedMultiplier());
+        assertEquals(1, Settings.load().gameSpeed());
+    }
+
+    @Test
+    void theTwoLocksAreIndependent() {
+        control.setScriptPending(true);
+        locked.set(true);
+        assertFalse(control.set(2));
+
+        control.setScriptPending(false);
+        assertFalse(control.set(2), "the script has ended, but a load still owns the world");
+
+        locked.set(false);
+        assertTrue(control.set(2));
+    }
 }

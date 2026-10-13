@@ -38,10 +38,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>{@code PortPanel} gets TWO lifecycle tests, not one (S15, 2026-10-12: it took the left
  * column, and both update channels, over from the removed map panel): its {@link EventBus}
- * subscriptions (port status / weather / world loaded) cancel exactly like every other panel's,
+ * subscriptions (port status / world loaded) cancel exactly like every other panel's,
  * but its {@link PortStateArtifact} subscription (tug statuses) has no cancel API at all — that
  * channel's test proves the panel's own {@code active} flag ("poor-man's unsubscribe") stops it
  * from acting on further deltas instead, per {@code PortPanel}'s own javadoc.
+ *
+ * <p>S16 (2026-10-13): the weather subscription moved with the weather line, from {@code PortPanel}
+ * to {@code HUDPanel} — so its positive control and its leak guard moved to the HUD's test here,
+ * together with the world-loaded marker the top bar now also listens for.
  */
 class GuiPanelsSubscriptionLifecycleTest {
 
@@ -80,11 +84,8 @@ class GuiPanelsSubscriptionLifecycleTest {
                 PortStatusEvent.BerthRow.free("berth_1"), PortStatusEvent.BerthRow.free("berth_2"),
                 PortStatusEvent.BerthRow.free("berth_3"), PortStatusEvent.BerthRow.free("berth_4"));
 
-        bus.publish(new WeatherChangeEvent(22.0, "good", 1.0, "sunny", false));
         bus.publish(new PortStatusEvent(1, allFree, List.of()));
         SwingUtilities.invokeAndWait(() -> { });
-        assertEquals("22 kn · sunny · visibility good", panel.model().weatherRow().value(),
-                "constructor subscription must be live (positive control: weather)");
         assertEquals("free", panel.model().berthRows().get(0).occupant(),
                 "constructor subscription must be live (positive control: port status)");
 
@@ -97,15 +98,12 @@ class GuiPanelsSubscriptionLifecycleTest {
         assertEquals("free", panel.model().berthRows().get(0).occupant(), "sanity: the re-announced status is shown");
         assertEquals("none", panel.model().queueRow().value());
 
-        // Detached panel: each of the three subscriptions gets an event that would visibly change
-        // the model -- new weather, a status with a queue, and the marker that blanks the berths.
+        // Detached panel: each of the two subscriptions gets an event that would visibly change
+        // the model -- a status with a queue, and the marker that blanks the berths.
         panel.removeNotify();
-        bus.publish(new WeatherChangeEvent(40.0, "poor", 3.0, "stormy", true));
         bus.publish(new PortStatusEvent(1, allFree, List.of("W001")));
         bus.publish(new it.unige.portcommand.persistence.events.GameLoadedEvent(2, 0.0, 0));
         SwingUtilities.invokeAndWait(() -> { });
-        assertEquals("22 kn · sunny · visibility good", panel.model().weatherRow().value(),
-                "removeNotify() must cancel the weather subscription");
         assertEquals("none", panel.model().queueRow().value(),
                 "removeNotify() must cancel the port-status subscription");
         assertEquals("free", panel.model().berthRows().get(0).occupant(),
@@ -201,6 +199,47 @@ class GuiPanelsSubscriptionLifecycleTest {
         bus.publish(new SimClockTickEvent(120_000, 1, 0, 2));
         SwingUtilities.invokeAndWait(() -> { });
         assertEquals(1, panel.model().simMinute(), "removeNotify() must cancel the subscription");
+    }
+
+    /**
+     * S16 (2026-10-13): the top bar took the weather over from the Port table, and with it two
+     * subscriptions — {@link WeatherChangeEvent} (the line) and the world-loaded marker (back to
+     * the placeholder: another world's weather must not stand). Both live from construction, both
+     * cancelled in {@code removeNotify()}.
+     */
+    @Test
+    @Timeout(5)
+    void hudPanelWeatherSubscriptionsCancelOnRemoveNotify() throws Exception {
+        EventBus bus = new EventBus();
+        HUDPanel panel = new HUDPanel(bus);
+        assertEquals("—", panel.weatherLabelForTest().getText(), "precondition: no reading yet");
+
+        bus.publish(new WeatherChangeEvent(22.0, "good", 1.0, "sunny", false));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals("22 kn · sunny · visibility good · swell 1.0 m", panel.weatherModel().text(),
+                "constructor subscription must be live (positive control: weather)");
+        assertEquals("22 kn · sunny · visibility good · swell 1.0 m", panel.weatherLabelForTest().getText(),
+                "and the label follows its model");
+
+        bus.publish(new it.unige.portcommand.persistence.events.GameLoadedEvent(1, 44_800.0, 62));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals("—", panel.weatherLabelForTest().getText(),
+                "constructor subscription must be live (positive control: the world-loaded marker blanks the weather)");
+        bus.publish(new WeatherChangeEvent(22.0, "good", 1.0, "sunny", false));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals("22 kn · sunny · visibility good · swell 1.0 m", panel.weatherLabelForTest().getText(),
+                "sanity: the new world's opening reading is shown, even one equal to the old world's");
+
+        // Detached panel: new weather, then the marker that would blank it. Neither may land.
+        panel.removeNotify();
+        bus.publish(new WeatherChangeEvent(40.0, "poor", 3.0, "stormy", true));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals("22 kn · sunny · visibility good · swell 1.0 m", panel.weatherModel().text(),
+                "removeNotify() must cancel the weather subscription");
+        bus.publish(new it.unige.portcommand.persistence.events.GameLoadedEvent(2, 0.0, 0));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals("22 kn · sunny · visibility good · swell 1.0 m", panel.weatherLabelForTest().getText(),
+                "removeNotify() must cancel the world-loaded subscription");
     }
 
     @Test

@@ -10,22 +10,32 @@ import java.util.TreeMap;
 
 import it.unige.portcommand.agents.TugStatus;
 import it.unige.portcommand.gui.events.PortStatusEvent;
-import it.unige.portcommand.gui.events.WeatherChangeEvent;
 import it.unige.portcommand.harbourmaster.BerthPositions;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.util.SimClock;
 
 /**
  * Pure rendering model for {@code PortPanel} (S15, 2026-10-12) — the Port table that replaced the
- * map: four berth lines, then one line each for the berth queue, the tugs and the weather. No
- * Swing/AWT import and no thread assertion; EDT discipline is the panel's job, so tests call the
- * mutators straight from the JUnit thread (the same split as {@code HUDModel}).
+ * map: four berth lines, then one line each for the berth queue and the tugs. No Swing/AWT import
+ * and no thread assertion; EDT discipline is the panel's job, so tests call the mutators straight
+ * from the JUnit thread (the same split as {@code HUDModel}).
  *
  * <p><b>Where each line comes from.</b> Berths and queue are the HarbourMaster's
  * {@link PortStatusEvent} — the only source that knows walk-ins and the queue (the
  * {@code PortStateArtifact} the map read sees contracted vessels only). Tugs are the artifact's
- * statuses (snapshot at construction and on a world change, deltas in between). Weather is the
- * last {@link WeatherChangeEvent}.
+ * statuses (snapshot at construction and on a world change, deltas in between).
+ *
+ * <p><b>S16 (2026-10-13): a berth line says WHY a ship is not moving.</b> A granted ship now waits
+ * outside until the weather, customs, its escort and its berth all allow the movement, and may be
+ * held at its berth when it is ready to leave. The HarbourMaster reports which of these it is
+ * ({@code BerthRow.waiting()}, with the rule ids behind it), and the state cell prints it:
+ * {@code held (weather) [R15,R19]}, {@code waiting: tugs}, {@code waiting: customs inspection
+ * [R22,R24]}, {@code waiting: berth closed (flood)}, {@code departure held (weather) [R19]}; a
+ * free berth that is closed reads {@code closed (flood)}. Before S16 the only such word was
+ * "weather hold", with no rule behind it. See {@link #stateText}.
+ *
+ * <p><b>S16: the weather is no longer a line of this table.</b> It moved to the top bar
+ * ({@code HudWeatherModel}), where it is on screen whichever column the player is reading.
  *
  * <p><b>Unknown is not "free".</b> Until a status has arrived — no world yet, or a world was just
  * replaced — every berth and the queue read {@value #UNKNOWN}. Showing "free" there would be a
@@ -44,12 +54,13 @@ public final class PortTableModel {
     public static final String UNKNOWN = "—";
     /** The occupant cell of a berth nobody holds. */
     public static final String FREE = "free";
+    /** S16: the occupant cell of a berth nobody holds and nobody can be given — it is closed. */
+    public static final String CLOSED = "closed (flood)";
     /** Joins the parts of one line: {@code 3 free · 1 busy}. */
     public static final String SEPARATOR = " · ";
 
     public static final String QUEUE_LABEL = "Queue";
     public static final String TUGS_LABEL = "Tugs";
-    public static final String WEATHER_LABEL = "Weather";
 
     private static final long MILLIS_PER_HOUR = 3_600_000L;
     private static final long MILLIS_PER_MINUTE = 60_000L;
@@ -59,10 +70,15 @@ public final class PortTableModel {
      *
      * @param berthId  the raw id ({@code berth_1})
      * @param label    {@code Berth 1}
-     * @param occupant the vessel's name, {@value PortTableModel#FREE}, or {@value PortTableModel#UNKNOWN}
-     * @param state    {@code until 14:30} or a state word; empty for a free or unknown berth
+     * @param occupant the vessel's name, {@value PortTableModel#FREE}, {@value PortTableModel#CLOSED}
+     *                 or {@value PortTableModel#UNKNOWN}
+     * @param state    what follows the occupant: {@code until 14:30}, a stage word, or (S16) the
+     *                 reason the ship is not moving; empty for a berth nobody holds and an unknown one
+     * @param waiting  S16: {@code state} is such a reason. It is the long kind of state — up to
+     *                 {@code waiting: customs inspection [R22,R24]} — so the panel gives it a line
+     *                 of its own under the name instead of squeezing the name out of a narrow column
      */
-    public record BerthLine(String berthId, String label, String occupant, String state) {
+    public record BerthLine(String berthId, String label, String occupant, String state, boolean waiting) {
 
         /** Nothing has been reported about this berth yet. */
         public boolean isUnknown() {
@@ -76,9 +92,9 @@ public final class PortTableModel {
     }
 
     /**
-     * One of the three lines under the berths.
+     * One of the two lines under the berths.
      *
-     * @param label  {@code Queue}, {@code Tugs} or {@code Weather}
+     * @param label  {@code Queue} or {@code Tugs}
      * @param value  the headline ({@code 2 waiting}), or {@value PortTableModel#UNKNOWN}
      * @param detail what backs the headline (the queued vessels' names); empty when there is none
      */
@@ -106,7 +122,6 @@ public final class PortTableModel {
     private final Map<String, TugStatus> tugs = new TreeMap<>();
     /** {@code null} until the HarbourMaster has reported, and again after {@link #clearStatus()}. */
     private PortStatusEvent status;
-    private WeatherChangeEvent weather;
     private Runnable onChange = () -> { };
 
     public PortTableModel() {
@@ -172,19 +187,9 @@ public final class PortTableModel {
         onChange.run();
     }
 
-    public void applyWeather(WeatherChangeEvent event) {
-        Objects.requireNonNull(event, "event");
-        if (event.equals(weather)) {
-            return;
-        }
-        weather = event;
-        onChange.run();
-    }
-
     /**
-     * Forgets the berth and queue status — the world it described is gone. Tugs and weather are
-     * kept: the tugs are reseeded by the panel from the artifact, and the weather line keeps the
-     * last reading until the new world's weather agent reports (as the map's chip did).
+     * Forgets the berth and queue status — the world it described is gone. The tugs are kept:
+     * the panel reseeds them from the artifact.
      */
     public void clearStatus() {
         if (status == null) {
@@ -216,21 +221,18 @@ public final class PortTableModel {
         return new InfoLine(TUGS_LABEL, tugSummary(tugs.values()), "");
     }
 
-    public InfoLine weatherRow() {
-        return new InfoLine(WEATHER_LABEL, weatherText(weather), "");
-    }
-
     private BerthLine berthLine(String berthId) {
         String label = berthLabel(berthId);
         PortStatusEvent.BerthRow row = status == null ? null : rowFor(berthId);
         if (row == null) {
             // No status at all, or one that says nothing about this berth: unknown, never "free".
-            return new BerthLine(berthId, label, UNKNOWN, "");
+            return new BerthLine(berthId, label, UNKNOWN, "", false);
         }
         if (row.isFree()) {
-            return new BerthLine(berthId, label, FREE, "");
+            // S16: a berth nobody holds is either open to the next grant or closed to it.
+            return new BerthLine(berthId, label, row.closed() ? CLOSED : FREE, "", false);
         }
-        return new BerthLine(berthId, label, occupantText(row), stateText(row, status.gameDay()));
+        return new BerthLine(berthId, label, occupantText(row), stateText(row, status.gameDay()), showsWait(row));
     }
 
     private PortStatusEvent.BerthRow rowFor(String berthId) {
@@ -275,19 +277,23 @@ public final class PortTableModel {
     /**
      * What the state cell says about the vessel holding a berth; empty for a free berth.
      *
-     * <p>A docked vessel shows until when it stays. Before it has docked there is no such time —
-     * deliberately: a weather hold slides the transit deadline every tick, and a word does not
-     * flicker — so the cell names the stage instead, and a weather hold overrides that word.
+     * <p>S16 (2026-10-13). First, the reason it is not moving, when the HarbourMaster reports one
+     * and the row is in a position to show it ({@link #showsWait}, {@link #waitText}). Otherwise a
+     * docked vessel shows until when it stays, and before it has docked — deliberately, a time
+     * there would republish the status every tick — a word for the stage: {@code leaving},
+     * {@code docked}, {@code arriving}. The pre-S16 word "awaiting tugs" is gone: a granted ship
+     * that is not moving now says what it is waiting for, and one with nothing in its way is
+     * simply arriving.
      */
     public static String stateText(PortStatusEvent.BerthRow row, int gameDay) {
         if (row == null || row.isFree()) {
             return "";
         }
+        if (showsWait(row)) {
+            return waitText(row);
+        }
         if (row.untilSimMillis() != null) {
             return untilText(row.untilSimMillis(), gameDay);
-        }
-        if (row.weatherHeld()) {
-            return "weather hold";
         }
         VesselTracking.Stage stage = row.stage();
         if (stage == null) {
@@ -296,9 +302,60 @@ public final class PortTableModel {
         return switch (stage) {
             case DEPARTING -> "leaving";
             case DOCKED -> "docked";
-            case AWAITING_TUG -> "awaiting tugs";
             default -> "arriving";
         };
+    }
+
+    /**
+     * Whether the state cell of {@code row} is the reason its ship is not moving (S16).
+     *
+     * <p>A reported wait is shown, with one exception that keeps the S15 rule "a hold never hides
+     * an until": the four waits of the way IN (weather, closed berth, customs, tugs) cannot be
+     * true of a ship that has an "until" — that time is the vessel's own docked-phase deadline, so
+     * the ship is moored and being served, and the HarbourMaster's tracking is a tick behind it.
+     * The departure hold is the opposite case: it is only ever reported for a ship that HAS been
+     * served, so it wins over whatever "until" is still on the row.
+     */
+    public static boolean showsWait(PortStatusEvent.BerthRow row) {
+        if (row == null || row.isFree()) {
+            return false;
+        }
+        return switch (row.waiting()) {
+            case NONE -> false;
+            case DEPARTURE_WEATHER -> true;
+            default -> row.untilSimMillis() == null;
+        };
+    }
+
+    /**
+     * The reason a ship is not moving, in the words of the S16 contract: {@code held (weather)
+     * [R15,R19]}, {@code departure held (weather) [R19]}, {@code waiting: customs inspection
+     * [R22,R24]} (plain {@code waiting: customs} while no rule is cited — the request is out and
+     * no inspection has been ordered), {@code waiting: tugs}, {@code waiting: berth closed
+     * (flood)}. Empty when the row reports no wait.
+     *
+     * <p>The rule ids are printed in the bracket form the comm log uses, and only when the
+     * HarbourMaster sent some: a reason never shows an empty {@code []}.
+     */
+    public static String waitText(PortStatusEvent.BerthRow row) {
+        if (row == null) {
+            return "";
+        }
+        String tag = ruleTag(row.ruleIds());
+        String reason = switch (row.waiting()) {
+            case NONE -> "";
+            case WEATHER -> "held (weather)";
+            case DEPARTURE_WEATHER -> "departure held (weather)";
+            case BERTH_CLOSED -> "waiting: berth closed (flood)";
+            case CUSTOMS -> tag.isEmpty() ? "waiting: customs" : "waiting: customs inspection";
+            case TUGS -> "waiting: tugs";
+        };
+        return reason.isEmpty() || tag.isEmpty() ? reason : reason + " " + tag;
+    }
+
+    /** {@code [R15,R19]}, or the empty string for no ids. */
+    public static String ruleTag(List<String> ruleIds) {
+        return ruleIds == null || ruleIds.isEmpty() ? "" : "[" + String.join(",", ruleIds) + "]";
     }
 
     /** {@code none}, {@code 1 waiting}, {@code 2 waiting}. */
@@ -325,23 +382,5 @@ public final class PortTableModel {
             }
         }
         return free + " free" + SEPARATOR + busy + " busy";
-    }
-
-    /**
-     * {@code 18 kn · sunny · visibility good}, from the event's own fields (the weather agent's
-     * vocabulary, unchanged), or {@value #UNKNOWN} before the first reading.
-     */
-    public static String weatherText(WeatherChangeEvent weather) {
-        if (weather == null) {
-            return UNKNOWN;
-        }
-        StringBuilder text = new StringBuilder(String.format(Locale.ROOT, "%.0f kn", weather.windKnots()));
-        if (weather.state() != null && !weather.state().isBlank()) {
-            text.append(SEPARATOR).append(weather.state().trim());
-        }
-        if (weather.visibility() != null && !weather.visibility().isBlank()) {
-            text.append(SEPARATOR).append("visibility ").append(weather.visibility().trim());
-        }
-        return text.toString();
     }
 }

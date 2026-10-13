@@ -9,7 +9,9 @@ import it.unige.portcommand.util.Event;
  *
  * <p>A notification, not a request: nothing applies a speed by listening to this. The HUD toggles
  * and the Game &#9656; Speed menu subscribe so that whichever control was NOT used shows the same
- * choice, and so both follow a load.
+ * choice, and so both follow a load. Since S16 it is also published when the script lock
+ * engages or releases ({@code GameSpeedControl.setScriptPending}): the speed in force is
+ * re-announced, and the controls re-read whether they may be used.
  *
  * @param speed the multiplier in force — one of {@code Settings.GAME_SPEEDS}
  */

@@ -8,12 +8,21 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 
+import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.JSplitPane;
+import javax.swing.SwingUtilities;
 
 import it.unige.portcommand.artifacts.PortStateArtifact;
+import it.unige.portcommand.gui.events.ReputationChangedEvent;
+import it.unige.portcommand.gui.events.SimClockTickEvent;
+import it.unige.portcommand.gui.events.WalletChangedEvent;
+import it.unige.portcommand.gui.events.WeatherChangeEvent;
 import it.unige.portcommand.gui.model.ColumnDividers;
 import it.unige.portcommand.gui.model.GameSpeedControl;
+import it.unige.portcommand.gui.model.WeatherForecast;
 import it.unige.portcommand.nlp.PipelineResult;
+import it.unige.portcommand.persistence.events.GameLoadedEvent;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.SimClock;
 import org.junit.jupiter.api.AfterEach;
@@ -42,6 +51,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Widths are asserted against the split panes' own divider size rather than a typed 10, so the
  * numbers follow the look-and-feel; the three minimum widths and the two default proportions are
  * {@code GameScreen}'s constants.
+ *
+ * <p>S16 (2026-10-13): the "top bar" block — the weather moved there from the Port table, opens a
+ * forecast on a click, and is the one cell of the bar that gives way, so that the speed toggles
+ * keep their place at the window's minimum width.
  */
 class GameScreenCompositionTest {
 
@@ -180,6 +193,216 @@ class GameScreenCompositionTest {
                 assertFalse(name != null && name.toLowerCase(Locale.ROOT).contains("map"),
                         "a component is still named '" + name + "' (" + type + ")");
                 assertFalse(type.toLowerCase(Locale.ROOT).contains("map"), "a component of class " + type);
+            }
+        });
+    }
+
+    // --- the top bar (S16: the weather) ----------------------------------------------------------------
+
+    /** The longest line the weather can be: two-digit wind, the longest state and visibility words. */
+    private static final WeatherChangeEvent WORST_WEATHER = new WeatherChangeEvent(45.0, "poor", 5.0, "stormy", true);
+    private static final String WORST_WEATHER_TEXT = "45 kn · stormy · visibility poor · swell 5.0 m";
+
+    private JLabel weatherLabel() {
+        return assertInstanceOf(JLabel.class, named(HUDPanel.NAME_WEATHER));
+    }
+
+    private static List<String> labelTexts(Container root) {
+        List<Component> all = new ArrayList<>();
+        collect(root, all);
+        List<String> texts = new ArrayList<>();
+        for (Component component : all) {
+            if (component instanceof JLabel label && label.getText() != null) {
+                texts.add(label.getText());
+            }
+        }
+        return texts;
+    }
+
+    @Test
+    @Timeout(20)
+    void theWeatherIsOnTheTopBarFollowsTheBusAndIsNotInTheLeftColumn() throws Exception {
+        HeadlessSwing.onEdt(() -> {
+            JLabel weather = weatherLabel();
+            Container hud = assertInstanceOf(Container.class, named(GameScreen.NAME_HUD));
+            assertTrue(SwingUtilities.isDescendingFrom(weather, hud), "it is on the top bar");
+            assertTrue(hud.getComponent(hud.getComponentCount() - 1) == weather,
+                    "as the bar's LAST cell: everything that was on the bar before keeps its place and order");
+            assertEquals("—", weather.getText(), "no reading yet: a placeholder, not calm weather");
+            assertTrue(weather.getToolTipText() == null, "a placeholder has nothing more to say in a tooltip");
+            assertFalse(weather.isFocusable(), "a click on it must never pull focus out of the chat input");
+            assertFalse(weather.isRequestFocusEnabled());
+        });
+
+        bus.publish(new WeatherChangeEvent(18.4, "good", 0.5, "sunny", false));
+        HeadlessSwing.flushEdt();
+
+        HeadlessSwing.onEdt(() -> {
+            JLabel weather = weatherLabel();
+            assertEquals("18 kn · sunny · visibility good · swell 0.5 m", weather.getText());
+            assertEquals("18 kn · sunny · visibility good · swell 0.5 m (click for the forecast)",
+                    weather.getToolTipText());
+            // Not a line of the Port table any more — nor anywhere else in the left column.
+            Container port = assertInstanceOf(Container.class, named(GameScreen.NAME_PORT));
+            for (String text : labelTexts(port)) {
+                assertFalse(text.contains("kn") || text.contains("Weather"),
+                        "the Port table still shows the weather: \"" + text + "\"");
+            }
+        });
+
+        // A world is replaced: its weather is not the next world's.
+        bus.publish(new GameLoadedEvent(1, 50_000.0, 70));
+        HeadlessSwing.flushEdt();
+        HeadlessSwing.onEdt(() -> assertEquals("—", weatherLabel().getText(),
+                "back to the placeholder until the new world announces its own weather"));
+
+        // ...which it does right after the marker; even a reading equal to the old one is shown.
+        bus.publish(new WeatherChangeEvent(18.4, "good", 0.5, "sunny", false));
+        HeadlessSwing.flushEdt();
+        HeadlessSwing.onEdt(() -> assertEquals("18 kn · sunny · visibility good · swell 0.5 m",
+                weatherLabel().getText()));
+    }
+
+    @Test
+    @Timeout(20)
+    void atTheWindowsMinimumWidthTheSpeedTogglesStayOnTheBarWhateverTheWeatherSays() throws Exception {
+        // Every other cell at about its widest too: day 30, six-digit wallet, three-digit reputation.
+        long late = 29L * 24 * 3_600_000 + 23 * 3_600_000 + 59 * 60_000;
+        bus.publish(new SimClockTickEvent(late, 30, 23, 59));
+        bus.publish(new WalletChangedEvent(-123_456.0, 0.0, "test", null, late));
+        bus.publish(new ReputationChangedEvent(100.0, 0.0, "test", null, late));
+        bus.publish(WORST_WEATHER);
+        HeadlessSwing.flushEdt();
+
+        HeadlessSwing.onEdt(() -> {
+            int content = MainWindow.MIN_WIDTH - FRAME_SLACK; // what the frame's borders leave at the minimum
+            showAtDefaults(content, HEIGHT);
+            Rectangle hud = onScreen(GameScreen.NAME_HUD);
+            assertEquals(content, hud.width, "fixture: the top bar spans the window");
+
+            int togglesEnd = 0;
+            for (int speed : new int[] {1, 2, 4}) {
+                Component toggle = named(HUDPanel.NAME_SPEED_PREFIX + speed);
+                Rectangle at = HeadlessSwing.boundsIn(toggle, screen);
+                assertEquals(toggle.getPreferredSize().width, at.width, "x" + speed + " is squeezed");
+                assertTrue(at.x >= hud.x && at.x + at.width <= hud.x + hud.width,
+                        "x" + speed + " is pushed off the top bar at " + content + " px: " + at);
+                assertTrue(at.y >= hud.y && at.y + at.height <= hud.y + hud.height,
+                        "x" + speed + " is on a row the bar does not show: " + at);
+                togglesEnd = Math.max(togglesEnd, at.x + at.width);
+            }
+
+            JLabel weather = weatherLabel();
+            Rectangle at = HeadlessSwing.boundsIn(weather, screen);
+            assertEquals(WORST_WEATHER_TEXT, weather.getText());
+            assertTrue(at.x >= togglesEnd, "the weather comes after the speed toggles: " + at);
+            assertTrue(at.x + at.width <= hud.x + hud.width, "and ends inside the bar: " + at);
+            assertTrue(at.y >= hud.y && at.y + at.height <= hud.y + hud.height, "on the bar's one row: " + at);
+            assertTrue(at.width <= weather.getPreferredSize().width, "never wider than its text");
+            assertEquals(WORST_WEATHER_TEXT + " (click for the forecast)", weather.getToolTipText(),
+                    "whatever the bar had to cut is in the tooltip");
+            assertEveryColumnHasItsMinimum("at the window's minimum width");
+        });
+    }
+
+    @Test
+    @Timeout(20)
+    void theWeatherIsTheOneCellOfTheBarThatGivesWay() throws Exception {
+        // Font-independent: the bar is laid out at its own natural width, then narrower than that.
+        bus.publish(WORST_WEATHER);
+        HeadlessSwing.flushEdt();
+
+        HeadlessSwing.onEdt(() -> {
+            HUDPanel hud = assertInstanceOf(HUDPanel.class, named(GameScreen.NAME_HUD));
+            JLabel weather = weatherLabel();
+            Component lastToggle = named(HUDPanel.NAME_SPEED_PREFIX + 4);
+            int natural = hud.getPreferredSize().width;
+            int barHeight = hud.getPreferredSize().height;
+            int weatherWidth = weather.getPreferredSize().width;
+            assertTrue(weatherWidth > 100, "fixture: the weather line has a real width: " + weatherWidth);
+
+            HeadlessSwing.layOut(hud, natural, barHeight);
+            assertEquals(weatherWidth, weather.getWidth(), "at the bar's natural width nothing is cut");
+            Rectangle toggleAt = HeadlessSwing.boundsIn(lastToggle, hud);
+            int weatherX = weather.getX();
+            assertEquals(natural - HUDPanel.HGAP, weatherX + weather.getWidth(), "the bar ends one gap after it");
+
+            HeadlessSwing.layOut(hud, natural + 300, barHeight);
+            assertEquals(weatherWidth, weather.getWidth(), "room to spare is not handed to the weather");
+            assertEquals(weatherX, weather.getX(), "nor does it move: it follows the toggles");
+
+            HeadlessSwing.layOut(hud, natural - 40, barHeight);
+            assertEquals(weatherWidth - 40, weather.getWidth(), "forty pixels short: the weather gives up all forty");
+            assertEquals(weatherX, weather.getX());
+            assertEquals(toggleAt, HeadlessSwing.boundsIn(lastToggle, hud), "and the speed toggles none");
+
+            HeadlessSwing.layOut(hud, weatherX - 5, barHeight);
+            assertEquals(0, weather.getWidth(), "narrower than everything before it: no width, never a negative one");
+            assertEquals(toggleAt, HeadlessSwing.boundsIn(lastToggle, hud), "the toggles still have not moved");
+
+            assertEquals(natural - weatherWidth - HUDPanel.HGAP, hud.getMinimumSize().width,
+                    "the bar's own minimum is everything but the weather");
+        });
+    }
+
+    @Test
+    @Timeout(20)
+    void aClickOnTheWeatherWouldShowTheForecastForTheCurrentState() throws Exception {
+        HeadlessSwing.onEdt(() -> {
+            HUDPanel hud = assertInstanceOf(HUDPanel.class, named(GameScreen.NAME_HUD));
+            assertEquals(List.of("No weather reading yet."), labelTexts(hud.forecastContentForTest()),
+                    "before the first reading there is nothing to forecast from, and the popup says so");
+        });
+
+        bus.publish(new WeatherChangeEvent(32.0, "good", 3.4, "stormy", true));
+        HeadlessSwing.flushEdt();
+
+        HeadlessSwing.onEdt(() -> {
+            HUDPanel hud = assertInstanceOf(HUDPanel.class, named(GameScreen.NAME_HUD));
+            JPanel forecast = hud.forecastContentForTest();
+
+            // From a storm, by the weather agent's own table: 15/55/30, then its square, then its cube.
+            assertEquals(List.of(
+                    "Forecast",
+                    "", "sunny", "cloudy", "stormy",
+                    "in 1 hour", "15%", "55%", "30%",
+                    "in 2 hours", "39%", "47%", "14%",
+                    "in 3 hours", "54%", "37%", "9%",
+                    "From the weather model's transition table.",
+                    "A scenario's scripted weather is not included."), labelTexts(forecast));
+            assertTrue(String.join(" ", labelTexts(forecast)).endsWith(WeatherForecast.NOTE),
+                    "the honest line, whole, at the bottom");
+            assertEquals(WeatherForecastPopup.NAME, forecast.getName());
+
+            // It must not be able to take the keyboard from the chat input: nothing in it is focusable.
+            List<Component> parts = new ArrayList<>();
+            parts.add(forecast);
+            collect(forecast, parts);
+            for (Component part : parts) {
+                assertFalse(part.isFocusable(), part.getClass().getSimpleName() + " in the forecast is focusable");
+            }
+        });
+
+        // The forecast follows the reading: a sunny sky gives the sunny row of the table.
+        bus.publish(new WeatherChangeEvent(12.0, "good", 0.5, "sunny", false));
+        HeadlessSwing.flushEdt();
+        HeadlessSwing.onEdt(() -> {
+            HUDPanel hud = assertInstanceOf(HUDPanel.class, named(GameScreen.NAME_HUD));
+            List<String> texts = labelTexts(hud.forecastContentForTest());
+            assertEquals(List.of("in 1 hour", "85%", "13%", "2%"), texts.subList(5, 9));
+        });
+    }
+
+    @Test
+    @Timeout(20)
+    void nothingOnTheTopBarCanTakeTheKeyboardFocus() throws Exception {
+        bus.publish(WORST_WEATHER);
+        HeadlessSwing.flushEdt();
+
+        HeadlessSwing.onEdt(() -> {
+            assertFalse(weatherLabel().isFocusable(), "the weather, with a reading on it");
+            for (int speed : new int[] {1, 2, 4}) {
+                assertFalse(named(HUDPanel.NAME_SPEED_PREFIX + speed).isFocusable(), "x" + speed);
             }
         });
     }

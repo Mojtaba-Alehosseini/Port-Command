@@ -72,7 +72,8 @@ public final class ScriptedEventBehaviour extends SimTickerBehaviour {
     private final Set<String> fired = new LinkedHashSet<>();
     private final PriorityQueue<Pending> pending = new PriorityQueue<>(
             Comparator.comparingLong(Pending::simTimeSeconds).thenComparingInt(Pending::seq));
-    private int pendingScenarioEvents;
+    /** Volatile: written on the HarbourMaster's thread, read by the session's (S16 review). */
+    private volatile int pendingScenarioEvents;
     private int lastMaterializedDay;
     private int seq;
 
@@ -208,6 +209,9 @@ public final class ScriptedEventBehaviour extends SimTickerBehaviour {
                 if (pendingScenarioEvents == 0) {
                     log.info("scenario '{}' script complete — Poisson walk-in traffic resumes",
                             scenario.key());
+                    // S16 (ADR-20): the script is written for x1, so the speed control and the
+                    // day-length slider are locked while it runs; this is their release.
+                    ctx.eventBus().publish(new it.unige.portcommand.gui.events.ScriptedWaveEvent(false));
                 }
             }
             try {

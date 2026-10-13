@@ -25,7 +25,7 @@ import it.unige.portcommand.util.SimClock;
  * notification strip, as ONE panel that {@code MainWindow} hosts.
  *
  * <pre>
- *   top bar (HUDPanel, with the speed toggles)
+ *   top bar (HUDPanel: day, time, wallet, reputation, target, speed toggles, weather)
  *   ┌───────────────────┬──────────────────────────┬──────────────────────────┐
  *   │ Waiting for you   │                          │                          │
  *   ├───────────────────┤   chat (one tab per      │   comm log               │
@@ -41,6 +41,14 @@ import it.unige.portcommand.util.SimClock;
  * {@code GameScreenRenderTest} paints it to PNG files. For the same reason it holds no
  * {@code Preferences} — the window owns those and hands the stored proportions in and the dragged
  * ones out, so a test never touches the registry.
+ *
+ * <p><b>S16 (2026-10-13): the weather is on the top bar, not in the left column.</b> It used to be
+ * the Port table's last line. The bar is the one part of the screen that is in view whichever
+ * column the player is reading, and since S16 the weather decides whether a ship that has a deal
+ * may move at all. The bar gives the weather only the room its other cells leave
+ * ({@code HUDPanel.BarLayout}), so the layout below — and the 1000 px minimum window width — is
+ * unchanged; {@code GameScreenCompositionTest} pins that the speed toggles stay on the bar at
+ * that width with the longest weather line there is.
  *
  * <p><b>Three columns, two dividers.</b> The outer split is {@code left | (chat | comm log)}, the
  * inner one {@code chat | comm log}. The left column is narrow by design (20 % by default; the
@@ -98,8 +106,9 @@ final class GameScreen extends JPanel {
      * @param portStateArtifact  the shared tug state the Port table seeds from and follows
      * @param chatInputProcessor the NLP pipeline seam the chat column calls on Send
      * @param simClock           the shared clock — the chat's counters and closed-tab dwell read it
-     * @param speedControl       the one applier behind the top bar's speed toggles, or
-     *                           {@code null} for a top bar without them
+     * @param speedControl       the one applier behind the top bar's speed toggles — and (S16) the
+     *                           holder of the scenario-script lock they show — or {@code null}
+     *                           for a top bar without them
      */
     GameScreen(EventBus eventBus, PortStateArtifact portStateArtifact, ChatInputProcessor chatInputProcessor,
                SimClock simClock, GameSpeedControl speedControl) {

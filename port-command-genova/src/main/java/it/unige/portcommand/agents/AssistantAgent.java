@@ -11,6 +11,8 @@ import it.unige.portcommand.behaviours.assistant.ExplainEventBehaviour;
 import it.unige.portcommand.behaviours.assistant.PolicyParseBehaviour;
 import it.unige.portcommand.behaviours.assistant.RecommendOnDemandBehaviour;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
+import it.unige.portcommand.gui.events.WeatherChangeEvent;
+import it.unige.portcommand.harbourmaster.MovementGate;
 import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
@@ -25,7 +27,16 @@ import it.unige.portcommand.util.Subscription;
  * ("Why?"). Sends no ACL messages and makes no Swing calls of its own — every effect is an
  * {@link EventBus} event (planning/10's "No GUI calls" hard constraint).
  *
- * <p>Args: {@code [MarketHistoryArtifact, PolicyRegistryArtifact, LLMBridge, EventBus]}.
+ * <p>Args: {@code [MarketHistoryArtifact, PolicyRegistryArtifact, LLMBridge, EventBus]}, then —
+ * found by type, wherever they sit — the game's {@code ConversationClock} (required) and an
+ * optional opening {@link MovementGate.Reading}.
+ *
+ * <p><b>S16 (2026-10-13, decision B10): the Assistant knows the weather.</b> It hears
+ * {@link WeatherChangeEvent} on the bus — the same event the top bar shows — and keeps the last
+ * reading, so that a Hint can say when the weather would keep that vessel waiting outside after
+ * a deal ({@code assistant.WeatherNote}). It learns it from the bus and from nowhere else: no
+ * call into the weather agent or the HarbourMaster, and nothing added to the dialogue snapshot,
+ * which stays the list of what the PLAYER can see about the negotiation.
  */
 public final class AssistantAgent extends PortCommandAgent {
 
@@ -48,6 +59,20 @@ public final class AssistantAgent extends PortCommandAgent {
     /** Task 21: the Settings screen's live autopilot toggle, delivered over the bus (never a
      * direct GUI→agent call — INVARIANTS: GUI ↔ agents only through EventBus). */
     private Subscription<SettingsChangedEvent> settingsSubscription;
+
+    /**
+     * S16 (B10): the last weather reading heard, {@code null} until the first. Volatile: written
+     * by whichever thread publishes the event (the weather agent's, the HarbourMaster's for a
+     * scripted change, the loader's at boot), read on this agent's thread when a Hint runs. A new
+     * world gets a new Assistant, so a reading never outlives the world it described.
+     */
+    private volatile MovementGate.Reading lastWeather;
+    private Subscription<WeatherChangeEvent> weatherSubscription;
+
+    /** S16, test seam: the weather the next Hint would be checked against; {@code null} if none yet. */
+    public MovementGate.Reading lastWeather() {
+        return lastWeather;
+    }
 
     @Override
     protected void registerServices() {
@@ -74,8 +99,21 @@ public final class AssistantAgent extends PortCommandAgent {
             throw new IllegalStateException("AssistantAgent " + getLocalName()
                     + " requires the game's ConversationClock among its args (SimClock.conversationClock())");
         }
+        // S16 (B10): the weather, for the Hint's note. Subscribed BEFORE the plans exist, so no
+        // reading published from here on can be missed. CALLER_THREAD like the settings toggle
+        // below: the handler only stores four values in a volatile field, so it needs no hop to
+        // this agent's thread, and it must not wait for one — a Hint pressed in the same instant
+        // should already see the reading. An opening reading among the spawn args (found by
+        // type, absent in every harness that does not care) covers the one case the bus cannot:
+        // GameSession announces the boot weather once the HarbourMaster is up, which may be
+        // before this agent has subscribed — and the next broadcast is fifteen game minutes off.
+        lastWeather = optionalArgOfType(MovementGate.Reading.class);
+        weatherSubscription = eventBus.subscribe(WeatherChangeEvent.class,
+                e -> lastWeather = new MovementGate.Reading(e.windKnots(), e.visibility(), e.swell(), e.state()),
+                DeliveryMode.CALLER_THREAD);
+
         recommendPlan = new RecommendOnDemandBehaviour(this, algorithm, llmBridge, eventBus, cache,
-                conversationClock);
+                conversationClock, () -> lastWeather);
         autopilotPlan = new AutopilotExecuteBehaviour(this, algorithm, policyRegistry, eventBus, cache,
                 autopilotEnabled);
         policyPlan = new PolicyParseBehaviour(this, policyRegistry, eventBus);
@@ -118,6 +156,11 @@ public final class AssistantAgent extends PortCommandAgent {
         }
         if (settingsSubscription != null) {
             settingsSubscription.cancel();
+        }
+        // S16: same reason as the settings subscription — the bus outlives this agent, and a
+        // dead lambda would go on writing a torn-down world's weather field.
+        if (weatherSubscription != null) {
+            weatherSubscription.cancel();
         }
     }
 

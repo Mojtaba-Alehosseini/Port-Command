@@ -1,7 +1,9 @@
 package it.unige.portcommand.behaviours.assistant;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 import it.unige.portcommand.assistant.AssistantPromptBuilder;
 import it.unige.portcommand.assistant.AssistantPromptBuilder.PromptPayload;
@@ -10,8 +12,10 @@ import it.unige.portcommand.assistant.Recommendation;
 import it.unige.portcommand.assistant.RecommendationAlgorithm;
 import it.unige.portcommand.assistant.RecommendationCache;
 import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
+import it.unige.portcommand.assistant.WeatherNote;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.HintButtonEvent;
+import it.unige.portcommand.harbourmaster.MovementGate;
 import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.nlp.LLMRequest;
 import it.unige.portcommand.nlp.LLMResponse;
@@ -34,6 +38,11 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Never blocks the agent thread: the LLM call is a {@link java.util.concurrent.CompletableFuture}
  * continuation, never {@code .get()}/{@code .join()}.
+ *
+ * <p>S16 (2026-10-13, decision B10): when the weather is unsafe for the vessel the Hint is about,
+ * one more line follows the template — {@link WeatherNote}, an ordinary Assistant message. It is
+ * not part of the Hint text: not sent to the model, not validated, and not replaced when the
+ * model's wording replaces the template.
  */
 public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
 
@@ -59,6 +68,10 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
      * {@code myAgent} once a OneShot completes (the DispatchPlayerCommandBehaviour task-19
      * lesson), while the bus subscription lives on. */
     private final Agent agent;
+    /** S16 (B10): the last weather reading the Assistant has heard, or {@code null} before the
+     * first. Read once per Hint, on the thread the Hint runs on; the agent keeps the reading in
+     * a volatile field its bus subscription writes. */
+    private final Supplier<MovementGate.Reading> weather;
 
     /** No conversation clock: nothing to freeze (a private clock no vessel is on). */
     public RecommendOnDemandBehaviour(Agent agent, RecommendationAlgorithm algorithm, LLMBridge llmBridge,
@@ -66,9 +79,21 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
         this(agent, algorithm, llmBridge, eventBus, cache, new ConversationClock());
     }
 
+    /** No weather: a Hint never carries the S16 weather note (nothing has told this plan the weather). */
     public RecommendOnDemandBehaviour(Agent agent, RecommendationAlgorithm algorithm, LLMBridge llmBridge,
                                       EventBus eventBus, RecommendationCache cache,
                                       ConversationClock conversationClock) {
+        this(agent, algorithm, llmBridge, eventBus, cache, conversationClock, () -> null);
+    }
+
+    /**
+     * @param weather the Assistant's last weather reading, {@code null} from it while none has
+     *                arrived — see {@link WeatherNote}
+     */
+    public RecommendOnDemandBehaviour(Agent agent, RecommendationAlgorithm algorithm, LLMBridge llmBridge,
+                                      EventBus eventBus, RecommendationCache cache,
+                                      ConversationClock conversationClock,
+                                      Supplier<MovementGate.Reading> weather) {
         super(agent);
         this.agent = agent;
         this.algorithm = algorithm;
@@ -76,6 +101,7 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
         this.eventBus = eventBus;
         this.cache = cache;
         this.conversationClock = conversationClock;
+        this.weather = Objects.requireNonNull(weather, "weather");
     }
 
     /** Held so AssistantAgent cancels on takedown (task 22): the bus outlives the agent,
@@ -133,6 +159,7 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
         long hintId = HINT_IDS.incrementAndGet();
         // Before explain() is even called, so the revision can never overtake its own template.
         eventBus.publish(AssistantChatEvent.hintTemplate(event.dialogueId(), hintId, template));
+        publishWeatherNote(event.dialogueId(), snapshot);
 
         PromptPayload prompt = AssistantPromptBuilder.prompt(rec);
         // requiredFigures(), not allFigures(): the sidecar's own check 1 mirrors the Java one
@@ -178,6 +205,34 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
                             hintId, event.dialogueId(), (System.nanoTime() - askedAt) / 1_000_000L, ex.toString());
                     return null;
                 });
+    }
+
+    /**
+     * S16 (2026-10-13, decision B10): since S16 a deal closes in any weather and the ship then
+     * waits outside until the movement gate lets her in. When the last reading is unsafe for THIS
+     * vessel's type the Hint therefore gets one more line — the gate's own reason, rule ids
+     * included — as an ordinary Assistant message right after the template.
+     *
+     * <p>Ordinary on purpose (the two-argument {@link AssistantChatEvent}): it is appended and
+     * stays, where a Hint's template is replaced in place by the model's wording; and it never
+     * goes near the model or {@link HallucinationValidator}, which would reject the wind figure
+     * and the rule id as numbers the recommendation did not contain. Published after the template
+     * so it reads as its footnote. (An ordinary message is appended even to a tab that closed
+     * between the press and now, where the template itself is refused; the note then stands
+     * alone on a finished negotiation, which is harmless and true.)
+     *
+     * <p>Nothing when the weather is safe for the type, and nothing before the first reading. A
+     * failure of the weather check itself is logged and swallowed — the note is advice about the
+     * Hint, and must never cost the player the Hint.
+     */
+    private void publishWeatherNote(String dialogueId, WalkInDialogueSnapshot snapshot) {
+        try {
+            WeatherNote.forHint(snapshot.vesselType(), weather.get())
+                    .ifPresent(note -> eventBus.publish(new AssistantChatEvent(dialogueId, note)));
+        } catch (RuntimeException e) {
+            log.warn("hint ({}): the weather note could not be worked out; the hint goes on without it",
+                    dialogueId, e);
+        }
     }
 
     /** The bridge's configured timeout plus a margin, never less than the clock's default lease

@@ -22,7 +22,6 @@ import javax.swing.SwingUtilities;
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.artifacts.PortStateUpdate;
 import it.unige.portcommand.gui.events.PortStatusEvent;
-import it.unige.portcommand.gui.events.WeatherChangeEvent;
 import it.unige.portcommand.gui.model.PortTableModel;
 import it.unige.portcommand.persistence.events.GameLoadedEvent;
 import it.unige.portcommand.util.DeliveryMode;
@@ -31,13 +30,14 @@ import it.unige.portcommand.util.Subscription;
 
 /**
  * The Port table (S15, 2026-10-12), which replaced the map in the left column: one line per berth
- * (who holds it, and until when), then one line each for the berth queue, the tugs and the
- * weather. Every string comes from {@link PortTableModel}, a plain POJO unit-tested with no Swing
- * involved ({@code PortTableModelTest}); this class only places labels and keeps the model fed.
+ * (who holds it, and until when — or, S16, why its ship is not moving), then one line each for the
+ * berth queue and the tugs. Every string comes from {@link PortTableModel}, a plain POJO
+ * unit-tested with no Swing involved ({@code PortTableModelTest}); this class only places labels
+ * and keeps the model fed.
  *
  * <p><b>Two update channels, two different threading contracts</b> (INVARIANTS, task 18 — taken
  * over unchanged from the map panel this replaces). {@link EventBus} in {@link DeliveryMode#EDT}
- * already dispatches via {@code invokeLater}, so the three bus subscriptions below do NOT re-wrap.
+ * already dispatches via {@code invokeLater}, so the two bus subscriptions below do NOT re-wrap.
  * {@link PortStateArtifact} is the other mechanism: it calls its subscribers synchronously on
  * whatever agent thread called {@code updateTug()} — never the EDT — so this panel does the EDT
  * hop itself, around that callback only.
@@ -51,21 +51,34 @@ import it.unige.portcommand.util.Subscription;
  * <p><b>What comes from where.</b> Berths and queue: the HarbourMaster's {@link PortStatusEvent}
  * (the artifact knows contracted vessels only, and no queue). Tugs: the artifact — a snapshot at
  * construction, because a tug's first status push happens during fleet spawn, before any window
- * subscribes, then live deltas. Weather: {@link WeatherChangeEvent}; the top bar shows none, so
- * this line is the only place the player sees it. On {@link GameLoadedEvent} the berths and the
- * queue go back to "unknown" (the HarbourMaster re-announces a tick later) and the tugs are
- * reseeded from the artifact.
+ * subscribes, then live deltas. On {@link GameLoadedEvent} the berths and the queue go back to
+ * "unknown" (the HarbourMaster re-announces a tick later) and the tugs are reseeded from the
+ * artifact.
+ *
+ * <p><b>S16 (2026-10-13): no weather line.</b> The weather moved to the top bar ({@code HUDPanel}),
+ * so this panel no longer subscribes to {@code WeatherChangeEvent}. What the weather DOES to a
+ * ship is still here, on that ship's berth line.
+ *
+ * <p><b>S16: a waiting ship gets a second line.</b> A berth line is {@code Berth 1 | name |
+ * until 14:30} — three cells that fit the narrow column because the last one is short. The reason
+ * a ship is not moving is not short ({@code held (weather) [R15,R16,R19]} is about 160 px,
+ * {@code waiting: customs inspection [R22,R24]} about 200): beside the name it would leave the
+ * name some 25 px of the default 256 px column, i.e. no name at all, on exactly the line the
+ * player is looking at to find out which ship is stuck. So the reason is printed under the name,
+ * slightly indented, and that line exists only while there is a reason.
  *
  * <p><b>Built for a 180 px column.</b> A line never asks for more width than it gets: the cells
- * that can be long (a vessel's name, the three values) have no minimum width and are cut with an
- * ellipsis, and every line carries its full text as a tooltip. Nothing here takes the keyboard
- * focus — a click in this panel must never pull it out of the chat input.
+ * that can be long (a vessel's name, a reason, the two values) have no minimum width and are cut
+ * with an ellipsis, and every line carries its full text as a tooltip. Nothing here takes the
+ * keyboard focus — a click in this panel must never pull it out of the chat input.
  */
 public final class PortPanel extends JPanel {
 
     static final String TITLE = "Port";
     /** Pixels between the cells of one line. */
     static final int GAP = 6;
+    /** Pixels a reason line is set in from the berth labels' left edge (S16). */
+    static final int REASON_INDENT = 12;
     private static final int LINE_GAP = 2;
 
     private static final Color MUTED = new Color(0x66, 0x66, 0x66);
@@ -75,9 +88,10 @@ public final class PortPanel extends JPanel {
     private final PortStateArtifact portStateArtifact;
     private final List<Subscription<?>> subscriptions = new ArrayList<>();
     private final List<BerthLineView> berthViews = new ArrayList<>();
+    /** S16: one per berth, same order as {@link #berthViews}; visible only while its ship waits. */
+    private final List<ReasonLineView> reasonViews = new ArrayList<>();
     private final InfoLineView queueView = new InfoLineView();
     private final InfoLineView tugView = new InfoLineView();
-    private final InfoLineView weatherView = new InfoLineView();
     private volatile boolean active = true;
 
     public PortPanel(EventBus eventBus, PortStateArtifact portStateArtifact) {
@@ -88,12 +102,17 @@ public final class PortPanel extends JPanel {
         JLabel title = new JLabel(TITLE);
         title.setFont(title.getFont().deriveFont(Font.BOLD));
 
-        JPanel berthBlock = new JPanel(new GridLayout(0, 1, 0, LINE_GAP));
+        // S16: a stack, not a grid — a grid gives every cell the height of the tallest and keeps
+        // a place for a hidden one, and the reason lines are hidden most of the time.
+        JPanel berthBlock = new JPanel(new StackLayout(LINE_GAP));
         int berthCount = model.berthRows().size();
         for (int i = 0; i < berthCount; i++) {
             BerthLineView view = new BerthLineView();
             berthViews.add(view);
             berthBlock.add(view);
+            ReasonLineView reason = new ReasonLineView();
+            reasonViews.add(reason);
+            berthBlock.add(reason);
         }
 
         JPanel infoBlock = new JPanel(new GridLayout(0, 1, 0, LINE_GAP));
@@ -102,7 +121,6 @@ public final class PortPanel extends JPanel {
                 BorderFactory.createEmptyBorder(GAP - LINE_GAP, 0, 0, 0)));
         infoBlock.add(queueView);
         infoBlock.add(tugView);
-        infoBlock.add(weatherView);
 
         // The lines sit at the TOP of the column at their natural height; whatever height the
         // column has beyond that stays empty rather than stretching the lines apart.
@@ -143,7 +161,6 @@ public final class PortPanel extends JPanel {
         model.setOnChange(this::render);
 
         subscriptions.add(eventBus.subscribe(PortStatusEvent.class, model::applyStatus, DeliveryMode.EDT));
-        subscriptions.add(eventBus.subscribe(WeatherChangeEvent.class, model::applyWeather, DeliveryMode.EDT));
         subscriptions.add(eventBus.subscribe(GameLoadedEvent.class, this::onGameLoaded, DeliveryMode.EDT));
     }
 
@@ -161,15 +178,22 @@ public final class PortPanel extends JPanel {
 
     private void render() {
         List<PortTableModel.BerthLine> berths = model.berthRows();
+        boolean lineCountChanged = false;
         for (int i = 0; i < berthViews.size() && i < berths.size(); i++) {
             berthViews.get(i).display(berths.get(i));
+            lineCountChanged |= reasonViews.get(i).display(berths.get(i));
         }
         queueView.display(model.queueRow());
         tugView.display(model.tugRow());
-        weatherView.display(model.weatherRow());
+        if (lineCountChanged) {
+            // A reason line appeared or went: the table is one line taller or shorter, so the
+            // column has to be laid out again (hiding a component does not ask for that itself).
+            revalidate();
+            repaint();
+        }
     }
 
-    /** Gives the seven line labels one common width, so the cells after them start in one column. */
+    /** Gives the six line labels one common width, so the cells after them start in one column. */
     private void alignLabelColumn() {
         List<JLabel> labels = new ArrayList<>();
         for (BerthLineView view : berthViews) {
@@ -177,7 +201,6 @@ public final class PortPanel extends JPanel {
         }
         labels.add(queueView.label);
         labels.add(tugView.label);
-        labels.add(weatherView.label);
         int width = 0;
         for (JLabel label : labels) {
             width = Math.max(width, label.getPreferredSize().width);
@@ -206,6 +229,12 @@ public final class PortPanel extends JPanel {
         return List.of(view.label, view.occupant, view.state);
     }
 
+    /** Test-only: the label of berth {@code index}'s reason line (S16) — on a hidden line while
+     * that berth's ship is not waiting for anything. */
+    JLabel berthReasonLabelForTest(int index) {
+        return reasonViews.get(index).reason;
+    }
+
     /** Test-only: the value label of the queue line. */
     JLabel queueLabelForTest() {
         return queueView.value;
@@ -214,11 +243,6 @@ public final class PortPanel extends JPanel {
     /** Test-only: the value label of the tug line. */
     JLabel tugLabelForTest() {
         return tugView.value;
-    }
-
-    /** Test-only: the value label of the weather line. */
-    JLabel weatherLabelForTest() {
-        return weatherView.value;
     }
 
     /** Never a focus owner, never a focus target: see the class javadoc's last paragraph. */
@@ -281,10 +305,42 @@ public final class PortPanel extends JPanel {
             label.setText(line.label());
             occupant.setText(line.occupant());
             occupant.setForeground(line.isUnknown() ? MUTED : occupantColour);
-            state.setText(line.state());
+            // S16: the reason a ship is not moving goes on the line below (ReasonLineView); this
+            // cell keeps the short states — a time, or one word.
+            String trailing = line.waiting() ? "" : line.state();
+            state.setText(trailing);
             // Hidden when empty so the occupant cell gets the whole rest of the line.
-            state.setVisible(!line.state().isEmpty());
+            state.setVisible(!trailing.isEmpty());
             tip(line.isUnknown() ? null : line.fullText(), this, label, occupant, state);
+        }
+    }
+
+    /**
+     * The second line of a berth whose ship is waiting (S16): {@code held (weather) [R15,R19]},
+     * under the ship's name. Hidden — and then taking no room at all, see {@link StackLayout} —
+     * while there is no reason to print.
+     */
+    private static final class ReasonLineView extends JPanel {
+
+        private final CutLabel reason = new CutLabel();
+
+        ReasonLineView() {
+            super(new BorderLayout());
+            setBorder(BorderFactory.createEmptyBorder(0, REASON_INDENT, 0, 0));
+            add(reason, BorderLayout.CENTER);
+            quiet(this, reason);
+            setVisible(false);
+        }
+
+        /** @return whether this line appeared or disappeared — the table's height changed */
+        boolean display(PortTableModel.BerthLine line) {
+            boolean show = line.waiting() && !line.state().isEmpty();
+            reason.setText(show ? line.state() : "");
+            // The same full line as the berth line above it: either one tells the whole story.
+            tip(show ? line.fullText() : null, this, reason);
+            boolean changed = show != isVisible();
+            setVisible(show);
+            return changed;
         }
     }
 
@@ -390,6 +446,87 @@ public final class PortPanel extends JPanel {
 
         private boolean hasTrailing() {
             return trailing != null && trailing.isVisible();
+        }
+    }
+
+    /**
+     * Stacks the VISIBLE children of a container top to bottom, each as wide as the container and
+     * as tall as it asks to be, {@code gap} pixels apart (S16, 2026-10-13).
+     *
+     * <p>It exists for the reason lines. {@code GridLayout}, which held the berth lines before,
+     * sizes and places every child whether it is visible or not, so a hidden reason line would
+     * still have cost a line of height under each berth; and it makes all cells as tall as the
+     * tallest. Here a hidden child takes no room and no gap, so the table is four lines tall
+     * until a ship waits, and grows by exactly one line for each ship that does.
+     */
+    static final class StackLayout implements LayoutManager {
+
+        private final int gap;
+
+        StackLayout(int gap) {
+            this.gap = Math.max(0, gap);
+        }
+
+        @Override
+        public void addLayoutComponent(String name, Component comp) {
+            // Nothing is kept per child: every pass reads the container's own list.
+        }
+
+        @Override
+        public void removeLayoutComponent(Component comp) {
+            // Nothing is kept per child: every pass reads the container's own list.
+        }
+
+        @Override
+        public Dimension preferredLayoutSize(Container parent) {
+            int width = 0;
+            for (Component child : parent.getComponents()) {
+                if (child.isVisible()) {
+                    width = Math.max(width, child.getPreferredSize().width);
+                }
+            }
+            return withInsets(parent, width);
+        }
+
+        /** As narrow as the children allow; never shorter than the lines themselves. */
+        @Override
+        public Dimension minimumLayoutSize(Container parent) {
+            int width = 0;
+            for (Component child : parent.getComponents()) {
+                if (child.isVisible()) {
+                    width = Math.max(width, child.getMinimumSize().width);
+                }
+            }
+            return withInsets(parent, width);
+        }
+
+        private Dimension withInsets(Container parent, int width) {
+            Insets insets = parent.getInsets();
+            int height = 0;
+            int shown = 0;
+            for (Component child : parent.getComponents()) {
+                if (child.isVisible()) {
+                    height += child.getPreferredSize().height;
+                    shown++;
+                }
+            }
+            height += gap * Math.max(0, shown - 1);
+            return new Dimension(insets.left + insets.right + width, insets.top + insets.bottom + height);
+        }
+
+        @Override
+        public void layoutContainer(Container parent) {
+            Insets insets = parent.getInsets();
+            int width = Math.max(0, parent.getWidth() - insets.left - insets.right);
+            int y = insets.top;
+            for (Component child : parent.getComponents()) {
+                if (!child.isVisible()) {
+                    continue;
+                }
+                int height = child.getPreferredSize().height;
+                child.setBounds(insets.left, y, width, height);
+                y += height + gap;
+            }
         }
     }
 }

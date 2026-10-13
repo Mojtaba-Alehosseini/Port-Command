@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import it.unige.portcommand.agents.TugStatus;
 import it.unige.portcommand.gui.events.PortStatusEvent;
 import it.unige.portcommand.gui.events.PortStatusEvent.BerthRow;
-import it.unige.portcommand.gui.events.WeatherChangeEvent;
+import it.unige.portcommand.gui.events.PortStatusEvent.Wait;
 import it.unige.portcommand.gui.model.PortTableModel.BerthLine;
 import it.unige.portcommand.gui.model.PortTableModel.InfoLine;
 import it.unige.portcommand.harbourmaster.VesselTracking.Channel;
@@ -21,6 +21,7 @@ import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,6 +32,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * S15 (2026-10-12): every string the Port table shows. {@link PortTableModel} is a plain POJO (no
  * Swing/AWT import — pinned by the last test), so all of this runs on the JUnit thread with no EDT
  * involved; {@code PortPanelTest} owns the wiring.
+ *
+ * <p>S16 (2026-10-13): the berth lines say why a ship is not moving (the "why a ship waits"
+ * block), and the weather line is gone from this table — it is the top bar's now
+ * ({@code HudWeatherModelTest}).
  */
 class PortTableModelTest {
 
@@ -42,8 +47,6 @@ class PortTableModelTest {
     private static final long DAY1_1430 = 14 * HOUR + 30 * MINUTE;
     /** 02:15 on game day 2. */
     private static final long DAY2_0215 = DAY + 2 * HOUR + 15 * MINUTE;
-
-    private static final WeatherChangeEvent WEATHER = new WeatherChangeEvent(18.4, "good", 1.2, "sunny", false);
 
     /** The event's own contract: always the four berths in id order, free unless {@code held} says otherwise. */
     private static PortStatusEvent status(int gameDay, List<String> queued, BerthRow... held) {
@@ -57,9 +60,19 @@ class PortTableModelTest {
         return new PortStatusEvent(gameDay, new ArrayList<>(rows.values()), queued);
     }
 
-    private static BerthRow held(String berthId, String vesselId, String vesselName, Stage stage, Long until,
-                                 boolean weatherHeld) {
-        return new BerthRow(berthId, vesselId, vesselName, Channel.WALK_IN, stage, until, weatherHeld);
+    /** A holder that is waiting for nothing. */
+    private static BerthRow held(String berthId, String vesselId, String vesselName, Stage stage, Long until) {
+        return new BerthRow(berthId, vesselId, vesselName, Channel.WALK_IN, stage, until, Wait.NONE, List.of(), false);
+    }
+
+    /** S16: "Ligurian Dawn" on berth 2, not yet docked, waiting for {@code wait}. */
+    private static BerthRow waiting(Wait wait, String... ruleIds) {
+        return waiting(Stage.AWAITING_TUG, null, wait, ruleIds);
+    }
+
+    private static BerthRow waiting(Stage stage, Long until, Wait wait, String... ruleIds) {
+        return new BerthRow("berth_2", "W004", "Ligurian Dawn", Channel.WALK_IN, stage, until, wait,
+                List.of(ruleIds), false);
     }
 
     private static PortTableModel modelWith(PortStatusEvent event) {
@@ -82,14 +95,13 @@ class PortTableModelTest {
             assertEquals("Berth " + (i + 1), line.label());
             assertEquals("—", line.occupant(), "unknown is not \"free\"");
             assertEquals("", line.state());
+            assertFalse(line.waiting());
             assertTrue(line.isUnknown());
         }
         assertEquals(new InfoLine("Queue", "—", ""), model.queueRow());
         assertEquals(new InfoLine("Tugs", "—", ""), model.tugRow());
-        assertEquals(new InfoLine("Weather", "—", ""), model.weatherRow());
         assertTrue(model.queueRow().isUnknown());
         assertTrue(model.tugRow().isUnknown());
-        assertTrue(model.weatherRow().isUnknown());
     }
 
     // --- berths ------------------------------------------------------------------------------------
@@ -109,13 +121,14 @@ class PortTableModelTest {
     @Test
     void aDockedVesselShowsItsNameAndUntilWhenItStays() {
         PortTableModel model = modelWith(status(1, List.of(),
-                held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430, false),
-                held("berth_3", "W003", "Genoa Star", Stage.DOCKED, DAY2_0215, false)));
+                held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430),
+                held("berth_3", "W003", "Genoa Star", Stage.DOCKED, DAY2_0215)));
 
         BerthLine first = model.berthRows().get(0);
         assertEquals("Berth 1", first.label());
         assertEquals("C501", first.occupant());
         assertEquals("until 14:30", first.state());
+        assertFalse(first.waiting(), "a time is not a reason for waiting: it stays beside the name");
         assertEquals("Berth 1 · C501 · until 14:30", first.fullText());
 
         BerthLine third = model.berthRows().get(2);
@@ -149,40 +162,35 @@ class PortTableModelTest {
             "ARRIVING,       arriving",
             "NEGOTIATING,    arriving",
             "AWAITING_BERTH, arriving",
-            "AWAITING_TUG,   awaiting tugs",
+            "AWAITING_TUG,   arriving",
             "IN_TRANSIT,     arriving",
             "DOCKED,         docked",
             "DEPARTING,      leaving",
     })
-    void beforeThereIsAnUntilTheStateIsAWordForTheStage(Stage stage, String expected) {
-        BerthRow row = held("berth_2", "W004", "Ligurian Dawn", stage, null, false);
+    void aShipThatWaitsForNothingAndHasNoUntilShowsAWordForItsStage(Stage stage, String expected) {
+        // S16: AWAITING_TUG used to read "awaiting tugs". A granted ship that is not moving now
+        // says what it is waiting for (the block below); with nothing in its way it is arriving.
+        BerthRow row = held("berth_2", "W004", "Ligurian Dawn", stage, null);
 
         assertEquals(expected, PortTableModel.stateText(row, 1));
-        assertEquals(expected, modelWith(status(1, List.of(), row)).berthRows().get(1).state());
-    }
-
-    @Test
-    void aWeatherHoldOverridesTheStageWordButNotAnUntil() {
-        assertEquals("weather hold",
-                PortTableModel.stateText(held("berth_2", "W004", "Ligurian Dawn", Stage.AWAITING_TUG, null, true), 1));
-        assertEquals("weather hold",
-                PortTableModel.stateText(held("berth_2", "W004", "Ligurian Dawn", Stage.IN_TRANSIT, null, true), 1));
-        assertEquals("until 14:30",
-                PortTableModel.stateText(held("berth_2", "W004", "Ligurian Dawn", Stage.DOCKED, DAY1_1430, true), 1));
+        BerthLine line = modelWith(status(1, List.of(), row)).berthRows().get(1);
+        assertEquals(expected, line.state());
+        assertFalse(line.waiting(), "a stage word is short: it stays beside the name");
     }
 
     @Test
     void aFreeRowAndAMissingStageStillHaveAStateText() {
         assertEquals("", PortTableModel.stateText(BerthRow.free("berth_1"), 1));
+        assertEquals("", PortTableModel.stateText(BerthRow.closedFree("berth_1"), 1));
         assertEquals("", PortTableModel.stateText(null, 1));
-        assertEquals("arriving", PortTableModel.stateText(held("berth_1", "W1", "W1", null, null, false), 1));
+        assertEquals("arriving", PortTableModel.stateText(held("berth_1", "W1", "W1", null, null), 1));
     }
 
     @Test
     void aVesselWithNoNameIsShownByItsId() {
         PortTableModel model = modelWith(status(1, List.of(),
-                held("berth_1", "C501", null, Stage.DOCKED, null, false),
-                held("berth_2", "C502", "  ", Stage.DOCKED, null, false)));
+                held("berth_1", "C501", null, Stage.DOCKED, null),
+                held("berth_2", "C502", "  ", Stage.DOCKED, null)));
 
         assertEquals("C501", model.berthRows().get(0).occupant());
         assertEquals("C502", model.berthRows().get(1).occupant());
@@ -193,7 +201,7 @@ class PortTableModelTest {
         // Never produced by the HarbourMaster (its contract is four rows), but a short list must
         // not be read as "the others are free".
         PortTableModel model = modelWith(new PortStatusEvent(1,
-                List.of(BerthRow.free("berth_1"), held("berth_2", "C501", "C501", Stage.DOCKED, null, false)),
+                List.of(BerthRow.free("berth_1"), held("berth_2", "C501", "C501", Stage.DOCKED, null)),
                 List.of()));
 
         List<BerthLine> berths = model.berthRows();
@@ -210,6 +218,118 @@ class PortTableModelTest {
         assertEquals("Berth 4", PortTableModel.berthLabel("berth_4"));
         assertEquals("—", PortTableModel.berthLabel(null));
         assertEquals("—", PortTableModel.berthLabel(" "));
+    }
+
+    // --- why a ship waits (S16) ----------------------------------------------------------------------
+
+    @Test
+    void aShipHeldByTheWeatherNamesTheRulesThatHoldIt() {
+        BerthRow row = waiting(Wait.WEATHER, "R15", "R19");
+
+        assertEquals("held (weather) [R15,R19]", PortTableModel.stateText(row, 1));
+        BerthLine line = modelWith(status(1, List.of(), row)).berthRows().get(1);
+        assertEquals("Ligurian Dawn", line.occupant());
+        assertEquals("held (weather) [R15,R19]", line.state());
+        assertTrue(line.waiting(), "a reason is the long kind of state: the panel gives it its own line");
+        assertEquals("Berth 2 · Ligurian Dawn · held (weather) [R15,R19]", line.fullText());
+
+        assertEquals("held (weather) [R15,R16,R19]",
+                PortTableModel.stateText(waiting(Wait.WEATHER, "R15", "R16", "R19"), 1));
+        assertEquals("held (weather) [R17]", PortTableModel.stateText(waiting(Wait.WEATHER, "R17"), 1));
+    }
+
+    @Test
+    void aWeatherHoldWithNoRuleIdsHasNoEmptyBracket() {
+        assertEquals("held (weather)", PortTableModel.stateText(waiting(Wait.WEATHER), 1));
+        // The pre-S16 shape of the event — a bare flag — is such a hold. Before S16 this row read
+        // "weather hold".
+        BerthRow legacy = new BerthRow("berth_2", "W004", "Ligurian Dawn", Channel.WALK_IN, Stage.AWAITING_TUG,
+                null, true);
+        assertEquals("held (weather)", PortTableModel.stateText(legacy, 1));
+        assertEquals("held (weather)", PortTableModel.stateText(
+                new BerthRow("berth_2", "W004", "Ligurian Dawn", Channel.WALK_IN, Stage.IN_TRANSIT, null, true), 1));
+    }
+
+    @Test
+    void aShipReadyToLeaveButHeldSaysDepartureHeld() {
+        assertEquals("departure held (weather) [R19]",
+                PortTableModel.stateText(waiting(Stage.DOCKED, null, Wait.DEPARTURE_WEATHER, "R19"), 1));
+        assertEquals("departure held (weather)",
+                PortTableModel.stateText(waiting(Stage.DOCKED, null, Wait.DEPARTURE_WEATHER), 1));
+    }
+
+    @Test
+    void waitingForCustomsSaysInspectionOnlyWhenARuleOrderedOne() {
+        assertEquals("waiting: customs inspection [R22,R24]",
+                PortTableModel.stateText(waiting(Wait.CUSTOMS, "R22", "R24"), 1));
+        assertEquals("waiting: customs", PortTableModel.stateText(waiting(Wait.CUSTOMS), 1),
+                "the request is out and nothing has been ordered: no inspection is claimed");
+    }
+
+    @Test
+    void waitingForTugsAndForAClosedBerth() {
+        assertEquals("waiting: tugs", PortTableModel.stateText(waiting(Wait.TUGS), 1));
+        assertEquals("waiting: berth closed (flood)", PortTableModel.stateText(waiting(Wait.BERTH_CLOSED), 1));
+
+        BerthLine line = modelWith(status(1, List.of(), waiting(Wait.TUGS))).berthRows().get(1);
+        assertEquals("Berth 2 · Ligurian Dawn · waiting: tugs", line.fullText());
+        assertTrue(line.waiting());
+    }
+
+    @Test
+    void aFreeBerthThatIsClosedReadsClosedNotFree() {
+        PortTableModel model = modelWith(status(1, List.of(), BerthRow.closedFree("berth_2")));
+
+        BerthLine closed = model.berthRows().get(1);
+        assertEquals("closed (flood)", closed.occupant());
+        assertEquals("", closed.state());
+        assertFalse(closed.waiting(), "nobody is waiting there: it is one short cell, not a reason line");
+        assertFalse(closed.isUnknown());
+        assertEquals("Berth 2 · closed (flood)", closed.fullText());
+        assertEquals("Berth 1 · free", model.berthRows().get(0).fullText(), "the open berths still read free");
+    }
+
+    @Test
+    void aWaitOfTheWayInNeverHidesAnUntilButADepartureHoldDoes() {
+        // An "until" is the vessel's own docked-phase deadline: the ship is moored and being
+        // served, so a wait of the way in reported with it is the HarbourMaster's tracking being
+        // a tick behind. (S15 pinned this for the weather flag; S16 keeps it for all four.)
+        for (Wait wayIn : List.of(Wait.WEATHER, Wait.BERTH_CLOSED, Wait.CUSTOMS, Wait.TUGS)) {
+            BerthRow row = waiting(Stage.DOCKED, DAY1_1430, wayIn, "R15");
+            assertEquals("until 14:30", PortTableModel.stateText(row, 1), wayIn.toString());
+            assertFalse(PortTableModel.showsWait(row), wayIn.toString());
+            assertFalse(modelWith(status(1, List.of(), row)).berthRows().get(1).waiting(), wayIn.toString());
+        }
+        // The departure hold is only ever reported for a ship that HAS been served.
+        BerthRow leaving = waiting(Stage.DOCKED, DAY1_1430, Wait.DEPARTURE_WEATHER, "R15");
+        assertEquals("departure held (weather) [R15]", PortTableModel.stateText(leaving, 1));
+        assertTrue(PortTableModel.showsWait(leaving));
+    }
+
+    @ParameterizedTest
+    @EnumSource(Wait.class)
+    void everyKindOfWaitHasItsOwnWords(Wait wait) {
+        // A kind added to the enum later must not silently print nothing.
+        String text = PortTableModel.waitText(waiting(wait));
+
+        if (wait == Wait.NONE) {
+            assertEquals("", text);
+            assertFalse(PortTableModel.showsWait(waiting(wait)));
+        } else {
+            assertFalse(text.isBlank(), wait + " prints nothing");
+            assertFalse(text.contains("["), wait + " with no rule ids must not print a bracket: " + text);
+            assertTrue(PortTableModel.showsWait(waiting(wait)), wait.toString());
+            assertTrue(PortTableModel.waitText(waiting(wait, "R1", "R2")).endsWith(" [R1,R2]"),
+                    wait + " drops the rule ids it was given");
+        }
+    }
+
+    @Test
+    void ruleIdsArePrintedInTheBracketFormTheCommLogUses() {
+        assertEquals("[R15]", PortTableModel.ruleTag(List.of("R15")));
+        assertEquals("[R15,R16,R19]", PortTableModel.ruleTag(List.of("R15", "R16", "R19")));
+        assertEquals("", PortTableModel.ruleTag(List.of()));
+        assertEquals("", PortTableModel.ruleTag(null));
     }
 
     // --- queue -------------------------------------------------------------------------------------
@@ -301,31 +421,7 @@ class PortTableModelTest {
         assertEquals("—", model.tugRow().value());
     }
 
-    // --- weather -----------------------------------------------------------------------------------
-
-    @Test
-    void theWeatherLineIsWindStateAndVisibilityFromTheEventsOwnFields() {
-        PortTableModel model = new PortTableModel();
-        model.applyWeather(WEATHER);
-
-        assertEquals(new InfoLine("Weather", "18 kn · sunny · visibility good", ""), model.weatherRow());
-        assertEquals("Weather · 18 kn · sunny · visibility good", model.weatherRow().fullText());
-        assertEquals("42 kn · stormy · visibility poor",
-                PortTableModel.weatherText(new WeatherChangeEvent(41.5, "poor", 3.4, "stormy", true)),
-                "the wind is rounded to whole knots");
-        assertEquals("0 kn · cloudy · visibility good",
-                PortTableModel.weatherText(new WeatherChangeEvent(0.0, "good", 0.0, "cloudy", false)));
-    }
-
-    @Test
-    void aWeatherReadingWithAFieldMissingLeavesThatPartOut() {
-        assertEquals("18 kn", PortTableModel.weatherText(new WeatherChangeEvent(18.0, null, 0.0, null, false)));
-        assertEquals("18 kn · sunny",
-                PortTableModel.weatherText(new WeatherChangeEvent(18.0, " ", 0.0, "sunny", false)));
-        assertEquals("18 kn · visibility poor",
-                PortTableModel.weatherText(new WeatherChangeEvent(18.0, "poor", 0.0, "", false)));
-        assertEquals("—", PortTableModel.weatherText(null));
-    }
+    // --- numbers -----------------------------------------------------------------------------------
 
     @Test
     void theNumbersDoNotFollowTheDefaultLocale() {
@@ -334,24 +430,20 @@ class PortTableModelTest {
             // German writes a decimal comma, like a Danish or Italian desktop.
             Locale.setDefault(Locale.Category.FORMAT, Locale.GERMANY);
             assertEquals("18,4", String.format("%.1f", 18.4), "non-vacuity: the default locale is now German");
-            assertEquals("18 kn · sunny · visibility good", PortTableModel.weatherText(WEATHER));
             assertEquals("until 14:30", PortTableModel.untilText(DAY1_1430, 1));
 
-            // A locale whose default-format digits are not ASCII: without Locale.ROOT the wind and
-            // the clock would be printed in Thai digits on such a desktop.
+            // A locale whose default-format digits are not ASCII: without Locale.ROOT the clock
+            // would be printed in Thai digits on such a desktop.
             Locale.setDefault(Locale.Category.FORMAT, Locale.forLanguageTag("th-TH-u-nu-thai"));
             assertNotEquals("18", String.format("%.0f", 18.4), "non-vacuity: this default locale has its own digits");
-            assertEquals("18 kn · sunny · visibility good", PortTableModel.weatherText(WEATHER));
             assertEquals("until D2 02:15", PortTableModel.untilText(DAY2_0215, 1));
 
             PortTableModel model = modelWith(status(1, List.of("Genoa Star", "C502"),
-                    held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430, false)));
-            model.applyWeather(WEATHER);
+                    held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430)));
             model.seedTugs(Map.of("tug_1", TugStatus.IDLE, "tug_2", TugStatus.ESCORTING));
             assertEquals("until 14:30", model.berthRows().get(0).state());
             assertEquals("2 waiting", model.queueRow().value());
             assertEquals("1 free · 1 busy", model.tugRow().value());
-            assertEquals("18 kn · sunny · visibility good", model.weatherRow().value());
         } finally {
             Locale.setDefault(Locale.Category.FORMAT, previous);
         }
@@ -366,22 +458,50 @@ class PortTableModelTest {
         model.setOnChange(changes::incrementAndGet);
 
         model.applyStatus(status(1, List.of("Genoa Star"),
-                held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430, false)));
+                held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430)));
         assertEquals(1, changes.get());
 
         // A separately built but equal event: what a re-announce on request delivers.
         model.applyStatus(status(1, List.of("Genoa Star"),
-                held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430, false)));
+                held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430)));
         assertEquals(1, changes.get(), "record equality is the change test");
 
         model.applyStatus(status(2, List.of("Genoa Star"),
-                held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430, false)));
+                held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430)));
         assertEquals(2, changes.get(), "a new game day alone is a change: the until text depends on it");
         assertEquals("until D1 14:30", model.berthRows().get(0).state());
     }
 
     @Test
-    void tugAndWeatherRepeatsFireNoChangeEither() {
+    void aChangeOfTheReasonOrOfItsRulesIsAChange() {
+        // S16: the reason and its rule ids are part of the event's equality, so the table follows
+        // a hold that changes its rules (the wind drops, the sea state does not) without a tick
+        // being lost to "nothing changed".
+        PortTableModel model = new PortTableModel();
+        AtomicInteger changes = new AtomicInteger();
+        model.setOnChange(changes::incrementAndGet);
+
+        model.applyStatus(status(1, List.of(), waiting(Wait.WEATHER, "R15", "R19")));
+        model.applyStatus(status(1, List.of(), waiting(Wait.WEATHER, "R15", "R19")));
+        assertEquals(1, changes.get(), "the same hold again is not a change");
+
+        model.applyStatus(status(1, List.of(), waiting(Wait.WEATHER, "R19")));
+        assertEquals(2, changes.get());
+        assertEquals("held (weather) [R19]", model.berthRows().get(1).state());
+
+        model.applyStatus(status(1, List.of(), waiting(Wait.TUGS)));
+        assertEquals(3, changes.get());
+        assertEquals("waiting: tugs", model.berthRows().get(1).state());
+
+        model.applyStatus(status(1, List.of(), BerthRow.closedFree("berth_2")));
+        assertEquals(4, changes.get());
+        model.applyStatus(status(1, List.of(), BerthRow.free("berth_2")));
+        assertEquals(5, changes.get(), "a berth reopening is a change too");
+        assertEquals("free", model.berthRows().get(1).occupant());
+    }
+
+    @Test
+    void tugRepeatsFireNoChangeEither() {
         PortTableModel model = new PortTableModel();
         AtomicInteger changes = new AtomicInteger();
         model.setOnChange(changes::incrementAndGet);
@@ -398,22 +518,15 @@ class PortTableModelTest {
         assertEquals(1, changes.get(), "a seed equal to what is held is not a change");
         model.seedTugs(Map.of("tug_1", TugStatus.IDLE));
         assertEquals(2, changes.get());
-
-        model.applyWeather(WEATHER);
-        assertEquals(3, changes.get());
-        model.applyWeather(new WeatherChangeEvent(18.4, "good", 1.2, "sunny", false));
-        assertEquals(3, changes.get());
-        model.applyWeather(new WeatherChangeEvent(31.0, "good", 2.0, "cloudy", true));
-        assertEquals(4, changes.get());
     }
 
     @Test
-    void clearStatusBlanksBerthsAndQueueButKeepsTugsAndWeather() {
+    void clearStatusBlanksBerthsAndQueueButKeepsTheTugs() {
         PortStatusEvent event = status(1, List.of("Genoa Star"),
-                held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430, false));
+                held("berth_1", "C501", "C501", Stage.DOCKED, DAY1_1430),
+                waiting(Wait.WEATHER, "R19"));
         PortTableModel model = modelWith(event);
         model.seedTugs(Map.of("tug_1", TugStatus.IDLE, "tug_2", TugStatus.ESCORTING));
-        model.applyWeather(WEATHER);
         AtomicInteger changes = new AtomicInteger();
         model.setOnChange(changes::incrementAndGet);
 
@@ -423,10 +536,10 @@ class PortTableModelTest {
         for (BerthLine line : model.berthRows()) {
             assertEquals("—", line.occupant(), "back to unknown, not to free");
             assertEquals("", line.state());
+            assertFalse(line.waiting(), "the old world's hold is gone with it");
         }
         assertEquals(new InfoLine("Queue", "—", ""), model.queueRow());
         assertEquals("1 free · 1 busy", model.tugRow().value(), "tugs are kept");
-        assertEquals("18 kn · sunny · visibility good", model.weatherRow().value(), "weather is kept");
 
         model.clearStatus();
         assertEquals(1, changes.get(), "clearing an already blank table is not a change");
@@ -444,7 +557,7 @@ class PortTableModelTest {
         PortTableModel model = modelWith(status(1, List.of()));
         List<BerthLine> before = model.berthRows();
 
-        model.applyStatus(status(1, List.of(), held("berth_1", "C501", "C501", Stage.DOCKED, null, false)));
+        model.applyStatus(status(1, List.of(), held("berth_1", "C501", "C501", Stage.DOCKED, null)));
 
         assertEquals("free", before.get(0).occupant(), "a list handed out earlier does not change under its reader");
         assertEquals("C501", model.berthRows().get(0).occupant());
@@ -453,10 +566,12 @@ class PortTableModelTest {
     // --- the model/view split ----------------------------------------------------------------------
 
     @Test
-    void theThreeLeftColumnModelsImportNoSwingOrAwt() throws IOException {
+    void theLeftColumnAndTopBarModelsImportNoSwingOrAwt() throws IOException {
         // INVARIANTS (task 18): gui/model is plain Java, so it is tested off the EDT. Patterns are
         // matched against the whole source, so not even a fully-qualified use slips through.
-        for (String name : List.of("PortTableModel", "WaitingListModel", "ColumnDividers")) {
+        // S16: the two models behind the top bar's weather joined the list.
+        for (String name : List.of("PortTableModel", "WaitingListModel", "ColumnDividers", "HudWeatherModel",
+                "WeatherForecast")) {
             Path file = Path.of("src/main/java/it/unige/portcommand/gui/model/" + name + ".java");
             String source = Files.readString(file);
             assertFalse(source.contains("java.awt"), file + " must not use AWT");

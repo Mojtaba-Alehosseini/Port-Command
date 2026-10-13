@@ -45,6 +45,15 @@ import it.unige.portcommand.util.EventBus;
  * 180-600 s range. It sets the &times;1 BASE pace; the speed control (HUD / Game &#9656; Speed)
  * multiplies it and is not on this form.
  *
+ * <p><b>S16 (2026-10-13): the day length is locked while a scenario's script is running.</b> The
+ * script's events are placed in GAME time and written for the scenario's own pace: a shorter day
+ * gives the player less real time between two scripted hails exactly as a higher speed does, so
+ * the slider is locked together with the speed control (PLAYABILITY &sect;10, P12). The form is told
+ * at construction ({@code dayLengthLocked}); it then shows the slider disabled with one line
+ * saying why, publishes the pace it opened on whatever the slider says, and Reset leaves the day
+ * length alone. Autopilot is NOT locked — switching it on mid-script is a legitimate way to play
+ * a scenario.
+ *
  * <p><b>Honest per-knob apply</b> (see {@link SettingsChangedEvent}): day-length is live
  * (SimClock), autopilot is live (Assistant + Hint button), {@code llmModel} takes effect on the
  * next launch (sidecar restart — labelled as such), and {@code difficulty} is recorded only — no
@@ -56,6 +65,10 @@ final class SettingsForm extends JPanel {
     private static final String[] DIFFICULTIES = {"EASY", "NORMAL", "HARD"};
     private static final String[] LLM_MODELS = {"microsoft/Phi-4-mini-instruct", "google/gemma-3-4b-it"};
 
+    /** S16: the line under a locked day-length slider. */
+    static final String DAY_LENGTH_LOCK_NOTE =
+            "Day length is locked while the scenario's scripted events are running";
+
     private final EventBus eventBus;
     /** Stateless; constructed here rather than injected so no call site has to thread it through. */
     private final transient PolicyParser policyParser = new PolicyParser();
@@ -66,6 +79,8 @@ final class SettingsForm extends JPanel {
     /** S14: the slider's value is a STEP INDEX into {@link DayLengthSteps}, never seconds. */
     private final JSlider dayLengthSlider = new JSlider(0, DayLengthSteps.count() - 1, 0);
     private final JLabel dayLengthReadout = new JLabel();
+    /** S16: on the form only while the day length is locked. */
+    private final JLabel dayLengthLockNote = new JLabel(DAY_LENGTH_LOCK_NOTE);
     private final JCheckBox autopilotCheck = new JCheckBox("Enable Channel-B autopilot");
     private final JComboBox<String> llmCombo = new JComboBox<>(LLM_MODELS);
     private final JButton applyButton = new JButton("Apply");
@@ -77,18 +92,29 @@ final class SettingsForm extends JPanel {
     private final long seededDayLength;
     /** Whether the player has moved the day-length slider (or pressed Reset) since the form opened. */
     private boolean dayLengthTouched;
+    /** S16: the scenario's script is running — the day length cannot be changed from this form. */
+    private final boolean dayLengthLocked;
+
+    /** A form whose day length is not locked (free play, or a scenario whose script has ended). */
+    SettingsForm(EventBus eventBus, String difficulty, long initialDayLengthSeconds,
+                 boolean autopilotEnabled, String llmModel, Runnable onCloseRequest) {
+        this(eventBus, difficulty, initialDayLengthSeconds, autopilotEnabled, llmModel, false, onCloseRequest);
+    }
 
     /**
      * @param initialDayLengthSeconds the LIVE {@code SimClock} base rate (so a scenario's pinned
      *                                pacing is reflected, not the stale {@code defaults.json}
      *                                value), shown at its nearest step
+     * @param dayLengthLocked         S16: {@code true} while the scenario's scripted events are
+     *                                still to come — the slider is then disabled, with a note
      * @param onCloseRequest          run by OK (after Apply) and Cancel; the wrapping dialog disposes
      */
     SettingsForm(EventBus eventBus, String difficulty, long initialDayLengthSeconds,
-                 boolean autopilotEnabled, String llmModel, Runnable onCloseRequest) {
+                 boolean autopilotEnabled, String llmModel, boolean dayLengthLocked, Runnable onCloseRequest) {
         super(new GridBagLayout());
         this.eventBus = eventBus;
         this.seededDayLength = initialDayLengthSeconds;
+        this.dayLengthLocked = dayLengthLocked;
         setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
 
         difficultyCombo.setSelectedItem(difficulty);
@@ -111,6 +137,9 @@ final class SettingsForm extends JPanel {
             updateDayReadout();
         });
         updateDayReadout();
+        // S16: disabled LAST, once the seed value and the labels are in — a disabled slider
+        // still shows where the pace is, greyed, which is the point of leaving it on the form.
+        dayLengthSlider.setEnabled(!dayLengthLocked);
 
         autopilotCheck.setSelected(autopilotEnabled);
         autopilotCheck.setToolTipText("When on, the Assistant auto-acts on walk-ins and per-tab "
@@ -132,6 +161,10 @@ final class SettingsForm extends JPanel {
         addRow(row++, "Difficulty:", difficultyCombo);
         addRow(row++, "Game day length (at \u00d71 speed):", dayLengthSlider);
         addRow(row++, "", dayLengthReadout);
+        if (dayLengthLocked) {
+            dayLengthLockNote.setFont(dayLengthLockNote.getFont().deriveFont(java.awt.Font.PLAIN));
+            addRow(row++, "", dayLengthLockNote);
+        }
         addRow(row++, "Autopilot:", autopilotCheck);
         addRow(row++, "Autopilot policy:", policyRow);
         addRow(row++, "", policyFeedback);
@@ -246,8 +279,15 @@ final class SettingsForm extends JPanel {
      * The day length Apply will publish: the slider's step once the player has moved it (or
      * pressed Reset), otherwise the true {@link #seededDayLength} the form opened on — so a pace
      * that is not one of the steps is preserved rather than snapped by merely opening the dialog.
+     *
+     * <p>S16: while the day length is locked it is ALWAYS the pace the form opened on. The slider
+     * is disabled, so the player cannot move it; this is what makes that true of every other way
+     * its value could change as well.
      */
     private long effectiveDayLength() {
+        if (dayLengthLocked) {
+            return seededDayLength;
+        }
         return dayLengthTouched ? DayLengthSteps.secondsAt(dayLengthSlider.getValue()) : seededDayLength;
     }
 
@@ -264,9 +304,13 @@ final class SettingsForm extends JPanel {
     private void resetToDefaults() {
         Settings d = Settings.defaults();
         difficultyCombo.setSelectedItem(d.difficulty());
-        dayLengthSlider.setValue(DayLengthSteps.nearestIndex(d.realSecondsPerGameDay()));
-        dayLengthTouched = true; // even when the slider was already there: Reset MEANS the default
-        updateDayReadout();
+        if (!dayLengthLocked) {
+            // S16: a locked day length is not Reset's to change — the default (1 h) is not the
+            // scenario's pace, and Reset must not be the one button that gets past the lock.
+            dayLengthSlider.setValue(DayLengthSteps.nearestIndex(d.realSecondsPerGameDay()));
+            dayLengthTouched = true; // even when the slider was already there: Reset MEANS the default
+            updateDayReadout();
+        }
         autopilotCheck.setSelected(d.autopilotEnabled());
         llmCombo.setSelectedItem(d.llmModel());
     }
@@ -284,6 +328,12 @@ final class SettingsForm extends JPanel {
     /** Test-only: the readout line under the slider. */
     String dayLengthReadoutForTest() {
         return dayLengthReadout.getText();
+    }
+
+    /** Test-only: the note under a locked day-length slider, or {@code null} when the form shows
+     * none (the day length is not locked). */
+    String dayLengthLockNoteForTest() {
+        return dayLengthLockNote.getParent() == this ? dayLengthLockNote.getText() : null;
     }
 
     JCheckBox autopilotCheckForTest() {

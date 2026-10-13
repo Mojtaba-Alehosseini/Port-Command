@@ -399,6 +399,15 @@ public final class GameSession {
             // S14: the speed control is one of those settings, and the SimClock instance outlives
             // a world swap (the GUI holds it) — so it is re-paced here, before any agent boots
             // and arms a timer at the previous world's pace.
+            // S16 (T7, ADR-20): a scenario's script is written for x1 - its events are a few game
+            // minutes apart on purpose - so while scripted events are still to come the speed is
+            // x1, whatever the save says. A scenario save taken at x4 used to load at x4.
+            if (scriptPending(runtime) && it.unige.portcommand.core.Settings.load().gameSpeed() != 1) {
+                log.info("scripted events pending - speed x{} from the save reset to x1",
+                        it.unige.portcommand.core.Settings.load().gameSpeed());
+                it.unige.portcommand.core.Settings.applyLive(
+                        it.unige.portcommand.core.Settings.load().withGameSpeed(1));
+            }
             boot.getSimClock().setSpeedMultiplier(it.unige.portcommand.core.Settings.load().gameSpeed());
 
             CompletableFuture<HarbourMasterAgent> hmReady = new CompletableFuture<>();
@@ -557,7 +566,38 @@ public final class GameSession {
                             SimClock.gameDayOf(simMillis), boot.getSimClock().simHour(),
                             boot.getSimClock().simMinute()));
                     hm.requestPortStatus(); // S15: re-announce for the window that just opened
+                    publishWeatherAndScript(hm); // S16: the top bar's weather, the speed lock
                 });
+    }
+
+    /**
+     * S16 (ADR-20): two facts a window needs from the first instant and that are otherwise
+     * published only on change. The weather - the top bar shows it and the Assistant's note
+     * reads it, and the weather agent's first broadcast is up to fifteen game minutes away -
+     * from the HarbourMaster's reading, which is seeded at boot. And whether scripted scenario
+     * events are still to come, which locks the speed control and the day-length slider.
+     */
+    private void publishWeatherAndScript(HarbourMasterAgent hm) {
+        HarbourMasterAgent.WeatherReading w = hm.lastWeather();
+        if (w != null) {
+            boot.getEventBus().publish(new it.unige.portcommand.gui.events.WeatherChangeEvent(
+                    w.windKnots(), w.visibility(), w.swell(), w.state(), false));
+        }
+        boot.getEventBus().publish(
+                new it.unige.portcommand.gui.events.ScriptedWaveEvent(hm.scriptedWaveActive()));
+    }
+
+    /** Whether {@code runtime}'s scenario still has scripted events that have not fired. */
+    private static boolean scriptPending(it.unige.portcommand.scenario.ScenarioRuntime runtime) {
+        if (runtime == null || runtime.scenario() == null) {
+            return false;
+        }
+        for (int i = 0; i < runtime.scenario().events().size(); i++) {
+            if (!runtime.firedEventIds().contains(runtime.scenario().key() + "#" + i)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Re-parses persisted policy triggers straight into the session registry (no bus race). */
@@ -601,6 +641,7 @@ public final class GameSession {
                 boot.getSimClock().speedMultiplier()));
         // S15: served by the HarbourMaster's next tick, on its own thread — after everything above.
         hm.requestPortStatus();
+        publishWeatherAndScript(hm); // S16: after the loaded marker, which resets both displays
     }
 
     /**

@@ -12,6 +12,7 @@ import java.util.concurrent.CompletableFuture;
 
 import javax.imageio.ImageIO;
 import javax.swing.JButton;
+import javax.swing.JLabel;
 
 import it.unige.portcommand.agents.TugStatus;
 import it.unige.portcommand.artifacts.PortStateArtifact;
@@ -21,6 +22,7 @@ import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.PortStatusEvent;
 import it.unige.portcommand.gui.events.PortStatusEvent.BerthRow;
+import it.unige.portcommand.gui.events.PortStatusEvent.Wait;
 import it.unige.portcommand.gui.events.ReputationChangedEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WalletChangedEvent;
@@ -48,11 +50,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>No window, no agents, no JADE: a {@link GameScreen} on a private bus, clock and port
  * artifact, fed the same events the running game publishes (two walk-ins negotiating, with about
- * 2:24 and 0:24 left on their counters; a port with one vessel docked, one arriving and one
- * queued; a mixed tug fleet; weather; wallet, reputation and clock; a few comm-log lines, one
- * citing a Prolog rule; a notification), laid out by {@link HeadlessSwing} and painted into an
- * image. The paused picture paints the real {@link PauseOverlay} over the first one, with its
- * pass-through region bound to this screen's three columns, as {@code MainWindow} binds it.
+ * 2:24 and 0:24 left on their counters; a port with one vessel docked, one held by the weather,
+ * one waiting for its tugs and one queued; a mixed tug fleet; the weather on the top bar; wallet,
+ * reputation and clock; a few comm-log lines, one citing a Prolog rule; a notification), laid out
+ * by {@link HeadlessSwing} and painted into an image. The paused picture paints the real
+ * {@link PauseOverlay} over the first one, with its pass-through region bound to this screen's
+ * three columns, as {@code MainWindow} binds it.
+ *
+ * <p>S16 (2026-10-13): the Port table's rows are chosen to show every KIND of line the table now
+ * has — a time, a weather hold with its rule ids, a wait for tugs — and are not one consistent
+ * instant of a game (in the storm the top bar shows, the second ship would be held by it too).
  *
  * <p><b>What is asserted is structure, never looks.</b> The pictures differ with the platform's
  * fonts, so nothing here compares them to a stored image: the files exist and are not empty, the
@@ -74,6 +81,13 @@ class GameScreenRenderTest {
     /** The moment the pictures show: day 1, 09:12. */
     private static final long NOW = 9 * HOUR + 12 * MINUTE;
     private static final Position AT_BASE = new Position(50, 100, 0);
+
+    /** S16: the reading on the top bar, and what it reads as there. */
+    private static final WeatherChangeEvent WEATHER = new WeatherChangeEvent(32.0, "poor", 3.4, "stormy", true);
+    private static final String WEATHER_TEXT = "32 kn · stormy · visibility poor · swell 3.4 m";
+    /** S16: the two kinds of reason line the seeded Port table shows (berths 2 and 3). */
+    private static final String HELD_TEXT = "held (weather) [R15,R16,R19]";
+    private static final String TUGS_TEXT = "waiting: tugs";
 
     private final EventBus bus = new EventBus();
     private final SimClock clock = new SimClock(3_600);
@@ -142,6 +156,7 @@ class GameScreenRenderTest {
                 // All three pictures are on disk; now the structure.
                 assertColumnsInOrderAtTheirMinimumsOrWider(at1280, 1280);
                 assertColumnsInOrderAtTheirMinimumsOrWider(at1536, 1536);
+                assertTheWeatherAndTheReasonLinesAreOnTheScreen(screen, at1536);
                 assertThePauseDimsEverythingButTheColumns(at1280, pausedBox, normal, paused);
                 assertTrue(clicks[0], "a click on Resume reaches the overlay");
                 assertFalse(clicks[1], "a click on the waiting list falls through to it");
@@ -178,19 +193,23 @@ class GameScreenRenderTest {
         bus.publish(new NegotiationOpenedEvent("nego-W004", new WalkInDialogueSnapshot("W004", "ferry",
                 5.0, 110.0, 9_000, "general_cargo", "berth_4", 3, 1250.0, 0.0, 1, 0.0, false, "Ligurian Dawn")));
 
-        // The port: a contracted vessel docked until 14:30, a walk-in on its way in, one queued.
+        // The port: a contracted vessel docked until 14:30, a walk-in held outside by the weather
+        // (S16: with the rules that hold it), another waiting for its tugs, and one queued.
         bus.publish(new PortStatusEvent(1, List.of(
                 new BerthRow("berth_1", "C501", "C501", Channel.CONTRACTED, Stage.DOCKED,
-                        14 * HOUR + 30 * MINUTE, false),
-                BerthRow.free("berth_2"),
-                new BerthRow("berth_3", "W002", "Santa Margherita", Channel.WALK_IN, Stage.IN_TRANSIT, null, false),
+                        14 * HOUR + 30 * MINUTE, Wait.NONE, List.of(), false),
+                new BerthRow("berth_2", "W001", "Portofino Trader", Channel.WALK_IN, Stage.AWAITING_TUG, null,
+                        Wait.WEATHER, List.of("R15", "R16", "R19"), false),
+                new BerthRow("berth_3", "W002", "Santa Margherita", Channel.WALK_IN, Stage.AWAITING_TUG, null,
+                        Wait.TUGS, List.of(), false),
                 BerthRow.free("berth_4")),
                 List.of("Camogli Express")));
         portState.updateTug("tug_1", AT_BASE, TugStatus.IDLE);
         portState.updateTug("tug_2", AT_BASE, TugStatus.ESCORTING);
         portState.updateTug("tug_3", AT_BASE, TugStatus.RETURNING);
         portState.updateTug("tug_4", AT_BASE, TugStatus.BIDDING);
-        bus.publish(new WeatherChangeEvent(18.4, "good", 1.2, "sunny", false));
+        // S16: the weather is the top bar's now — the reading behind the hold on berth 2.
+        bus.publish(WEATHER);
 
         // The top bar.
         bus.publish(new SimClockTickEvent(NOW, 1, 9, 12));
@@ -214,8 +233,8 @@ class GameScreenRenderTest {
                 ACLMessage.PROPOSE, "tug_2 bids 180 for the escort, 4 min away", "cnp-C501", ontology,
                 "fipa-contract-net", "{\"tug_id\":\"tug_2\",\"cost\":180,\"eta_minutes\":4}"));
         bus.publish(new CommLogEvent(NOW - 5 * MINUTE, "weather_agent", List.of("harbour_master"), ACLMessage.INFORM,
-                "weather: 18 kn, sunny, visibility good", "weather-37", ontology, "weather-broadcast",
-                "{\"wind\":18.4,\"visibility\":\"good\",\"swell\":1.2,\"state\":\"sunny\"}"));
+                "weather: 32 kn, stormy, visibility poor", "weather-37", ontology, "weather-broadcast",
+                "{\"wind\":32,\"visibility\":\"poor\",\"swell\":3.4,\"state\":\"stormy\"}"));
         bus.publish(new CommLogEvent(NOW - 2 * MINUTE, "vessel_w003", List.of("harbour_master"), ACLMessage.PROPOSE,
                 "Genoa Star offers 1436 for 6h at berth_3", "nego-W003", ontology, "walk-in-negotiation",
                 "{\"vessel_id\":\"W003\",\"price\":1436,\"hours\":6}"));
@@ -307,6 +326,38 @@ class GameScreenRenderTest {
         assertTrue(chat.width >= GameScreen.COLUMN_MIN_WIDTH, "the chat has its minimum" + where);
         assertTrue(commLog.width >= GameScreen.COLUMN_MIN_WIDTH, "the comm log has its minimum" + where);
         assertTrue(port.width < chat.width, "the left column is the narrow one" + where);
+    }
+
+    /**
+     * S16 (2026-10-13): what the pictures were re-seeded to show is really on the laid-out screen
+     * — the weather on the top bar, and under their ships in the Port table the two kinds of
+     * reason line. Read from the labels, at the last size the screen was shown at; whether the
+     * text is cut there is a matter of the platform's font and is not asserted.
+     */
+    private static void assertTheWeatherAndTheReasonLinesAreOnTheScreen(GameScreen screen, Layout at) {
+        Component weather = HeadlessSwing.byName(screen, HUDPanel.NAME_WEATHER);
+        assertNotNull(weather, "the top bar has no weather line");
+        assertEquals(WEATHER_TEXT, ((JLabel) weather).getText());
+        Rectangle weatherAt = HeadlessSwing.boundsIn(weather, screen);
+        assertTrue(weatherAt.width > 0 && at.hud().contains(weatherAt),
+                "the weather is on the top bar, inside it: " + weatherAt + " in " + at.hud());
+
+        PortPanel port = (PortPanel) HeadlessSwing.byName(screen, GameScreen.NAME_PORT);
+        assertEquals("Portofino Trader", port.berthLabelsForTest(1).get(1).getText());
+        assertEquals("Santa Margherita", port.berthLabelsForTest(2).get(1).getText());
+        JLabel held = port.berthReasonLabelForTest(1);
+        JLabel tugs = port.berthReasonLabelForTest(2);
+        assertEquals(HELD_TEXT, held.getText());
+        assertEquals(TUGS_TEXT, tugs.getText());
+        for (JLabel reason : List.of(held, tugs)) {
+            Rectangle reasonAt = HeadlessSwing.boundsIn(reason, screen);
+            assertTrue(reason.getParent().isVisible() && reasonAt.width > 0 && reasonAt.height > 0,
+                    "\"" + reason.getText() + "\" has a line of its own on the table: " + reasonAt);
+            assertTrue(at.port().contains(reasonAt),
+                    "\"" + reason.getText() + "\" is inside the Port table: " + reasonAt + " in " + at.port());
+        }
+        assertFalse(port.berthReasonLabelForTest(0).getParent().isVisible(), "the docked ship has no reason line");
+        assertEquals("until 14:30", port.berthLabelsForTest(0).get(2).getText());
     }
 
     /**

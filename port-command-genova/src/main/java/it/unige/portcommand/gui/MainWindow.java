@@ -36,6 +36,7 @@ import it.unige.portcommand.gui.events.EndOfDayCompletedEvent;
 import it.unige.portcommand.gui.events.GameSpeedChangedEvent;
 import it.unige.portcommand.gui.events.GuiReadyEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
+import it.unige.portcommand.gui.events.ScriptedWaveEvent;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.model.GameSpeedControl;
 import it.unige.portcommand.gui.model.GameSpeedModel;
@@ -124,6 +125,11 @@ public final class MainWindow extends JFrame {
     /** The scenario whose own scripted cards ARE the tutorial (see {@link #maybeAutoOpenTutorial}). */
     private static final String TUTORIAL_SCENARIO_KEY = "tutorial";
 
+    /** S16: shown when a changed day length reaches {@link #applySettings} under the script lock. */
+    static final String DAY_LENGTH_LOCKED_TEXT =
+            "Day length not changed — it is locked while the scenario's scripted events are running. "
+                    + "The other settings were applied.";
+
     private final EventBus eventBus;
     private final GameLifecycle lifecycle;
     private final Leaderboard leaderboard;
@@ -132,8 +138,13 @@ public final class MainWindow extends JFrame {
     private final GameOverDialog gameOverDialog;
     private final PauseOverlay pauseOverlay;
     private final TutorialOverlay tutorialOverlay;
-    /** S14: the one applier behind both speed controls (HUD toggles, Game ▸ Speed). */
+    /** S14: the one applier behind both speed controls (HUD toggles, Game ▸ Speed). S16: it also
+     * holds the scenario-script lock ({@link GameSpeedControl#scriptPending()}) — the window's
+     * "is the script still running" for the speed menu, the Settings dialog and
+     * {@link #applySettings}. */
     private final GameSpeedControl speedControl;
+    /** S16: the Game ▸ Speed items by multiplier, kept so the script lock can disable them. */
+    private final Map<Integer, JRadioButtonMenuItem> speedMenuItems = new LinkedHashMap<>();
     /** S15: everything inside the frame — top bar, three columns, notification strip. */
     private final GameScreen screen;
     private final Preferences prefs = Preferences.userNodeForPackage(MainWindow.class);
@@ -203,7 +214,9 @@ public final class MainWindow extends JFrame {
         // in MENU too. With the window open on the empty shell there is no game to speed up, and
         // the next game start applies ITS settings' speed anyway — so an accepted ×4 would be
         // silently discarded a moment later. Refusing re-announces the speed in force, which
-        // snaps the toggle back instead.
+        // snaps the toggle back instead. S16: the third refusal — a scenario's script is still
+        // running — is not in this predicate but in the control itself (setScriptPending, fed by
+        // the ScriptedWaveEvent subscription below), where it can be tested without a window.
         this.speedControl = new GameSpeedControl(lifecycle.simClock(), eventBus,
                 () -> lifecycle.mode() == GameMode.LOADING || lifecycle.mode() == GameMode.MENU);
         this.screen = new GameScreen(eventBus, portStateArtifact, chatInputProcessor,
@@ -232,6 +245,15 @@ public final class MainWindow extends JFrame {
         // shared SimClock); the other three are mirrored for the dialog's next open (difficulty is
         // inert in v1, llmModel is next-launch — see SettingsChangedEvent).
         eventBus.subscribe(SettingsChangedEvent.class, this::applySettings, DeliveryMode.EDT);
+        // S16 (2026-10-13, PLAYABILITY §10 / T7 / P12): while a scenario's scripted events are
+        // still to come, the speed and the day length are locked. The fact lives on the
+        // HarbourMaster's scenario engine; the window may only hear of it over the bus — at every
+        // world boot, when the last scripted event fires, and again when a window reports ready
+        // (a world booted before the window existed). Engaging the lock drops the speed to ×1
+        // first if need be, and the control then announces the change: the top bar's toggles
+        // and the Game ▸ Speed items disable themselves on that announcement.
+        eventBus.subscribe(ScriptedWaveEvent.class,
+                e -> speedControl.setScriptPending(e.pending()), DeliveryMode.EDT);
 
         // Lifecycle mirror: the overlay + menu enablement follow the bus, never poll. The
         // EndOfDayCompletedEvent handler is subscribed BEFORE the dialog is constructed so the
@@ -503,40 +525,64 @@ public final class MainWindow extends JFrame {
      * saved speed. Left enabled in every mode: while paused the choice simply takes effect on
      * resume, and while a load is in flight — or (S15) no game is running at all — the control
      * itself refuses and the selection snaps back.
+     *
+     * <p>S16 (2026-10-13): with one exception. While a scenario's scripted events are still to
+     * come the speed is locked to ×1, and the three items are then DISABLED and say why in a
+     * tooltip ({@link #reflectScriptLock}) — for the whole of a scripted opening a selection that
+     * silently snapped back would read as a broken menu. A disabled item's accelerator does not
+     * fire, so Ctrl+2 and Ctrl+4 are locked with it. The two older refusals keep the snap-back:
+     * a load lasts a moment, and in the empty shell there is nothing to explain.
      */
     private JMenu buildSpeedMenu(EventBus eventBus) {
         JMenu speedMenu = new JMenu("Speed");
         speedMenu.setName(NAME_SPEED_MENU);
         ButtonGroup group = new ButtonGroup();
-        Map<Integer, JRadioButtonMenuItem> items = new LinkedHashMap<>();
         for (int speed : GameSpeedModel.options()) {
             JRadioButtonMenuItem item = new JRadioButtonMenuItem(GameSpeedModel.label(speed));
             item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0 + speed,
                     java.awt.event.InputEvent.CTRL_DOWN_MASK));
             item.addActionListener(e -> speedControl.set(speed));
             group.add(item);
-            items.put(speed, item);
+            speedMenuItems.put(speed, item);
             speedMenu.add(item);
         }
-        items.get(speedControl.current()).setSelected(true);
+        speedMenuItems.get(speedControl.current()).setSelected(true);
+        reflectScriptLock();
         eventBus.subscribe(GameSpeedChangedEvent.class, e -> {
-            JRadioButtonMenuItem item = items.get(GameSpeedModel.normalise(e.speed()));
+            JRadioButtonMenuItem item = speedMenuItems.get(GameSpeedModel.normalise(e.speed()));
             if (item != null) {
                 item.setSelected(true);
             }
+            // S16: the control announces a change of the script lock with this same event.
+            reflectScriptLock();
         }, DeliveryMode.EDT);
         return speedMenu;
     }
 
+    /**
+     * S16: the Game ▸ Speed items follow the scenario-script lock — disabled, with the reason as
+     * their tooltip, while it is engaged. Read from the control every time, never mirrored in a
+     * field of the window: the control is the one place that knows, and the top bar's toggles
+     * read the same answer.
+     */
+    private void reflectScriptLock() {
+        boolean locked = speedControl.scriptPending();
+        for (JRadioButtonMenuItem item : speedMenuItems.values()) {
+            item.setEnabled(!locked);
+            item.setToolTipText(locked ? GameSpeedModel.SCRIPT_LOCK_TOOLTIP : null);
+        }
+    }
+
     /** Settings → Settings…: opens the four-knob dialog seeded with the current live values (day
      * length read straight off the SimClock so a scenario's pinned pacing shows, not a stale
-     * default). */
+     * default). S16: and told whether the scenario's script is still running, in which case the
+     * dialog shows its day-length slider locked. */
     private JMenu buildSettingsMenu(EventBus eventBus) {
         JMenu settings = new JMenu("Settings");
         settingsItem = new JMenuItem("Settings…");
         settingsItem.addActionListener(e -> SettingsDialog.open(this, eventBus, Settings.load().difficulty(),
                 lifecycle.simClock().realSecondsPerGameDay(), Settings.load().autopilotEnabled(),
-                Settings.load().llmModel()));
+                Settings.load().llmModel(), speedControl.scriptPending()));
         settings.add(settingsItem);
         return settings;
     }
@@ -611,12 +657,25 @@ public final class MainWindow extends JFrame {
                     lifecycle.simClock().nowSimMillis()));
             return;
         }
-        lifecycle.simClock().setRealSecondsPerGameDay(event.realSecondsPerGameDay());
+        // S16 (2026-10-13, PLAYABILITY §10 / P12): while the scenario's script is running the day
+        // length is locked with the speed — a shorter day squeezes the script's game-minute gaps
+        // exactly as ×4 does. The dialog shows its slider disabled then, so a changed day length
+        // normally cannot arrive; if one does anyway (a dialog opened before the lock engaged),
+        // the clock keeps its pace, the other three knobs are applied as asked, and the player is
+        // told which part was not done.
+        long livePace = lifecycle.simClock().realSecondsPerGameDay();
+        boolean dayLengthRefused = speedControl.scriptPending() && event.realSecondsPerGameDay() != livePace;
+        long dayLength = dayLengthRefused ? livePace : event.realSecondsPerGameDay();
+        lifecycle.simClock().setRealSecondsPerGameDay(dayLength);
         it.unige.portcommand.core.Settings.applyLive(it.unige.portcommand.core.Settings.load()
-                .withRealSecondsPerGameDay(event.realSecondsPerGameDay())
+                .withRealSecondsPerGameDay(dayLength)
                 .withDifficulty(event.difficulty())
                 .withAutopilotEnabled(event.autopilotEnabled())
                 .withLlmModel(event.llmModel()));
+        if (dayLengthRefused) {
+            eventBus.publish(new NotificationEvent(DAY_LENGTH_LOCKED_TEXT, NotificationEvent.Severity.WARNING,
+                    lifecycle.simClock().nowSimMillis()));
+        }
     }
 
     /**
@@ -866,9 +925,9 @@ public final class MainWindow extends JFrame {
         debug.addSeparator();
         // Checkpoint-#5 request: storms are rare by design (steady-state ≈4%) — these force the
         // WeatherAgent's snapshot so the full hold → clear → re-dispatch cascade can be shown on
-        // demand. Everything downstream (alerts, holds, the Port table's weather line,
-        // notifications) runs the REAL pipeline; the next broadcast tick (~3 s at default speed)
-        // picks the override up.
+        // demand. Everything downstream (alerts, holds, the top bar's weather — S16 — and the
+        // Port table's "held (weather)" lines, notifications) runs the REAL pipeline; the next
+        // broadcast tick picks the override up.
         JMenuItem forceStorm = new JMenuItem("Force storm (42 kn, stormy)");
         forceStorm.addActionListener(e ->
                 eventBus.publish(new DebugWeatherEvent(42, "poor", 5.0, "stormy")));

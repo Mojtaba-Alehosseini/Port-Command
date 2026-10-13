@@ -16,6 +16,8 @@ import it.unige.portcommand.util.EventBus;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -277,5 +279,115 @@ class SettingsFormTest {
 
         assertEquals(3_600L, events.get(0).realSecondsPerGameDay());
         assertEquals("1 h per game day (default)", form.dayLengthReadoutForTest());
+    }
+
+    // ==================== Day length locked while a scenario's script runs (S16) ====================
+    //
+    // 2026-10-13, PLAYABILITY §10 / P12. A scenario's scripted events are placed in game time and
+    // written for the scenario's own pace; a shorter day squeezes the real time between two scripted
+    // hails exactly as a higher speed does. So while scripted events are still to come the form is
+    // built with dayLengthLocked = true: the slider is disabled and says why, nothing the form
+    // publishes can change the pace, and Reset is not a way round it. Autopilot is NOT locked.
+
+    /** A form opened mid-script on a scenario's 15-minute day. */
+    private static SettingsForm lockedForm(EventBus bus, List<SettingsChangedEvent> sink) {
+        bus.subscribe(SettingsChangedEvent.class, sink::add, DeliveryMode.CALLER_THREAD);
+        return new SettingsForm(bus, "HARD", 900L, true, "google/gemma-3-4b-it", true, () -> { });
+    }
+
+    @Test
+    @Timeout(5)
+    void whileLockedTheDayLengthSliderIsDisabledAndANoteSaysWhy() {
+        SettingsForm form = lockedForm(new EventBus(), new ArrayList<>());
+
+        assertFalse(form.dayLengthSliderForTest().isEnabled(), "the player cannot move a locked day length");
+        assertEquals("Day length is locked while the scenario's scripted events are running",
+                form.dayLengthLockNoteForTest());
+        assertEquals(DayLengthSteps.nearestIndex(900), form.dayLengthSliderForTest().getValue(),
+                "the disabled slider still shows where the pace is");
+        assertEquals("15 min per game day", form.dayLengthReadoutForTest());
+
+        // Only the day length is locked.
+        assertTrue(form.autopilotCheckForTest().isEnabled(), "autopilot is not locked by the script");
+        assertTrue(form.difficultyComboForTest().isEnabled());
+        assertTrue(form.llmComboForTest().isEnabled());
+    }
+
+    @Test
+    @Timeout(5)
+    void whileLockedApplyPublishesThePaceTheFormOpenedOnAndTheOtherKnobsAsEdited() {
+        EventBus bus = new EventBus();
+        List<SettingsChangedEvent> events = new ArrayList<>();
+        SettingsForm form = lockedForm(bus, events);
+
+        // No mouse can do this to a disabled slider; whatever else might must not get a new pace out.
+        form.dayLengthSliderForTest().setValue(DayLengthSteps.nearestIndex(7_200));
+        form.autopilotCheckForTest().setSelected(false);
+        form.difficultyComboForTest().setSelectedItem("EASY");
+        form.clickApplyForTest();
+
+        assertEquals(1, events.size());
+        assertEquals(900L, events.get(0).realSecondsPerGameDay(), "the day length the form opened on, untouched");
+        assertFalse(events.get(0).autopilotEnabled(), "autopilot is applied as edited: it is not locked");
+        assertEquals("EASY", events.get(0).difficulty());
+        assertEquals("15 min per game day", form.dayLengthReadoutForTest(),
+                "and the readout keeps saying what is in force");
+    }
+
+    @Test
+    @Timeout(5)
+    void whileLockedResetLeavesTheDayLengthAloneAndResetsTheRest() {
+        EventBus bus = new EventBus();
+        List<SettingsChangedEvent> events = new ArrayList<>();
+        SettingsForm form = lockedForm(bus, events);
+        int sliderBefore = form.dayLengthSliderForTest().getValue();
+        assertNotEquals(DayLengthSteps.nearestIndex(Settings.defaults().realSecondsPerGameDay()), sliderBefore,
+                "fixture: the scenario's pace is not the default, so a reset of it would show");
+
+        form.resetToDefaultsForTest();
+
+        assertEquals(sliderBefore, form.dayLengthSliderForTest().getValue(), "Reset is not a way round the lock");
+        assertEquals("15 min per game day", form.dayLengthReadoutForTest());
+        assertEquals("NORMAL", form.difficultyComboForTest().getSelectedItem(), "the other knobs are reset");
+        assertFalse(form.autopilotCheckForTest().isSelected());
+        assertEquals("microsoft/Phi-4-mini-instruct", form.llmComboForTest().getSelectedItem());
+        assertTrue(events.isEmpty(), "Reset still publishes nothing");
+
+        form.clickApplyForTest();
+        assertEquals(900L, events.get(0).realSecondsPerGameDay(), "not the default 3600 s");
+        assertEquals("NORMAL", events.get(0).difficulty());
+    }
+
+    @Test
+    @Timeout(5)
+    void anOffStepPaceIsKeptUnderTheLockToo() {
+        // A --day-length test pace under a running script: shown at its nearest step, published as itself.
+        EventBus bus = new EventBus();
+        List<SettingsChangedEvent> events = new ArrayList<>();
+        bus.subscribe(SettingsChangedEvent.class, events::add, DeliveryMode.CALLER_THREAD);
+        SettingsForm form = new SettingsForm(bus, "NORMAL", 75L, false, "microsoft/Phi-4-mini-instruct", true,
+                () -> { });
+
+        form.resetToDefaultsForTest();
+        form.clickApplyForTest();
+
+        assertEquals(75L, events.get(0).realSecondsPerGameDay());
+    }
+
+    @Test
+    @Timeout(5)
+    void whenNotLockedTheSliderIsEnabledAndThereIsNoNote() {
+        // The six-argument form — free play, or a scenario whose script has ended — is the form
+        // every test above this block drives: nothing about it changed in S16.
+        SettingsForm form = form(new EventBus(), new ArrayList<>());
+
+        assertTrue(form.dayLengthSliderForTest().isEnabled());
+        assertNull(form.dayLengthLockNoteForTest(), "no lock, no note on the form");
+
+        // And the explicit "not locked" of the seven-argument form is the same thing.
+        SettingsForm explicit = new SettingsForm(new EventBus(), "NORMAL", 3_600L, false,
+                "microsoft/Phi-4-mini-instruct", false, () -> { });
+        assertTrue(explicit.dayLengthSliderForTest().isEnabled());
+        assertNull(explicit.dayLengthLockNoteForTest());
     }
 }
