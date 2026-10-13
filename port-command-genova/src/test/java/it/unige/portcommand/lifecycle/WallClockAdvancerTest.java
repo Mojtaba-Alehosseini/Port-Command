@@ -72,6 +72,56 @@ class WallClockAdvancerTest {
         }
     }
 
+    /**
+     * S17b, decision T4 — born red. The scheduler runs at a fixed RATE, so after a stall it fires
+     * every tick it missed, back to back. Each tick used to be worth its full period whenever it
+     * came: a laptop that slept for ten minutes woke up to ten minutes of game time delivered in
+     * a fraction of a second, and every waiting vessel timed out at once (patience runs on these
+     * same ticks, ADR-18).
+     */
+    @Test
+    void aStallIsNotPaidBackAsABurstOfGameTime() {
+        SimClock clock = new SimClock(86_400); // 1 real second = 1 game second
+        java.util.concurrent.atomic.AtomicLong wall = new java.util.concurrent.atomic.AtomicLong(5_000_000_000L);
+        WallClockAdvancer advancer = new WallClockAdvancer(clock, 100L, wall::get);
+        for (int i = 0; i < 10; i++) {
+            wall.addAndGet(100_000_000L);
+            advancer.tick();
+        }
+        long before = clock.nowSimMillis();
+        assertEquals(1_000L, before, "fixture: ten ordinary ticks are one second");
+
+        wall.addAndGet(600_000_000_000L);       // the machine sleeps for ten minutes...
+        for (int i = 0; i < 6_000; i++) {       // ...and the scheduler fires the 6000 ticks it missed
+            advancer.tick();
+            wall.addAndGet(20_000L);            // 20 microseconds apart
+        }
+
+        long credited = clock.nowSimMillis() - before;
+        assertTrue(credited <= 1_000L,
+                "ten minutes asleep must not become ten minutes of game time - credited " + credited + " ms");
+    }
+
+    /** The other half: ordinary lateness is NOT lost. A tick that comes 250 ms after the last is
+     * worth 250 ms, so game time still tracks the wall clock on a busy machine. */
+    @Test
+    void aLateTickIsWorthTheTimeThatReallyPassed() {
+        SimClock clock = new SimClock(86_400);
+        java.util.concurrent.atomic.AtomicLong wall = new java.util.concurrent.atomic.AtomicLong(1_000_000_000L);
+        WallClockAdvancer advancer = new WallClockAdvancer(clock, 100L, wall::get);
+        advancer.tick(); // the first tick is worth one period
+        long[] gapsMs = {100, 250, 30, 20, 700, 100};
+
+        long total = 100;
+        for (long gap : gapsMs) {
+            wall.addAndGet(gap * 1_000_000L);
+            advancer.tick();
+            total += gap;
+        }
+
+        assertEquals(total, clock.nowSimMillis(), "every millisecond that passed, and no more");
+    }
+
     @Test
     void startAndStopAreIdempotent() {
         WallClockAdvancer advancer = new WallClockAdvancer(new SimClock(300), 1_000L);
