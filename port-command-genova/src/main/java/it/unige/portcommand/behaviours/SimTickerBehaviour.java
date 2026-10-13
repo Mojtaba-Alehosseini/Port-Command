@@ -24,11 +24,14 @@ import jade.core.behaviours.TickerBehaviour;
  * is re-armed with it; an unchanged pace never takes that branch. One tick at the old period can
  * still be pending when the pace changes — late by at most that one period; the re-armed
  * ticker's next tick is one new period after it (JADE's {@code reset} re-runs {@code onStart}
- * on the next scheduler pass, it does not cost a period). Eleven of the twelve subclasses
- * compare against sim time — a deadline, or the clock itself — so for them a late tick delays
- * an observation and loses nothing. {@code WeatherEvolutionBehaviour} is the exception: it takes
- * one Markov step per TICK, so the tick pending across a speed-up takes one weather step where
- * several were due, once per change. A subclass must not override {@code onStart}.
+ * on the next scheduler pass, it does not cost a period). The subclasses compare against sim
+ * time — a deadline, or the clock itself — so for them a late tick delays an observation and
+ * loses nothing. That had one exception until S16 (2026-10-13): {@code WeatherEvolutionBehaviour}
+ * took one Markov step per TICK, so the tick pending across a speed-up took one weather step
+ * where several were due (and a slow-down added one). Weather steps are now the full game hours
+ * of the sim clock, counted by {@code WeatherStepper}; that behaviour is a ticker like the
+ * others and only notices that an hour boundary has passed, so a late tick costs it nothing
+ * either. A subclass must not override {@code onStart}.
  */
 public abstract class SimTickerBehaviour extends TickerBehaviour {
 

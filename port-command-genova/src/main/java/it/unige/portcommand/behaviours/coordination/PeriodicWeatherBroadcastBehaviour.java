@@ -15,6 +15,7 @@ import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.WeatherChangeEvent;
+import it.unige.portcommand.harbourmaster.MovementGate;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.SimClock;
 import jade.core.AID;
@@ -27,19 +28,54 @@ import org.slf4j.LoggerFactory;
  * Sends the HarbourMaster a weather snapshot every 15 sim-minutes (audit P1-4 — it used to
  * address a {@code weather-subscriber} DF type nothing registers, so the channel was dead;
  * see {@link #broadcast}), publishes the GUI's {@link WeatherChangeEvent} (task 24 — it feeds
- * the Port table's weather line), and — when {@link WeatherAlertPolicy} reports a genuine
+ * the top bar's weather), and — when {@link WeatherAlertPolicy} reports a genuine
  * severity transition — sends the HarbourMaster an alert on the
  * {@code WEATHER_ALERT_PROTOCOL}, in BOTH directions:
  * <ul>
  *   <li>{@code weather_threshold}, {@code priority=high} — conditions crossed a
  *       limit upward; {@code HandleWeatherAlertBehaviour} runs the hold sweep.</li>
- *   <li>{@code weather_clear} (normal priority) — conditions recovered a limit;
- *       the hold behaviour re-evaluates weather-held vessels and re-dispatches
- *       their tug CNP. This is the signal whose absence permanently stranded
- *       held vessels (task-19 finding, filed at planning/24).</li>
+ *   <li>{@code weather_clear} (normal priority) — the weather is calm again for every
+ *       vessel type; the hold behaviour re-evaluates weather-held vessels and
+ *       re-dispatches their tug CNP. This is the signal whose absence permanently
+ *       stranded held vessels (task-19 finding, filed at planning/24).</li>
  * </ul>
  * The current snapshot is shared (read-only here) with
  * {@code WeatherEvolutionBehaviour} via the {@link AtomicReference}.
+ *
+ * <p><b>S16 (2026-10-13, ADR-20).</b> Two things changed around this class, neither in the
+ * shape of what it sends. (1) A cycle now also runs at once after every weather step that took
+ * effect ({@code WeatherEvolutionBehaviour} → {@link #broadcastNow()}), so on top of the
+ * 15-sim-minute rhythm there is one broadcast on each full game hour whose step changed the
+ * reading. (2) {@code weather_clear} and the "Weather clearing" notification used to follow any
+ * recovering dimension, a wind-band drop inside a storm included; they now follow
+ * {@link WeatherAlertPolicy}'s S16 rule and are sent only when the reading has become safe for
+ * every vessel type, release margin included (decision B4). The order inside a cycle is
+ * unchanged and load-bearing: the periodic snapshot first, so the HarbourMaster's reading is
+ * current before an alert makes it act.
+ *
+ * <p><b>S16, two rules about WHAT is announced</b> (the decision of a cycle is
+ * {@link #announce}, pure and unit-tested without an agent):
+ * <ul>
+ *   <li><b>The baseline is the reading the agent boots with</b>, not {@code null}. The first
+ *       cycle after a new game, a scenario start or a load compares against the opening or
+ *       restored snapshot. An unchanged reading is silent, exactly as before — a load taken in
+ *       mid-storm re-fires no alert, which was the whole reason for the old null baseline — and
+ *       a real change in the first minutes is announced. It used not to be: a step is broadcast
+ *       at once, so a first hourly step that fell before the first 15-sim-minute tick became
+ *       the baseline itself and its worsening was never announced.</li>
+ *   <li><b>A clearing is announced only after an announced worsening.</b> The policy is
+ *       stateless: it calls 28&nbsp;→&nbsp;26&nbsp;kn a clear (28 is inside a tanker's release
+ *       margin, 26 is calm) whether the wind came down from 31 or merely wandered up from 26.
+ *       In the second case nothing was ever announced and nobody was held, and "Weather
+ *       clearing" was news without cause. One flag, {@code worseningOutstanding}, tells the two
+ *       apart: set when a worsening alert goes out, and at boot when the boot reading is not
+ *       calm (a world that starts or loads in a storm must still announce its end); a clear
+ *       transition is announced only while it is set, and lowers it. With the flag down the
+ *       cycle is routine: the periodic snapshot as always, no alert, no notification,
+ *       {@code thresholdCrossed=false}. Nobody waits for the clear alert — the HarbourMaster
+ *       runs its hold and release checks on every weather message — so this removes only the
+ *       unfounded news.</li>
+ * </ul>
  *
  * <p><b>Task 19 cadence fix.</b> The tick was 60 sim-seconds, which at the default
  * 300-real-second game day compresses to ~0.2&nbsp;s of wall time — hundreds of
@@ -61,9 +97,22 @@ public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour 
     private final AtomicReference<WeatherSnapshot> current;
     private final ServiceLocator locator;
     private final EventBus eventBus;
-    /** The previous reading — {@link WeatherAlertPolicy}'s baseline. Null until the first tick. */
+    /**
+     * The previous reading — {@link WeatherAlertPolicy}'s baseline. S16: seeded at construction
+     * with the reading the agent boots with (it was {@code null} until the first tick); see the
+     * class comment.
+     */
     private WeatherSnapshot lastObserved;
+    /** S16: a worsening has been announced (or the world booted in bad weather) and no clearing
+     * has been announced since. See the class comment and {@link #announce}. */
+    private boolean worseningOutstanding;
 
+    /**
+     * @param current the agent's shared cell. It must ALREADY hold the reading the world boots
+     *                with — the init-args snapshot, or the restored one on a load — because that
+     *                reading is taken here as the alert baseline ({@code WeatherAgent.onSetup}
+     *                fills the cell before it builds this behaviour for exactly this reason)
+     */
     public PeriodicWeatherBroadcastBehaviour(Agent agent, SimClock simClock,
                                              AtomicReference<WeatherSnapshot> current, ServiceLocator locator,
                                              EventBus eventBus) {
@@ -71,6 +120,60 @@ public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour 
         this.current = current;
         this.locator = locator;
         this.eventBus = eventBus;
+        this.lastObserved = current.get();
+        this.worseningOutstanding = worseningOutstandingAtBoot(lastObserved);
+    }
+
+    /**
+     * What one broadcast cycle announces, and the flag it leaves behind.
+     *
+     * @param alert                the alert to send, or empty for a routine cycle
+     * @param worseningOutstanding the value of the behaviour's flag after this cycle
+     */
+    public record Announcement(Optional<Direction> alert, boolean worseningOutstanding) {
+    }
+
+    /**
+     * The announcement rule of one cycle (S16), pure: {@link WeatherAlertPolicy#transition}
+     * decides the direction of the change {@code previous → reading}; this decides whether it
+     * is news.
+     * <ul>
+     *   <li>no transition → nothing, the flag stays as it is;</li>
+     *   <li>WORSENED → announced, always; the flag is raised (and stays raised through any
+     *       further worsening);</li>
+     *   <li>CLEARED → announced only if the flag is up, and lowers it; with the flag down it is
+     *       a routine cycle.</li>
+     * </ul>
+     * Public (with {@link #worseningOutstandingAtBoot}) only so that it can be unit-tested: this
+     * package is one of the catalogue-counted behaviour packages and can hold no test class.
+     *
+     * @param worseningOutstanding the behaviour's flag before this cycle
+     * @param previous             the baseline: the last reading broadcast, or the boot reading
+     * @param reading              the reading being broadcast now
+     */
+    public static Announcement announce(boolean worseningOutstanding, WeatherSnapshot previous,
+                                        WeatherSnapshot reading) {
+        Optional<Direction> transition = WeatherAlertPolicy.transition(previous, reading);
+        if (transition.isEmpty()) {
+            return new Announcement(Optional.empty(), worseningOutstanding);
+        }
+        if (transition.get() == Direction.WORSENED) {
+            return new Announcement(transition, true);
+        }
+        return worseningOutstanding
+                ? new Announcement(transition, false)
+                : new Announcement(Optional.empty(), false);
+    }
+
+    /**
+     * The flag's value at boot (S16): raised when the reading the world boots with is not calm
+     * for every vessel type ({@link MovementGate#calmForEveryType}, the same test the policy's
+     * clear uses). No alert preceded that reading in THIS world, but ships may be held under
+     * it, so its end is news. A missing reading counts as calm.
+     */
+    public static boolean worseningOutstandingAtBoot(WeatherSnapshot bootReading) {
+        return bootReading != null && !MovementGate.calmForEveryType(new MovementGate.Reading(
+                bootReading.wind(), bootReading.visibility(), bootReading.swell(), bootReading.state()));
     }
 
     /**
@@ -86,6 +189,11 @@ public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour 
      * The scripted event now calls this so the change takes effect at the instant it is scripted
      * for. Idempotent with respect to the ticker: {@code lastObserved} advances here, so the next
      * periodic tick simply sees no transition.
+     *
+     * <p><b>S16.</b> Also called after every weather step that took effect, for the same reason:
+     * a step on the hour could leave the HarbourMaster working from the previous reading for up
+     * to fifteen game minutes. Like every cycle it does nothing while the game is paused; the
+     * caller only steps while the clock runs.
      */
     public void broadcastNow() {
         onSimTick();
@@ -101,10 +209,14 @@ public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour 
             return;
         }
         broadcast(w);
-        Optional<Direction> transition = WeatherAlertPolicy.transition(lastObserved, w);
-        transition.ifPresent(direction -> alertHarbourMaster(w, direction));
+        // S16: the flag follows the DECISION to announce. (If the hub is not in the DF yet, the
+        // alert is dropped with a warning, as it always was — a boot race at very fast paces.
+        // The flag is raised all the same: the weather did worsen, so its end is still news.)
+        Announcement announcement = announce(worseningOutstanding, lastObserved, w);
+        announcement.alert().ifPresent(direction -> alertHarbourMaster(w, direction));
         eventBus.publish(new WeatherChangeEvent(w.wind(), w.visibility(), w.swell(), w.state(),
-                transition.isPresent()));
+                announcement.alert().isPresent()));
+        worseningOutstanding = announcement.worseningOutstanding();
         lastObserved = w;
     }
 
@@ -168,6 +280,10 @@ public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour 
         // decided this transition IS threshold_crossed/2's enumeration (WeatherAlertPolicy.windBand
         // delegates to PrologQueries.windThresholdsCrossed), so the citation is the rule actually
         // consulted, and the Paraphraser renders it into the comm log line.
+        // S16: that is the whole truth for the worsening direction only. A clear is now decided
+        // by MovementGate.calmForEveryType (R15 with the release margin, R16, R17, R19), not by
+        // a band comparison. Its reason string is left as it was: it is wire content that the
+        // Paraphraser prints into the comm log and that the comm-log tests carry as fixtures.
         alert.setContent(TerminalJson.write(Map.of(
                 "event", worsened ? "weather_threshold" : "weather_clear",
                 "reason", worsened ? "threshold_crossed [R18]" : "threshold_cleared [R18]",

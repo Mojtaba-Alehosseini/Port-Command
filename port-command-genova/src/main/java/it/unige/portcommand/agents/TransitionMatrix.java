@@ -5,8 +5,14 @@ import java.util.Map;
 
 /**
  * The weather Markov chain's 3×3 transition matrix over {@code sunny/cloudy/stormy}.
- * Tunable via {@code defaults.json} (task 23); rides inside {@code WeatherInitArgs}
- * as a Jackson {@code Map<from, Map<to, probability>>}.
+ * Rides inside {@code WeatherInitArgs} as a Jackson {@code Map<from, Map<to, probability>>}.
+ *
+ * <p><b>The shipped game has exactly one matrix: {@link #defaults()}, in code.</b> (S16,
+ * 2026-10-13, audit finding A6: this comment used to say the matrix was "tunable via
+ * {@code defaults.json}". It never was — that file has no weather key, and every production
+ * spawn passes {@code defaults()}.) That is also what makes the forecast honest (decision B9):
+ * the 1–3 hour outlook is powers of {@code defaults()} applied to the current state, the same
+ * numbers the chain itself samples, with no look at the random stream.
  */
 public record TransitionMatrix(Map<String, Map<String, Double>> rows) {
 
@@ -20,8 +26,9 @@ public record TransitionMatrix(Map<String, Map<String, Double>> rows) {
      * fire on compressed WALL time (~a game-day of weather per 5 real minutes), so nearly
      * every tug escort was cancelled mid-flight by a weather hold. Storms are now rare and
      * short (steady-state ≈4%): dramatic when they land, not a permanent hurricane. Task
-     * 24 fixes the underlying wall-time compression; task 23 makes these rows config-file
-     * data.
+     * 24 fixed the underlying wall-time compression. (The plan to make these rows
+     * config-file data in task 23 was not carried out; they are constants — see the class
+     * comment. Since S16 one step is one game hour of the sim clock, exactly.)
      */
     public static TransitionMatrix defaults() {
         return new TransitionMatrix(Map.of(

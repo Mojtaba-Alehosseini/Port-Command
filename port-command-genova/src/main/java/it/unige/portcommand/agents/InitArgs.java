@@ -36,8 +36,14 @@ public sealed interface InitArgs
 
     /**
      * Weather init: the starting snapshot, the Markov transition matrix, and an
-     * optional list of scripted overrides (empty by default; the Storm scenario
-     * scripts a sim-minute-8 threshold event — task 09/23).
+     * optional list of scripted overrides.
+     *
+     * <p>The overrides are a legacy, test-only route (comment corrected in S16, 2026-10-13: it
+     * used to say the Storm scenario scripts a sim-minute-8 event through here). The shipped
+     * game always passes an empty list, and the storm scenario scripts its weather through the
+     * scenario engine's {@code WeatherChange} event, not through these args; only
+     * {@code WeatherAgentIT} supplies any. Since S16 an override replaces the first hourly
+     * weather step at or after its sim-minute ({@code WeatherStepper}).
      */
     record WeatherInitArgs(WeatherSnapshot initial, TransitionMatrix matrix,
                            List<ScriptedWeather> overrides) implements InitArgs {
