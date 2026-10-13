@@ -77,6 +77,11 @@ rule that decided it: `waiting: tugs`, `waiting: customs inspection [R22,R24]`,
 Middle: one chat tab per walk-in, with both sides' offers above the
 conversation, a grey example of what you can type in the empty input, and **Send / Hint / Accept /
 Reject**; a small `(DCG)` or `(Rasa 0.97)` after each of your messages shows which parser read it.
+**Hint** answers with one plain sentence, a grey details line under it (`EV €640 · chance 62% ·
+R7 ✓`) and an *Assistant suggests …* row whose **Use this** button sends exactly that advice —
+or reads *Outdated — press Hint again* once the vessel has countered. With **autopilot** on
+(Settings) the Assistant negotiates for you: the tab is locked under *Assistant is negotiating…*,
+a move follows each offer after about two seconds, and **Take over** gives that tab back to you.
 Right: the **comm log**, every message the HarbourMaster sent or received, with the filters
 **All / This vessel / Rules / Weather**, a **Raw** switch that shows the real FIPA fields, and
 clickable rule ids such as `[R7]` that show the rule in plain words. The column borders drag.
