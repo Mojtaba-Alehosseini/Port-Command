@@ -21,6 +21,11 @@ import it.unige.portcommand.util.SimClock;
  * live: the "§3.12" the planning file cites throughout <strong>does not exist</strong> —
  * PROJECT_DEFINITION has only §3.1–§3.3 (verified 2026-07-17), and the tables were inlined into
  * planning/20 itself. See the task-20 Done note.
+ *
+ * <p><b>S17b (E5): every rule here has a producer.</b> planning/20 also priced a hazmat surcharge,
+ * a pilot service, bunker fuel and water/waste. Nothing in the game ever said "a pilot was used",
+ * so none of them was ever booked; they were deleted rather than given an invented trigger
+ * ({@code IncomeRulesTest.theIncomeRulesNothingProducedAreGone}).
  */
 public final class IncomeRules {
 
@@ -35,10 +40,6 @@ public final class IncomeRules {
     /** Source tags for {@link IncomeEvent#source()} — the ledger's audit vocabulary. */
     public static final String SOURCE_BERTH_BASE = "berth_base";
     public static final String SOURCE_EXTRA_TUG = "extra_tug_surcharge";
-    public static final String SOURCE_HAZMAT = "hazmat_surcharge";
-    public static final String SOURCE_PILOT = "pilot_service";
-    public static final String SOURCE_BUNKER_FUEL = "bunker_fuel";
-    public static final String SOURCE_WATER_WASTE = "water_waste";
     public static final String SOURCE_PREMIUM = "premium_surcharge";
     /** S9 (P1-8): the compensating entry for a post-award tug decline — an INFLOW that reverses
      * the charge-at-award without touching the append-only expense history. EOD nets exactly;
@@ -47,12 +48,6 @@ public final class IncomeRules {
 
     /** planning/20: extra_tug_surcharge +€500 per tug beyond the first. */
     private static final double EXTRA_TUG_EUR = 500.0;
-    /** planning/20: hazmat_surcharge +€500. */
-    private static final double HAZMAT_EUR = 500.0;
-    /** planning/20: pilot_service flat +€300. */
-    private static final double PILOT_EUR = 300.0;
-    /** planning/20: water_waste flat +€150. */
-    private static final double WATER_WASTE_EUR = 150.0;
     /** planning/20: premium_surcharge +15% of the base total, gated on reputation. */
     private static final double PREMIUM_PCT = 0.15;
     /** planning/20: the reputation at or above which premium pricing unlocks. */
@@ -127,29 +122,6 @@ public final class IncomeRules {
             throw new IllegalArgumentException("chargedCost must be > 0: " + chargedCost);
         }
         return chargedCost;
-    }
-
-    /** +€500 for a hazmat cargo. */
-    public static double hazmatSurcharge(boolean isHazmat) {
-        return isHazmat ? HAZMAT_EUR : 0.0;
-    }
-
-    /** Flat +€300 when a pilot is used. */
-    public static double pilotService(boolean used) {
-        return used ? PILOT_EUR : 0.0;
-    }
-
-    /** Negotiated bunker-fuel sale — a passthrough of whatever was agreed. */
-    public static double bunkerFuel(double negotiated) {
-        if (negotiated < 0) {
-            throw new IllegalArgumentException("negotiated must be >= 0: " + negotiated);
-        }
-        return negotiated;
-    }
-
-    /** Flat +€150 water and waste service. */
-    public static double waterAndWaste() {
-        return WATER_WASTE_EUR;
     }
 
     /**

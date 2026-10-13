@@ -40,8 +40,14 @@ import it.unige.portcommand.util.Subscription;
  * Real HUD bar. Day/Time are driven by {@link SimClockTickEvent} (whose live per-sim-minute
  * publisher is task 24's wall-clock tick driver). Wallet and Reputation went LIVE in task 20 —
  * {@link WalletChangedEvent} / {@link ReputationChangedEvent} are published by the ledgers on
- * every mutation, replacing the static {@code "—"} placeholders task 18 left here. Daily Target is
- * the canonical €5,000 from {@code Settings}.
+ * every mutation, replacing the static {@code "—"} placeholders task 18 left here.
+ *
+ * <p><b>S17b (ADR-22): the day's score is on this bar.</b> One event, {@code ScoreChangedEvent},
+ * feeds three cells: the day cell (the scenario's name while its own day runs, "Day N of 30"
+ * otherwise), "Today: €2,960 / €5,000" (the profit so far, daily costs charged by the hour,
+ * against the session's target - this replaced a static "Daily Target" label read once from
+ * {@code Settings}), and "Score 88", whose tooltip lists the four parts. A "Next ship" button sits
+ * after the speed toggles (playtest 2, PT8).
  *
  * <p>Every subscription is {@link DeliveryMode#EDT}, which already dispatches on the Event
  * Dispatch Thread — deliberately NOT re-wrapped in another {@code invokeLater} (INVARIANTS,
@@ -85,6 +91,12 @@ public final class HUDPanel extends JPanel {
     private final JLabel timeLabel = new JLabel();
     private final JLabel walletLabel = new JLabel();
     private final JLabel reputationLabel = new JLabel();
+    /** S17b: today's profit against today's target (was a static "Daily Target" label). */
+    private final JLabel profitLabel = new JLabel();
+    /** S17b: "Score 88"; its tooltip has the four parts. */
+    private final JLabel scoreLabel = new JLabel();
+    /** S17b (PT8): "Next ship"; {@code null} on a bar built without the game controls. */
+    private javax.swing.JButton nextShipButton;
     private final JLabel weatherLabel = new JLabel();
     /** The weather label's own font, and the same font underlined — the cue, as for a rule id in
      * the comm log, that the text can be clicked. Only a reading is underlined, not the dash. */
@@ -99,6 +111,13 @@ public final class HUDPanel extends JPanel {
     static final String NAME_SPEED_PREFIX = "hud-speed-";
     /** Component name of the weather line (S16). */
     static final String NAME_WEATHER = "hud-weather";
+    /** Component names of the S17b cells. */
+    static final String NAME_PROFIT = "hud-profit";
+    static final String NAME_SCORE = "hud-score";
+    static final String NAME_NEXT_SHIP = "hud-next-ship";
+    static final String NEXT_SHIP_LABEL = "Next ship";
+    static final String NEXT_SHIP_TOOLTIP = "Call the next walk-in ship in now";
+    static final String NEXT_SHIP_LOCKED_TOOLTIP = "The scenario's own ships are still arriving";
 
     /** A HUD with no speed control (headless panel tests that only watch the labels). */
     public HUDPanel(EventBus eventBus) {
@@ -113,11 +132,17 @@ public final class HUDPanel extends JPanel {
         add(timeLabel);
         add(walletLabel);
         add(reputationLabel);
-        add(new JLabel(model.dailyTargetLabel()));
+        profitLabel.setName(NAME_PROFIT);
+        scoreLabel.setName(NAME_SCORE);
+        add(profitLabel);
+        add(scoreLabel);
         if (speedControl != null) {
             addSpeedToggles(eventBus, speedControl);
+            addNextShipButton(eventBus);
         }
         addWeather(eventBus);
+        subscriptions.add(eventBus.subscribe(
+                it.unige.portcommand.gui.events.ScoreChangedEvent.class, this::onScoreChanged, DeliveryMode.EDT));
 
         subscriptions.add(eventBus.subscribe(SimClockTickEvent.class, this::onSimClockTick, DeliveryMode.EDT));
         subscriptions.add(eventBus.subscribe(WalletChangedEvent.class, this::onWalletChanged, DeliveryMode.EDT));
@@ -151,6 +176,29 @@ public final class HUDPanel extends JPanel {
 
     private static final String SPEED_PROPERTY = "hud.speed";
 
+    /**
+     * S17b (playtest 2, PT8): "Next ship" - the next walk-in comes now instead of when its arrival
+     * falls due. The button only ASKS, over the bus; the HarbourMaster decides (two negotiating,
+     * four in port) and answers a refusal in the notification strip. Off, with the reason as its
+     * tooltip, while a scenario's own ships are still arriving - the same lock, read from the
+     * same control, as the speed toggles beside it. Not focusable, like everything on the bar.
+     */
+    private void addNextShipButton(EventBus eventBus) {
+        nextShipButton = new javax.swing.JButton(NEXT_SHIP_LABEL);
+        nextShipButton.setName(NAME_NEXT_SHIP);
+        nextShipButton.setFocusable(false);
+        nextShipButton.setMargin(new java.awt.Insets(1, 6, 1, 6));
+        nextShipButton.addActionListener(
+                e -> eventBus.publish(new it.unige.portcommand.gui.events.CallNextShipEvent()));
+        add(nextShipButton);
+        reflectScriptLock();
+    }
+
+    /** Test-only: the "Next ship" button, or {@code null} on a bar without the game controls. */
+    javax.swing.JButton nextShipButtonForTest() {
+        return nextShipButton;
+    }
+
     private void selectSpeed(int speed) {
         int shown = GameSpeedModel.normalise(speed);
         for (JToggleButton toggle : speedToggles) {
@@ -168,6 +216,10 @@ public final class HUDPanel extends JPanel {
         for (JToggleButton toggle : speedToggles) {
             toggle.setEnabled(!locked);
             toggle.setToolTipText(locked ? GameSpeedModel.SCRIPT_LOCK_TOOLTIP : null);
+        }
+        if (nextShipButton != null) {
+            nextShipButton.setEnabled(!locked);
+            nextShipButton.setToolTipText(locked ? NEXT_SHIP_LOCKED_TOOLTIP : NEXT_SHIP_TOOLTIP);
         }
     }
 
@@ -231,6 +283,15 @@ public final class HUDPanel extends JPanel {
         if (weatherModel.clear()) {
             refreshWeather();
         }
+        // S17b: the same for the score, the profit and the scenario's name - the next world's
+        // score keeper announces its own right after this event.
+        model.onWorldReplaced();
+        refreshLabels();
+    }
+
+    private void onScoreChanged(it.unige.portcommand.gui.events.ScoreChangedEvent event) {
+        model.onScoreChanged(event);
+        refreshLabels();
     }
 
     private void refreshWeather() {
@@ -267,9 +328,14 @@ public final class HUDPanel extends JPanel {
 
     private void refreshLabels() {
         dayLabel.setText(model.dayLabel());
+        dayLabel.setToolTipText(model.dayTooltip());
         timeLabel.setText(model.timeLabel());
         walletLabel.setText(model.walletLabel());
         reputationLabel.setText(model.reputationLabel());
+        profitLabel.setText(model.profitLabel());
+        profitLabel.setToolTipText(model.profitTooltip());
+        scoreLabel.setText(model.scoreLabel());
+        scoreLabel.setToolTipText(model.scoreTooltip());
     }
 
     @Override

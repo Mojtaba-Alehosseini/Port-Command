@@ -22,6 +22,27 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class SimClockTest {
 
+    /**
+     * S17b (adversarial review): midnight is detected by a ticker, up to a game minute late. In
+     * that minute the day has changed and the day before is still to be settled; a manual save is
+     * refused there ({@code GameSession.saveNow}), because a load would never settle that day.
+     */
+    @org.junit.jupiter.api.Test
+    void aMidnightIsPendingFromTheCrossingUntilItIsReported() {
+        SimClock clock = new SimClock(300);
+        org.junit.jupiter.api.Assertions.assertFalse(clock.midnightPending(), "day 1, nothing crossed");
+
+        clock.advanceToNextDay();
+        org.junit.jupiter.api.Assertions.assertTrue(clock.midnightPending(), "past midnight, not reported yet");
+        org.junit.jupiter.api.Assertions.assertTrue(clock.midnightPending(), "asking does not consume the crossing");
+
+        org.junit.jupiter.api.Assertions.assertTrue(clock.isMidnightCrossed(), "the ticker reports it once");
+        org.junit.jupiter.api.Assertions.assertFalse(clock.midnightPending(), "reported: the day can be settled and saved");
+
+        clock.restore(3 * 86_400_000L + 5_000L, 300);
+        org.junit.jupiter.api.Assertions.assertFalse(clock.midnightPending(), "a loaded clock starts with nothing pending");
+    }
+
     private static final long DAY_MS = 86_400_000L;
 
     @ParameterizedTest

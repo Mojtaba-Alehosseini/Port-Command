@@ -82,11 +82,11 @@ class NewGameDialogTest {
             // German groups thousands with '.', like a Danish or Italian desktop; under a
             // comma-grouping default the literal below would pass even without Locale.ROOT.
             Locale.setDefault(Locale.Category.FORMAT, Locale.GERMANY);
-            assertEquals("3.500", String.format("%,.0f", 3500.0),
+            assertEquals("7.000", String.format("%,.0f", 7000.0),
                     "non-vacuity: the default locale now groups with '.'");
 
             String html = NewGameDialog.detailHtml(tutorial);
-            assertTrue(html.contains(tutorial.description() + "<br><i>Target daily revenue: €3,500</i>"),
+            assertTrue(html.contains(tutorial.description() + "<br><i>Target daily revenue: €7,000</i>"),
                     html);
         } finally {
             Locale.setDefault(Locale.Category.FORMAT, previous);

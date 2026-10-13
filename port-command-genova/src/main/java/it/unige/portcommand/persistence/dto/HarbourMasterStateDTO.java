@@ -5,6 +5,7 @@ import java.util.Map;
 
 import it.unige.portcommand.harbourmaster.ExpenseEvent;
 import it.unige.portcommand.harbourmaster.IncomeEvent;
+import it.unige.portcommand.harbourmaster.financial.ScoreKeeper;
 
 /**
  * The HarbourMaster's persisted coordination state (task 22). Wallet balance and
@@ -42,12 +43,25 @@ public record HarbourMasterStateDTO(
         Map<String, String> pendingCustomsChecks,
         int walkInSpawnCount,
         int namePoolOffset,
-        Map<String, Long> closedBerths) {
+        Map<String, Long> closedBerths,
+        ScoreKeeper.Saved score) {
 
     public HarbourMasterStateDTO {
         // S16 (ADR-20): additive within schema v1 - a save written before it existed has no such
         // key and binds null, which reads as "no berth is closed".
         closedBerths = closedBerths == null ? Map.of() : closedBerths;
+        // S17b (ADR-22): `score` is additive in the same way - the current day's score counters.
+        // A save written before it has none (null): the day loads with nothing counted yet.
+    }
+
+    /** The S16 shape (closed berths, no score counters). */
+    public HarbourMasterStateDTO(List<IncomeEvent> dayIncome, List<ExpenseEvent> dayExpense,
+                                 Map<String, Integer> performativeCounts,
+                                 Map<String, String> pendingCustomsChecks,
+                                 int walkInSpawnCount, int namePoolOffset,
+                                 Map<String, Long> closedBerths) {
+        this(dayIncome, dayExpense, performativeCounts, pendingCustomsChecks, walkInSpawnCount,
+                namePoolOffset, closedBerths, null);
     }
 
     /** The pre-S16 shape (no closed berths). */
@@ -56,6 +70,6 @@ public record HarbourMasterStateDTO(
                                  Map<String, String> pendingCustomsChecks,
                                  int walkInSpawnCount, int namePoolOffset) {
         this(dayIncome, dayExpense, performativeCounts, pendingCustomsChecks, walkInSpawnCount,
-                namePoolOffset, Map.of());
+                namePoolOffset, Map.of(), null);
     }
 }

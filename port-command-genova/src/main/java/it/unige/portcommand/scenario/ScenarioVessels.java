@@ -58,7 +58,7 @@ import it.unige.portcommand.util.RandomSource;
  *       cargo_vessel and a ferry, and only {@code storm.json}'s ST-901 is a contracted tanker.
  *       The cargo class is otherwise inert: berth compatibility keys on vessel TYPE (R5 via
  *       {@code vessel_class_needs/2}), {@code ExpenseRules.marginalCost} takes a cargo class and
- *       never reads it, and {@code IncomeRules.hazmatSurcharge} has no production call site. So the
+ *       never reads it, and there is no hazmat surcharge (deleted in S17b - it never had a producer). So the
  *       observable change beyond storm is the literal string in a {@code BerthRequest}, a
  *       {@code WalkInDialogueSnapshot} and the save DTO.</li>
  *   <li><b>A deterministic CONFIRM, not a dice roll.</b> {@code HandleClearanceRequestBehaviour}

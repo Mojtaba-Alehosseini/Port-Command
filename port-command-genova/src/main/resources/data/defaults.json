@@ -7,10 +7,9 @@
   "maxGameDays": 30,
   "firstLaunch": true,
   "llmModel": "microsoft/Phi-4-mini-instruct",
-  "withdrawalPenaltyEur": 500.0,
   "cnpReplyBySimSeconds": 5,
   "cnpRetryAfterSimSeconds": 30,
-  "dailyTargetEur": 5000.0,
+  "dailyTargetEur": 8000.0,
   "bankruptcyFloorEur": -20000.0,
   "reputation": {
     "deal_closed": 1.0,

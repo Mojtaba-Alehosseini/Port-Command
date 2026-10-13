@@ -120,7 +120,7 @@ class GameLifecycleIT {
         // A synthetic overspend (planning/24's "synthetic deal that overspends"): the ledger
         // coordinator charges the awarded tug cost, exactly as a real award would.
         boot.getEventBus().publish(new TugJobAwardedEvent("V-SYNTH", "tug_1", 80_000.0,
-                "cnp-synthetic-overspend", clock.nowSimMillis()));
+                "cnp-synthetic-overspend", clock.nowSimMillis(), 1));
         assertTrue(countEvents(GameOverEvent.class) == 0,
                 "mid-day deep debt alone must NOT end the game (bankruptcy is EOD-only)");
 

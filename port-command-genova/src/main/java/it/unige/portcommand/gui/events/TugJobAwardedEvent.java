@@ -34,7 +34,17 @@ import it.unige.portcommand.util.Event;
  * @param cost           the winning bid's cost (€), verbatim from the tug's PROPOSE
  * @param conversationId the CNP {@code cfpId}; shared by co-winning tugs for the same vessel
  * @param simTimeMillis  sim time of the award
+ * @param escortSize     how many tugs the ship's escort has once this one is added (S17b, E11):
+ *                       1 for the first tug of an escort, 2 for the second, whichever tender
+ *                       awarded them. The extra-tug surcharge is billed from this, so an escort
+ *                       put together over two tenders is billed like one awarded in a single round
  */
 public record TugJobAwardedEvent(String vesselId, String tugId, double cost, String conversationId,
-                                  long simTimeMillis) implements Event {
+                                  long simTimeMillis, int escortSize) implements Event {
+
+    public TugJobAwardedEvent {
+        if (escortSize < 1) {
+            throw new IllegalArgumentException("escortSize must be >= 1 (this tug included): " + escortSize);
+        }
+    }
 }

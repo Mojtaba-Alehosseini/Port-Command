@@ -172,6 +172,9 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
             return;
         }
 
+        // S17b (E11): the surcharge is billed on the ship's escort as it stands, so each award says
+        // how big the escort is with this tug in it - the tugs that are already waiting count.
+        java.util.Set<String> escortSoFar = new java.util.LinkedHashSet<>(current.assignedTugs());
         for (Map.Entry<String, ACLMessage> entry : bidsByTugId.entrySet()) {
             ACLMessage bid = entry.getValue();
             AID tugAid = bid.getSender();
@@ -187,9 +190,10 @@ public final class AwardContractBehaviour extends OneShotBehaviour {
                 // chose, so a cheaper bid really does save the port money. Charge-point is AWARD
                 // (Moji, 2026-07-17); the ledger dedupes on (conversationId, tugId) because two
                 // co-winning tugs share this one cfpId. See TugJobAwardedEvent's javadoc.
+                escortSoFar.add(entry.getKey());
                 hm.eventBus().publish(new TugJobAwardedEvent(
                         req.vesselId(), entry.getKey(), costByTugId.get(entry.getKey()),
-                        bid.getConversationId(), hm.simClock().nowSimMillis()));
+                        bid.getConversationId(), hm.simClock().nowSimMillis(), escortSoFar.size()));
             } else {
                 hm.sendLogged(MessageFactory.reply(bid, ACLMessage.REJECT_PROPOSAL));
                 log.info("CNP for {}: REJECT -> {}", req.vesselId(), tugAid.getLocalName());

@@ -16,6 +16,7 @@ import it.unige.portcommand.behaviours.coordination.TransitToVesselBehaviour;
 import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.MovementSafetyEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.PortStatusEvent;
 import it.unige.portcommand.harbourmaster.BerthPositions;
@@ -328,6 +329,7 @@ public final class MovementControl {
         content.put("transit_sim_millis", legSimMillis);
         content.put("escort", tracking.assignedTugs().size());
         proceed.setContent(TerminalJson.write(content));
+        auditMoveOrder(hm, tracking);
         hm.sendLogged(proceed);
         hm.activeVessels().put(vesselId, tracking.withStage(Stage.IN_TRANSIT));
         book.clearStation(vesselId);
@@ -456,6 +458,10 @@ public final class MovementControl {
         hm.eventBus().publish(new NotificationEvent(
                 displayName(tracking) + " held outside: " + verdict.reason(),
                 NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis()));
+        // S17b (E1): one blocked movement per ship per hold - this line is reached once, when the
+        // hold begins (an already-held ship returned above).
+        hm.eventBus().publish(new MovementSafetyEvent(MovementSafetyEvent.Kind.BLOCKED, vesselId,
+                verdict.ruleIds(), hm.simClock().nowSimMillis()));
         log.info("{}: weather HOLD ({}) -> CANCEL {} tug(s){}", vesselId, verdict.reason(),
                 tracking.assignedTugs().size(),
                 wasMoving ? ", caught under way: priority escalated to emergency [R26,R29]" : "");
@@ -618,6 +624,9 @@ public final class MovementControl {
                         displayName(tracking) + " stays at its berth: " + verdict.reason(),
                         NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis()));
                 log.info("{}: departure HELD at {} ({})", vesselId, tracking.assignedBerth(), verdict.reason());
+                // S17b (E1): a served ship kept at its berth is a blocked movement too, once.
+                hm.eventBus().publish(new MovementSafetyEvent(MovementSafetyEvent.Kind.BLOCKED, vesselId,
+                        verdict.ruleIds(), hm.simClock().nowSimMillis()));
             }
             return;
         }
@@ -625,6 +634,7 @@ public final class MovementControl {
         cleared.addReceiver(tracking.aid());
         cleared.setProtocol(HandleWeatherHoldBehaviour.VESSEL_WEATHER_PROTOCOL);
         cleared.setContent(TerminalJson.write(Map.of("event", "cleared_to_depart", "vessel_id", vesselId)));
+        auditMoveOrder(hm, tracking);
         hm.sendLogged(cleared);
         book.departureCleared(vesselId);
         book.clearHoldRules(vesselId);
@@ -795,6 +805,24 @@ public final class MovementControl {
             return new PortStatusSnapshot.WaitInfo(PortStatusEvent.Wait.TUGS, List.of());
         }
         return PortStatusSnapshot.WaitInfo.NONE;
+    }
+
+    /**
+     * S17b (decision E1): the score's "unsafe moves carried out". Called at the two places an
+     * order to move is written - {@code proceed_to_berth} and {@code cleared_to_depart} - it asks
+     * the gate once more, with the reading of this very moment, whatever the code above it
+     * decided. The answer is "safe" every time, because the code above asked first; that is the
+     * point. If a later change ever reorders or drops one of those checks, the order still goes
+     * out here, and this is where it is seen, logged as an error and taken off the score.
+     * Public so that {@code MovementControlIT} can ask it under a reading the gate would never
+     * let an order reach it with.
+     */
+    public static void auditMoveOrder(HarbourMasterAgent hm, VesselTracking tracking) {
+        MovementGate.Verdict now = MovementGate.check(tracking.vesselType(), reading(hm));
+        if (!now.safe()) {
+            hm.eventBus().publish(new MovementSafetyEvent(MovementSafetyEvent.Kind.UNSAFE_MOVE,
+                    tracking.vesselId(), now.ruleIds(), hm.simClock().nowSimMillis()));
+        }
     }
 
     private static String displayName(VesselTracking tracking) {

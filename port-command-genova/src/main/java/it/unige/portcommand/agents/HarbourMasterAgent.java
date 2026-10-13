@@ -122,6 +122,10 @@ public final class HarbourMasterAgent extends PortCommandAgent
     private LedgerCoordinator ledgerCoordinator;
     private PerformativeCounter performativeCounter;
     private DayRolloverCoordinator dayRolloverCoordinator;
+    /** S17b (ADR-22): what a day of this session is measured against and owes. */
+    private it.unige.portcommand.harbourmaster.financial.SessionTerms sessionTerms;
+    /** S17b (ADR-22): the figures behind the day's score. */
+    private volatile it.unige.portcommand.harbourmaster.financial.ScoreKeeper scoreKeeper;
     private SimClock simClock;
     private RandomSource randomSource;
     private EventBus eventBus;
@@ -132,6 +136,29 @@ public final class HarbourMasterAgent extends PortCommandAgent
      * the walk-in spawn counter. */
     private DispatchPlayerCommandBehaviour dispatchPlayerCommand;
     private PoissonSpawnBehaviour poissonSpawn;
+    /**
+     * S17b (T1, PT8): walk-ins that have been spawned and have not hailed yet: vessel id -> the
+     * sim time of the spawn. A walk-in is not in {@link #activeVessels} until its opening offer
+     * arrives, a few hundred real milliseconds after the spawn; without this, two arrivals asked
+     * for in that gap (two scripted walk-ins due together, two quick presses of "Call next ship")
+     * would each see a free slot. An entry goes when the ship hails or is turned away, and after
+     * {@link #WALK_IN_EN_ROUTE_MAX_REAL_MILLIS} at the latest, so a ship that never hails cannot
+     * hold a slot for good.
+     *
+     * <p><b>The limit is REAL time, kept on the conversation clock</b> (adversarial review): what
+     * it bounds - spawn, DF registration, DF search, the opening PROPOSE - is wall latency, the
+     * same at every game pace. A limit in game time shrank with the pace: five game minutes are
+     * twelve real seconds at a 60-minute day and a quarter of a second at a 5-minute day at x4.
+     * {@code ConversationClock} already counts real milliseconds for the walk-ins' patience
+     * (fed through {@code SimClock.advance}, unscaled, frozen by a pause), so no second
+     * wall-clock reader is needed.
+     */
+    private final ConcurrentHashMap<String, it.unige.portcommand.util.ConversationClock.Conversation>
+            walkInsEnRoute = new ConcurrentHashMap<>();
+    private static final long WALK_IN_EN_ROUTE_MAX_REAL_MILLIS = 15_000L;
+    /** S17b (PT8): the "Call next ship" listener; cancelled in {@link #onTakeDown()}. */
+    private it.unige.portcommand.util.Subscription<it.unige.portcommand.gui.events.CallNextShipEvent>
+            callNextSubscription;
     /** S8 (GOAL 3, ADR-17): the session's name-pool offset — rolled once per new game from the
      * seeded {@code "name-pool"} stream, restored verbatim from a save. Read by
      * {@code PoissonSpawnBehaviour.spawnWalkIn} and persisted by {@link #snapshotDto()}. */
@@ -164,13 +191,28 @@ public final class HarbourMasterAgent extends PortCommandAgent
         // on every mutation, which is the HUD's live data path.
         this.walletLedger = new WalletLedger(init.startingWallet(), eventBus);
         this.reputationLedger = new ReputationLedger(init.startingReputation(), eventBus);
-        // Plain bus subscribers, not JADE behaviours — the catalogue stays locked at 51 (ADR-01).
-        this.ledgerCoordinator = new LedgerCoordinator(eventBus, walletLedger, reputationLedger);
+        // S17b (ADR-22): the session's terms come from the scenario this world was booted with -
+        // its name, its own target, the hour it opens at - and are free play's when there is none.
+        // Derived on every boot (a load passes the same runtime), never saved.
+        it.unige.portcommand.scenario.ScenarioRuntime bootRuntime =
+                optionalArgOfType(it.unige.portcommand.scenario.ScenarioRuntime.class);
+        it.unige.portcommand.scenario.Scenario bootScenario =
+                bootRuntime == null ? null : bootRuntime.scenario();
+        this.sessionTerms = bootScenario == null
+                ? it.unige.portcommand.harbourmaster.financial.SessionTerms.freePlay()
+                : it.unige.portcommand.harbourmaster.financial.SessionTerms.scenario(
+                        bootScenario.displayName(), bootScenario.targetDailyRevenue(),
+                        bootScenario.initialState().startSimMillis());
+        // Plain bus subscribers, not JADE behaviours — the catalogue stays locked at 52 (ADR-01).
+        this.scoreKeeper = new it.unige.portcommand.harbourmaster.financial.ScoreKeeper(
+                eventBus, simClock, walletLedger, reputationLedger, sessionTerms);
+        this.ledgerCoordinator = new LedgerCoordinator(eventBus, walletLedger, reputationLedger,
+                scoreKeeper, this::vesselDisplayName);
         this.performativeCounter = new PerformativeCounter(eventBus);
         // Task 24: the EOD owner. Constructed here (LedgerCoordinator precedent) because every
         // collaborator is agent-owned; it subscribes to EndOfDayDetectBehaviour's EndOfDayEvent.
         this.dayRolloverCoordinator = new DayRolloverCoordinator(eventBus, simClock, walletLedger,
-                reputationLedger, performativeCounter);
+                reputationLedger, performativeCounter, sessionTerms, scoreKeeper);
         // Task 23: mutable since the scenario engine registers scenario-local contracts and
         // the daily stream's day-qualified clones at runtime (ConcurrentHashMap — behaviours
         // read it on this thread, but the map is advertised shared state like the trackers).
@@ -203,6 +245,8 @@ public final class HarbourMasterAgent extends PortCommandAgent
         if (restore != null) {
             walletLedger.restoreHistory(restore.harbourMaster().dayIncome(),
                     restore.harbourMaster().dayExpense());
+            // S17b: after the history, because the day's money is read back from it.
+            scoreKeeper.restore(restore.harbourMaster().score());
             performativeCounter.restore(restore.harbourMaster().performativeCounts());
             pendingCustomsChecks.putAll(restore.harbourMaster().pendingCustomsChecks());
             startingSpawnCount = restore.harbourMaster().walkInSpawnCount();
@@ -233,8 +277,18 @@ public final class HarbourMasterAgent extends PortCommandAgent
         this.poissonSpawn = new PoissonSpawnBehaviour(this, simClock, randomSource, spawner,
                 marketHistory, startingSpawnCount);
         addBehaviour(poissonSpawn);
+        // S17b (PT8): "Call next ship". The press arrives on a bus thread; the spawn - like every
+        // spawn - happens on this agent's thread, as a queued one-shot step.
+        this.callNextSubscription = eventBus.subscribe(
+                it.unige.portcommand.gui.events.CallNextShipEvent.class,
+                press -> addBehaviour(new jade.core.behaviours.OneShotBehaviour(this) {
+                    @Override
+                    public void action() {
+                        callNextShip();
+                    }
+                }), it.unige.portcommand.util.DeliveryMode.ASYNC);
         // Task 24: the single SimClockTickEvent publisher (Option B) — uncounted parent-package
-        // behaviour, so the 51-catalogue is untouched.
+        // behaviour, so the catalogue (52 since S8) is untouched.
         // S15 (2026-10-12): the same tick now also publishes the read-only PortStatusEvent (the
         // Port table's feed) whenever the snapshot from portStatus() changed. Still ONE behaviour
         // in the uncounted package — it runs on this agent's thread, the only thread allowed to
@@ -250,7 +304,7 @@ public final class HarbourMasterAgent extends PortCommandAgent
             addBehaviour(new RestoreDispatchBehaviour(this));
         }
 
-        // Task 23: the scenario engine (scenario-package behaviour — catalogue stays 51,
+        // Task 23: the scenario engine (scenario-package behaviour — catalogue stays 52,
         // ADR-01/INVARIANTS). The daily contracted stream's base is captured from the
         // PRISTINE contracts.json arg BEFORE scenario-local contracts merge in, so script
         // props never recur daily. Installed on every production boot (ScenarioRuntime is
@@ -326,6 +380,9 @@ public final class HarbourMasterAgent extends PortCommandAgent
         if (ledgerCoordinator != null) {
             ledgerCoordinator.close();
         }
+        if (scoreKeeper != null) {
+            scoreKeeper.close();
+        }
         if (performativeCounter != null) {
             performativeCounter.close();
         }
@@ -334,6 +391,9 @@ public final class HarbourMasterAgent extends PortCommandAgent
         // handler would double-count comm-log traffic through the new PerformativeCounter).
         if (dispatchPlayerCommand != null) {
             dispatchPlayerCommand.cancelSubscription();
+        }
+        if (callNextSubscription != null) {
+            callNextSubscription.cancel();
         }
     }
 
@@ -360,7 +420,90 @@ public final class HarbourMasterAgent extends PortCommandAgent
         return new it.unige.portcommand.persistence.dto.HarbourMasterStateDTO(
                 dayIncome, dayExpense, performativeCounter.snapshot(), pendingSorted,
                 poissonSpawn == null ? 0 : poissonSpawn.spawnCount(), namePoolOffset,
-                movement.closedBerths());
+                movement.closedBerths(), scoreKeeper == null ? null : scoreKeeper.snapshot());
+    }
+
+    /** S17b (PT8): brings the next walk-in in now, or says in the strip why not. Agent thread. */
+    private void callNextShip() {
+        String refusal = poissonSpawn.callNext();
+        if (refusal != null) {
+            eventBus.publish(new it.unige.portcommand.gui.events.NotificationEvent(refusal,
+                    it.unige.portcommand.gui.events.NotificationEvent.Severity.INFO,
+                    simClock.nowSimMillis()));
+        }
+    }
+
+    /** S17b: a walk-in was spawned and will hail in a moment (see {@link #walkInsEnRoute}). */
+    public void walkInSpawned(String vesselId) {
+        walkInsEnRoute.put(vesselId, simClock.conversationClock()
+                .open("en-route-" + vesselId, WALK_IN_EN_ROUTE_MAX_REAL_MILLIS));
+    }
+
+    /** S17b: the walk-in's opening offer has arrived - it is tracked from here on, or it was
+     * turned away and is no longer coming. */
+    public void walkInHailed(String vesselId) {
+        var timer = walkInsEnRoute.remove(vesselId);
+        if (timer != null) {
+            timer.close();
+        }
+    }
+
+    /** S17b: walk-ins the player is talking to, or will be in a moment - the "at most two" count. */
+    public int negotiatingWalkIns() {
+        long tracked = activeVessels.values().stream()
+                .filter(v -> v.channel() == VesselTracking.Channel.WALK_IN
+                        && v.stage() == VesselTracking.Stage.NEGOTIATING)
+                .count();
+        return (int) tracked + walkInsStillEnRoute();
+    }
+
+    /** S17b: walk-ins in port at any stage, those about to hail included - the "at most four". */
+    public int walkInsInPort() {
+        long tracked = activeVessels.values().stream()
+                .filter(v -> v.channel() == VesselTracking.Channel.WALK_IN)
+                .count();
+        return (int) tracked + walkInsStillEnRoute();
+    }
+
+    private int walkInsStillEnRoute() {
+        walkInsEnRoute.entrySet().removeIf(e -> {
+            // Tracked by now; or its time is up; or the clock was restored under it (no view).
+            boolean over = activeVessels.containsKey(e.getKey())
+                    || e.getValue().view().map(it.unige.portcommand.util.ConversationClock.View::expired)
+                            .orElse(true);
+            if (over) {
+                e.getValue().close();
+            }
+            return over;
+        });
+        return walkInsEnRoute.size();
+    }
+
+    /** S17b: a ship's name as the player knows it - its display name, or its id if it has none
+     * or is no longer tracked. Safe from any thread (one concurrent-map read). */
+    public String vesselDisplayName(String vesselId) {
+        VesselTracking tracking = vesselId == null ? null : activeVessels.get(vesselId);
+        String name = tracking == null || tracking.spec() == null ? null : tracking.spec().vesselName();
+        return name == null || name.isBlank() ? String.valueOf(vesselId) : name;
+    }
+
+    /** S17b (ADR-22): the session's target, hours and scenario day. */
+    public it.unige.portcommand.harbourmaster.financial.SessionTerms sessionTerms() {
+        return sessionTerms;
+    }
+
+    /** S17b (ADR-22): the figures behind the day's score. */
+    public it.unige.portcommand.harbourmaster.financial.ScoreKeeper scoreKeeper() {
+        return scoreKeeper;
+    }
+
+    /** S17b: announces the day's score once more, for a window that has just opened or a game
+     * that has just loaded. Safe from any thread; a no-op while this agent is still setting up. */
+    public void publishScore() {
+        it.unige.portcommand.harbourmaster.financial.ScoreKeeper keeper = scoreKeeper;
+        if (keeper != null) {
+            keeper.publishNow();
+        }
     }
 
     /** S8 (GOAL 3): the session's rolled name-pool offset — see the field's javadoc. */
@@ -380,6 +523,7 @@ public final class HarbourMasterAgent extends PortCommandAgent
         var dto = persistenceMapper().convertValue(node,
                 it.unige.portcommand.persistence.dto.HarbourMasterStateDTO.class);
         walletLedger.restoreHistory(dto.dayIncome(), dto.dayExpense());
+        scoreKeeper.restore(dto.score());
         performativeCounter.restore(dto.performativeCounts());
         pendingCustomsChecks.putAll(dto.pendingCustomsChecks());
         movement.restoreClosedBerths(dto.closedBerths());

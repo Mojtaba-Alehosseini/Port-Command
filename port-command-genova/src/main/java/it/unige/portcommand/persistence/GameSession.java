@@ -246,6 +246,14 @@ public final class GameSession {
     public Path saveNow() throws SaveNotAllowedException, IOException {
         boolean pausedHere = lifecycle.pauseIfRunning();
         try {
+            // S17b (adversarial review): not in the game minute between a midnight and its
+            // settlement. A save taken there carries the new day's clock with the old day still
+            // open; a load seeds "last day seen" from that clock, so the old day would never be
+            // settled - its costs never booked and, in a scenario, the scenario never ended.
+            // The clock is paused here, so the answer cannot change under the check.
+            if (boot.getSimClock().midnightPending()) {
+                throw new SaveNotAllowedException("The day is just ending — save again in a moment.");
+            }
             GameState state = buildOnHarbourMasterThread();
             Path written = saveLoadManager.save(saveLoadManager.savegamePath(), state);
             boot.getEventBus().publish(new GameSavedEvent(written.toString(),
@@ -567,6 +575,7 @@ public final class GameSession {
                             SimClock.gameDayOf(simMillis), boot.getSimClock().simHour(),
                             boot.getSimClock().simMinute()));
                     hm.requestPortStatus(); // S15: re-announce for the window that just opened
+                    hm.publishScore(); // S17b: the top bar's score, profit and target
                     publishWeatherAndScript(hm); // S16: the top bar's weather, the speed lock
                 });
     }
@@ -643,6 +652,7 @@ public final class GameSession {
         // S15: served by the HarbourMaster's next tick, on its own thread — after everything above.
         hm.requestPortStatus();
         publishWeatherAndScript(hm); // S16: after the loaded marker, which resets both displays
+        hm.publishScore(); // S17b: the loaded day's score, profit and target
     }
 
     /**

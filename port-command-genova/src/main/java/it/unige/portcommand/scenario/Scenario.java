@@ -23,8 +23,10 @@ import it.unige.portcommand.scenario.events.ScriptedEvent;
  * @param key                classpath key and save-file marker ({@code GameState.activeScenario})
  * @param displayName        shown by {@code NewGameDialog}
  * @param description        shown by {@code NewGameDialog}
- * @param targetDailyRevenue advisory figure for the NewGameDialog tooltip (this task's
- *                           values; §7.2 names no numbers)
+ * @param targetDailyRevenue the scenario's own target net for its day. Until S17b an advisory
+ *                           figure only the NewGameDialog showed; since S17b (ADR-22) it is
+ *                           what the day's score, the top bar and the end-of-day bonus are
+ *                           measured against while the scenario runs ({@code SessionTerms})
  * @param randomSeed         nullable: null → generate a fresh seed at scenario start and
  *                           record it in the built {@code GameState}. 0 is a VALID pinned
  *                           seed, never a sentinel (hard constraint).

@@ -33,8 +33,10 @@ import it.unige.portcommand.util.EventBus;
  * of money events per game day.
  *
  * <p>Because publication happens under the lock, a {@code CALLER_THREAD} subscriber to
- * {@link WalletChangedEvent} MUST return promptly — a slow one holds this ledger. The
- * in-tree subscriber (the HUD) is {@code EDT}, which returns immediately.
+ * {@link WalletChangedEvent} MUST return promptly — a slow one holds this ledger. The HUD is
+ * {@code EDT}, which returns immediately; since S17b the HarbourMaster's {@code ScoreKeeper}
+ * IS a {@code CALLER_THREAD} subscriber and runs under this lock - one addition and one bus
+ * publish, and it never reads a ledger there (it would be a second lock order).
  */
 public final class WalletLedger {
 

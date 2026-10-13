@@ -163,7 +163,7 @@ class LedgerCoordinatorTest {
 
     @Test
     void aTugAwardChargesTheWinningBidExactlyOnce() {
-        TugJobAwardedEvent award = new TugJobAwardedEvent("V1", "tug_1", 425.0, "cnp-abc", 2_000L);
+        TugJobAwardedEvent award = new TugJobAwardedEvent("V1", "tug_1", 425.0, "cnp-abc", 2_000L, 1);
 
         bus.publish(award);
         bus.publish(award); // a replay must not charge twice
@@ -180,8 +180,8 @@ class LedgerCoordinatorTest {
      */
     @Test
     void twoCoWinningTugsOnOneConversationAreBothChargedAndBillOneExtraTugSurcharge() {
-        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-abc", 2_000L));
-        bus.publish(new TugJobAwardedEvent("V1", "tug_2", 450.0, "cnp-abc", 2_000L));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-abc", 2_000L, 1));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_2", 450.0, "cnp-abc", 2_000L, 2));
 
         assertEquals(2, wallet.expenseHistory().size(), "two real tug jobs, not one");
         assertEquals(850.0, wallet.expenseHistory().stream().mapToDouble(ExpenseEvent::amount).sum(), EPS);
@@ -195,18 +195,13 @@ class LedgerCoordinatorTest {
      * A CNP retry mints a fresh cfpId. Re-awarding the SAME tug is a genuinely new job to pay for
      * — but NOT a second tug to bill the vessel a €500 surcharge for.
      *
-     * <p><b>What this test pins changed on 2026-07-27 (audit B-1), and the old description no longer
-     * fit</b> — corrected after the adversarial review pointed out that it now passes for a different
-     * reason. It used to demonstrate "the same tug across two conversations is deduped by the
-     * vessel-lifetime key". Since the surcharge is keyed per ESCORT, each conversation is now an
-     * independent size-1 set and neither charges a surcharge on its own. The OUTCOME it asserts —
-     * two jobs paid, no surcharge invented — is the one that matters and is unchanged; it is simply
-     * no longer evidence for the two-different-keys rationale.
+     * <p>S17b (E11): each award says how big the escort is with that tug in it. A retry that
+     * re-awards the only tug is an escort of one both times, so no surcharge is due on either.
      */
     @Test
     void aRetryReawardingTheSameTugChargesAgainButInventsNoExtraTugSurcharge() {
-        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-abc", 2_000L));
-        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-retry-1", 9_000L));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-abc", 2_000L, 1));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-retry-1", 9_000L, 1));
 
         assertEquals(2, wallet.expenseHistory().size(), "two jobs — the retry is real work");
         assertEquals(List.of(), wallet.incomeHistory(),
@@ -215,19 +210,14 @@ class LedgerCoordinatorTest {
     }
 
     /**
-     * Keeps the VESSEL half of the surcharge key honest. {@code tugsForDifferentVesselsDoNotShareASurchargeCount}
-     * below uses two different conversation ids as well as two vessels, so since the B-1 re-key it
-     * would pass even if {@code vesselId} were dropped from the key entirely (adversarial review,
-     * 2026-07-27). This one holds the conversation id constant so only the vessel discriminates.
-     *
-     * <p>A shared cfpId across two vessels cannot happen today — {@code InitiateCNPBehaviour} mints a
-     * fresh UUID per CNP and one CNP serves one vessel — which is exactly why the composite key was
-     * chosen over the bare conversation id, and why that choice needs a test rather than a comment.
+     * Two vessels, one tug each: neither owes a surcharge, whatever the conversation id says. (A
+     * shared cfpId across two vessels cannot happen — one Contract Net serves one vessel — and
+     * since S17b the surcharge does not read the conversation id at all.)
      */
     @Test
     void twoVesselsOnOneConversationIdDoNotPoolTheirTugsIntoOneSurcharge() {
-        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-shared", 2_000L));
-        bus.publish(new TugJobAwardedEvent("V2", "tug_2", 400.0, "cnp-shared", 2_000L));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-shared", 2_000L, 1));
+        bus.publish(new TugJobAwardedEvent("V2", "tug_2", 400.0, "cnp-shared", 2_000L, 1));
 
         assertEquals(List.of(), wallet.incomeHistory(),
                 "one tug each — pooling them under the conversation alone would invent a €500 surcharge");
@@ -235,9 +225,9 @@ class LedgerCoordinatorTest {
 
     @Test
     void aThirdDistinctTugBillsASecondExtraTugSurcharge() {
-        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-abc", 2_000L));
-        bus.publish(new TugJobAwardedEvent("V1", "tug_2", 400.0, "cnp-abc", 2_000L));
-        bus.publish(new TugJobAwardedEvent("V1", "tug_3", 400.0, "cnp-abc", 2_000L));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-abc", 2_000L, 1));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_2", 400.0, "cnp-abc", 2_000L, 2));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_3", 400.0, "cnp-abc", 2_000L, 3));
 
         assertEquals(1_000.0, wallet.incomeHistory().stream().mapToDouble(IncomeEvent::amount).sum(), EPS,
                 "extraTugSurcharge(3) = 2 x 500");
@@ -261,11 +251,11 @@ class LedgerCoordinatorTest {
     @Test
     void aSecondEscortAfterAWeatherHoldBillsItsOwnSurchargeNotACumulativeOne() {
         // CNP #1: the original escort, two tugs -> one extra tug.
-        bus.publish(new TugJobAwardedEvent("T901", "tug_1", 400.0, "cnp-storm-1", 2_000L));
-        bus.publish(new TugJobAwardedEvent("T901", "tug_2", 450.0, "cnp-storm-1", 2_000L));
+        bus.publish(new TugJobAwardedEvent("T901", "tug_1", 400.0, "cnp-storm-1", 2_000L, 1));
+        bus.publish(new TugJobAwardedEvent("T901", "tug_2", 450.0, "cnp-storm-1", 2_000L, 2));
         // Storm hold CANCELs both; the clear sweep re-tenders and two DIFFERENT tugs win.
-        bus.publish(new TugJobAwardedEvent("T901", "tug_3", 420.0, "cnp-storm-2", 9_000L));
-        bus.publish(new TugJobAwardedEvent("T901", "tug_4", 430.0, "cnp-storm-2", 9_000L));
+        bus.publish(new TugJobAwardedEvent("T901", "tug_3", 420.0, "cnp-storm-2", 9_000L, 1));
+        bus.publish(new TugJobAwardedEvent("T901", "tug_4", 430.0, "cnp-storm-2", 9_000L, 2));
 
         assertEquals(4, wallet.expenseHistory().size(), "four real escort jobs — the expense side was right");
         assertEquals(1_000.0, wallet.incomeHistory().stream().mapToDouble(IncomeEvent::amount).sum(), EPS,
@@ -274,10 +264,99 @@ class LedgerCoordinatorTest {
                 wallet.incomeHistory().stream().map(IncomeEvent::source).toList());
     }
 
+    /**
+     * S17b, decision E11 — born red. Since S16 a ship that is one tug short keeps the tug it has and
+     * the missing one is tendered again, so a two-tug escort arrives as TWO tenders of one tug
+     * each. The surcharge was keyed per tender: each was "an escort of one", and the second tug was
+     * never billed. The ship has a two-tug escort all the same.
+     */
+    @Test
+    void anEscortPutTogetherOverTwoTendersBillsItsSecondTugOnce() {
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-first", 2_000L, 1));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_3", 410.0, "cnp-top-up", 6_000L, 2));
+
+        assertEquals(2, wallet.expenseHistory().size(), "two jobs paid");
+        assertEquals(List.of(IncomeRules.SOURCE_EXTRA_TUG),
+                wallet.incomeHistory().stream().map(IncomeEvent::source).toList(),
+                "the ship's escort has two tugs: one extra tug, whichever tender hired it");
+        assertEquals(500.0, wallet.incomeHistory().get(0).amount(), EPS);
+    }
+
+    /**
+     * S17b (E11): a tug that only REPLACES one which declined brings the escort back to a size
+     * that was already billed. The decline refunds the job (S9) and deliberately leaves the
+     * surcharge alone, so billing the replacement would bill the same second tug twice.
+     */
+    @Test
+    void aTugThatReplacesOneWhichDeclinedIsNotBilledASecondTime() {
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-abc", 2_000L, 1));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_2", 450.0, "cnp-abc", 2_000L, 2));
+        bus.publish(new it.unige.portcommand.gui.events.TugJobDeclinedEvent(
+                "V1", "tug_2", "cnp-abc", "already_committed", 2_500L));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_4", 430.0, "cnp-refill", 7_000L, 2));
+
+        assertEquals(500.0, wallet.incomeHistory().stream()
+                        .filter(e -> IncomeRules.SOURCE_EXTRA_TUG.equals(e.source()))
+                        .mapToDouble(IncomeEvent::amount).sum(), EPS,
+                "one second tug, billed once - the replacement is not a third");
+    }
+
+    /**
+     * S17b (decision E6): the notification strip names money in two cases only — a walk-in deal and
+     * a contracted fee, one line each for what the ship paid — and the settlement adds the daily
+     * costs at midnight. A tug job, a customs clearance or a surcharge moves the wallet silently.
+     */
+    @Test
+    void onlyADealAndAContractedFeeAreNamedInTheStrip() {
+        List<String> lines = new java.util.concurrent.CopyOnWriteArrayList<>();
+        bus.subscribe(it.unige.portcommand.gui.events.NotificationEvent.class,
+                e -> lines.add(e.text()), it.unige.portcommand.util.DeliveryMode.CALLER_THREAD);
+
+        bus.publish(new DealClosedEvent(deal("V1", 2_200.0)));
+        bus.publish(new ContractedFeeEarnedEvent("CONTRACT-1", "C001", "berth_1", 5_200.0, 8, 500L));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-abc", 2_000L, 1));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_2", 450.0, "cnp-abc", 2_000L, 2));
+        bus.publish(new CustomsClearedEvent("V1", "CL-2026-1", 3_000L));
+        bus.publish(new WithdrawalEvent("V2", Deal.Outcome.TIMEOUT, true, 4_000L));
+
+        assertEquals(List.of("+€2,200 deal with V1", "+€5,200 contract fee from C001"), lines);
+    }
+
+    /** The premium is part of what the ship paid, so it is in the ship's one line, not a second. */
+    @Test
+    void aDealAtPremiumStandingIsStillOneLineForTheWholeAmount() {
+        List<String> lines = new java.util.concurrent.CopyOnWriteArrayList<>();
+        bus.subscribe(it.unige.portcommand.gui.events.NotificationEvent.class,
+                e -> lines.add(e.text()), it.unige.portcommand.util.DeliveryMode.CALLER_THREAD);
+        reputation.adjust(30.0, "test_boost", null, 0L); // -> 80: premium unlocked
+
+        bus.publish(new DealClosedEvent(deal("V1", 1_000.0)));
+
+        assertEquals(List.of("+€1,150 deal with V1"), lines);
+    }
+
+    /**
+     * The billed size is the SHIP's. The two one-tug cases around this one cannot show that - a
+     * single shared counter passes them too (adversarial review); two ships hiring at the same
+     * time can: with one counter the second ship's second tug finds "2" already billed.
+     */
+    @Test
+    void twoShipsHiringAtTheSameTimeAreEachBilledForTheirOwnSecondTug() {
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-a", 2_000L, 1));
+        bus.publish(new TugJobAwardedEvent("V2", "tug_3", 400.0, "cnp-b", 2_100L, 1));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_2", 400.0, "cnp-a", 2_200L, 2));
+        bus.publish(new TugJobAwardedEvent("V2", "tug_4", 400.0, "cnp-b", 2_300L, 2));
+
+        assertEquals(List.of("V1", "V2"), wallet.incomeHistory().stream()
+                .filter(e -> IncomeRules.SOURCE_EXTRA_TUG.equals(e.source()))
+                .map(IncomeEvent::vesselId).toList(), "one surcharge each, for its own second tug");
+        assertEquals(1_000.0, wallet.incomeHistory().stream().mapToDouble(IncomeEvent::amount).sum(), EPS);
+    }
+
     @Test
     void tugsForDifferentVesselsDoNotShareASurchargeCount() {
-        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-a", 2_000L));
-        bus.publish(new TugJobAwardedEvent("V2", "tug_2", 400.0, "cnp-b", 2_000L));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-a", 2_000L, 1));
+        bus.publish(new TugJobAwardedEvent("V2", "tug_2", 400.0, "cnp-b", 2_000L, 1));
 
         assertEquals(List.of(), wallet.incomeHistory(), "one tug each — neither vessel owes a surcharge");
     }
@@ -313,7 +392,7 @@ class LedgerCoordinatorTest {
         long day2 = 86_400_000L;
         bus.publish(new DealClosedEvent(
                 new Deal("D-V1", "V1", "berth_1", 2_200.0, 8, 1_000L, Deal.Outcome.DEAL)));
-        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-a", 1_500L));
+        bus.publish(new TugJobAwardedEvent("V1", "tug_1", 400.0, "cnp-a", 1_500L, 1));
         bus.publish(new DealClosedEvent(
                 new Deal("D-V2", "V2", "berth_1", 1_800.0, 8, day2 + 1_000L, Deal.Outcome.DEAL)));
 

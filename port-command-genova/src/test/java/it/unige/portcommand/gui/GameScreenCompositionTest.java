@@ -271,6 +271,11 @@ class GameScreenCompositionTest {
         bus.publish(new SimClockTickEvent(late, 30, 23, 59));
         bus.publish(new WalletChangedEvent(-123_456.0, 0.0, "test", null, late));
         bus.publish(new ReputationChangedEvent(100.0, 0.0, "test", null, late));
+        // S17b: the two score cells at about their widest as well - a five-digit loss against a
+        // five-digit target, a three-digit score.
+        bus.publish(new it.unige.portcommand.gui.events.ScoreChangedEvent(
+                new it.unige.portcommand.harbourmaster.financial.DayScore(30, -12_345.0, 14_500.0, 4, 4, 0, 0, 5.0),
+                null));
         bus.publish(WORST_WEATHER);
         HeadlessSwing.flushEdt();
 
@@ -292,10 +297,18 @@ class GameScreenCompositionTest {
                 togglesEnd = Math.max(togglesEnd, at.x + at.width);
             }
 
+            // S17b: "Next ship" is the last cell that may not be cut - it must be whole and on the bar.
+            Component nextShip = named(HUDPanel.NAME_NEXT_SHIP);
+            Rectangle button = HeadlessSwing.boundsIn(nextShip, screen);
+            assertEquals(nextShip.getPreferredSize().width, button.width, "Next ship is squeezed");
+            assertTrue(button.x >= togglesEnd && button.x + button.width <= hud.x + hud.width,
+                    "Next ship is pushed off the top bar at " + content + " px: " + button);
+            togglesEnd = button.x + button.width;
+
             JLabel weather = weatherLabel();
             Rectangle at = HeadlessSwing.boundsIn(weather, screen);
             assertEquals(WORST_WEATHER_TEXT, weather.getText());
-            assertTrue(at.x >= togglesEnd, "the weather comes after the speed toggles: " + at);
+            assertTrue(at.x >= togglesEnd, "the weather comes after the speed toggles and Next ship: " + at);
             assertTrue(at.x + at.width <= hud.x + hud.width, "and ends inside the bar: " + at);
             assertTrue(at.y >= hud.y && at.y + at.height <= hud.y + hud.height, "on the bar's one row: " + at);
             assertTrue(at.width <= weather.getPreferredSize().width, "never wider than its text");

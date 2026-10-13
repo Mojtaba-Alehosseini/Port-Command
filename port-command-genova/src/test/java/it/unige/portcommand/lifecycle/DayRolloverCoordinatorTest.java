@@ -93,7 +93,7 @@ class DayRolloverCoordinatorTest {
 
     @Test
     void hittingTheDailyTargetEarnsTheReputationBonus() {
-        // Net = 18,950 − 5,200 = 13,750 ≥ the €5,000 target.
+        // Net = 18,950 − 5,200 = 13,750 ≥ the free-play target (€8,000 since S17b).
         wallet.recordIncome(new IncomeEvent(18_950.0, "berth_base", "V1", DAY_1_NOON));
 
         crossMidnightAndSettle(1);

@@ -21,7 +21,6 @@ public final class ExpenseRules {
     /** Source tags for {@link ExpenseEvent#source()} — the ledger's audit vocabulary. */
     public static final String SOURCE_TUG_JOB = "tug_job";
     public static final String SOURCE_CUSTOMS = "customs_clearance";
-    public static final String SOURCE_INCIDENT_FINE = "incident_fine";
     public static final String SOURCE_SALARIES = "salaries";
     public static final String SOURCE_BERTH_MAINTENANCE = "berth_maintenance";
     public static final String SOURCE_TUG_IDLE_LEASE = "tug_idle_lease";
@@ -46,8 +45,6 @@ public final class ExpenseRules {
 
     /** planning/20: customs_clearance €100 per clearance. */
     private static final double CUSTOMS_CLEARANCE_EUR = 100.0;
-    /** planning/20: incident_fine €2000. */
-    private static final double INCIDENT_FINE_EUR = 2_000.0;
 
     // ---- marginalCost inputs (task-10's Assistant EV estimate; unchanged by task 20) ----
 
@@ -94,11 +91,6 @@ public final class ExpenseRules {
         return CUSTOMS_CLEARANCE_EUR;
     }
 
-    /** €2000 per safety incident. */
-    public static double incidentFine() {
-        return INCIDENT_FINE_EUR;
-    }
-
     /**
      * The fixed daily cost: <strong>€5200</strong>, summed from {@link #dailyFixedBreakdown()}'s
      * five lines (150×4 salaries + 1200 berth maintenance + 400×4 tug idle lease + 1500 insurance
@@ -118,6 +110,11 @@ public final class ExpenseRules {
         return DAILY_FIXED;
     }
 
+    /** Whether {@code source} is one of the five fixed lines the end-of-day settlement books. */
+    public static boolean isFixedSource(String source) {
+        return FIXED_SOURCES.contains(source);
+    }
+
     /**
      * Marginal cost of servicing one more vessel (tug escort + berth-occupancy share + customs-
      * handling share) — the Assistant's EV computation input (planning/10 §10.2 step 5).
@@ -132,7 +129,7 @@ public final class ExpenseRules {
     }
 
     /**
-     * Read-only sum of the day's VARIABLE expenses — tug jobs, customs clearances, incident fines
+     * Read-only sum of the day's VARIABLE expenses — tug jobs and customs clearances
      * — consumed by {@code DayRolloverCoordinator} (task 24).
      *
      * <p>Excludes the five fixed lines <strong>by source tag</strong>, not by timing. Task 24

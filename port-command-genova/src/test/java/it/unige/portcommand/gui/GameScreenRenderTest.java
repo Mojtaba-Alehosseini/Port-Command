@@ -285,6 +285,10 @@ class GameScreenRenderTest {
         bus.publish(new SimClockTickEvent(NOW, 1, 9, 12));
         bus.publish(new WalletChangedEvent(52_300.0, 2_300.0, "render", null, NOW));
         bus.publish(new ReputationChangedEvent(72.0, 2.0, "render", null, NOW));
+        // S17b: the top bar’s score cells, as during a scenario (its short name in the day cell).
+        bus.publish(new it.unige.portcommand.gui.events.ScoreChangedEvent(
+                new it.unige.portcommand.harbourmaster.financial.DayScore(1, 2_960.0, 12_000.0, 2, 3, 0, 1, 1.0),
+                "Busy Day — Stress Test"));
 
         // The comm log: a contracted arrival's berth request, its grant citing a rule, the tug
         // call and a bid, a routine weather report, and one walk-in's opening offer.

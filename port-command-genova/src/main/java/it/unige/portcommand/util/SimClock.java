@@ -196,6 +196,16 @@ public final class SimClock {
      * after the game day advances wins the CAS; later calls in the same day return
      * {@code false}.
      */
+    /**
+     * Whether the clock is past a midnight that {@link #isMidnightCrossed()} has not reported yet
+     * - the game day has changed and the day before it is still to be settled. Midnight is
+     * detected by a ticker, up to a game minute late; this is that minute. Read-only: it does not
+     * consume the crossing.
+     */
+    public boolean midnightPending() {
+        return gameDayOf(nowSimMillis()) > lastObservedDay.get();
+    }
+
     public boolean isMidnightCrossed() {
         long current = gameDay();
         long last = lastObservedDay.get();

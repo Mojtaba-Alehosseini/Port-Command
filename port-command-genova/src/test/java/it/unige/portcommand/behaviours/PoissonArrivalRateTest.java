@@ -20,10 +20,12 @@ class PoissonArrivalRateTest {
     private static final double SIM_MILLIS_PER_HOUR = 3_600_000.0;
 
     @Test
-    void theRateIsOneThirdPerSimHourAndTheCapsAreTwoAndThree() {
+    void theRateIsOneThirdPerSimHourAndTheCapsAreTwoAndFour() {
         assertEquals(1.0 / 3.0, PoissonSpawnBehaviour.DEFAULT_RATE_PER_SIM_HOUR, 1e-12);
         assertEquals(2, PoissonSpawnBehaviour.MAX_NEGOTIATING_WALKINS, "what a human can hold at once");
-        assertEquals(3, PoissonSpawnBehaviour.MAX_ACTIVE_WALKINS, "the in-port limit is unchanged");
+        // S17b (PLAYABILITY §10): 3 -> 4. The port has four berths, and with three the S14 count
+        // was about five walk-ins a game day - the in-port limit, not the arrival rate, was binding.
+        assertEquals(4, PoissonSpawnBehaviour.MAX_ACTIVE_WALKINS, "one walk-in per berth");
     }
 
     @Test

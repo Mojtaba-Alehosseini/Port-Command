@@ -248,6 +248,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             refuse.setContent(TerminalJson.write(Map.of("intent", "refuse", "reason", "no_compatible_berth")));
             hm.sendLogged(refuse);
             forgetDialogue(hm, dialogueId);
+            hm.walkInHailed(spec.vesselId()); // S17b: turned away - it holds no slot any more
             log.info("{}: REFUSE opening offer (no compatible berth)", spec.vesselId());
             return;
         }
@@ -256,6 +257,7 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
                 .arriving(spec.vesselId(), spec, Channel.WALK_IN, msg.getSender())
                 .withStage(Stage.NEGOTIATING)
                 .withBerth(berthId));
+        hm.walkInHailed(spec.vesselId()); // S17b: tracked now, no longer "about to hail"
 
         int roundsUsed = hm.negotiationRounds()
                 .computeIfAbsent(dialogueId, id -> new AtomicInteger(0))

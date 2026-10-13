@@ -2,7 +2,7 @@
   "key": "tutorial",
   "displayName": "Tutorial — Calm Morning",
   "description": "Calm day, two vessels, gentle pace. Learn the command surface and the Assistant.",
-  "targetDailyRevenue": 3500,
+  "targetDailyRevenue": 7000,
   "randomSeed": 20260101,
   "settingsOverride": { "difficulty": "EASY", "autopilotEnabled": false, "realSecondsPerGameDay": 1800 },
   "initialState": {

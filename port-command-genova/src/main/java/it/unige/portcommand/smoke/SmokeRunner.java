@@ -17,6 +17,8 @@ import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
 import it.unige.portcommand.gui.events.CommLogEvent;
+import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
 import it.unige.portcommand.harbourmaster.financial.PerformativeCounter;
@@ -220,6 +222,7 @@ public final class SmokeRunner {
         Path work = Files.createTempDirectory("port-command-smoke-" + scenario);
         Subscription<CommLogEvent> commLog = null;
         Subscription<SimClockTickEvent> tickSub = null;
+        Subscription<NegotiationOpenedEvent> standIn = null;
         try {
             BootstrapConfig cfg = new BootstrapConfig(port, false, "realtime", DAY_SECONDS);
             GameSession session = new GameSession(boot, cfg,
@@ -244,6 +247,20 @@ public final class SmokeRunner {
                     DeliveryMode.CALLER_THREAD);
             tickSub = boot.getEventBus().subscribe(SimClockTickEvent.class,
                     e -> ticks.incrementAndGet(), DeliveryMode.CALLER_THREAD);
+            // S17b (T1): a stand-in player. A scripted walk-in now waits while two are negotiating,
+            // so with nobody at the keyboard busy_day's third walk-in would wait for the first
+            // two to run out of patience - two real minutes, longer than this run's bound, and
+            // its script would never drain. The stand-in takes every walk-in's first offer, the
+            // way a player would press Accept: the same command, through the same Prolog gate.
+            // It adds no performative of its own to row 10 - an ACCEPT-PROPOSAL is in every
+            // scenario's tally already, from the tug Contract Nets.
+            var bus = boot.getEventBus();
+            standIn = bus.subscribe(NegotiationOpenedEvent.class, e -> {
+                if (e.snapshot().roundsUsed() == 1) {
+                    bus.publish(new PlayerCommandEvent(PlayerCommandEvent.PlayerCommandKind.ACCEPT,
+                            e.snapshot().vesselId(), Map.of()));
+                }
+            }, DeliveryMode.ASYNC);
 
             session.startScenario(scenario);
 
@@ -269,6 +286,9 @@ public final class SmokeRunner {
             }
             if (tickSub != null) {
                 tickSub.cancel();
+            }
+            if (standIn != null) {
+                standIn.cancel();
             }
             if (boot.isStarted()) {
                 boot.shutdown();

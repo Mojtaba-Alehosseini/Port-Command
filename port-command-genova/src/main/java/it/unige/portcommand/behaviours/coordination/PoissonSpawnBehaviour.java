@@ -8,8 +8,6 @@ import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.JadeAgentSpawner;
 import it.unige.portcommand.core.Settings;
-import it.unige.portcommand.harbourmaster.VesselTracking.Channel;
-import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
 import it.unige.portcommand.negotiation.RealNegotiationEngine;
 import it.unige.portcommand.negotiation.VesselTemplate;
 import it.unige.portcommand.negotiation.VesselTemplates;
@@ -58,8 +56,9 @@ import org.slf4j.LoggerFactory;
  * live playtest. (1) The rate drops from one arrival every two sim-hours to one every three —
  * about eight a game day. (2) A second limit: at most {@link #MAX_NEGOTIATING_WALKINS} walk-ins
  * may be at stage NEGOTIATING at once, so the player is never asked to hold three conversations;
- * the in-port limit of {@link #MAX_ACTIVE_WALKINS} is unchanged. Scripted scenario spawns go
- * through {@code AgentRoster.spawnWalkIn} directly and bypass both, as before. (3) The gap is a
+ * the in-port limit is {@link #MAX_ACTIVE_WALKINS}. Scripted scenario spawns go through
+ * {@code AgentRoster.spawnWalkIn} directly; since S17b (T1) the scenario engine holds one back
+ * while two walk-ins are negotiating, and the in-port limit is still not theirs. (3) The gap is a
  * sim-time gap, so it is waited with {@link SimDeadlineWait}: a pause HOLDS the pending arrival
  * instead of dropping it (the old wake-while-paused threw the arrival away and drew a new gap),
  * and a speed change re-times it. With an untouched pace the wall wait is exactly what it was.
@@ -70,8 +69,10 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
     /** S14: one walk-in every three sim-hours on average — about eight a game day (was 0.5). */
     public static final double DEFAULT_RATE_PER_SIM_HOUR = 1.0 / 3.0;
     private static final String CARGO_CLASS = "general_cargo"; // task 23: sample a real cargo mix
-    /** Task 19 STEP 1: at most this many walk-ins in port at once (caps the reported spawn flood). */
-    public static final int MAX_ACTIVE_WALKINS = 3;
+    /** At most this many walk-ins in port at once, whatever their stage (task 19). S17b: 3 -> 4 -
+     * one per berth. With three, S14's count was about five walk-ins a game day: the in-port limit,
+     * not the arrival rate, was what kept ships away. */
+    public static final int MAX_ACTIVE_WALKINS = 4;
     /** S14: at most this many walk-ins NEGOTIATING at once — what a human can actually hold. */
     public static final int MAX_NEGOTIATING_WALKINS = 2;
 
@@ -161,18 +162,42 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
         if (hm.scriptedWaveActive()) {
             return false;
         }
-        long activeWalkIns = hm.activeVessels().values().stream()
-                .filter(v -> v.channel() == Channel.WALK_IN)
-                .count();
-        long negotiating = hm.activeVessels().values().stream()
-                .filter(v -> v.channel() == Channel.WALK_IN && v.stage() == Stage.NEGOTIATING)
-                .count();
-        return activeWalkIns < MAX_ACTIVE_WALKINS && negotiating < MAX_NEGOTIATING_WALKINS;
+        // S17b: both counts include a walk-in that was spawned a moment ago and has not hailed yet.
+        return hm.walkInsInPort() < MAX_ACTIVE_WALKINS
+                && hm.negotiatingWalkIns() < MAX_NEGOTIATING_WALKINS;
+    }
+
+    /**
+     * S17b (playtest 2, PT8): "Call next ship". Brings the next walk-in in NOW instead of when its
+     * arrival falls due, and starts a fresh gap from this moment - the ship that was on its way is
+     * the one that came. Refused, with the reason for the player, while the game is paused, while
+     * a scenario's own ships are still arriving, and at either limit. HarbourMaster thread only.
+     *
+     * @return {@code null} if a walk-in was called in, otherwise the sentence for the strip
+     */
+    public String callNext() {
+        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
+        if (simClock.isPaused()) {
+            return "The game is paused \u2014 resume it to call a ship in.";
+        }
+        if (hm.scriptedWaveActive()) {
+            return "The scenario's own ships are still arriving \u2014 no extra ship can be called yet.";
+        }
+        if (hm.negotiatingWalkIns() >= MAX_NEGOTIATING_WALKINS) {
+            return "Two ships are already waiting for your answer \u2014 answer one first.";
+        }
+        if (hm.walkInsInPort() >= MAX_ACTIVE_WALKINS) {
+            return "Four walk-in ships are in port already \u2014 wait for one to leave.";
+        }
+        spawnWalkIn();
+        reset(gap.armUntil(simClock.nowSimMillis() + nextGapSimMillis(draw)));
+        return null;
     }
 
     /** Public for the same reason {@link #canSpawnNow()} is (S8): {@code WalkInNamePoolIT}
      * drives single spawns directly rather than waiting out exponential gaps. Production's
-     * only caller remains {@link #onWake()}, behind the {@code canSpawnNow} gate. */
+     * callers are {@link #onWake()}, behind the {@code canSpawnNow} gate, and since S17b
+     * {@link #callNext()}, which checks the same two limits itself to say which one refused. */
     public void spawnWalkIn() {
         List<String> types = List.copyOf(VesselTemplates.types());
         String vesselType = types.get(draw.nextInt(types.size()));
@@ -194,6 +219,7 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
                 Settings.load().roundLimit(), randomSource.forStream("nego-" + vesselId));
         AgentRoster.spawnWalkIn(spawner, spec, simClock, marketHistory, randomSource, engine,
                 ((HarbourMasterAgent) myAgent).directory());
+        ((HarbourMasterAgent) myAgent).walkInSpawned(vesselId);
         log.info("Poisson spawn: {} ({}) draft={} length={} tonnage={}",
                 vesselId, vesselType, draft, length, tonnage);
     }

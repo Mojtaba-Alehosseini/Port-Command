@@ -86,6 +86,23 @@ class SettingsTest {
         assertEquals("HARD", loaded.difficulty());
     }
 
+    /**
+     * S17b (E5): {@code withdrawalPenaltyEur} was read by nothing — a withdrawal costs reputation,
+     * never money — and is gone from the record and from defaults.json. A save or settings file
+     * that still carries the key loads as before (see the pre-S14 block above, which has it).
+     */
+    @Test
+    void theUnusedWithdrawalPenaltyIsNoLongerASetting() throws Exception {
+        for (java.lang.reflect.RecordComponent c : Settings.class.getRecordComponents()) {
+            org.junit.jupiter.api.Assertions.assertNotEquals("withdrawalPenaltyEur", c.getName());
+        }
+        assertFalse(JSON.readTree(JSON.writeValueAsString(Settings.defaults())).has("withdrawalPenaltyEur"));
+        try (java.io.InputStream in = Settings.class.getResourceAsStream("/data/defaults.json")) {
+            assertFalse(JSON.readTree(in).has("withdrawalPenaltyEur"),
+                    "defaults.json must not ship a key nothing reads");
+        }
+    }
+
     @Test
     void everyWitherCarriesTheSpeedAlong() {
         // The with-ers rebuild the record positionally; a field added last is the one a wither

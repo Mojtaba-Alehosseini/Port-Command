@@ -98,14 +98,32 @@ class IncomeRulesTest {
         assertThrows(IllegalArgumentException.class, () -> IncomeRules.extraTugSurcharge(-1));
     }
 
+    /**
+     * S17b (E5): a money rule nothing in the game can charge is not a rule, it is a number the
+     * wallet never sees. Pilot service, water and waste, bunker fuel and the hazmat surcharge had
+     * no producer — no event or message says "a pilot was used" — and are gone. This pins the
+     * list of rules and source tags that may exist; it cannot prove each has a caller (the
+     * ledger tests do that), so a new rule here must come with its producer and be added below.
+     */
     @Test
-    void flatSurchargesAreTheCanonicalFigures() {
-        assertEquals(500.0, IncomeRules.hazmatSurcharge(true), EPS);
-        assertEquals(0.0, IncomeRules.hazmatSurcharge(false), EPS);
-        assertEquals(300.0, IncomeRules.pilotService(true), EPS);
-        assertEquals(0.0, IncomeRules.pilotService(false), EPS);
-        assertEquals(150.0, IncomeRules.waterAndWaste(), EPS);
-        assertEquals(1_234.5, IncomeRules.bunkerFuel(1_234.5), EPS);
+    void theIncomeRulesNothingProducedAreGone() {
+        java.util.Set<String> rules = new java.util.TreeSet<>();
+        for (java.lang.reflect.Method m : IncomeRules.class.getDeclaredMethods()) {
+            if (java.lang.reflect.Modifier.isPublic(m.getModifiers())) {
+                rules.add(m.getName());
+            }
+        }
+        assertEquals(java.util.Set.of("aggregateForDay", "berthBase", "berthFeeRange",
+                "extraTugSurcharge", "premiumSurcharge", "tugJobRefund"), rules);
+
+        java.util.Set<String> sources = new java.util.TreeSet<>();
+        for (java.lang.reflect.Field f : IncomeRules.class.getDeclaredFields()) {
+            if (f.getName().startsWith("SOURCE_")) {
+                sources.add(f.getName());
+            }
+        }
+        assertEquals(java.util.Set.of("SOURCE_BERTH_BASE", "SOURCE_EXTRA_TUG", "SOURCE_PREMIUM",
+                "SOURCE_TUG_JOB_REFUND"), sources);
     }
 
     @ParameterizedTest(name = "premiumSurcharge(1000, rep={0}) = {1}")

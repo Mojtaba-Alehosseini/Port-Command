@@ -33,7 +33,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * scalars this record holds). {@link JsonIgnoreProperties} lets this record bind against that same
  * shared file without choking on the extra objects.
  *
- * <p>{@code dailyTargetEur} was added by task 20 (the canonical €5,000 daily target,
+ * <p><b>S17b (ADR-22, decision E4):</b> {@code dailyTargetEur} is the FREE-PLAY target and its
+ * default is €8,000 (was €5,000) - about 80 % of a measured free-play day's net with every walk-in
+ * taken. A scenario is measured against its own {@code targetDailyRevenue} on its day
+ * ({@code SessionTerms}); a save keeps the figure it was saved with.
+ *
+ * <p>{@code dailyTargetEur} was added by task 20 (the then-canonical €5,000 daily target,
  * {@code planning/20} "Notes"); it lives here rather than in a financial-only config because the
  * HUD and the EOD summary both read it, and this record is the designed cross-task home.
  *
@@ -60,7 +65,6 @@ public record Settings(
         @JsonProperty("maxGameDays") int maxGameDays,
         @JsonProperty("firstLaunch") boolean firstLaunch,
         @JsonProperty("llmModel") String llmModel,
-        @JsonProperty("withdrawalPenaltyEur") double withdrawalPenaltyEur,
         @JsonProperty("cnpReplyBySimSeconds") int cnpReplyBySimSeconds,
         @JsonProperty("cnpRetryAfterSimSeconds") int cnpRetryAfterSimSeconds,
         @JsonProperty("dailyTargetEur") double dailyTargetEur,
@@ -99,7 +103,7 @@ public record Settings(
     /** The hard-coded fallback values (task-15 brief, §15.1) — also what ships in defaults.json. */
     public static Settings defaults() {
         return new Settings(6, false, "NORMAL", 3_600L, 30, true,
-                "microsoft/Phi-4-mini-instruct", 500.0, 5, 30, 5_000.0, -20_000.0, 1);
+                "microsoft/Phi-4-mini-instruct", 5, 30, 8_000.0, -20_000.0, 1);
     }
 
     /** The session's EFFECTIVE settings (see the class javadoc's S9 note). */
@@ -126,38 +130,38 @@ public record Settings(
     // S9 with-ers for the live-changeable knobs (records are immutable — new instance each).
     public Settings withRoundLimit(int v) {
         return new Settings(v, autopilotEnabled, difficulty, realSecondsPerGameDay,
-                maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
+                maxGameDays, firstLaunch, llmModel, cnpReplyBySimSeconds,
                 cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, gameSpeed);
     }
 
     public Settings withAutopilotEnabled(boolean v) {
         return new Settings(roundLimit, v, difficulty, realSecondsPerGameDay,
-                maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
+                maxGameDays, firstLaunch, llmModel, cnpReplyBySimSeconds,
                 cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, gameSpeed);
     }
 
     public Settings withDifficulty(String v) {
         return new Settings(roundLimit, autopilotEnabled, v, realSecondsPerGameDay,
-                maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
+                maxGameDays, firstLaunch, llmModel, cnpReplyBySimSeconds,
                 cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, gameSpeed);
     }
 
     public Settings withRealSecondsPerGameDay(long v) {
         return new Settings(roundLimit, autopilotEnabled, difficulty, v,
-                maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur, cnpReplyBySimSeconds,
+                maxGameDays, firstLaunch, llmModel, cnpReplyBySimSeconds,
                 cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, gameSpeed);
     }
 
     public Settings withLlmModel(String v) {
         return new Settings(roundLimit, autopilotEnabled, difficulty,
-                realSecondsPerGameDay, maxGameDays, firstLaunch, v, withdrawalPenaltyEur,
+                realSecondsPerGameDay, maxGameDays, firstLaunch, v,
                 cnpReplyBySimSeconds, cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, gameSpeed);
     }
 
     /** S14: the speed control's write-through. */
     public Settings withGameSpeed(int v) {
         return new Settings(roundLimit, autopilotEnabled, difficulty,
-                realSecondsPerGameDay, maxGameDays, firstLaunch, llmModel, withdrawalPenaltyEur,
+                realSecondsPerGameDay, maxGameDays, firstLaunch, llmModel,
                 cnpReplyBySimSeconds, cnpRetryAfterSimSeconds, dailyTargetEur, bankruptcyFloorEur, v);
     }
 

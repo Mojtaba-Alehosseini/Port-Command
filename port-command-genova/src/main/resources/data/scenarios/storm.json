@@ -2,7 +2,7 @@
   "key": "storm",
   "displayName": "Storm Event",
   "description": "A tanker inbound as severe wind builds. Hold vessels offshore or expedite — includes one CANCEL cascade.",
-  "targetDailyRevenue": 8000,
+  "targetDailyRevenue": 12000,
   "randomSeed": 20260320,
   "settingsOverride": { "difficulty": "HARD", "autopilotEnabled": false, "realSecondsPerGameDay": 900 },
   "initialState": {

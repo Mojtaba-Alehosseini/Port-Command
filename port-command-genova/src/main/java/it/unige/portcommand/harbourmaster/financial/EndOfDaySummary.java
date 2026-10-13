@@ -35,7 +35,17 @@ import java.util.Map;
  *                           canonical order, zeroes included)
  */
 public record EndOfDaySummary(int gameDay, double income, double totalExpense, double endingWallet,
-                               int endingReputation, Map<String, Integer> performativeCounts) {
+                               int endingReputation, Map<String, Integer> performativeCounts,
+                               DayScore score, String scenarioName) {
+
+    /**
+     * The pre-S17b shape: a day with no score and no scenario. Kept for the fixtures and the
+     * Debug menu's synthetic summary; the settlement always supplies both.
+     */
+    public EndOfDaySummary(int gameDay, double income, double totalExpense, double endingWallet,
+                           int endingReputation, Map<String, Integer> performativeCounts) {
+        this(gameDay, income, totalExpense, endingWallet, endingReputation, performativeCounts, null, null);
+    }
 
     public EndOfDaySummary {
         if (gameDay < 1) {
@@ -49,6 +59,15 @@ public record EndOfDaySummary(int gameDay, double income, double totalExpense, d
     /** The day's net margin — what the §7.5 calibration targets at +€8,000–12,000 on a default day. */
     public double net() {
         return income - totalExpense;
+    }
+
+    /**
+     * Whether this settlement ends a scenario (S17b, decision E8): a scenario is scored on its own
+     * day and ends at its first midnight. The one window that then opens is the end-of-day report
+     * and the score card together.
+     */
+    public boolean endsScenario() {
+        return scenarioName != null;
     }
 
     /** Total FIPA messages the HarbourMaster exchanged this day (the demo's "MAS messages" line). */

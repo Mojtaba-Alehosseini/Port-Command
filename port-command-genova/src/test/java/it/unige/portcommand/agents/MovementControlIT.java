@@ -22,12 +22,15 @@ import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
+import it.unige.portcommand.gui.events.MovementSafetyEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.PortStatusEvent;
 import it.unige.portcommand.gui.events.TugJobAwardedEvent;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
+import it.unige.portcommand.harbourmaster.financial.ExpenseRules;
+import it.unige.portcommand.harbourmaster.financial.IncomeRules;
 import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.ontology.VesselSpec;
 import it.unige.portcommand.prolog.PrologEngine;
@@ -211,8 +214,18 @@ class MovementControlIT {
         assertEquals(Stage.AWAITING_TUG, held.stage());
         assertEquals("berth_1", held.assignedBerth(), "the berth stays reserved");
         assertEquals(List.of("R16", "R19"), hm.movement().holdRules("C001"));
+        // S17b (E1): the score's "blocked" - the gate refused this movement, and says with which rules.
+        MovementSafetyEvent blocked = awaitEvent(MovementSafetyEvent.class,
+                e -> e.kind() == MovementSafetyEvent.Kind.BLOCKED && "C001".equals(e.vesselId()), 5_000);
+        assertNotNull(blocked, "a hold is announced as a blocked movement");
+        assertEquals(List.of("R16", "R19"), blocked.ruleIds());
         assertNull(pollUntil(tug1.inbox, m -> m.getPerformative() == ACLMessage.CFP, 2_000),
                 "no tug is tendered for into the storm (pre-S16: the CFP went out at the grant)");
+        // The storm goes on: more weather messages are still the SAME hold.
+        weather.outbox.put(weatherAlert(hm, "weather_threshold", 34, "poor", 4.5, "stormy"));
+        assertTrue(pollUntilTrue(() -> hm.lastWeather().windKnots() == 34, 10_000));
+        assertEquals(1, safetyEvents(MovementSafetyEvent.Kind.BLOCKED, "C001"),
+                "once per ship per hold, not once per weather message");
 
         weather.outbox.put(weatherAlert(hm, "weather_clear", 20, "good", 1.0, "sunny"));
         ACLMessage cfp1 = pollUntil(tug1.inbox, m -> m.getPerformative() == ACLMessage.CFP, 10_000);
@@ -228,6 +241,52 @@ class MovementControlIT {
                 "weather_resume reaches the ship once its tugs are actually hired");
         assertEquals(Stage.AWAITING_TUG, hm.activeVessels().get("C001").stage(),
                 "and it still waits for them to reach it");
+        assertEquals(1, safetyEvents(MovementSafetyEvent.Kind.BLOCKED, "C001"), "the release blocks nothing");
+        assertEquals(0, safetyEvents(MovementSafetyEvent.Kind.UNSAFE_MOVE, null), "and nothing unsafe was ordered");
+    }
+
+    /**
+     * S17b (decision E1): the score's "unsafe moves carried out" is counted where an order to
+     * move is written, by asking the gate once more at that moment. Here the reading turns
+     * unsafe by ANOTHER road than a weather message - no sweep runs, nothing is held yet - and a
+     * ferry (no tug to wait for) is granted its berth. The grant asks the gate: the ship is held,
+     * that is one blocked movement, and no order goes out. If a later change ever let the order
+     * through, {@code auditMoveOrder} is what would see it: this test then fails on its first
+     * assertion with one unsafe move counted (proved by reverting both checks at once).
+     */
+    @Test
+    @Timeout(60)
+    void anOrderToMoveIsNeverWrittenUnderAnUnsafeReading() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of("CONTRACT-F1", FERRY_CONTRACT), CNP_PACE, false);
+        Probe vessel = spawnProbe("e1_vessel", null);
+        hm.recordWeather(new HarbourMasterAgent.WeatherReading(38, "poor", 3.5, "stormy"));
+
+        vessel.outbox.put(contractRequest(hm, "CONTRACT-F1", FERRY, "e1_vessel"));
+        assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
+                "fixture: the berth is granted - a grant reserves, it does not move anything");
+        assertNotNull(pollTracking(hm, "F001", t -> t.assignedBerth() != null, 10_000));
+        // A bounded wait for something that must NOT come: the order to proceed.
+        ACLMessage proceed = pollUntil(vessel.inbox, MovementControlIT::isProceed, 1_500);
+
+        assertEquals(0, safetyEvents(MovementSafetyEvent.Kind.UNSAFE_MOVE, null),
+                "no order to move may be written while the gate says the move is unsafe");
+        assertNull(proceed, "and none was");
+        assertTrue(hm.activeVessels().get("F001").weatherHeld(), "the ship is held instead");
+        assertEquals(1, safetyEvents(MovementSafetyEvent.Kind.BLOCKED, "F001"), "one blocked movement");
+
+        // The audit itself, asked directly with the reading no order can reach it with: it must
+        // name the ship and the rules, and the day's score must lose its five points for it.
+        MovementControl.auditMoveOrder(hm, hm.activeVessels().get("F001"));
+        MovementSafetyEvent unsafe = awaitEvent(MovementSafetyEvent.class,
+                e -> e.kind() == MovementSafetyEvent.Kind.UNSAFE_MOVE, 5_000);
+        assertNotNull(unsafe, "an order written under this reading is an unsafe move");
+        assertEquals("F001", unsafe.vesselId());
+        assertEquals(List.of("R15", "R16", "R19"), unsafe.ruleIds(), "38 kn is over a ferry's 35 kn limit");
+        it.unige.portcommand.gui.events.ScoreChangedEvent scored = awaitEvent(
+                it.unige.portcommand.gui.events.ScoreChangedEvent.class, e -> e.score().unsafeMoves() == 1, 5_000);
+        assertNotNull(scored, "and it reaches the score");
+        assertEquals(20.0, scored.score().safetyPoints(), 1e-9);
+        assertEquals(1, scored.score().blockedMoves());
     }
 
     /**
@@ -325,11 +384,21 @@ class MovementControlIT {
         assertNotNull(awaitEvent(NotificationEvent.class,
                 e -> e.text().contains("F001") && e.text().contains("stays at its berth"), 5_000),
                 "and the player is told");
+        // S17b (E1): a served ship kept at its berth is a blocked movement - once, however long
+        // the storm lasts and however many weather messages ask again.
+        assertNotNull(awaitEvent(MovementSafetyEvent.class,
+                e -> e.kind() == MovementSafetyEvent.Kind.BLOCKED && "F001".equals(e.vesselId()), 5_000));
+        weather.outbox.put(weatherAlert(hm, "weather_threshold", 41, "poor", 3.5, "stormy"));
+        assertTrue(pollUntilTrue(() -> hm.lastWeather().windKnots() == 41, 10_000));
+        assertEquals(1, safetyEvents(MovementSafetyEvent.Kind.BLOCKED, "F001"),
+                "asked again by the next weather message: still the same hold");
 
         weather.outbox.put(weatherAlert(hm, "weather_clear", 18, "good", 1.0, "sunny"));
         assertNotNull(pollUntil(vessel.inbox, m -> isOrder(m, "cleared_to_depart"), 10_000),
                 "cleared when the weather allows");
         assertNotNull(pollTracking(hm, "F001", t -> t.stage() == Stage.DEPARTING, 10_000));
+        assertEquals(1, safetyEvents(MovementSafetyEvent.Kind.BLOCKED, "F001"));
+        assertEquals(0, safetyEvents(MovementSafetyEvent.Kind.UNSAFE_MOVE, null));
     }
 
     // ===================================================================================== C1 / C2
@@ -414,6 +483,16 @@ class MovementControlIT {
         assertNotNull(order2);
         assertEquals(cfp1.getConversationId(), order1.getConversationId(), "each on its own hiring conversation");
         assertEquals(topUp.getConversationId(), order2.getConversationId());
+
+        // S17b (decision E11) - born red. The ship has a two-tug escort; it was hired over two
+        // tenders of one tug each, and the surcharge used to be counted per tender: nothing.
+        List<it.unige.portcommand.harbourmaster.IncomeEvent> surcharges = hm.walletLedger().incomeHistory().stream()
+                .filter(e -> IncomeRules.SOURCE_EXTRA_TUG.equals(e.source())).toList();
+        assertEquals(1, surcharges.size(), "one tug beyond the first, whichever tender hired it: " + surcharges);
+        assertEquals(500.0, surcharges.get(0).amount(), 1e-9);
+        assertEquals("C001", surcharges.get(0).vesselId());
+        assertEquals(2, hm.walletLedger().expenseHistory().stream()
+                .filter(e -> ExpenseRules.SOURCE_TUG_JOB.equals(e.source())).count(), "and two jobs paid");
     }
 
     /**
@@ -905,6 +984,14 @@ class MovementControlIT {
     }
 
     @SuppressWarnings("unused")
+    /** How many movement-safety events of {@code kind} were published, for one ship or (null) all. */
+    private long safetyEvents(MovementSafetyEvent.Kind kind, String vesselId) {
+        return EventBusProbe.published(boot.getEventBus()).stream()
+                .filter(MovementSafetyEvent.class::isInstance).map(MovementSafetyEvent.class::cast)
+                .filter(e -> e.kind() == kind && (vesselId == null || vesselId.equals(e.vesselId())))
+                .count();
+    }
+
     private static void unreachable() {
         fail("unused helper anchor");
     }

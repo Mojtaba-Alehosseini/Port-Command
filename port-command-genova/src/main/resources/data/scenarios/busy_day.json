@@ -2,7 +2,7 @@
   "key": "busy_day",
   "displayName": "Busy Day — Stress Test",
   "description": "Three contracted arrivals in two sim-minutes, concurrent walk-ins, one tug refuelling. Tug Contract Nets compete.",
-  "targetDailyRevenue": 12000,
+  "targetDailyRevenue": 14000,
   "randomSeed": 20260214,
   "settingsOverride": { "difficulty": "NORMAL", "autopilotEnabled": false, "realSecondsPerGameDay": 900 },
   "initialState": {

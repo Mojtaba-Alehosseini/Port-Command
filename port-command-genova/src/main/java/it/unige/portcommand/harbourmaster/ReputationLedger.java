@@ -17,8 +17,8 @@ import it.unige.portcommand.util.EventBus;
  *
  * <p>Threading contract is {@link WalletLedger}'s, for the same reason: score, history and the
  * published {@link ReputationChangedEvent} must move together or the HUD can render a stale
- * figure as the final one. A {@code CALLER_THREAD} subscriber must return promptly; the in-tree
- * subscriber (the HUD) is {@code EDT}.
+ * figure as the final one. A {@code CALLER_THREAD} subscriber must return promptly; the HUD is
+ * {@code EDT}, and since S17b the {@code ScoreKeeper} is {@code CALLER_THREAD} (O(1), no ledger read).
  */
 public final class ReputationLedger {
 

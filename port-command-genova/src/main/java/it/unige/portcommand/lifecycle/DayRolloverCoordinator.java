@@ -2,7 +2,6 @@ package it.unige.portcommand.lifecycle;
 
 import java.util.Map;
 
-import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.EndOfDayCompletedEvent;
 import it.unige.portcommand.gui.events.EndOfDayEvent;
 import it.unige.portcommand.harbourmaster.ExpenseEvent;
@@ -13,6 +12,10 @@ import it.unige.portcommand.harbourmaster.financial.ExpenseRules;
 import it.unige.portcommand.harbourmaster.financial.IncomeRules;
 import it.unige.portcommand.harbourmaster.financial.PerformativeCounter;
 import it.unige.portcommand.harbourmaster.financial.ReputationRules;
+import it.unige.portcommand.harbourmaster.financial.DayScore;
+import it.unige.portcommand.harbourmaster.financial.ScoreKeeper;
+import it.unige.portcommand.harbourmaster.financial.SessionTerms;
+import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.lifecycle.events.AutosaveRequestedEvent;
 import it.unige.portcommand.lifecycle.events.DayRolloverEvent;
 import it.unige.portcommand.util.DeliveryMode;
@@ -35,7 +38,7 @@ import org.slf4j.LoggerFactory;
  * <p>Constructed by {@code HarbourMasterAgent.onSetup()} — the
  * {@code LedgerCoordinator} precedent — because every collaborator (ledgers,
  * counter) is agent-owned state. Like it, this is a plain bus subscriber, NOT
- * a JADE behaviour: the catalogue stays locked at 51 (ADR-01).
+ * a JADE behaviour: the catalogue stays locked (52 since S8, ADR-01).
  *
  * <h2>Why this is race-free without pausing the clock</h2>
  * Every money mutation in the game is published on the HarbourMaster's JADE
@@ -71,13 +74,38 @@ public final class DayRolloverCoordinator {
     private final WalletLedger walletLedger;
     private final ReputationLedger reputationLedger;
     private final PerformativeCounter performativeCounter;
+    private final SessionTerms terms;
+    private final ScoreKeeper scoreKeeper;
+    /** Whether {@link #scoreKeeper} is this coordinator's own (the five-argument constructor). */
+    private final boolean ownsScoreKeeper;
     private final Subscription<EndOfDayEvent> subscription;
 
     /** EOD fires exactly once per game day (planning/24 hard constraint). */
     private volatile int lastEndOfDayProcessed = 0;
 
+    /**
+     * A free-play settlement with a score keeper of its own: every day is a whole day against
+     * the player's own target. The HarbourMaster uses the seven-argument constructor.
+     */
     public DayRolloverCoordinator(EventBus eventBus, SimClock simClock, WalletLedger walletLedger,
                                   ReputationLedger reputationLedger, PerformativeCounter performativeCounter) {
+        this(eventBus, simClock, walletLedger, reputationLedger, performativeCounter, SessionTerms.freePlay(),
+                new ScoreKeeper(eventBus, simClock, walletLedger, reputationLedger, SessionTerms.freePlay()), true);
+    }
+
+    /**
+     * @param terms       what a day of this session is measured against and owes (S17b)
+     * @param scoreKeeper the day's score figures; closed by its owner, the HarbourMaster
+     */
+    public DayRolloverCoordinator(EventBus eventBus, SimClock simClock, WalletLedger walletLedger,
+                                  ReputationLedger reputationLedger, PerformativeCounter performativeCounter,
+                                  SessionTerms terms, ScoreKeeper scoreKeeper) {
+        this(eventBus, simClock, walletLedger, reputationLedger, performativeCounter, terms, scoreKeeper, false);
+    }
+
+    private DayRolloverCoordinator(EventBus eventBus, SimClock simClock, WalletLedger walletLedger,
+                                   ReputationLedger reputationLedger, PerformativeCounter performativeCounter,
+                                   SessionTerms terms, ScoreKeeper scoreKeeper, boolean ownsScoreKeeper) {
         // design rule 7, enforced where the charge lives: ExpenseRules' javadoc has always
         // promised "task 24 throws if it ever reads anything else", but nothing threw (S11,
         // money-hunter doc note). The sum is exact in binary (600+1200+1600+1500+300), so ==
@@ -91,6 +119,9 @@ public final class DayRolloverCoordinator {
         this.walletLedger = walletLedger;
         this.reputationLedger = reputationLedger;
         this.performativeCounter = performativeCounter;
+        this.terms = java.util.Objects.requireNonNull(terms, "terms");
+        this.scoreKeeper = java.util.Objects.requireNonNull(scoreKeeper, "scoreKeeper");
+        this.ownsScoreKeeper = ownsScoreKeeper;
         this.subscription = eventBus.subscribe(EndOfDayEvent.class, this::onEndOfDay, DeliveryMode.CALLER_THREAD);
     }
 
@@ -112,16 +143,26 @@ public final class DayRolloverCoordinator {
         //    (never re-typed — design rule 7). Stamped at the ended day's final millisecond
         //    so the history buckets them into the day they paid for; variableForDay excludes
         //    them by SOURCE TAG regardless (replay-safe).
+        //    S17b (decision E3): a day pays for the hours it had. The rate is €5,200 per 24 hours,
+        //    unchanged; a session that opened at 08:00 owes sixteen twenty-fourths of each line for
+        //    its first day. The profit shown during the day charged those same hours one by one
+        //    (SessionTerms), so this booking is the last hour's step, not a €5,200 cliff.
         long stamp = endOfDayStamp(day);
-        for (Map.Entry<String, Double> line : ExpenseRules.dailyFixedBreakdown().entrySet()) {
+        double fixedExpense = 0.0;
+        for (Map.Entry<String, Double> line : terms.fixedBreakdownForDay(day).entrySet()) {
             walletLedger.recordExpense(new ExpenseEvent(line.getValue(), line.getKey(), null, stamp));
+            fixedExpense += line.getValue();
         }
-        double fixedExpense = ExpenseRules.dailyFixed();
+        // S17b (decision E6): the one money line the strip shows at midnight.
+        eventBus.publish(new NotificationEvent(String.format(java.util.Locale.ROOT,
+                "−€%,.0f daily costs", fixedExpense), NotificationEvent.Severity.INFO, stamp));
 
         // 3. Daily-target reputation (+2 canonical) BEFORE the summary snapshot, so the ended
-        //    day's own summary shows the reputation it earned.
+        //    day's own summary shows the reputation it earned. The target is the SESSION's: the
+        //    scenario's own on a scenario's day, the player's otherwise (S17b, decision E4).
         double net = income - variableExpense - fixedExpense;
-        if (net >= Settings.load().dailyTargetEur()) {
+        double target = terms.targetEur(day);
+        if (net >= target) {
             reputationLedger.adjust(ReputationRules.dailyTargetBonus(), "daily_target", null, stamp);
         }
 
@@ -129,11 +170,17 @@ public final class DayRolloverCoordinator {
         //    (snapshot-then-reset would lose boundary messages; task-20 measured 17/4000).
         Map<String, Integer> performatives = performativeCounter.resetForNewDay();
 
+        // 4b. The day's final score (S17b), on the settled net and after the bonus above: both
+        //     belong to the day that ended. Closing the day is what starts the new day's count.
+        DayScore score = scoreKeeper.closeDay(day, net);
+
         EndOfDaySummary summary = new EndOfDaySummary(day, income, variableExpense + fixedExpense,
-                walletLedger.balance(), (int) Math.round(reputationLedger.score()), performatives);
-        log.info("day {} settled: income={} expense={} wallet={} reputation={} messages={}",
+                walletLedger.balance(), (int) Math.round(reputationLedger.score()), performatives,
+                score, terms.scenarioName(day));
+        log.info("day {} settled: income={} expense={} wallet={} reputation={} messages={} score={}{}",
                 day, summary.income(), summary.totalExpense(), summary.endingWallet(),
-                summary.endingReputation(), summary.totalMessages());
+                summary.endingReputation(), summary.totalMessages(), score.total(),
+                summary.endsScenario() ? " - scenario '" + summary.scenarioName() + "' ends" : "");
 
         // 5-7. The contracted fan-out order (see class javadoc).
         eventBus.publish(new EndOfDayCompletedEvent(summary));
@@ -149,5 +196,8 @@ public final class DayRolloverCoordinator {
     /** Unsubscribes — the HM's {@code onTakeDown()} calls this (respawn double-settle guard). */
     public void close() {
         subscription.cancel();
+        if (ownsScoreKeeper) {
+            scoreKeeper.close();
+        }
     }
 }

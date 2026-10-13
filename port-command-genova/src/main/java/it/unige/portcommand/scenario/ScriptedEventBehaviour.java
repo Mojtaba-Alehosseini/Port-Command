@@ -7,7 +7,9 @@ import java.util.List;
 import java.util.PriorityQueue;
 import java.util.Set;
 
+import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.behaviours.SimTickerBehaviour;
+import it.unige.portcommand.behaviours.coordination.PoissonSpawnBehaviour;
 import it.unige.portcommand.ontology.ServiceContract;
 import it.unige.portcommand.scenario.events.ScriptedEvent;
 import it.unige.portcommand.scenario.events.SpawnVesselEvent;
@@ -76,6 +78,8 @@ public final class ScriptedEventBehaviour extends SimTickerBehaviour {
     private volatile int pendingScenarioEvents;
     private int lastMaterializedDay;
     private int seq;
+    /** S17b (T1): scripted walk-ins currently held back for a free slot - logged once each. */
+    private final Set<String> waitingForASlot = new LinkedHashSet<>();
 
     public ScriptedEventBehaviour(jade.core.Agent agent, GameContext ctx, ScenarioRuntime runtime,
                                   List<ServiceContract> dailyBase) {
@@ -199,8 +203,15 @@ public final class ScriptedEventBehaviour extends SimTickerBehaviour {
 
     private void drainDue() {
         long nowSeconds = simClock().nowSimMillis() / 1000L;
+        List<Pending> heldBack = new ArrayList<>();
         while (!pending.isEmpty() && pending.peek().simTimeSeconds() <= nowSeconds) {
             Pending due = pending.poll();
+            if (waitsForAFreeSlot(due)) {
+                // S17b (T1): not fired, not lost - it stays due, and the events after it go ahead.
+                heldBack.add(due);
+                continue;
+            }
+            waitingForASlot.remove(due.id());
             if (!fired.add(due.id())) {
                 continue; // double-enqueue guard; enqueue paths already filter on fired
             }
@@ -216,10 +227,42 @@ public final class ScriptedEventBehaviour extends SimTickerBehaviour {
             }
             try {
                 due.event().apply(ctx);
+                if (isWalkInSpawn(due) && myAgent instanceof HarbourMasterAgent hm) {
+                    hm.walkInSpawned(((SpawnVesselEvent) due.event()).vesselId());
+                }
             } catch (RuntimeException e) {
                 log.error("scripted event {} failed — timeline continues", due.id(), e);
             }
         }
+        pending.addAll(heldBack);
+    }
+
+    /**
+     * S17b (decision T1): a scripted walk-in that would be the third conversation waits. Scripted
+     * spawns used to go round the "at most two negotiating" limit - Busy Day's two walk-ins at
+     * t=300 and its third at t=900 put three talks on a player still answering the first two. The
+     * script file is unchanged: the event stays due and fires on the first tick with a free slot.
+     * Until then it has not fired, so it is not in the save's fired ids (a load finds it due
+     * again) and the script is not complete - the speed stays locked and Poisson traffic stays
+     * off, as for any scripted event still to come.
+     */
+    private boolean waitsForAFreeSlot(Pending due) {
+        if (!due.scenarioEvent() || !isWalkInSpawn(due) || !(myAgent instanceof HarbourMasterAgent hm)) {
+            return false;
+        }
+        if (hm.negotiatingWalkIns() < PoissonSpawnBehaviour.MAX_NEGOTIATING_WALKINS) {
+            return false;
+        }
+        if (waitingForASlot.add(due.id())) {
+            log.info("scripted walk-in {} waits: {} walk-ins are already negotiating", due.id(),
+                    PoissonSpawnBehaviour.MAX_NEGOTIATING_WALKINS);
+        }
+        return true;
+    }
+
+    private static boolean isWalkInSpawn(Pending due) {
+        return due.event() instanceof SpawnVesselEvent spawn
+                && !SpawnVesselEvent.CHANNEL_CONTRACTED.equals(spawn.channel());
     }
 
     /** True while the scenario's own scripted wave is still firing (Poisson gate). */

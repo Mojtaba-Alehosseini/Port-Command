@@ -32,8 +32,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * class in a catalogue-counted sub-package shadows {@code BehaviourCatalogueTest}'s
  * {@code getResource} scan (same reason as {@code WithdrawalBehaviourTest}).
  *
- * <p>S14 (playability/timing): the gate has TWO limits now — at most three walk-ins in port
- * (task 19, unchanged) and at most two of them still NEGOTIATING (new: what one player can hold
+ * <p>S14 (playability/timing): the gate has TWO limits now — at most four walk-ins in port
+ * (task 19's limit, raised from three in S17b) and at most two of them still NEGOTIATING (new: what one player can hold
  * a conversation with). Each has its own case below, staged so that only the limit under test
  * can be the one that refuses.
  */
@@ -78,13 +78,17 @@ class PoissonSpawnBehaviourIT {
         // negotiating limit cannot be what refuses — this case is the in-port count alone.
         hm.activeVessels().put("WALKIN-1", walkIn("WALKIN-1", Stage.DOCKED));
         hm.activeVessels().put("WALKIN-2", walkIn("WALKIN-2", Stage.IN_TRANSIT));
-        assertTrue(behaviour.canSpawnNow(), "2 active walk-ins must still be under the cap of 3");
+        assertTrue(behaviour.canSpawnNow(), "2 active walk-ins must still be under the cap of 4");
 
+        // S17b (PLAYABILITY §10): the in-port limit is 4, one walk-in per berth (was 3).
         hm.activeVessels().put("WALKIN-3", walkIn("WALKIN-3", Stage.AWAITING_TUG));
-        assertFalse(behaviour.canSpawnNow(), "a 3rd active walk-in must hit the cap: no 4th");
+        assertTrue(behaviour.canSpawnNow(), "3 active walk-ins leave room for a 4th since S17b");
+
+        hm.activeVessels().put("WALKIN-4", walkIn("WALKIN-4", Stage.DOCKED));
+        assertFalse(behaviour.canSpawnNow(), "a 4th active walk-in must hit the cap: no 5th");
 
         // A contracted vessel must never count against the walk-in cap.
-        hm.activeVessels().remove("WALKIN-3");
+        hm.activeVessels().remove("WALKIN-4");
         hm.activeVessels().put("CONTRACTED-1", contracted("CONTRACTED-1", Stage.DOCKED));
         assertTrue(behaviour.canSpawnNow(), "a contracted vessel must not count toward the walk-in cap");
     }
@@ -105,17 +109,19 @@ class PoissonSpawnBehaviourIT {
 
         hm.activeVessels().put("WALKIN-2", walkIn("WALKIN-2", Stage.NEGOTIATING));
         assertFalse(behaviour.canSpawnNow(),
-                "2 walk-ins negotiating must hold the next arrival, although only 2 of 3 are in port");
+                "2 walk-ins negotiating must hold the next arrival, although only 2 of 4 are in port");
 
         // WALKIN-2 closes its deal and moves on: one negotiating + one past negotiation.
         hm.activeVessels().computeIfPresent("WALKIN-2", (id, t) -> t.withStage(Stage.AWAITING_TUG));
         assertTrue(behaviour.canSpawnNow(),
                 "1 negotiating + 1 past negotiation is under both limits: the next walk-in may come");
 
-        // A second vessel past negotiation fills the port: one negotiating + two past.
+        // Two more vessels past negotiation fill the port: one negotiating + three past.
         hm.activeVessels().put("WALKIN-3", walkIn("WALKIN-3", Stage.DOCKED));
+        assertTrue(behaviour.canSpawnNow(), "1 negotiating + 2 past negotiation is 3 of 4 in port");
+        hm.activeVessels().put("WALKIN-4", walkIn("WALKIN-4", Stage.DOCKED));
         assertFalse(behaviour.canSpawnNow(),
-                "1 negotiating + 2 past negotiation is 3 walk-ins in port: the older cap still holds");
+                "1 negotiating + 3 past negotiation is 4 walk-ins in port: the in-port cap still holds");
     }
 
     /** Neither limit ever counts a contracted vessel, whatever its stage. */
@@ -130,7 +136,7 @@ class PoissonSpawnBehaviourIT {
         hm.activeVessels().put("CONTRACTED-2", contracted("CONTRACTED-2", Stage.IN_TRANSIT));
         hm.activeVessels().put("CONTRACTED-3", contracted("CONTRACTED-3", Stage.DOCKED));
         assertTrue(behaviour.canSpawnNow(),
-                "three contracted vessels in port must not fill the walk-in cap of 3");
+                "three contracted vessels in port must not fill the walk-in cap");
 
         // A contracted vessel never negotiates in play; the stage is forced here only to pin the
         // CHANNEL half of the negotiating count — it must filter on walk-ins, not on the stage alone.

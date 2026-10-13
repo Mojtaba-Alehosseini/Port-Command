@@ -71,9 +71,25 @@ class ExpenseRulesTest {
     }
 
     @Test
-    void customsAndIncidentAreTheCanonicalFlatFigures() {
+    void customsIsTheCanonicalFlatFigure() {
         assertEquals(100.0, ExpenseRules.customsClearance(), EPS);
-        assertEquals(2_000.0, ExpenseRules.incidentFine(), EPS);
+    }
+
+    /** S17b (E5): the incident fine had no producer — there is no incident event — and is gone. */
+    @Test
+    void theIncidentFineIsGone() {
+        java.util.Set<String> sources = new java.util.TreeSet<>();
+        for (java.lang.reflect.Field f : ExpenseRules.class.getDeclaredFields()) {
+            if (f.getName().startsWith("SOURCE_")) {
+                sources.add(f.getName());
+            }
+        }
+        assertEquals(java.util.Set.of("SOURCE_TUG_JOB", "SOURCE_CUSTOMS", "SOURCE_SALARIES",
+                "SOURCE_BERTH_MAINTENANCE", "SOURCE_TUG_IDLE_LEASE", "SOURCE_INSURANCE",
+                "SOURCE_UTILITIES"), sources);
+        for (java.lang.reflect.Method m : ExpenseRules.class.getDeclaredMethods()) {
+            org.junit.jupiter.api.Assertions.assertNotEquals("incidentFine", m.getName());
+        }
     }
 
     /**
