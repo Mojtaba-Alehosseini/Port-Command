@@ -142,6 +142,9 @@ class WalkInNamePoolIT {
 
         session.loadGame(saved);
         boot.getSimClock().pause();
+        // loadGame awaits the rebuilt HarbourMaster's onSetup, but the directory entry is
+        // written a few statements later — the same lookup race, only narrower.
+        awaitHarbourMasterRegistered();
         HarbourMasterAgent hm2 = (HarbourMasterAgent) session.directory().byName("harbour_master")
                 .orElseThrow();
         assertEquals(offset, hm2.namePoolOffset(), "the rolled offset restores verbatim");
@@ -185,6 +188,17 @@ class WalkInNamePoolIT {
         }
     }
 
+    /** Bounded wait for the HarbourMaster's directory entry — the last step of its setup. */
+    private void awaitHarbourMasterRegistered() throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 15_000;
+        while (session.directory().byName("harbour_master").isEmpty()
+                && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50);
+        }
+        assertTrue(session.directory().byName("harbour_master").isPresent(),
+                "fixture: the HarbourMaster must be registered within 15 s");
+    }
+
     private List<String> bootAndSpawnThree() throws Exception {
         boot = new JadeBootstrap();
         session = new GameSession(boot,
@@ -192,6 +206,11 @@ class WalkInNamePoolIT {
                 new SaveLoadManager(tempDir), new Leaderboard(tempDir.resolve("scores.json")));
         session.startNewGame();
         boot.getSimClock().pause();
+        // S15 hardening (same as SaveLoadMidTransitIT, S10): startNewGame does NOT await the
+        // HarbourMaster's setup, and the agent registers in the directory as the LAST step of
+        // that setup — so a bare orElseThrow here raced the agent's boot and lost under machine
+        // load (NoSuchElementException, three times in one S15 afternoon). Bounded wait.
+        awaitHarbourMasterRegistered();
         HarbourMasterAgent hm = (HarbourMasterAgent) session.directory().byName("harbour_master")
                 .orElseThrow();
 

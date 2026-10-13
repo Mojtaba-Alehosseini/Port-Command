@@ -143,6 +143,10 @@ class WeatherHoldTransitIT {
         assertTrue(dto.weatherHeld(), "the hold flag rides the existing DTO field (ADR-17: no new field)");
 
         session.loadGame(saved);
+        // loadGame awaits the rebuilt HarbourMaster's onSetup; the directory entry follows a few
+        // statements later (register-last) — the same lookup race, only narrower.
+        assertTrue(waitUntil(() -> session.directory().byName("harbour_master").isPresent(), 15_000),
+                "fixture: the rebuilt HarbourMaster must register");
         HarbourMasterAgent hm2 = (HarbourMasterAgent) session.directory().byName("harbour_master")
                 .orElseThrow();
         assertTrue(waitUntil(() -> {
@@ -206,6 +210,10 @@ class WeatherHoldTransitIT {
         it.unige.portcommand.bootstrap.AgentRoster.spawnContractedVessel(
                 boot.getSpawner(), spec, "CONTRACT-1", boot.getSimClock(),
                 boot.getMarketHistoryArtifact(), session.directory());
+        // S15 hardening (same race WalkInNamePoolIT lost): startNewGame does not await the
+        // HarbourMaster's setup, and directory registration is that setup's last step.
+        assertTrue(waitUntil(() -> session.directory().byName("harbour_master").isPresent(), 15_000),
+                "fixture: the HarbourMaster must finish booting");
         HarbourMasterAgent hm = (HarbourMasterAgent) session.directory().byName("harbour_master")
                 .orElseThrow();
 
