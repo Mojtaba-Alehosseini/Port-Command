@@ -111,6 +111,20 @@ class SaveLoadSessionIT {
         VesselStateDTO beliefsBefore = live.snapshotDto();
         assertNotNull(beliefsBefore.minAcceptablePrice(), "the staged walk-in has hidden beliefs");
 
+        // S17a: let the EUR 100 customs clearance be booked first. It lands when customs answers,
+        // a moment after the grant; saved before that, the fee is charged after each load instead
+        // (correctly - it had not been paid), and "the loads restore the saved wallet" then
+        // depends on whether that charge beats the assertion. The test lost that race once on a
+        // loaded machine. Saved after it, the wallet and the ship's clearance are both in the file.
+        assertNotNull(awaitEvent(it.unige.portcommand.gui.events.CustomsClearedEvent.class,
+                        e -> "WALKIN-T1".equals(e.vesselId()), 20_000),
+                "fixture: customs must clear the walk-in before the save");
+        // ... and let her take the order to proceed that follows it (a ferry needs no tug): a
+        // manual save is refused for the instant that order is on the wire.
+        assertTrue(waitUntil(() -> live.flowPhase() != null
+                        && live.flowPhase().ordinal() >= BaseVesselAgent.FlowPhase.TRANSIT.ordinal(), 15_000),
+                "fixture: the cleared ferry must be under way before the save, phase=" + live.flowPhase());
+
         // --- Save (negotiation closed → allowed), then load TWICE. ---
         Path saved = session.saveNow();
         GameState savedState = new SaveLoadManager(tempDir).load(saved);
@@ -139,8 +153,10 @@ class SaveLoadSessionIT {
                 "both loads restore the saved wallet exactly");
 
         // --- THE TRAP, structurally: after two teardown/rebuilds, ONE subscriber each. ---
-        assertEquals(1, EventBusProbe.subscriberCount(boot.getEventBus(), DealClosedEvent.class),
-                "exactly one LedgerCoordinator alive — a stale one would double-charge");
+        // S17a: two, not one - the LedgerCoordinator, and the Assistant's autopilot plan (it hears a
+        // deal for its "accepted at once" note, ADR-21). Each stale world would add two more.
+        assertEquals(2, EventBusProbe.subscriberCount(boot.getEventBus(), DealClosedEvent.class),
+                "exactly one LedgerCoordinator (and one Assistant plan) alive — a stale one would double-charge");
         assertEquals(1, EventBusProbe.subscriberCount(boot.getEventBus(), PlayerCommandEvent.class),
                 "exactly one DispatchPlayerCommand subscription alive");
         assertEquals(1, EventBusProbe.subscriberCount(boot.getEventBus(), NegotiationOpenedEvent.class),
@@ -247,11 +263,15 @@ class SaveLoadSessionIT {
 
         // It must actually MATCH the vessel it scopes to, and not the ones it does not — otherwise
         // "registered" would be a claim about a lambda nobody ever calls.
-        assertTrue(registry.firstMatching(snapshot("tanker", 2_400.0)).isPresent(),
-                "a tanker asking 2400 is above the 2200 threshold");
-        assertTrue(registry.firstMatching(snapshot("tanker", 2_100.0)).isEmpty(),
-                "2100 is below the threshold — deferred to the player");
-        assertTrue(registry.firstMatching(snapshot("cargo_vessel", 2_400.0)).isEmpty(),
+        // S17a (decision A8): the scripted threshold is 6000 - at the old 2200 every tanker
+        // matched (their offers start around 3850), so the policy showed nothing.
+        assertTrue(registry.firstMatching(snapshot("tanker", 6_400.0)).isPresent(),
+                "a tanker offering 6400 is above the 6000 threshold");
+        assertTrue(registry.firstMatching(snapshot("tanker", 5_900.0)).isEmpty(),
+                "5900 is below the threshold - left to the expected-value calculation");
+        assertTrue(registry.firstMatching(snapshot("tanker", 3_850.0)).isEmpty(),
+                "and so is the lowest offer a walk-in tanker opens with: the policy no longer takes every tanker");
+        assertTrue(registry.firstMatching(snapshot("cargo_vessel", 6_400.0)).isEmpty(),
                 "the 'for tankers' scope must exclude other types");
 
         Path saved = session.saveNow();
@@ -262,8 +282,10 @@ class SaveLoadSessionIT {
         session.loadGame(saved);
         assertTrue(waitUntil(() -> boot.getPolicyRegistryArtifact().all().size() == 1, 15_000),
                 "restorePolicies must re-parse the persisted trigger into a live rule");
-        assertTrue(boot.getPolicyRegistryArtifact().firstMatching(snapshot("tanker", 2_400.0)).isPresent(),
+        assertTrue(boot.getPolicyRegistryArtifact().firstMatching(snapshot("tanker", 6_400.0)).isPresent(),
                 "the RESTORED rule must be a working predicate, not just a remembered string");
+        assertTrue(boot.getPolicyRegistryArtifact().firstMatching(snapshot("tanker", 5_900.0)).isEmpty(),
+                "with the threshold it was saved with");
     }
 
     private static WalkInDialogueSnapshot snapshot(String vesselType, double vesselAsk) {

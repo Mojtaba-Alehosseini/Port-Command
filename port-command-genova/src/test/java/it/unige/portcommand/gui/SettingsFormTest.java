@@ -60,7 +60,7 @@ class SettingsFormTest {
         String feedback = form.policyFeedbackForTest();
         assertTrue(feedback.contains("Policy set"), feedback);
         assertTrue(feedback.contains("accept the vessel's offer"), "the parsed ACTION: " + feedback);
-        assertTrue(feedback.contains("price &gt; 2200"), "the parsed CONDITION: " + feedback);
+        assertTrue(feedback.contains("price &gt; 6000"), "the parsed CONDITION: " + feedback);
         assertTrue(feedback.contains("tankers only"), "the parsed canonical SCOPE: " + feedback);
         assertTrue(form.policyFieldForTest().getText().isEmpty(), "an accepted policy clears the field");
     }
@@ -83,7 +83,7 @@ class SettingsFormTest {
         assertTrue(feedback.contains("Not understood"), feedback);
         assertTrue(feedback.contains("fixed grammar"), "the player must be told it is a DSL: " + feedback);
         assertTrue(feedback.contains("rounds_used"), "the grammar itself: " + feedback);
-        assertTrue(feedback.contains("auto accept if price &gt; 2200 for tankers"),
+        assertTrue(feedback.contains("auto accept if price &gt; 6000 for tankers"),
                 "a working example: " + feedback);
         assertFalse(form.policyFieldForTest().getText().isEmpty(),
                 "a rejected policy keeps the text so it can be corrected, not retyped");

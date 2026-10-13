@@ -6,6 +6,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 import it.unige.portcommand.assistant.AssistantPromptBuilder;
+import it.unige.portcommand.assistant.AssistantWording;
+import it.unige.portcommand.assistant.HintCard;
 import it.unige.portcommand.assistant.AssistantPromptBuilder.PromptPayload;
 import it.unige.portcommand.assistant.HallucinationValidator;
 import it.unige.portcommand.assistant.Recommendation;
@@ -40,9 +42,22 @@ import org.slf4j.LoggerFactory;
  * continuation, never {@code .get()}/{@code .join()}.
  *
  * <p>S16 (2026-10-13, decision B10): when the weather is unsafe for the vessel the Hint is about,
- * one more line follows the template — {@link WeatherNote}, an ordinary Assistant message. It is
- * not part of the Hint text: not sent to the model, not validated, and not replaced when the
- * model's wording replaces the template.
+ * the Hint says so — {@link WeatherNote}. It is not part of the Hint text: not sent to the model,
+ * not validated, and not replaced when the model's wording replaces the template.
+ *
+ * <p><b>S17a (ADR-21): a Hint is a card.</b> What appears at once is a plain sentence
+ * ({@link AssistantWording#hintText}) with a {@link HintCard}: the recommendation as data — so
+ * the tab can offer "Use this" and can tell when the vessel has countered and the advice is out
+ * of date — and a details line with the numbers, the R7 check and, when the weather would keep
+ * the ship outside, the S16 note (it used to be a separate message). The paragraph sent to the
+ * model and the validator that judges the answer are unchanged; the model's validated wording
+ * still replaces the sentence in place, and the card stays.
+ *
+ * <p><b>S17a (UI-tree decision U1): one Hint at a time per offer.</b> A second press while the
+ * model is still answering the first one for the SAME offer is ignored. Every press used to add
+ * a bubble, start another model call and freeze the vessel's patience once more — a way to hold
+ * a vessel for as long as one cared to click. A press after the vessel has countered is a new
+ * question and is answered.
  */
 public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
 
@@ -72,6 +87,9 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
      * first. Read once per Hint, on the thread the Hint runs on; the agent keeps the reading in
      * a volatile field its bus subscription writes. */
     private final Supplier<MovementGate.Reading> weather;
+    /** S17a (U1): the offers a Hint is being answered for right now. Written on the agent thread
+     * at the press and from the model call's own completion thread, hence concurrent. */
+    private final java.util.Set<String> pendingOffers = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     /** No conversation clock: nothing to freeze (a private clock no vessel is on). */
     public RecommendOnDemandBehaviour(Agent agent, RecommendationAlgorithm algorithm, LLMBridge llmBridge,
@@ -126,7 +144,11 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
         agent.addBehaviour(new OneShotBehaviour(agent) {
             @Override
             public void action() {
-                onHintButton(event);
+                // S17a (adversarial review): onHintButton rethrows what the bridge throws, and an
+                // exception out of a behaviour ends the JADE agent - which, since the chat tabs
+                // lock and unlock from the Assistant's own statements, would leave every tab
+                // locked for the rest of the game. The failure is logged; the Assistant lives.
+                AutopilotExecuteBehaviour.guarded(() -> onHintButton(event));
             }
         });
     }
@@ -152,14 +174,21 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
      */
     public void onHintButton(HintButtonEvent event) {
         WalkInDialogueSnapshot snapshot = event.snapshot();
+        String offerKey = offerKey(event.dialogueId(), snapshot);
+        if (pendingOffers.contains(offerKey)) {
+            log.info("hint ({}): one is already being answered for this offer; the press is ignored",
+                    event.dialogueId());
+            return;
+        }
         Recommendation rec = algorithm.run(snapshot);
         cache.put(decisionId(event.dialogueId(), snapshot), rec);
 
-        String template = AssistantPromptBuilder.template(rec);
+        String sentence = AssistantWording.hintText(rec, snapshot);
+        HintCard card = HintCard.of(rec, snapshot,
+                AssistantWording.details(rec, snapshot, weatherWait(event.dialogueId(), snapshot)));
         long hintId = HINT_IDS.incrementAndGet();
         // Before explain() is even called, so the revision can never overtake its own template.
-        eventBus.publish(AssistantChatEvent.hintTemplate(event.dialogueId(), hintId, template));
-        publishWeatherNote(event.dialogueId(), snapshot);
+        eventBus.publish(AssistantChatEvent.hintTemplate(event.dialogueId(), hintId, sentence, card));
 
         PromptPayload prompt = AssistantPromptBuilder.prompt(rec);
         // requiredFigures(), not allFigures(): the sidecar's own check 1 mirrors the Java one
@@ -187,7 +216,12 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
             log.info("hint {} ({}): no model call was made; the template stands", hintId, event.dialogueId());
             return;
         }
-        answer.whenComplete((response, error) -> thaw.run());
+        // U1: from here until the model answers, fails or times out, this offer has its Hint.
+        pendingOffers.add(offerKey);
+        answer.whenComplete((response, error) -> {
+            pendingOffers.remove(offerKey);
+            thaw.run();
+        });
         answer
                 .thenAccept(response -> {
                     long ms = (System.nanoTime() - askedAt) / 1_000_000L;
@@ -210,29 +244,30 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
     /**
      * S16 (2026-10-13, decision B10): since S16 a deal closes in any weather and the ship then
      * waits outside until the movement gate lets her in. When the last reading is unsafe for THIS
-     * vessel's type the Hint therefore gets one more line — the gate's own reason, rule ids
-     * included — as an ordinary Assistant message right after the template.
+     * vessel's type the Hint says so, in the gate's own words, rule ids included.
      *
-     * <p>Ordinary on purpose (the two-argument {@link AssistantChatEvent}): it is appended and
-     * stays, where a Hint's template is replaced in place by the model's wording; and it never
-     * goes near the model or {@link HallucinationValidator}, which would reject the wind figure
-     * and the rule id as numbers the recommendation did not contain. Published after the template
-     * so it reads as its footnote. (An ordinary message is appended even to a tab that closed
-     * between the press and now, where the template itself is refused; the note then stands
-     * alone on a finished negotiation, which is harmless and true.)
+     * <p>S17a (ADR-21): it is part of the card's DETAILS LINE now ({@link WeatherNote#forDetails}),
+     * not a second message after the template. Still never near the model or
+     * {@link HallucinationValidator}, which would reject the wind figure and the rule id as
+     * numbers the recommendation did not contain.
      *
      * <p>Nothing when the weather is safe for the type, and nothing before the first reading. A
      * failure of the weather check itself is logged and swallowed — the note is advice about the
      * Hint, and must never cost the player the Hint.
      */
-    private void publishWeatherNote(String dialogueId, WalkInDialogueSnapshot snapshot) {
+    private java.util.Optional<String> weatherWait(String dialogueId, WalkInDialogueSnapshot snapshot) {
         try {
-            WeatherNote.forHint(snapshot.vesselType(), weather.get())
-                    .ifPresent(note -> eventBus.publish(new AssistantChatEvent(dialogueId, note)));
+            return WeatherNote.forDetails(snapshot.vesselType(), weather.get());
         } catch (RuntimeException e) {
             log.warn("hint ({}): the weather note could not be worked out; the hint goes on without it",
                     dialogueId, e);
+            return java.util.Optional.empty();
         }
+    }
+
+    /** U1: one offer of one dialogue — the round and the vessel's price it stands at. */
+    private static String offerKey(String dialogueId, WalkInDialogueSnapshot snapshot) {
+        return dialogueId + "|" + snapshot.roundsUsed() + "|" + snapshot.lastVesselOffer();
     }
 
     /** The bridge's configured timeout plus a margin, never less than the clock's default lease

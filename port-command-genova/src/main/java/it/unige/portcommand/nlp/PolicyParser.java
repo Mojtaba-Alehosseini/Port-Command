@@ -50,8 +50,13 @@ public final class PolicyParser {
                     + "(> | < | >= | <= | =) NUMBER [and ...] "
                     + "[for (tankers | container_vessels | cargo_vessels | ferries | cruise_ships)]";
 
-    /** A policy that parses — the demo's own scripted sentence, and the example in the hint. */
-    public static final String GRAMMAR_EXAMPLE = "auto accept if price > 2200 for tankers";
+    /**
+     * A policy that parses — the demo's own scripted sentence, and the example in the hint.
+     * S17a (decision A8): the threshold was 2200, which accepted EVERY tanker (their offers start
+     * around 3850); at 6000 the policy takes the good offers and leaves the rest to the
+     * expected-value calculation, which is what the demo means to show.
+     */
+    public static final String GRAMMAR_EXAMPLE = "auto accept if price > 6000 for tankers";
 
     private static final Pattern TOP_LEVEL = Pattern.compile(
             "^auto\\s+(.+?)\\s+if\\s+(.+?)(?:\\s+for\\s+(\\S+))?$", Pattern.CASE_INSENSITIVE);

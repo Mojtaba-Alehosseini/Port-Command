@@ -29,21 +29,23 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * S16 (2026-10-13, decision B10): the line the Assistant adds to a Hint when the weather would
- * keep that vessel waiting outside after a deal. {@link WeatherNote} only words the verdict of
+ * S16 (2026-10-13, decision B10): what the Assistant adds to a Hint when the weather would keep
+ * that vessel waiting outside after a deal. {@link WeatherNote} only words the verdict of
  * {@code MovementGate}, which asks the real weather rules (R15 wind per vessel type, R16
  * visibility, R17 swell, R19 sea state) — so the engine is loaded here as in
  * {@code PrologQueriesTest}, and the limits below are the kernel's own (tanker 30 kn, ferry 35,
  * cargo vessel 45; swell 4.0 m).
  *
- * <p>The second block is the wiring: that {@code RecommendOnDemandBehaviour} publishes the note
- * next to a Hint's template as an ordinary message, only when there is one, and that neither
- * the model's revision nor a failure of the weather check disturbs the Hint itself. No JADE
- * container and no sidecar: the handler is called directly against a mocked {@code LLMBridge}.
+ * <p>S17a (ADR-21): the note is the last part of the Hint card's DETAILS LINE — in S16 it was a
+ * message of its own after the template. The second block is that wiring: that
+ * {@code RecommendOnDemandBehaviour} puts it on the card only when there is one, that it is not in
+ * the Hint's sentence, and that neither the model's revision nor a failure of the weather check
+ * disturbs the Hint itself. No JADE container and no sidecar: the handler is called directly
+ * against a mocked {@code LLMBridge}.
  */
 class WeatherNoteTest {
 
-    private static final String LEAD = "Note: in this weather she will wait outside after a deal — ";
+    private static final String LEAD = "ship will wait: ";
 
     @BeforeAll
     static void initEngine() {
@@ -56,11 +58,11 @@ class WeatherNoteTest {
 
     @Test
     void unsafeWeatherForTheVesselGivesTheNoteWithTheGatesReasonAndRuleTag() {
-        Optional<String> note = WeatherNote.forHint("tanker", reading(32, "good", 1.0, "stormy"));
+        Optional<String> note = WeatherNote.forDetails("tanker", reading(32, "good", 1.0, "stormy"));
 
-        assertEquals(Optional.of(LEAD + "wind 32 kn, sea state stormy [R15,R19]."), note);
-        assertEquals("Note: in this weather she will wait outside after a deal — "
-                + "wind 32 kn, sea state stormy [R15,R19].", note.orElseThrow(), "the line as the player reads it");
+        assertEquals(Optional.of(LEAD + "wind 32 kn, sea state stormy [R15,R19]"), note);
+        assertEquals("ship will wait: wind 32 kn, sea state stormy [R15,R19]", note.orElseThrow(),
+                "the part as the player reads it");
     }
 
     @Test
@@ -71,30 +73,30 @@ class WeatherNoteTest {
         MovementGate.Verdict verdict = MovementGate.check("tanker", storm);
         assertFalse(verdict.safe(), "fixture: the gate holds a tanker in this reading");
 
-        assertEquals(LEAD + verdict.reason() + ".", WeatherNote.forHint("tanker", storm).orElseThrow());
-        assertTrue(WeatherNote.forHint("tanker", storm).orElseThrow().contains(verdict.ruleTag()));
+        assertEquals(LEAD + verdict.reason(), WeatherNote.forDetails("tanker", storm).orElseThrow());
+        assertTrue(WeatherNote.forDetails("tanker", storm).orElseThrow().contains(verdict.ruleTag()));
     }
 
     @Test
     void safeWeatherGivesNoNote() {
-        assertEquals(Optional.empty(), WeatherNote.forHint("tanker", reading(18, "good", 0.5, "sunny")));
-        assertEquals(Optional.empty(), WeatherNote.forHint("ferry", reading(29, "fair", 4.0, "cloudy")),
+        assertEquals(Optional.empty(), WeatherNote.forDetails("tanker", reading(18, "good", 0.5, "sunny")));
+        assertEquals(Optional.empty(), WeatherNote.forDetails("ferry", reading(29, "fair", 4.0, "cloudy")),
                 "fair visibility and a swell exactly on the limit are both within the rules");
     }
 
     @Test
     void noReadingGivesNoNote() {
         // "No reading" closes the movement gate, but a guess is not a warning.
-        assertEquals(Optional.empty(), WeatherNote.forHint("tanker", null));
+        assertEquals(Optional.empty(), WeatherNote.forDetails("tanker", null));
         assertFalse(MovementGate.check("tanker", null).safe(), "non-vacuity: the gate itself is closed here");
     }
 
     @Test
     void aFerryIsSafeAtThirtyFourKnotsAndHeldAtThirtyFive() {
         // R15 is "wind BELOW the type's limit", and a ferry's limit is 35.
-        assertEquals(Optional.empty(), WeatherNote.forHint("ferry", reading(34, "good", 1.0, "cloudy")));
-        assertEquals(Optional.of(LEAD + "wind 35 kn [R15]."),
-                WeatherNote.forHint("ferry", reading(35, "good", 1.0, "cloudy")));
+        assertEquals(Optional.empty(), WeatherNote.forDetails("ferry", reading(34, "good", 1.0, "cloudy")));
+        assertEquals(Optional.of(LEAD + "wind 35 kn [R15]"),
+                WeatherNote.forDetails("ferry", reading(35, "good", 1.0, "cloudy")));
     }
 
     @Test
@@ -103,23 +105,23 @@ class WeatherNoteTest {
         // nobody else.
         Reading windy = reading(32, "good", 1.0, "cloudy");
 
-        assertEquals(Optional.of(LEAD + "wind 32 kn [R15]."), WeatherNote.forHint("tanker", windy));
-        assertEquals(Optional.empty(), WeatherNote.forHint("ferry", windy));
-        assertEquals(Optional.empty(), WeatherNote.forHint("cruise_ship", windy));
-        assertEquals(Optional.empty(), WeatherNote.forHint("container_vessel", windy));
-        assertEquals(Optional.empty(), WeatherNote.forHint("cargo_vessel", windy));
+        assertEquals(Optional.of(LEAD + "wind 32 kn [R15]"), WeatherNote.forDetails("tanker", windy));
+        assertEquals(Optional.empty(), WeatherNote.forDetails("ferry", windy));
+        assertEquals(Optional.empty(), WeatherNote.forDetails("cruise_ship", windy));
+        assertEquals(Optional.empty(), WeatherNote.forDetails("container_vessel", windy));
+        assertEquals(Optional.empty(), WeatherNote.forDetails("cargo_vessel", windy));
     }
 
     @Test
     void visibilitySwellAndSeaStateEachHoldOnTheirOwn() {
-        assertEquals(Optional.of(LEAD + "visibility poor [R16]."),
-                WeatherNote.forHint("cargo_vessel", reading(12, "poor", 1.0, "cloudy")));
-        assertEquals(Optional.of(LEAD + "swell 4.5 m [R17]."),
-                WeatherNote.forHint("cargo_vessel", reading(12, "good", 4.5, "cloudy")));
-        assertEquals(Optional.of(LEAD + "sea state stormy [R19]."),
-                WeatherNote.forHint("cargo_vessel", reading(12, "good", 1.0, "stormy")));
-        assertEquals(Optional.of(LEAD + "wind 46 kn, visibility poor, swell 5.0 m, sea state stormy [R15,R16,R17,R19]."),
-                WeatherNote.forHint("cargo_vessel", reading(46, "poor", 5.0, "stormy")),
+        assertEquals(Optional.of(LEAD + "visibility poor [R16]"),
+                WeatherNote.forDetails("cargo_vessel", reading(12, "poor", 1.0, "cloudy")));
+        assertEquals(Optional.of(LEAD + "swell 4.5 m [R17]"),
+                WeatherNote.forDetails("cargo_vessel", reading(12, "good", 4.5, "cloudy")));
+        assertEquals(Optional.of(LEAD + "sea state stormy [R19]"),
+                WeatherNote.forDetails("cargo_vessel", reading(12, "good", 1.0, "stormy")));
+        assertEquals(Optional.of(LEAD + "wind 46 kn, visibility poor, swell 5.0 m, sea state stormy [R15,R16,R17,R19]"),
+                WeatherNote.forDetails("cargo_vessel", reading(46, "poor", 5.0, "stormy")),
                 "all four at once, in rule order");
     }
 
@@ -127,8 +129,8 @@ class WeatherNoteTest {
     void aMissingVesselTypeGivesNoNote() {
         Reading storm = reading(42, "poor", 5.0, "stormy");
 
-        assertEquals(Optional.empty(), WeatherNote.forHint(null, storm));
-        assertEquals(Optional.empty(), WeatherNote.forHint(" ", storm));
+        assertEquals(Optional.empty(), WeatherNote.forDetails(null, storm));
+        assertEquals(Optional.empty(), WeatherNote.forDetails(" ", storm));
     }
 
     // --- on a Hint: the wiring in RecommendOnDemandBehaviour ----------------------------------------
@@ -169,37 +171,39 @@ class WeatherNoteTest {
     }
 
     @Test
-    void aHintInUnsafeWeatherIsFollowedByTheNoteAsAnOrdinaryMessage() {
+    void aHintInUnsafeWeatherCarriesTheNoteAtTheEndOfItsDetailsLine() {
         List<AssistantChatEvent> chats = hint(STORM, noModel());
 
-        assertEquals(2, chats.size(), "the Hint's template, then the note");
+        assertEquals(1, chats.size(), "ONE message: the note is on the card, not a message of its own (S17a)");
         AssistantChatEvent template = chats.get(0);
-        AssistantChatEvent note = chats.get(1);
-        assertTrue(template.isHint(), "the template is still the first thing out");
+        assertTrue(template.isHint(), "the Hint is still the first thing out");
         assertFalse(template.revision());
-        assertFalse(template.text().contains("R15"), "the note is not part of the Hint text");
+        assertFalse(template.text().contains("R15"), "the note is not part of the Hint's sentence");
+        assertFalse(template.text().contains("wind"), "nor is the weather");
 
-        assertEquals("dlg-1", note.dialogueId(), "in the same tab");
-        assertEquals(LEAD + "wind 32 kn, sea state stormy [R15,R19].", note.text());
-        assertFalse(note.isHint(), "an ordinary message: appended, and never replaced by a revision");
-        assertEquals(AssistantChatEvent.NO_HINT, note.hintId());
-        assertFalse(note.revision());
+        String details = template.card().details();
+        assertTrue(details.endsWith(" · ship will wait: wind 32 kn, sea state stormy [R15,R19]"),
+                "the gate's reason and its rule ids close the details line: " + details);
+        assertTrue(details.contains("R7 ✓"), "after the numbers and the berth check: " + details);
     }
 
     @Test
-    void aHintInSafeWeatherOrBeforeAnyReadingIsJustTheHint() {
+    void aHintInSafeWeatherOrBeforeAnyReadingHasNoWeatherInItsDetails() {
         List<AssistantChatEvent> calm = hint(CALM, noModel());
-        assertEquals(1, calm.size(), "safe for a tanker: nothing to warn of");
+        assertEquals(1, calm.size());
         assertTrue(calm.get(0).isHint());
+        assertFalse(calm.get(0).card().details().contains("ship will wait"), "safe for a tanker: nothing to warn of");
+        assertTrue(calm.get(0).card().details().endsWith("R7 ✓"), calm.get(0).card().details());
 
         List<AssistantChatEvent> unknown = hint(null, noModel());
-        assertEquals(1, unknown.size(), "no reading yet: the Assistant does not guess");
-        assertTrue(unknown.get(0).isHint());
+        assertEquals(1, unknown.size());
+        assertFalse(unknown.get(0).card().details().contains("ship will wait"),
+                "no reading yet: the Assistant does not guess");
     }
 
     @Test
-    void theModelsRevisionReplacesTheTemplateAndNeverTheNote() {
-        // The same canned answer AssistantAgentIT uses: the behaviour's own template behind a
+    void theModelsRevisionReplacesTheSentenceAndNeverTheDetails() {
+        // The same canned answer AssistantAgentIT uses: the prompt's own paragraph behind a
         // figure-free lead-in, so it passes the hallucination validator by construction.
         Recommendation expected = new RecommendationAlgorithm(new MarketHistoryArtifact()).run(tanker());
         String cannedText = "Here is my advice. " + AssistantPromptBuilder.template(expected);
@@ -209,15 +213,14 @@ class WeatherNoteTest {
 
         List<AssistantChatEvent> chats = hint(STORM, bridge);
 
-        assertEquals(3, chats.size(), "template, note, then the validated wording");
+        assertEquals(2, chats.size(), "the Hint, then the validated wording");
         AssistantChatEvent template = chats.get(0);
-        AssistantChatEvent note = chats.get(1);
-        AssistantChatEvent revision = chats.get(2);
+        AssistantChatEvent revision = chats.get(1);
         assertTrue(revision.revision(), "the model's text was validated as before: the note was not in it");
-        assertEquals(template.hintId(), revision.hintId(), "it replaces the TEMPLATE");
+        assertEquals(template.hintId(), revision.hintId(), "it replaces the SENTENCE of that Hint");
         assertEquals(cannedText, revision.text());
-        assertFalse(note.isHint(), "and the note, being no part of that Hint, stays where it was put");
-        assertEquals(LEAD + "wind 32 kn, sea state stormy [R15,R19].", note.text());
+        assertEquals(null, revision.card(), "a revision carries no card: the one already shown stays");
+        assertTrue(template.card().details().endsWith("ship will wait: wind 32 kn, sea state stormy [R15,R19]"));
     }
 
     @Test
@@ -238,5 +241,6 @@ class WeatherNoteTest {
                 .toList();
         assertEquals(1, chats.size(), "the Hint is out; only the note is missing");
         assertTrue(chats.get(0).isHint());
+        assertTrue(chats.get(0).card().details().endsWith("R7 ✓"), chats.get(0).card().details());
     }
 }

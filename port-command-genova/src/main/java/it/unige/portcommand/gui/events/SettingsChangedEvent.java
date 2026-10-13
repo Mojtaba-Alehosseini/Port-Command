@@ -20,8 +20,10 @@ import it.unige.portcommand.util.Event;
  *       shows the scenario's value rather than stomping it; only an explicit drag+apply
  *       changes it (the same "player intent wins" rule as {@code --day-length}).</li>
  *   <li><b>{@code autopilotEnabled}</b> — LIVE. {@link it.unige.portcommand.agents.AssistantAgent}
- *       subscribes and flips its Channel-B toggle; {@code ChatPanel} reads the live value so
- *       the per-tab Hint button appears/disappears immediately.</li>
+ *       subscribes and flips its Channel-B toggle. S17a (ADR-21): the chat tabs do NOT read this
+ *       event any more — the Assistant restates who is negotiating where
+ *       ({@link AutopilotOwnershipEvent}), and the tabs lock, unlock and show Hint from that
+ *       alone.</li>
  *   <li><b>{@code difficulty}</b> — RECORDED ONLY. As of task 24 NOTHING in the running
  *       negotiation engine or HarbourMaster reads {@code Settings.difficulty()} (grep-verified
  *       2026-07-18: the field is plumbed through save/scenario merge but has no runtime

@@ -24,6 +24,7 @@ import it.unige.portcommand.agents.ContractedVesselAgent;
 import it.unige.portcommand.agents.WalkInVesselAgent;
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
+import it.unige.portcommand.assistant.AutopilotPacing;
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.harbourmaster.TugBasePositions;
 import it.unige.portcommand.negotiation.NegotiationEngine;
@@ -108,6 +109,24 @@ public final class AgentRoster {
                                                EventBus eventBus, AgentDirectory directory,
                                                PolicyRegistryArtifact policyRegistry,
                                                it.unige.portcommand.scenario.ScenarioRuntime scenarioRuntime) {
+        // Pre-S17a signature: no autopilot pacing — a move is sent in the step that decided it.
+        spawnSingletonsAndFleet(spawner, portState, simClock, randomSource, marketHistory,
+                llmBridge, eventBus, directory, policyRegistry, scenarioRuntime, AutopilotPacing.NONE);
+    }
+
+    /**
+     * S17a signature (ADR-21, PT12): {@code autopilotPacing} rides the Assistant's args channel,
+     * found by type. A launched game passes {@code BootstrapConfig.autopilotPacing()} (about two
+     * seconds per move); everything else passes {@link AutopilotPacing#NONE} through the
+     * overloads above.
+     */
+    public static void spawnSingletonsAndFleet(JadeAgentSpawner spawner, PortStateArtifact portState,
+                                               SimClock simClock, RandomSource randomSource,
+                                               MarketHistoryArtifact marketHistory, LLMBridge llmBridge,
+                                               EventBus eventBus, AgentDirectory directory,
+                                               PolicyRegistryArtifact policyRegistry,
+                                               it.unige.portcommand.scenario.ScenarioRuntime scenarioRuntime,
+                                               AutopilotPacing autopilotPacing) {
         spawner.spawn("harbour_master", HarbourMasterAgent.class, new Object[] {
                 new HarbourMasterInitArgs(STARTING_WALLET, STARTING_REPUTATION, defaultWeather(), true),
                 simClock, randomSource, eventBus, loadContracts(), spawner, marketHistory,
@@ -117,7 +136,7 @@ public final class AgentRoster {
         spawner.spawn("customs_agent", CustomsAgent.class, new Object[] {randomSource, directory, simClock});
         spawner.spawn("assistant_agent", AssistantAgent.class,
                 assistantArgs(marketHistory, policyRegistry, llmBridge, eventBus, directory, simClock,
-                        defaultWeather()));
+                        defaultWeather(), autopilotPacing));
 
         spawner.spawn("terminal_container", TerminalAgent.class, new Object[] {
                 new TerminalInitArgs("terminal_container", List.of("berth_2"), 4), portState, simClock,
@@ -156,7 +175,8 @@ public final class AgentRoster {
                                        PolicyRegistryArtifact policyRegistry, GameState state,
                                        List<TerminalStateDTO> reconciledTerminals,
                                        java.util.concurrent.CompletableFuture<HarbourMasterAgent> hmReady,
-                                       it.unige.portcommand.scenario.ScenarioRuntime scenarioRuntime) {
+                                       it.unige.portcommand.scenario.ScenarioRuntime scenarioRuntime,
+                                       AutopilotPacing autopilotPacing) {
         // The existing task-20 self-future seam at args[7] (adversarial review #3): agent
         // spawning is async, and the loader must not declare the world live before the HM —
         // the coordination anchor and the directory's first entry — finished its setup.
@@ -177,7 +197,7 @@ public final class AgentRoster {
                 randomSource, directory, simClock, state.agents().customs()});
         spawner.spawn("assistant_agent", AssistantAgent.class,
                 assistantArgs(marketHistory, policyRegistry, llmBridge, eventBus, directory, simClock,
-                        state.agents().weather().current()));
+                        state.agents().weather().current(), autopilotPacing));
 
         spawner.spawn("terminal_container", TerminalAgent.class, new Object[] {
                 new TerminalInitArgs("terminal_container", List.of("berth_2"), 4), portState, simClock,
@@ -385,16 +405,22 @@ public final class AgentRoster {
      * note. The bus announces the boot weather once the HarbourMaster is up, which can be before
      * the Assistant has subscribed, and the next broadcast is fifteen game minutes away; handing
      * the reading over here closes that gap. A world with no reading yet passes none.
+     *
+     * <p>S17a (ADR-21): and how long the autopilot lets a move be seen coming. Found by type like
+     * the reading; an Assistant given none does not pace.
      */
     private static Object[] assistantArgs(MarketHistoryArtifact marketHistory,
                                           PolicyRegistryArtifact policyRegistry, LLMBridge llmBridge,
                                           EventBus eventBus, AgentDirectory directory, SimClock simClock,
-                                          WeatherSnapshot opening) {
+                                          WeatherSnapshot opening, AutopilotPacing autopilotPacing) {
         List<Object> args = new java.util.ArrayList<>(java.util.Arrays.asList(marketHistory, policyRegistry,
                 llmBridge, eventBus, directory, simClock.conversationClock()));
         if (opening != null) {
             args.add(new it.unige.portcommand.harbourmaster.MovementGate.Reading(
                     opening.wind(), opening.visibility(), opening.swell(), opening.state()));
+        }
+        if (autopilotPacing != null) {
+            args.add(autopilotPacing);
         }
         return args.toArray();
     }

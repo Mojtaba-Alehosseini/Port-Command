@@ -19,15 +19,30 @@ import it.unige.portcommand.util.Event;
  *                       chat tab assigns one to every PROPOSE whose terms it shows on the offer
  *                       strip before the HarbourMaster's Prolog gate has judged it; a gate refusal
  *                       echoes it in {@link PlayerCommandRefusedEvent} so the tab can take exactly
- *                       that offer back. Bus-only: it is a record field, never a {@code content}
- *                       key, so it never reaches the wire.
+ *                       that offer back. S17a (ADR-21): the autopilot gives every move of its own
+ *                       an id too, from the same {@link #nextCommandId()} source, and hears back
+ *                       either that refusal or {@link PlayerCommandDispatchedEvent}. Bus-only: it
+ *                       is a record field, never a {@code content} key, so it never reaches the
+ *                       wire.
  */
 public record PlayerCommandEvent(PlayerCommandKind kind, String targetVesselId, Map<String, Object> content,
                                  long commandId)
         implements Event {
 
-    /** The {@code commandId} of a command no one needs to correlate (autopilot, buttons, tests). */
+    /** The {@code commandId} of a command no one needs to correlate (buttons, tests). */
     public static final long NO_COMMAND_ID = 0L;
+
+    /** JVM-wide on purpose, like the Assistant hint ids: a verdict still in flight across a load
+     * must not match the next world, and since S17a two producers draw from it - the chat tab
+     * (S13) and the autopilot, which now waits for the verdict on each of its moves. One source,
+     * so an autopilot id can never be mistaken for a tab id and roll an offer strip back. */
+    private static final java.util.concurrent.atomic.AtomicLong COMMAND_IDS =
+            new java.util.concurrent.atomic.AtomicLong();
+
+    /** A fresh correlation id; never {@link #NO_COMMAND_ID}. */
+    public static long nextCommandId() {
+        return COMMAND_IDS.incrementAndGet();
+    }
 
     /**
      * Defensive copy that KEEPS insertion order — deliberately not {@code Map.copyOf}, which
@@ -44,7 +59,8 @@ public record PlayerCommandEvent(PlayerCommandKind kind, String targetVesselId, 
         content = content == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(content));
     }
 
-    /** A command with no correlation id — every producer except the chat tab's PROPOSE send. */
+    /** A command with no correlation id — every producer except the chat tab's PROPOSE send and,
+     * since S17a, the autopilot's moves. */
     public PlayerCommandEvent(PlayerCommandKind kind, String targetVesselId, Map<String, Object> content) {
         this(kind, targetVesselId, content, NO_COMMAND_ID);
     }

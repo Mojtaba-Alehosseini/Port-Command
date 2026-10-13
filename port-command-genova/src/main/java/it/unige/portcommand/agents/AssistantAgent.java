@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
+import it.unige.portcommand.assistant.AutopilotPacing;
 import it.unige.portcommand.assistant.RecommendationAlgorithm;
 import it.unige.portcommand.assistant.RecommendationCache;
 import it.unige.portcommand.behaviours.assistant.AutopilotExecuteBehaviour;
@@ -28,8 +29,8 @@ import it.unige.portcommand.util.Subscription;
  * {@link EventBus} event (planning/10's "No GUI calls" hard constraint).
  *
  * <p>Args: {@code [MarketHistoryArtifact, PolicyRegistryArtifact, LLMBridge, EventBus]}, then —
- * found by type, wherever they sit — the game's {@code ConversationClock} (required) and an
- * optional opening {@link MovementGate.Reading}.
+ * found by type, wherever they sit — the game's {@code ConversationClock} (required), an
+ * optional opening {@link MovementGate.Reading} and an optional {@link AutopilotPacing}.
  *
  * <p><b>S16 (2026-10-13, decision B10): the Assistant knows the weather.</b> It hears
  * {@link WeatherChangeEvent} on the bus — the same event the top bar shows — and keeps the last
@@ -37,6 +38,13 @@ import it.unige.portcommand.util.Subscription;
  * a deal ({@code assistant.WeatherNote}). It learns it from the bus and from nowhere else: no
  * call into the weather agent or the HarbourMaster, and nothing added to the dialogue snapshot,
  * which stays the list of what the PLAYER can see about the negotiation.
+ *
+ * <p><b>S17a (ADR-21): the Assistant says who is negotiating where.</b> The Settings switch is
+ * still the one global "autopilot on/off", and this agent still mirrors it into a flag — but a
+ * flip is now also handed to the autopilot plan on this agent's thread, which answers the offers
+ * that were waiting and announces the new state to the chat tabs
+ * ({@code AutopilotOwnershipEvent}). The tabs used to mirror the Settings event themselves, which
+ * is how a loaded autopilot-ON game came to show an unlocked tab (R-07).
  */
 public final class AssistantAgent extends PortCommandAgent {
 
@@ -52,8 +60,16 @@ public final class AssistantAgent extends PortCommandAgent {
         return autopilotEnabled.get();
     }
 
+    /** S17a, test seam: the pacing this agent was spawned with (none = no wait). A session IT reads
+     * it off the spawned and the RESPAWNED agent to prove the boot configuration reached both. */
+    private volatile AutopilotPacing autopilotPacing = AutopilotPacing.NONE;
+
+    public AutopilotPacing autopilotPacing() {
+        return autopilotPacing;
+    }
+
     private RecommendOnDemandBehaviour recommendPlan;
-    private AutopilotExecuteBehaviour autopilotPlan;
+    private volatile AutopilotExecuteBehaviour autopilotPlan;
     private PolicyParseBehaviour policyPlan;
     private ExplainEventBehaviour explainPlan;
     /** Task 21: the Settings screen's live autopilot toggle, delivered over the bus (never a
@@ -114,8 +130,14 @@ public final class AssistantAgent extends PortCommandAgent {
 
         recommendPlan = new RecommendOnDemandBehaviour(this, algorithm, llmBridge, eventBus, cache,
                 conversationClock, () -> lastWeather);
+        // S17a (PT12): how long a decided move waits before it is sent. Found by type; absent in
+        // every harness that builds the agent by hand, and then there is no wait at all.
+        AutopilotPacing pacing = optionalArgOfType(AutopilotPacing.class);
+        if (pacing != null) {
+            autopilotPacing = pacing;
+        }
         autopilotPlan = new AutopilotExecuteBehaviour(this, algorithm, policyRegistry, eventBus, cache,
-                autopilotEnabled);
+                autopilotEnabled, autopilotPacing, null);
         policyPlan = new PolicyParseBehaviour(this, policyRegistry, eventBus);
         explainPlan = new ExplainEventBehaviour(this, cache, llmBridge, eventBus);
         addBehaviour(recommendPlan);
@@ -130,8 +152,34 @@ public final class AssistantAgent extends PortCommandAgent {
         // needs no myAgent — sidestepping the OneShot-nulls-myAgent trap the four plans work
         // around; cancelled in onTakeDown so an Assistant respawn (load teardown/rebuild) does not
         // leave a dead lambda writing a garbage-collected agent's flag.
+        //
+        // S17a (A1, A10): the flag is still flipped right here — a move waiting out its pacing
+        // delay must see "off" at once — and a CHANGE is then handed to the autopilot plan on this
+        // agent's own thread, where its state lives: switched on, it answers every offer that was
+        // already waiting; either way it announces who is negotiating now. An Apply that leaves
+        // the switch where it was (a speed change, say) hands over nothing.
         settingsSubscription = eventBus.subscribe(SettingsChangedEvent.class,
-                e -> autopilotEnabled.set(e.autopilotEnabled()), DeliveryMode.CALLER_THREAD);
+                e -> switchAutopilot(e.autopilotEnabled()), DeliveryMode.CALLER_THREAD);
+    }
+
+    /** Flips the shared flag and, if that changed anything, tells the autopilot plan on this agent's thread. */
+    private void switchAutopilot(boolean enabled) {
+        if (autopilotEnabled.getAndSet(enabled) == enabled) {
+            return;
+        }
+        AutopilotExecuteBehaviour plan = autopilotPlan;
+        if (plan == null) {
+            return;
+        }
+        addBehaviour(new jade.core.behaviours.OneShotBehaviour(this) {
+            @Override
+            public void action() {
+                // The flag as it is NOW, not as it was when this was queued: two quick flips must
+                // end in the state the player left the switch in. Guarded like every step of the
+                // plan: an exception here must not end the agent the tabs take their lock from.
+                AutopilotExecuteBehaviour.guarded(() -> plan.onAutopilotSwitched(autopilotEnabled.get()));
+            }
+        });
     }
 
     /**
@@ -165,11 +213,11 @@ public final class AssistantAgent extends PortCommandAgent {
     }
 
     /**
-     * Test/ops seam: flips the autopilot toggle. Task 21's Settings screen wires a real UI
-     * control to this once it exists; autopilot defaults OFF.
+     * Test/ops seam: flips the autopilot toggle the way the Settings screen's event does
+     * (S17a: including the hand-over to the autopilot plan).
      */
     public void setAutopilotEnabled(boolean enabled) {
-        autopilotEnabled.set(enabled);
+        switchAutopilot(enabled);
     }
 
     private <T> T argAt(int index, Class<T> type) {

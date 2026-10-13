@@ -1363,6 +1363,15 @@ class HarbourMasterAgentIT {
         assertEquals("nego-W050", propose.getConversationId());
         assertFalse(propose.getContent().contains("7051") || propose.getContent().contains("command"),
                 "the correlation id is bus-only and must never reach the wire: " + propose.getContent());
+        // S17a (ADR-21, A9): the counterpart of the refusal - a command that carried an id and
+        // WENT OUT is announced as dispatched, so the autopilot narrates a move only once it was
+        // made. The refused 7050 must never be announced so.
+        it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent sent = awaitEvent(
+                it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent.class,
+                e -> e.commandId() == 7_051L, 10_000);
+        assertNotNull(sent, "a dispatched command with an id must be announced");
+        assertEquals("nego-W050", sent.dialogueId());
+        assertEquals(PlayerCommandKind.PROPOSE, sent.kind());
 
         // Once an offer HAS reached the vessel, a later refusal reports it as the standing price:
         // the HarbourMaster's own record, which the chat tab restores (S13 review finding).
@@ -1373,6 +1382,14 @@ class HarbourMasterAgentIT {
         assertNotNull(second, "the second incompatible PROPOSE must be refused too");
         assertEquals(5000.0, second.standingPlayerPrice(), 0.001,
                 "the standing price is the one the vessel last heard, never the refused 4800");
+        // Both refusals have long been published by now, each in the same HarbourMaster step that
+        // would have announced a dispatch: only the command that went out was ever announced.
+        assertEquals(List.of(7_051L),
+                it.unige.portcommand.util.EventBusProbe.published(hm.eventBus()).stream()
+                        .filter(it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent.class::isInstance)
+                        .map(e -> ((it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent) e).commandId())
+                        .toList(),
+                "a refused command is never announced as dispatched");
     }
 
     /**
@@ -1407,6 +1424,10 @@ class HarbourMasterAgentIT {
                         m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 10_000),
                 "the ACCEPT reaches the vessel: a deal is talk, and the weather does not forbid talk");
         assertEventNeverPublished(PlayerCommandRefusedEvent.class, e -> true, 500);
+        // S17a: a command with NO id (a button, a typed accept) asks for no announcement.
+        assertTrue(it.unige.portcommand.util.EventBusProbe.published(hm.eventBus()).stream()
+                        .noneMatch(it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent.class::isInstance),
+                "nobody is waiting to hear about a command that carried no id");
 
         vessel.outbox.put(dealConfirmed(hm, 4800.0, 6, "nego-W051"));
         assertNotNull(pollUntil(vessel.inbox,

@@ -270,7 +270,10 @@ class FreePlaySessionIT {
 
         // …and its bus subscribers (the task-20 double-charge trap, on the new boot path). The
         // counts are polled: the Assistant's setup is not awaited by the boot.
-        assertSubscribers(1, DealClosedEvent.class, "exactly one LedgerCoordinator alive");
+        // S17a: two, not one - the LedgerCoordinator, and the Assistant's autopilot plan (it hears a
+        // deal for its "accepted at once" note, ADR-21). A world that was not torn down would make it four.
+        assertSubscribers(2, DealClosedEvent.class,
+                "exactly one LedgerCoordinator and one Assistant plan alive");
         assertSubscribers(1, PlayerCommandEvent.class, "exactly one DispatchPlayerCommand subscription");
         assertSubscribers(1, NegotiationOpenedEvent.class, "exactly one Assistant autopilot plan");
         assertSubscribers(1, AutosaveRequestedEvent.class, "exactly one AutosaveCoordinator (session-scoped)");

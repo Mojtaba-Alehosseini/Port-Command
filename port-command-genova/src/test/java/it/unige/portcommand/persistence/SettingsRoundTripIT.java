@@ -62,12 +62,16 @@ class SettingsRoundTripIT {
     void roundLimitSpeedAutopilotDifficulty_surviveTheRoundTrip_andApplyBeforeAgentsBoot()
             throws Exception {
         boot = new JadeBootstrap();
+        // S17a: an autopilot pacing of its own (no negotiation runs here - the clock is paused and
+        // no walk-in hails - so the value costs nothing; it is there to be found again below).
         GameSession session = new GameSession(boot,
-                new BootstrapConfig(TEST_PORT, false, "realtime", 300),
+                new BootstrapConfig(TEST_PORT, false, "realtime", 300, 1_234L),
                 new SaveLoadManager(tempDir), new Leaderboard(tempDir.resolve("scores.json")));
         session.startNewGame();
         boot.getSimClock().pause(); // no Poisson traffic -> deterministic immediate save
         awaitFleetSettled(session);
+        assertEquals(1_234L, awaitAssistant(session).autopilotPacing().moveDelayMillis(),
+                "S17a: a new game's Assistant is handed the boot configuration's pacing");
 
         // The player's four live-changeable knobs, all moved off their defaults.
         Settings changed = Settings.load()
@@ -94,6 +98,10 @@ class SettingsRoundTripIT {
                 "sanity: defaults back in force pre-load");
         assertEquals(1, Settings.load().gameSpeed());
         boot.getSimClock().setSpeedMultiplier(1);
+        assertTrue(ownershipStatements().stream().noneMatch(
+                        it.unige.portcommand.gui.events.AutopilotOwnershipEvent::autopilotOn),
+                "fixture: nothing has said 'the autopilot is on' before the load (the first Assistant "
+                        + "booted with it off, and the live value was changed without the Settings event)");
 
         session.loadGame(saved);
 
@@ -112,6 +120,47 @@ class SettingsRoundTripIT {
                         .findFirst().orElseThrow().autopilotOn(),
                 "the respawned AssistantAgent's construction-time autopilot seed must reflect "
                         + "the SAVED value — the apply-before-agents-boot ordering, observed");
+
+        // 4b) S17a (ADR-21, PT12): the boot configuration's autopilot pacing reached the
+        //     respawned Assistant too - the restore path builds its own argument list.
+        assertEquals(1_234L, awaitAssistant(session).autopilotPacing().moveDelayMillis(),
+                "a loaded game must pace its autopilot like a new one");
+
+        // 5) S17a (ADR-21, decision A10 / backlog R-07): and it SAYS so. The chat tabs lock and
+        //    unlock from the Assistant's own statement and from nothing else; before S17a the
+        //    window kept a copy of the switch and set it to "off" on every load, so after loading
+        //    this very save it showed Hint and a free input while the Assistant negotiated.
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (System.currentTimeMillis() < deadline && ownershipStatements().stream().noneMatch(
+                it.unige.portcommand.gui.events.AutopilotOwnershipEvent::autopilotOn)) {
+            Thread.sleep(50);
+        }
+        var statements = ownershipStatements();
+        assertTrue(!statements.isEmpty() && statements.get(statements.size() - 1).autopilotOn(),
+                "the respawned Assistant must state that the autopilot is on in the loaded world: " + statements);
+        assertTrue(statements.get(statements.size() - 1).takenOver().isEmpty(),
+                "and that no tab of the new world has been taken over");
+    }
+
+    /** The session's Assistant, once it has registered (it does so at the END of its setup, so
+     * what it was spawned with is in place by then). Bounded. */
+    private it.unige.portcommand.agents.AssistantAgent awaitAssistant(GameSession session)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (System.currentTimeMillis() < deadline
+                && session.directory().byType(it.unige.portcommand.agents.AssistantAgent.class).isEmpty()) {
+            Thread.sleep(50);
+        }
+        return session.directory().byType(it.unige.portcommand.agents.AssistantAgent.class).stream()
+                .findFirst().orElseThrow(() -> new AssertionError("no Assistant registered within 10 s"));
+    }
+
+    /** Every ownership statement on the session's bus so far, oldest first. */
+    private java.util.List<it.unige.portcommand.gui.events.AutopilotOwnershipEvent> ownershipStatements() {
+        return it.unige.portcommand.util.EventBusProbe.published(boot.getEventBus()).stream()
+                .filter(it.unige.portcommand.gui.events.AutopilotOwnershipEvent.class::isInstance)
+                .map(it.unige.portcommand.gui.events.AutopilotOwnershipEvent.class::cast)
+                .toList();
     }
 
     /** A settings-less save (the pre-S9 optionality decision) loads fine and leaves boot

@@ -25,6 +25,7 @@ import it.unige.portcommand.artifacts.MarketHistoryArtifact;
 import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
 import it.unige.portcommand.artifacts.PolicyRule;
 import it.unige.portcommand.assistant.AssistantPromptBuilder;
+import it.unige.portcommand.assistant.AssistantWording;
 import it.unige.portcommand.assistant.Recommendation;
 import it.unige.portcommand.assistant.RecommendationAlgorithm;
 import it.unige.portcommand.assistant.RecommendationCache;
@@ -39,6 +40,7 @@ import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.ExplainRequestEvent;
 import it.unige.portcommand.gui.events.HintButtonEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.nlp.LLMRequest;
@@ -109,12 +111,14 @@ class AssistantAgentIT {
         WalkInDialogueSnapshot snapshot = tankerSnapshot(6000.0, 1, 60.0);
 
         // Independently reproduce the same deterministic recommendation the behaviour will
-        // compute, then hand back its own template text (behind a figure-free, name-free lead-in so
-        // the revision is distinguishable) as the "LLM" response — guaranteed to pass the
-        // hallucination validator without hand-picking figures.
+        // compute, then hand back the prompt's own paragraph (behind a figure-free, name-free
+        // lead-in so the revision is distinguishable) as the "LLM" response — guaranteed to pass
+        // the hallucination validator without hand-picking figures.
         Recommendation expected = algorithm.run(snapshot);
-        String template = AssistantPromptBuilder.template(expected);
-        String cannedText = "Here is my advice. " + template;
+        // S17a (PT13): what the player sees FIRST is the plain sentence; the paragraph below is
+        // only what the model is asked to reword (and what the validator checks its answer by).
+        String template = AssistantWording.hintText(expected, snapshot);
+        String cannedText = "Here is my advice. " + AssistantPromptBuilder.template(expected);
         LLMBridge mockBridge = mock(LLMBridge.class);
         when(mockBridge.explain(any(LLMRequest.class)))
                 .thenReturn(CompletableFuture.completedFuture(new LLMResponse(cannedText, true)));
@@ -131,6 +135,9 @@ class AssistantAgentIT {
         assertEquals(template, shown.text());
         assertTrue(shown.isHint());
         assertFalse(shown.revision());
+        assertTrue(shown.card() != null && shown.card().describes(snapshot),
+                "S17a: the Hint carries its recommendation as a card, for the offer it answered");
+        assertEquals(null, revision.card(), "the revision replaces the sentence; the card already shown stays");
         assertEquals("dlg-1", revision.dialogueId());
         assertTrue(revision.revision());
         assertEquals(shown.hintId(), revision.hintId(), "the revision must name the template it replaces");
@@ -155,7 +162,7 @@ class AssistantAgentIT {
 
         List<AssistantChatEvent> chats = chatEvents(eventBus);
         assertEquals(1, chats.size(), "a failed call publishes nothing after the template");
-        assertEquals(AssistantPromptBuilder.template(expected), chats.get(0).text());
+        assertEquals(AssistantWording.hintText(expected, snapshot), chats.get(0).text());
         assertFalse(chats.get(0).revision());
     }
 
@@ -178,7 +185,7 @@ class AssistantAgentIT {
 
         List<AssistantChatEvent> chats = chatEvents(eventBus);
         assertEquals(1, chats.size(), "a hallucinated LLM response must never be shown");
-        assertEquals(AssistantPromptBuilder.template(expected), chats.get(0).text());
+        assertEquals(AssistantWording.hintText(expected, snapshot), chats.get(0).text());
         assertFalse(chats.get(0).revision());
     }
 
@@ -192,8 +199,8 @@ class AssistantAgentIT {
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
         EventBus eventBus = new EventBus();
         WalkInDialogueSnapshot snapshot = tankerSnapshot(6000.0, 1, 60.0);
-        String template = AssistantPromptBuilder.template(algorithm.run(snapshot));
-        String modelText = "Here is my advice. " + template;
+        String template = AssistantWording.hintText(algorithm.run(snapshot), snapshot);
+        String modelText = "Here is my advice. " + AssistantPromptBuilder.template(algorithm.run(snapshot));
         CountDownLatch answer = new CountDownLatch(1);
         HttpServer sidecar = fakeSidecar(answer, modelText);
         try {
@@ -225,9 +232,10 @@ class AssistantAgentIT {
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact());
         EventBus eventBus = new EventBus();
         WalkInDialogueSnapshot snapshot = tankerSnapshot(6000.0, 1, 60.0);
-        String template = AssistantPromptBuilder.template(algorithm.run(snapshot));
+        String template = AssistantWording.hintText(algorithm.run(snapshot), snapshot);
         CountDownLatch answer = new CountDownLatch(1);
-        HttpServer sidecar = fakeSidecar(answer, "Here is my advice. " + template);
+        HttpServer sidecar = fakeSidecar(answer,
+                "Here is my advice. " + AssistantPromptBuilder.template(algorithm.run(snapshot)));
         try {
             LLMBridge realBridge = bridgeTo(sidecar, Duration.ofMillis(300));
             AtomicReference<CompletableFuture<LLMResponse>> call = new AtomicReference<>();
@@ -439,8 +447,14 @@ class AssistantAgentIT {
         assertTrue(cmd.isPresent(), "autopilot must dispatch a PlayerCommandEvent to HM");
         assertEquals(PlayerCommandEvent.PlayerCommandKind.ACCEPT, cmd.get().kind());
         assertEquals("v1", cmd.get().targetVesselId());
-        assertTrue(published.stream().anyMatch(AssistantChatEvent.class::isInstance),
-                "autopilot must also narrate its move via chat");
+        // S17a (A9): the move is narrated once the HarbourMaster has SENT it — not with the
+        // command, before the Prolog gate has judged it. (AutopilotPlanTest pins the rest.)
+        assertFalse(published.stream().anyMatch(AssistantChatEvent.class::isInstance),
+                "nothing is said about a move the gate has not let through yet");
+        behaviour.onCommandDispatched(new PlayerCommandDispatchedEvent("dlg-5",
+                PlayerCommandEvent.PlayerCommandKind.ACCEPT, cmd.get().commandId()));
+        assertTrue(EventBusProbe.published(eventBus).stream().anyMatch(AssistantChatEvent.class::isInstance),
+                "autopilot must narrate its move via chat once it has been made");
     }
 
     @Test
@@ -474,12 +488,20 @@ class AssistantAgentIT {
                 policyRegistry, eventBus, new RecommendationCache(), autopilotEnabled);
         behaviour.onNegotiationOpened(new NegotiationOpenedEvent("dlg-7", tankerSnapshot(6000.0, 0, 0.0)));
 
-        List<Event> published = EventBusProbe.published(eventBus);
-        assertFalse(published.stream().anyMatch(PlayerCommandEvent.class::isInstance),
-                "reject_silent (from the matched policy) must not dispatch a PlayerCommandEvent");
-        AssistantChatEvent chat = published.stream().filter(AssistantChatEvent.class::isInstance)
+        // S17a (A1): the policy's "reject" is an explicit NO on the wire. Before S17a it
+        // dispatched nothing — this test used to pin exactly that — and the vessel then waited
+        // out her whole patience and the port lost reputation for a timeout.
+        PlayerCommandEvent cmd = EventBusProbe.published(eventBus).stream()
+                .filter(PlayerCommandEvent.class::isInstance).map(PlayerCommandEvent.class::cast)
+                .findFirst().orElseThrow(() -> new AssertionError("the policy's reject must be SAID"));
+        assertEquals(PlayerCommandEvent.PlayerCommandKind.REJECT, cmd.kind(),
+                "the policy decided, not the EV path (which accepts this snapshot)");
+        behaviour.onCommandDispatched(new PlayerCommandDispatchedEvent("dlg-7", cmd.kind(), cmd.commandId()));
+        AssistantChatEvent chat = EventBusProbe.published(eventBus).stream()
+                .filter(AssistantChatEvent.class::isInstance)
                 .map(AssistantChatEvent.class::cast).findFirst().orElseThrow();
-        assertTrue(chat.text().contains("reject_silent"), "chat narration must reflect the policy's action");
+        assertTrue(chat.text().contains("said no") && chat.text().contains("your policy: auto reject if price > 0"),
+                "chat narration must reflect the policy's action: " + chat.text());
     }
 
     // --- Explain ("Why?") flow ------------------------------------------------

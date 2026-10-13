@@ -206,6 +206,14 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
         hm.sendLogged(out);
         log.info("PlayerCommand {} -> {} ({})", cmd.kind(), target.getLocalName(),
                 ACLMessage.getPerformative(out.getPerformative()));
+        // S17a (ADR-21, A9): the counterpart of the refusal event. A sender that gave its command
+        // an id - the autopilot does, for every move - hears here that it really went out, and
+        // only then says so in the chat. Before S17a the autopilot wrote "counter at ..." when it
+        // PUBLISHED the command, so a move this gate refused read exactly like one that was made.
+        if (cmd.commandId() != PlayerCommandEvent.NO_COMMAND_ID) {
+            hm.eventBus().publish(new it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent(
+                    conversationId, cmd.kind(), cmd.commandId()));
+        }
     }
 
     /**

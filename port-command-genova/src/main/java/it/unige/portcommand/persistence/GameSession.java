@@ -137,7 +137,8 @@ public final class GameSession {
         AgentRoster.spawnSingletonsAndFleet(boot.getSpawner(), boot.getPortStateArtifact(),
                 boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact(),
                 boot.getLLMBridge(), boot.getEventBus(), directory, boot.getPolicyRegistryArtifact(),
-                it.unige.portcommand.scenario.ScenarioRuntime.sandbox(java.util.Set.of()));
+                it.unige.portcommand.scenario.ScenarioRuntime.sandbox(java.util.Set.of()),
+                bootConfig.autopilotPacing());
         this.gameOverGuard = new GameOverGuard(boot.getEventBus(), lifecycle, leaderboard,
                 AgentRoster.STARTING_WALLET, AgentRoster.STARTING_REPUTATION);
         lifecycle.startNewGame();
@@ -415,7 +416,7 @@ public final class GameSession {
                     boot.getSimClock(), boot.getRandomSource(), boot.getMarketHistoryArtifact(),
                     boot.getLLMBridge(), boot.getEventBus(), directory,
                     boot.getPolicyRegistryArtifact(), state, GameStateBuilder.reconcileTerminals(state),
-                    hmReady, runtime);
+                    hmReady, runtime, bootConfig.autopilotPacing());
             HarbourMasterAgent hm = awaitHarbourMasterReady(hmReady);
 
             GameOverGuard guard = new GameOverGuard(boot.getEventBus(), lifecycle, leaderboard,
