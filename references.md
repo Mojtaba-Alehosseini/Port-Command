@@ -111,6 +111,12 @@ primary-source check. A clean report has either confirmed each one (replacing
 > (`PROJECT_DEFINITION.md` § 5); the `VERIFY` rows (R25, R29) claim that a real
 > port traffic-priority scheme and an emergency-override principle exist in the
 > Capitaneria regulation and SOLAS.
+>
+> **S16 (2026-10-13, ADR-20):** a seventh class atom, `walk_in_arrival`, shares
+> rank 5 with `departure` — one more `priority_rank/2` fact under R25, not a new
+> rule (the count stays 30). It is a **DESIGN** choice with no external source: a
+> ship with a contract is served before one that arrived unannounced, which is
+> what makes R25/R27/R30 change who gets a freed berth.
 
 ---
 

@@ -70,8 +70,11 @@ meanwhile.
 
 **The window.** Three columns of text under the top bar — there is no map. Left: **Waiting for
 you**, the vessels negotiating with you, the one closest to leaving first (click a line to open
-its chat tab), and the **Port** table — who holds each berth and until when, the berth queue, the
-tugs and the weather. Middle: one chat tab per walk-in, with both sides' offers above the
+its chat tab), and the **Port** table — who holds each berth and until when, the berth queue and
+the tugs. A ship that has a berth but is not moving yet says why on a line of its own, with the
+rule that decided it: `waiting: tugs`, `waiting: customs inspection [R22,R24]`,
+`held (weather) [R15,R19]`. The weather is in the top bar; click it for a three-hour forecast.
+Middle: one chat tab per walk-in, with both sides' offers above the
 conversation, a grey example of what you can type in the empty input, and **Send / Hint / Accept /
 Reject**; a small `(DCG)` or `(Rasa 0.97)` after each of your messages shows which parser read it.
 Right: the **comm log**, every message the HarbourMaster sent or received, with the filters
@@ -79,7 +82,9 @@ Right: the **comm log**, every message the HarbourMaster sent or received, with 
 clickable rule ids such as `[R7]` that show the rule in plain words. The column borders drag.
 
 **Pace.** A Free play game day is 60 real minutes at ×1; switch to ×2 or ×4 from the top bar or
-with Ctrl+1 / Ctrl+2 / Ctrl+4, and set the day length itself (5 minutes to 2 hours) in Settings. A
+with Ctrl+1 / Ctrl+2 / Ctrl+4, and set the day length itself (5 minutes to 2 hours) in Settings.
+(While a scenario's scripted events are still coming — the first half minute of the tutorial and
+of the storm — the speed and the day length are locked.) A
 walk-in waits for your answer in real seconds — its chat tab and its line under *Waiting for you*
 show a live counter that no speed setting changes — and **Esc** pauses the game but leaves all
 three columns usable, so you can stop the clock, read, think and type.
