@@ -86,6 +86,15 @@ Right: the **comm log**, every message the HarbourMaster sent or received, with 
 **All / This vessel / Rules / Weather**, a **Raw** switch that shows the real FIPA fields, and
 clickable rule ids such as `[R7]` that show the rule in plain words. The column borders drag.
 
+**The day and the score.** The top bar shows *Today: €2,960 / €8,000* — the day's profit so far
+(the €5,200 daily costs are taken off hour by hour) against the target — and *Score 88*; hover
+over the score for its four parts of 25: money, walk-ins handled, safety and reputation. At
+midnight one window shows the day's report and score. A scenario is one day long: the top bar
+shows its name instead of *Day N of 30*, it is measured against its own target, and at its first
+midnight that window offers **Continue in free play** or **Close**. **Next ship** (top bar, or
+Game ▸ Call Next Ship) brings the next walk-in in at once — at most two ships negotiating and
+four in port, and not while a scenario's own ships are still arriving.
+
 **Pace.** A Free play game day is 60 real minutes at ×1; switch to ×2 or ×4 from the top bar or
 with Ctrl+1 / Ctrl+2 / Ctrl+4, and set the day length itself (5 minutes to 2 hours) in Settings.
 (While a scenario's scripted events are still coming — the first half minute of the tutorial and
