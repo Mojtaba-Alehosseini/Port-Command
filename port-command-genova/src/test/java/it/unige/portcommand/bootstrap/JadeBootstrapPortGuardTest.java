@@ -26,9 +26,8 @@ class JadeBootstrapPortGuardTest {
 
     @Test
     void startFailsFastWhenMainPortIsAlreadyHeld() throws Exception {
-        // Ensure the cold-boot probe runs regardless of JVM state (the probe is
-        // skipped once a Main Container has booted in this JVM).
-        JadeBootstrap.resetBootLatchForTest();
+        // (Until 2026-10-13 the probe ran on a cold boot only and this test had to reset a JVM
+        // latch first. It runs on every start now: shutdown() waits for the port to be released.)
         try (ServerSocket holder = new ServerSocket()) {
             holder.setReuseAddress(false);
             holder.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0)); // OS-assigned free port

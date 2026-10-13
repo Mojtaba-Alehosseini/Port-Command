@@ -98,17 +98,35 @@ public abstract class PortCommandAgent extends Agent {
         return unhandledMessages;
     }
 
+    /**
+     * 2026-10-13 (backlog A-14, ADR-15 addendum): two changes to the order and the bound.
+     *
+     * <p><b>{@link #onTakeDown()} runs FIRST.</b> It is where every bus subscription is
+     * cancelled, and {@code GameSession}'s rebuild depends on those cancels (a subscriber that
+     * outlives its world double-charges the next one). They used to wait behind the DF
+     * deregistration, so a DF that did not answer kept them from ever running.
+     *
+     * <p><b>The DF deregistration is bounded</b>, like the registration has been since
+     * 2026-07-18. The stock {@code DFService.deregister} waits for the DF's answer with no limit;
+     * in a platform whose DF does not answer, every agent's takedown blocked there, JADE's
+     * {@code kill()} gave up on each after two interrupts, and the teardown never ended - the
+     * integration lane hung for two hours on it, twice in one day. A deregistration that is not
+     * answered within {@link #DF_DEREGISTER_TIMEOUT_MS} is now logged and left: the agent is going
+     * away, and in a world that is being torn down the DF goes with it.
+     */
     @Override
     protected final void takeDown() {
         if (agentDirectory != null) {
             agentDirectory.unregister(this);
         }
         try {
-            DFService.deregister(this);
-        } catch (FIPAException e) {
-            log.warn("DF deregister failed for {}", getLocalName(), e);
+            onTakeDown();
+        } catch (RuntimeException e) {
+            // The deregistration below must still happen: an agent that leaves a live world
+            // (a vessel sailing) must not stay listed because its own cleanup failed.
+            log.error("{}: onTakeDown failed", getLocalName(), e);
         }
-        onTakeDown();
+        deregisterFromDf();
         MDC.remove("agent");
     }
 
@@ -131,6 +149,10 @@ public abstract class PortCommandAgent extends Agent {
      * loudly through the session layer — never a silent hang.
      */
     private static final long DF_REGISTER_TIMEOUT_MS = 2_500L;
+    /** One attempt: a DF that is alive answers a deregistration in a few milliseconds. JADE kills
+     * a platform's agents one after the other, so in a world whose DF is dead this is paid once
+     * per agent - about ten seconds for the fixed fleet, and then the teardown is over. */
+    private static final long DF_DEREGISTER_TIMEOUT_MS = 1_000L;
     private static final int DF_REGISTER_ATTEMPTS = 3;
     /** Mirrors the DF-registration-send retry invariant's spacing (INVARIANTS.md). */
     private static final long DF_REGISTER_RETRY_SPACING_MS = 1_200L;
@@ -194,6 +216,31 @@ public abstract class PortCommandAgent extends Agent {
         throw new IllegalStateException("DF registration timed out for " + getLocalName()
                 + " (service " + serviceType + ") after " + DF_REGISTER_ATTEMPTS + " attempts of "
                 + DF_REGISTER_TIMEOUT_MS + " ms — the platform DF is not answering");
+    }
+
+    /**
+     * The timed counterpart of the stock {@code DFService.deregister(this)}: the same request
+     * ({@code createRequestMessage} with the DEREGISTER action and a description that names only
+     * this agent - bytecode-verified against jade-4.6.0.jar, like the registration above), sent
+     * through the TIMED {@code doFipaRequestClient}. Never throws.
+     */
+    private void deregisterFromDf() {
+        DFAgentDescription dfd = new DFAgentDescription();
+        dfd.setName(getAID());
+        try {
+            ACLMessage request = DFService.createRequestMessage(this, getDefaultDF(),
+                    FIPAManagementVocabulary.DEREGISTER, dfd, null);
+            ACLMessage reply = FIPAService.doFipaRequestClient(this, request, DF_DEREGISTER_TIMEOUT_MS);
+            if (reply == null) {
+                log.warn("DF deregister timed out ({} ms) for {} - the platform DF is not answering; "
+                        + "the takedown goes on without it", DF_DEREGISTER_TIMEOUT_MS, getLocalName());
+            }
+        } catch (FIPAException e) {
+            log.warn("DF deregister failed for {}", getLocalName(), e);
+        } catch (RuntimeException e) {
+            // e.g. an interrupt delivered by JADE's own kill while this agent was waiting
+            log.warn("DF deregister abandoned for {}: {}", getLocalName(), e.toString());
+        }
     }
 
     /** AID lookup helper for subclasses; never call {@code DFService.search} directly. */

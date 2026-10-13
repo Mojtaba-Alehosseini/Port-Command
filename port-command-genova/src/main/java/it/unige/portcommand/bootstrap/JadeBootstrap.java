@@ -49,20 +49,49 @@ import org.slf4j.LoggerFactory;
  * <p>Not a {@link jade.core.Agent}: it uses only the {@code jade.wrapper} API and
  * never calls the agent-side DF directly. Instance methods are guarded by a
  * {@link ReentrantLock}; one instance per JVM.
+ *
+ * <p><b>A world is rebuilt in this JVM</b> - a load, a new game, free play replacing a scenario
+ * are all {@link #shutdown()} followed by {@link #start}. Three things keep that safe
+ * (2026-10-13, after the integration lane hung twice in a rebuilt world's teardown; ADR-15
+ * addendum):
+ * <ul>
+ *   <li>{@link JadeTableGuard} is installed on every new Main Container before an agent of ours
+ *       exists. JADE 4.6.0's agent tables can leave a row locked for good when they grow while a
+ *       message is being delivered - which is exactly what spawning the fleet does. That was the
+ *       cause of "the DF is not answering".</li>
+ *   <li>{@link #shutdown()} returns only when the old platform is really gone. JADE removes a
+ *       dead platform's entries from its JVM-wide command dispatcher - and closes its server
+ *       socket - in background threads that sleep a full second first; a platform started inside
+ *       that second shares the dying dispatcher and cannot bind its own socket ("Cannot bind
+ *       server socket to localhost port ..."). The wait is bounded, and {@link #start} now refuses
+ *       a port that is still held, on a restart as on a cold boot.</li>
+ *   <li>the kill itself is bounded: a teardown that does not finish is logged with what it is
+ *       stuck in and interrupted - JADE's waits give way to an interrupt - and, should even that
+ *       not end it, abandoned. It never wedges the caller.</li>
+ * </ul>
  */
 public final class JadeBootstrap {
 
     private static final Logger log = LoggerFactory.getLogger(JadeBootstrap.class);
     private static final long READY_TIMEOUT_SECONDS = 5L;
     private static final int PORT_PROBE_TIMEOUT_MS = 300;
+    /** How long {@code mainContainer.kill()} may take before it is abandoned. JADE's own kill takes
+     * about 2.5 s on an idle platform, and one second more per agent whose DF deregistration
+     * times out (see {@code PortCommandAgent.takeDown}). */
+    private static volatile long killTimeoutMs = 30_000L;
+    /** How long the old platform may take to let go of JADE's shared dispatcher and its port once
+     * the kill has returned. Normally a few milliseconds (its sleeping threads are woken). */
+    private static volatile long platformGoneTimeoutMs = 5_000L;
+    /** How long a kill that overran its bound is given to finish once it is being interrupted. */
+    private static final long KILL_INTERRUPT_GRACE_MS = 10_000L;
+    /** JADE's delayed "remove this dead platform's entry from the dispatcher" thread: an anonymous
+     * class of {@code jade.imtp.leap.CommandDispatcher} (JADE 4.6.0) that sleeps 1000 ms first. */
+    private static final String JADE_DISPATCHER_REMOVAL_THREAD = "jade.imtp.leap.CommandDispatcher$1";
     // Fixed master seed for reproducible runs; task 22/23 override it via RandomSource.setSeed on load/scenario.
     private static final long DEFAULT_RANDOM_SEED = 20260622L;
 
-    // JVM-global, mirroring JADE's own Runtime singleton: once a Main Container has
-    // booted in this JVM, its RMI registry persists across shutdown and is reused on
-    // restart, so the held-port probe must run only on the FIRST (cold) boot — a
-    // foreign orphan can only wedge that one. Not DI/registry state; pure boot latch.
-    private static volatile boolean jadeBootedInThisJvm;
+    /** The port of the platform that is up (or was last up): {@link #shutdown()} waits for it. */
+    private volatile int mainPort;
 
     private final ReentrantLock lock = new ReentrantLock();
     // Written under the lock in start()/shutdown(); volatile so the lock-free
@@ -97,10 +126,12 @@ public final class JadeBootstrap {
             // Fail fast on a held port: createMainContainer() blocks indefinitely on a
             // contended RMI bind (a stale JADE container once wedged the build ~1h25m),
             // and our awaitReady timeout only covers the probe AFTER the container exists.
-            // Cold boot only — a restart reuses this JVM's own persistent registry.
-            if (!jadeBootedInThisJvm) {
-                assertPortAvailable(cfg.mainPort());
-            }
+            // On a restart too, since 2026-10-13: shutdown() now waits until the previous
+            // platform has closed its socket, so a port still held here is either a foreign
+            // process or a teardown that did not finish - and starting on top of either one
+            // is what must not happen. (Until then a restart skipped this check, because the
+            // previous platform of this very JVM routinely still held the port.)
+            assertPortAvailable(cfg.mainPort());
 
             Profile profile = new ProfileImpl();
             profile.setParameter(Profile.MAIN_HOST, "localhost");
@@ -113,7 +144,17 @@ public final class JadeBootstrap {
             if (mainContainer == null) {
                 throw new IllegalStateException("createMainContainer returned null — JADE failed to boot");
             }
-            jadeBootedInThisJvm = true; // registry now persists in this JVM; skip the probe on restart
+            mainPort = cfg.mainPort();
+            // Before ANY agent of ours exists (the probe below is the first): JADE's agent
+            // tables must not be written and read at the same time once the fleet is spawned.
+            try {
+                JadeTableGuard.install(mainContainer);
+            } catch (IllegalStateException e) {
+                killBounded(mainContainer);
+                awaitOldPlatformGone(mainPort);
+                mainContainer = null;
+                throw e;
+            }
 
             // Task 22: the shared services are CREATE-IF-ABSENT so a save/load restart cycle
             // (shutdown() then start()) keeps the SAME instances — the GUI holds references to
@@ -239,7 +280,9 @@ public final class JadeBootstrap {
         }
         if (listenerPresent) {
             throw new IllegalStateException(
-                    "JADE main port " + port + " already in use — kill the stale java process holding it");
+                    "JADE main port " + port + " already in use — kill the stale java process holding it "
+                            + "(or, right after a load or a new game: the previous world's platform did not "
+                            + "shut down - see the ERROR line of its teardown above)");
         }
     }
 
@@ -250,18 +293,23 @@ public final class JadeBootstrap {
                 log.warn("shutdown() called while not started — ignoring");
                 return;
             }
-            try {
-                mainContainer.kill();
-            } catch (StaleProxyException e) {
-                log.warn("main container kill raised", e);
-            }
+            boolean killed = killBounded(mainContainer);
             // Task 22: the NLP executor is NOT shut down here any more — shutdown() is also the
             // save/load restart teardown, and the pipeline (with MainWindow's captured method
             // reference into it) must survive the cycle. Its threads are daemons; JVM exit
             // reaps them.
-            Runtime.instance().shutDown();
+            if (killed) {
+                Runtime.instance().shutDown();
+            }
+            boolean gone = awaitOldPlatformGone(mainPort);
             started = false;
-            log.info("JADE Main Container down");
+            if (killed && gone) {
+                log.info("JADE Main Container down");
+            } else {
+                log.error("JADE Main Container teardown did NOT complete (kill finished: {}, platform gone: {}) "
+                        + "- this world is abandoned; a new one cannot be started on port {} in this process",
+                        killed, gone, mainPort);
+            }
         } finally {
             lock.unlock();
         }
@@ -333,8 +381,145 @@ public final class JadeBootstrap {
         return started;
     }
 
-    /** Test seam: clears the JVM cold-boot latch so a unit test can exercise the held-port probe. */
-    static void resetBootLatchForTest() {
-        jadeBootedInThisJvm = false;
+    // =============================================================================================
+    // A teardown that always ends (2026-10-13)
+    // =============================================================================================
+
+    /**
+     * Kills {@code container} on a helper thread and waits for it, but not for ever. JADE's
+     * {@code kill()} has no timeout of its own: it joins every agent, and it walks the agent
+     * table taking each row's lock - a row that is never released, or an agent that never
+     * returns from its takedown, used to hold the calling thread (a test's teardown, the
+     * player's Load) until the process was killed from outside.
+     *
+     * <p>A kill that overruns its bound is first reported - an ERROR line with the frames it is
+     * stuck in - and then interrupted, repeatedly, for {@link #KILL_INTERRUPT_GRACE_MS}. That is
+     * usually enough: JADE's row lock waits in {@code Object.wait()}, catches the interrupt and
+     * carries on without the lock, which is harmless in a platform that is being destroyed, and
+     * its agent joins give up after two interrupts. So a stuck kill normally still completes, the
+     * port is released and the next world can start.
+     *
+     * @return false only if the kill could not be ended at all; it is then abandoned (its thread
+     *         is a daemon) and {@link #start} will refuse the port it still holds
+     */
+    private static boolean killBounded(AgentContainer container) {
+        Thread killer = new Thread(() -> {
+            try {
+                container.kill();
+            } catch (StaleProxyException e) {
+                log.warn("main container kill raised", e);
+            } catch (RuntimeException e) {
+                log.error("main container kill failed", e);
+            }
+        }, "jade-container-kill");
+        killer.setDaemon(true);
+        long bound = killTimeoutMs;
+        killer.start();
+        try {
+            killer.join(bound);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        if (!killer.isAlive()) {
+            return true;
+        }
+        StringBuilder where = new StringBuilder();
+        for (StackTraceElement frame : killer.getStackTrace()) {
+            where.append(System.lineSeparator()).append("    at ").append(frame);
+        }
+        log.error("JADE container kill did not finish within {} ms - interrupting it. It is stuck in:{}",
+                bound, where);
+        long giveUpAt = System.currentTimeMillis() + KILL_INTERRUPT_GRACE_MS;
+        try {
+            while (killer.isAlive() && System.currentTimeMillis() < giveUpAt) {
+                killer.interrupt(); // one stuck wait at a time: there may be several rows, several agents
+                killer.join(250);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        if (!killer.isAlive()) {
+            log.warn("JADE container kill finished once it was interrupted");
+            return true;
+        }
+        log.error("JADE container kill could not be ended even by interrupting it for {} ms - abandoning it",
+                KILL_INTERRUPT_GRACE_MS);
+        return false;
+    }
+
+    /**
+     * Waits until the platform that was just killed has let go of everything a new one would
+     * share with it: JADE's delayed dispatcher-removal threads have run, and nothing accepts a
+     * connection on {@code port} any more.
+     *
+     * <p>Those threads ({@value #JADE_DISPATCHER_REMOVAL_THREAD}) sleep 1000 ms before they act,
+     * "to give the reply of the exit command time to be sent back" to a remote container. There
+     * is no remote container here, so they are interrupted - JADE catches the interrupt and does
+     * the removal at once - and joined; the last removal shuts the dispatcher down and closes
+     * its server socket. A rebuild therefore costs milliseconds here, not a second.
+     *
+     * @return false if the port is still held after {@code platformGoneTimeoutMs}
+     */
+    private static boolean awaitOldPlatformGone(int port) {
+        long bound = platformGoneTimeoutMs;
+        long deadline = System.currentTimeMillis() + bound;
+        boolean interrupted = false;
+        try {
+            while (true) {
+                List<Thread> removals = Thread.getAllStackTraces().keySet().stream()
+                        .filter(t -> t.isAlive() && JADE_DISPATCHER_REMOVAL_THREAD.equals(t.getClass().getName()))
+                        .toList();
+                for (Thread removal : removals) {
+                    removal.interrupt();
+                }
+                for (Thread removal : removals) {
+                    try {
+                        removal.join(Math.max(1L, deadline - System.currentTimeMillis()));
+                    } catch (InterruptedException e) {
+                        interrupted = true;
+                    }
+                }
+                // The port is asked only once the removal threads are gone and JADE's server thread
+                // for it has ended: a connection to a JICP server that is still alive makes JADE
+                // print an EOFException for it, every time.
+                boolean serverThreadAlive = Thread.getAllStackTraces().keySet().stream()
+                        .anyMatch(t -> t.isAlive() && ("JICPServer-" + port).equals(t.getName()));
+                if (removals.isEmpty() && !serverThreadAlive && !portAccepts(port)) {
+                    return true;
+                }
+                if (System.currentTimeMillis() >= deadline) {
+                    log.error("the previous JADE platform still holds port {} {} ms after its kill - "
+                            + "its dispatcher was not shut down", port, bound);
+                    return false;
+                }
+                if (removals.isEmpty()) {
+                    try {
+                        Thread.sleep(20);
+                    } catch (InterruptedException e) {
+                        interrupted = true;
+                    }
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /** Test seam: shorter bounds, so a test that stages a teardown that cannot finish does not
+     * sit through the production ones. Returns nothing; a test restores {@code 30_000, 5_000}. */
+    static void teardownBoundsForTest(long killMs, long goneMs) {
+        killTimeoutMs = killMs;
+        platformGoneTimeoutMs = goneMs;
+    }
+
+    private static boolean portAccepts(int port) {
+        try (Socket probe = new Socket()) {
+            probe.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port), PORT_PROBE_TIMEOUT_MS);
+            return true;
+        } catch (IOException refusedOrUnreachable) {
+            return false;
+        }
     }
 }
