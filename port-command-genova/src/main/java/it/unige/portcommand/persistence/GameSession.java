@@ -16,6 +16,7 @@ import it.unige.portcommand.artifacts.PolicyRule;
 import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
 import it.unige.portcommand.bootstrap.JadeBootstrap;
+import it.unige.portcommand.gui.events.PolicyListEvent;
 import it.unige.portcommand.gui.events.ReputationChangedEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WalletChangedEvent;
@@ -577,6 +578,11 @@ public final class GameSession {
                     hm.requestPortStatus(); // S15: re-announce for the window that just opened
                     hm.publishScore(); // S17b: the top bar's score, profit and target
                     publishWeatherAndScript(hm); // S16: the top bar's weather, the speed lock
+                    // S18a (ADR-23, N11): the autopilot policies in force. On a cold `--load --gui`
+                    // start they were restored and announced before this window existed (the bus has
+                    // no replay), and Settings would show "none" over policies deciding offers.
+                    boot.getEventBus().publish(new PolicyListEvent(boot.getPolicyRegistryArtifact().all()
+                            .stream().map(PolicyRule::description).toList()));
                 });
     }
 

@@ -36,11 +36,13 @@ import it.unige.portcommand.gui.events.EndOfDayCompletedEvent;
 import it.unige.portcommand.gui.events.GameSpeedChangedEvent;
 import it.unige.portcommand.gui.events.GuiReadyEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
+import it.unige.portcommand.gui.events.PolicyListEvent;
 import it.unige.portcommand.gui.events.ScriptedWaveEvent;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.model.GameSpeedControl;
 import it.unige.portcommand.gui.model.GameSpeedModel;
 import it.unige.portcommand.gui.model.NewGameChoice;
+import it.unige.portcommand.gui.model.PolicyListModel;
 import it.unige.portcommand.harbourmaster.financial.EndOfDaySummary;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
 import it.unige.portcommand.harbourmaster.financial.PerformativeCounter;
@@ -143,6 +145,10 @@ public final class MainWindow extends JFrame {
      * "is the script still running" for the speed menu, the Settings dialog and
      * {@link #applySettings}. */
     private final GameSpeedControl speedControl;
+    /** S18a (ADR-23, decision N11): the autopilot policies in force, as the Assistant last
+     * reported them ({@code PolicyListEvent}). Kept here because the Settings dialog exists only
+     * while it is open and has to show the list the moment it does. */
+    private final PolicyListModel policyList = new PolicyListModel();
     /** S16: the Game ▸ Speed items by multiplier, kept so the script lock can disable them. */
     private final Map<Integer, JRadioButtonMenuItem> speedMenuItems = new LinkedHashMap<>();
     /** S15: everything inside the frame — top bar, three columns, notification strip. */
@@ -247,6 +253,9 @@ public final class MainWindow extends JFrame {
         // shared SimClock); the other three are mirrored for the dialog's next open (difficulty is
         // inert in v1, llmModel is next-launch — see SettingsChangedEvent).
         eventBus.subscribe(SettingsChangedEvent.class, this::applySettings, DeliveryMode.EDT);
+        // S18a (ADR-23, decision N11): the Assistant reports the policies in force; the Settings
+        // dialog, which exists only while it is open, reads them from this window-long model.
+        eventBus.subscribe(PolicyListEvent.class, e -> policyList.set(e.descriptions()), DeliveryMode.EDT);
         // S16 (2026-10-13, PLAYABILITY §10 / T7 / P12): while a scenario's scripted events are
         // still to come, the speed and the day length are locked. The fact lives on the
         // HarbourMaster's scenario engine; the window may only hear of it over the bus — at every
@@ -610,7 +619,7 @@ public final class MainWindow extends JFrame {
         settingsItem = new JMenuItem("Settings…");
         settingsItem.addActionListener(e -> SettingsDialog.open(this, eventBus, Settings.load().difficulty(),
                 lifecycle.simClock().realSecondsPerGameDay(), Settings.load().autopilotEnabled(),
-                Settings.load().llmModel(), speedControl.scriptPending()));
+                Settings.load().llmModel(), speedControl.scriptPending(), policyList));
         settings.add(settingsItem);
         return settings;
     }

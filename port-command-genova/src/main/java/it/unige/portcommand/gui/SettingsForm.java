@@ -5,6 +5,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.util.Hashtable;
+import java.util.List;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -16,8 +17,10 @@ import javax.swing.JSlider;
 import javax.swing.JTextField;
 
 import it.unige.portcommand.core.Settings;
+import it.unige.portcommand.gui.events.PolicyClearRequestEvent;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.model.DayLengthSteps;
+import it.unige.portcommand.gui.model.PolicyListModel;
 import it.unige.portcommand.nlp.PolicyParser;
 import it.unige.portcommand.util.EventBus;
 
@@ -65,6 +68,8 @@ final class SettingsForm extends JPanel {
     private static final String[] DIFFICULTIES = {"EASY", "NORMAL", "HARD"};
     private static final String[] LLM_MODELS = {"microsoft/Phi-4-mini-instruct", "google/gemma-3-4b-it"};
 
+    static final String CLEAR_POLICIES_LABEL = "Clear policies";
+
     /** S16: the line under a locked day-length slider. */
     static final String DAY_LENGTH_LOCK_NOTE =
             "Day length is locked while the scenario's scripted events are running";
@@ -75,6 +80,15 @@ final class SettingsForm extends JPanel {
     private final JTextField policyField = new JTextField(28);
     private final JButton policyButton = new JButton("Set policy");
     private final JLabel policyFeedback = new JLabel(" ");
+    /** S18a (decision N11): the policies in force, as the Assistant last reported them. */
+    private final transient PolicyListModel policies;
+    private final JLabel policyList = new JLabel(PolicyListModel.NONE);
+    private final JButton clearPoliciesButton = new JButton(CLEAR_POLICIES_LABEL);
+    private final transient Runnable policyListListener = this::showPolicyList;
+    /** S18a (decision N11): whether the autopilot is ON in the running game - what the form opened
+     * on, then whatever was last applied. The checkbox alone does not say: ticking it changes
+     * nothing until Apply, and a policy does nothing while the autopilot is off. */
+    private boolean autopilotLive;
     private final JComboBox<String> difficultyCombo = new JComboBox<>(DIFFICULTIES);
     /** S14: the slider's value is a STEP INDEX into {@link DayLengthSteps}, never seconds. */
     private final JSlider dayLengthSlider = new JSlider(0, DayLengthSteps.count() - 1, 0);
@@ -111,10 +125,24 @@ final class SettingsForm extends JPanel {
      */
     SettingsForm(EventBus eventBus, String difficulty, long initialDayLengthSeconds,
                  boolean autopilotEnabled, String llmModel, boolean dayLengthLocked, Runnable onCloseRequest) {
+        this(eventBus, difficulty, initialDayLengthSeconds, autopilotEnabled, llmModel, dayLengthLocked,
+                new PolicyListModel(), onCloseRequest);
+    }
+
+    /**
+     * @param policies S18a (decision N11): the window's list of the policies in force. The form
+     *                 shows it and follows it until {@link #removeNotify()} (the model outlives
+     *                 every dialog)
+     */
+    SettingsForm(EventBus eventBus, String difficulty, long initialDayLengthSeconds,
+                 boolean autopilotEnabled, String llmModel, boolean dayLengthLocked,
+                 PolicyListModel policies, Runnable onCloseRequest) {
         super(new GridBagLayout());
         this.eventBus = eventBus;
         this.seededDayLength = initialDayLengthSeconds;
         this.dayLengthLocked = dayLengthLocked;
+        this.policies = policies;
+        this.autopilotLive = autopilotEnabled;
         setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
 
         difficultyCombo.setSelectedItem(difficulty);
@@ -168,6 +196,17 @@ final class SettingsForm extends JPanel {
         addRow(row++, "Autopilot:", autopilotCheck);
         addRow(row++, "Autopilot policy:", policyRow);
         addRow(row++, "", policyFeedback);
+        // S18a (decision N11): what is in force, and the one way to take it back.
+        policyList.setFont(policyList.getFont().deriveFont(java.awt.Font.PLAIN));
+        clearPoliciesButton.setToolTipText("Forget every autopilot policy. The first policy that "
+                + "matches a vessel wins, so an old one can hide a newer one.");
+        clearPoliciesButton.addActionListener(e -> eventBus.publish(new PolicyClearRequestEvent()));
+        JPanel policyListRow = new JPanel(new java.awt.BorderLayout(6, 0));
+        policyListRow.add(policyList, java.awt.BorderLayout.CENTER);
+        JPanel clearHolder = new JPanel(new java.awt.BorderLayout());
+        clearHolder.add(clearPoliciesButton, java.awt.BorderLayout.NORTH);
+        policyListRow.add(clearHolder, java.awt.BorderLayout.EAST);
+        addRow(row++, "Active policies:", policyListRow);
         addRow(row++, "LLM model:", llmCombo);
         addRow(row++, "", new JLabel("(LLM model takes effect on next launch)"));
 
@@ -194,6 +233,49 @@ final class SettingsForm extends JPanel {
         c.anchor = GridBagConstraints.EAST;
         c.insets = new Insets(12, 4, 0, 4);
         add(buttons, c);
+
+        showPolicyList();
+        policies.addListener(policyListListener);
+    }
+
+    /**
+     * S18a (decision N11): the list as the model has it now - numbered, because the order is the
+     * precedence (the first policy that matches a vessel wins), and said so once there is more
+     * than one. Called when the form opens and on every report from the Assistant while it is on
+     * screen; a longer list re-packs the dialog so nothing is cut off.
+     */
+    private void showPolicyList() {
+        List<String> rules = policies.descriptions();
+        if (rules.isEmpty()) {
+            policyList.setText(PolicyListModel.NONE);
+        } else {
+            StringBuilder html = new StringBuilder("<html><div style='width:420px'>");
+            for (int i = 0; i < rules.size(); i++) {
+                html.append(i + 1).append(". ").append(escape(rules.get(i))).append("<br>");
+            }
+            if (rules.size() > 1) {
+                html.append("<i>The first one that matches a vessel wins.</i>");
+            }
+            policyList.setText(html.append("</div></html>").toString());
+        }
+        clearPoliciesButton.setEnabled(!rules.isEmpty());
+        java.awt.Window dialog = javax.swing.SwingUtilities.getWindowAncestor(this);
+        if (dialog != null) {
+            dialog.pack();
+        }
+    }
+
+    /**
+     * The project's panel lifecycle (INVARIANTS, "EventBus + GUI shell"): attach in the
+     * constructor, let go in {@code removeNotify()} - which Swing calls when the dialog the form
+     * sits in is disposed, whether by OK, by Cancel or by the window's own close button. The
+     * model belongs to the window and outlives every form; a form that kept listening would be
+     * kept alive by it, and would re-pack a dialog that is gone.
+     */
+    @Override
+    public void removeNotify() {
+        super.removeNotify();
+        policies.removeListener(policyListListener);
     }
 
     /**
@@ -227,10 +309,26 @@ final class SettingsForm extends JPanel {
         }
         policyParser.parse(text, eventBus).ifPresentOrElse(rule -> {
             policyFeedback.setForeground(new java.awt.Color(21, 101, 52));
-            policyFeedback.setText("<html><b>Policy set.</b> " + escape(rule.description())
-                    + " <i>(active now — Cancel will not undo it)</i></html>");
+            policyFeedback.setText("<html><div style='width:420px'><b>Policy set.</b> "
+                    + escape(rule.description()) + " <i>(" + whenItActs()
+                    + " Cancel will not undo it)</i></div></html>");
             policyField.setText("");
         }, () -> showPolicyHint("Not understood."));
+    }
+
+    /**
+     * S18a (ADR-23, decision N11): what the success line says about WHEN the policy acts. It used
+     * to say "active now" always; a policy is consulted by the autopilot only, so with the
+     * autopilot off that was false. The answer follows the state that is live in the game, and
+     * a ticked-but-unapplied box gets the sentence that says what is still missing.
+     */
+    private String whenItActs() {
+        if (autopilotLive) {
+            return "active now —";
+        }
+        return autopilotCheck.isSelected()
+                ? "it takes effect when you press Apply — Autopilot is ticked but not switched on yet."
+                : "Autopilot is off, so it does nothing yet — tick Autopilot above and press Apply.";
     }
 
     private void showPolicyHint(String lead) {
@@ -299,6 +397,7 @@ final class SettingsForm extends JPanel {
                 effectiveDayLength(),
                 autopilotCheck.isSelected(),
                 (String) llmCombo.getSelectedItem()));
+        autopilotLive = autopilotCheck.isSelected(); // S18a: what was just applied is what is live
     }
 
     private void resetToDefaults() {
@@ -367,5 +466,14 @@ final class SettingsForm extends JPanel {
     /** The inline feedback line's current HTML (audit C-01/D-02: it must never be silent). */
     String policyFeedbackForTest() {
         return policyFeedback.getText();
+    }
+
+    /** S18a: the "Active policies" line as shown ({@code none}, or the numbered HTML list). */
+    String policyListForTest() {
+        return policyList.getText();
+    }
+
+    JButton clearPoliciesButtonForTest() {
+        return clearPoliciesButton;
     }
 }

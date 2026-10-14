@@ -4,6 +4,7 @@ import java.awt.Window;
 
 import javax.swing.JDialog;
 
+import it.unige.portcommand.gui.model.PolicyListModel;
 import it.unige.portcommand.util.EventBus;
 
 /**
@@ -26,11 +27,12 @@ import it.unige.portcommand.util.EventBus;
 public final class SettingsDialog extends JDialog {
 
     private SettingsDialog(Window owner, EventBus eventBus, String difficulty, long dayLengthSeconds,
-                           boolean autopilotEnabled, String llmModel, boolean dayLengthLocked) {
+                           boolean autopilotEnabled, String llmModel, boolean dayLengthLocked,
+                           PolicyListModel policies) {
         super(owner, "Settings", ModalityType.APPLICATION_MODAL);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setContentPane(new SettingsForm(eventBus, difficulty, dayLengthSeconds, autopilotEnabled,
-                llmModel, dayLengthLocked, this::dispose));
+                llmModel, dayLengthLocked, policies, this::dispose));
         pack();
         setLocationRelativeTo(owner);
     }
@@ -41,10 +43,12 @@ public final class SettingsDialog extends JDialog {
      * @param dayLengthSeconds the LIVE {@code SimClock} rate (reflects a scenario's pinned pacing)
      * @param dayLengthLocked  S16: the scenario's scripted events are still to come — the
      *                         day-length slider is shown disabled, with a note saying why
+     * @param policies         S18a: the window's list of the autopilot policies in force
      */
     public static void open(Window owner, EventBus eventBus, String difficulty, long dayLengthSeconds,
-                            boolean autopilotEnabled, String llmModel, boolean dayLengthLocked) {
+                            boolean autopilotEnabled, String llmModel, boolean dayLengthLocked,
+                            PolicyListModel policies) {
         new SettingsDialog(owner, eventBus, difficulty, dayLengthSeconds, autopilotEnabled, llmModel,
-                dayLengthLocked).setVisible(true);
+                dayLengthLocked, policies).setVisible(true);
     }
 }

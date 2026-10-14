@@ -16,6 +16,7 @@ import it.unige.portcommand.gui.events.GuiReadyEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
+import it.unige.portcommand.gui.events.PolicyListEvent;
 import it.unige.portcommand.gui.events.PortStatusEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WalletChangedEvent;
@@ -23,6 +24,7 @@ import it.unige.portcommand.harbourmaster.financial.Leaderboard;
 import it.unige.portcommand.lifecycle.GameLifecycle;
 import it.unige.portcommand.lifecycle.GameMode;
 import it.unige.portcommand.lifecycle.events.AutosaveRequestedEvent;
+import it.unige.portcommand.nlp.PolicyParser;
 import it.unige.portcommand.persistence.events.GameLoadedEvent;
 import it.unige.portcommand.util.Event;
 import it.unige.portcommand.util.EventBusProbe;
@@ -332,6 +334,16 @@ class FreePlaySessionIT {
         assertTrue(waitUntil(() -> ticksSinceLastPortStatus() >= 5, 15_000),
                 "fixture: an unchanged port must stop publishing PortStatusEvent");
         long before = portStatusCount();
+        // S18a (ADR-23, N11): a policy in force that the window has never heard of - what a cold
+        // `--load --gui` start leaves behind (restored, and announced before the window existed).
+        // Registered straight into the registry, as GameSession.restorePolicies does: nothing is
+        // published, so only the first-paint refresh below can say it.
+        String policy = new PolicyParser().parseQuietly("auto accept if price > 6000 for tankers")
+                .map(rule -> {
+                    boot.getPolicyRegistryArtifact().register(rule);
+                    return rule.description();
+                })
+                .orElseThrow();
 
         boot.getEventBus().publish(new GuiReadyEvent());
 
@@ -341,6 +353,8 @@ class FreePlaySessionIT {
         assertTrue(allFourFree(lastPortStatus()), "the re-announce is the current (empty) port");
         assertNotNull(awaitEvent(WalletChangedEvent.class, e -> "gui_ready".equals(e.source()), 10_000),
                 "…alongside the HUD refresh it has always published");
+        assertNotNull(awaitEvent(PolicyListEvent.class, e -> e.descriptions().equals(List.of(policy)), 10_000),
+                "…and the autopilot policies in force, which Settings would otherwise show as none");
     }
 
     // ---- fixtures ----

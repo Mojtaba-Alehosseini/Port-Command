@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import it.unige.portcommand.core.Settings;
+import it.unige.portcommand.gui.events.PolicyClearRequestEvent;
 import it.unige.portcommand.gui.events.PolicyParsedEvent;
+import it.unige.portcommand.gui.model.PolicyListModel;
 import it.unige.portcommand.gui.events.SettingsChangedEvent;
 import it.unige.portcommand.gui.model.DayLengthSteps;
 import it.unige.portcommand.nlp.PolicyParser;
@@ -63,6 +65,137 @@ class SettingsFormTest {
         assertTrue(feedback.contains("price &gt; 6000"), "the parsed CONDITION: " + feedback);
         assertTrue(feedback.contains("tankers only"), "the parsed canonical SCOPE: " + feedback);
         assertTrue(form.policyFieldForTest().getText().isEmpty(), "an accepted policy clears the field");
+    }
+
+    /**
+     * S18a (ADR-23, decision N11) - born red. The success line said "active now" whatever the
+     * autopilot was doing. A policy is consulted by the AUTOPILOT only: with the autopilot off it
+     * does nothing at all, and the line told the player the opposite. It now reports the state
+     * that is LIVE (what the form opened on, or what was last applied) and, when the box has been
+     * ticked but not applied, says that pressing Apply is what is missing.
+     */
+    @Test
+    @Timeout(5)
+    void theSuccessLineSaysWhetherThePolicyDoesAnythingYet() {
+        EventBus bus = new EventBus();
+
+        SettingsForm off = new SettingsForm(bus, "NORMAL", 3_600L, false, "microsoft/Phi-4-mini-instruct", () -> { });
+        off.policyFieldForTest().setText(PolicyParser.GRAMMAR_EXAMPLE);
+        off.clickSetPolicyForTest();
+        assertFalse(off.policyFeedbackForTest().contains("active now"),
+                "the autopilot is off - nothing is active: " + off.policyFeedbackForTest());
+        assertTrue(off.policyFeedbackForTest().contains("Autopilot is off, so it does nothing yet"),
+                off.policyFeedbackForTest());
+        assertTrue(off.policyFeedbackForTest().contains("Cancel will not undo it"), off.policyFeedbackForTest());
+
+        // Ticked, not applied: still not live.
+        off.autopilotCheckForTest().setSelected(true);
+        off.policyFieldForTest().setText(PolicyParser.GRAMMAR_EXAMPLE);
+        off.clickSetPolicyForTest();
+        assertFalse(off.policyFeedbackForTest().contains("active now"), off.policyFeedbackForTest());
+        assertTrue(off.policyFeedbackForTest().contains("it takes effect when you press Apply"),
+                off.policyFeedbackForTest());
+
+        // Applied: live from here on.
+        off.clickApplyForTest();
+        off.policyFieldForTest().setText(PolicyParser.GRAMMAR_EXAMPLE);
+        off.clickSetPolicyForTest();
+        assertTrue(off.policyFeedbackForTest().contains("active now"), off.policyFeedbackForTest());
+
+        SettingsForm on = new SettingsForm(bus, "NORMAL", 3_600L, true, "microsoft/Phi-4-mini-instruct", () -> { });
+        on.policyFieldForTest().setText(PolicyParser.GRAMMAR_EXAMPLE);
+        on.clickSetPolicyForTest();
+        assertTrue(on.policyFeedbackForTest().contains("active now"), on.policyFeedbackForTest());
+        assertTrue(on.policyFeedbackForTest().contains("Cancel will not undo it"), on.policyFeedbackForTest());
+    }
+
+    // ---- S18a (ADR-23, decision N11): the policies in force can be seen, and cleared ----
+    // Until S18a the registry was write-only from the player's side. The first policy that
+    // matches a vessel wins, so an early mistake silently shadowed every later correction, and
+    // nothing on screen said what was in force.
+
+    private static SettingsForm formShowing(EventBus bus, PolicyListModel policies) {
+        return new SettingsForm(bus, "NORMAL", 3_600L, true, "microsoft/Phi-4-mini-instruct", false,
+                policies, () -> { });
+    }
+
+    @Test
+    @Timeout(5)
+    void withNoPoliciesTheListSaysNoneAndThereIsNothingToClear() {
+        SettingsForm form = formShowing(new EventBus(), new PolicyListModel());
+
+        assertEquals("none", form.policyListForTest());
+        assertFalse(form.clearPoliciesButtonForTest().isEnabled());
+        assertEquals("Clear policies", form.clearPoliciesButtonForTest().getText());
+    }
+
+    @Test
+    @Timeout(5)
+    void theFormOpensOnTheListTheWindowHolds() {
+        PolicyListModel policies = new PolicyListModel();
+        policies.set(List.of("Automatically accept the vessel's offer when price > 6000 (tankers only)."));
+
+        SettingsForm form = formShowing(new EventBus(), policies);
+
+        assertTrue(form.policyListForTest().contains("1. Automatically accept the vessel's offer when "
+                + "price &gt; 6000 (tankers only)."), form.policyListForTest());
+        assertFalse(form.policyListForTest().contains("first one that matches"),
+                "with one policy there is no precedence to explain");
+        assertTrue(form.clearPoliciesButtonForTest().isEnabled());
+    }
+
+    /** The order is the precedence, so the list is numbered and says which one wins. */
+    @Test
+    @Timeout(5)
+    void severalPoliciesAreNumberedInTheOrderTheyApply() {
+        PolicyListModel policies = new PolicyListModel();
+        SettingsForm form = formShowing(new EventBus(), policies);
+
+        policies.set(List.of("accept when price > 6000", "accept when price > 5000 <b>"));
+
+        String list = form.policyListForTest();
+        assertTrue(list.contains("1. accept when price &gt; 6000<br>2. accept when price &gt; 5000 &lt;b&gt;<br>"), list);
+        assertTrue(list.contains("The first one that matches a vessel wins."), list);
+    }
+
+    /** The button ASKS; the list empties when the Assistant answers. Showing "none" at the click
+     * would be the form claiming something it does not know. */
+    @Test
+    @Timeout(5)
+    void clearAsksTheAssistantAndTheListEmptiesOnlyWhenItAnswers() {
+        EventBus bus = new EventBus();
+        List<PolicyClearRequestEvent> asked = new ArrayList<>();
+        bus.subscribe(PolicyClearRequestEvent.class, asked::add, DeliveryMode.CALLER_THREAD);
+        PolicyListModel policies = new PolicyListModel();
+        policies.set(List.of("accept when price > 6000"));
+        SettingsForm form = formShowing(bus, policies);
+
+        form.clearPoliciesButtonForTest().doClick();
+
+        assertEquals(1, asked.size());
+        assertTrue(form.policyListForTest().contains("1. accept when price"),
+                "still listed: the Assistant has not answered yet");
+
+        policies.set(List.of());
+        assertEquals("none", form.policyListForTest());
+        assertFalse(form.clearPoliciesButtonForTest().isEnabled());
+    }
+
+    /** The model belongs to the window and outlives every dialog; a closed form must not go on
+     * being told (and being kept alive) by it. {@code removeNotify()} is what Swing calls when the
+     * dialog is disposed - the same lifecycle every panel in the window follows. */
+    @Test
+    @Timeout(5)
+    void aClosedFormStopsFollowingTheList() {
+        PolicyListModel policies = new PolicyListModel();
+        SettingsForm form = formShowing(new EventBus(), policies);
+        assertEquals(1, policies.listenerCount());
+
+        form.removeNotify();
+
+        assertEquals(0, policies.listenerCount());
+        policies.set(List.of("accept when price > 6000"));
+        assertEquals("none", form.policyListForTest(), "a closed form is no longer updated");
     }
 
     @Test
