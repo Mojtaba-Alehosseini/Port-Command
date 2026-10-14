@@ -4,6 +4,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
+import it.unige.portcommand.gui.events.NegotiationClosedEvent;
+import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.ontology.Deal;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -115,5 +119,61 @@ class ChatRepliesTest {
 
         assertTrue(help.contains("Accept and Reject send '" + InputExamples.ACCEPT_UTTERANCE + "' and '"
                 + InputExamples.REJECT_UTTERANCE + "'"), help);
+    }
+
+    // --- S18b (playtest 4, PT22): did you mean --------------------------------------------------
+
+    private static final String DIALOGUE = "nego-W001";
+
+    /** A tab whose vessel offers {@code theirOffer} for 6 h. */
+    private static NegotiationTabRegistry tabOffering(double theirOffer) {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(new NegotiationOpenedEvent(DIALOGUE, new WalkInDialogueSnapshot("W001",
+                "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", "berth_2", 6, theirOffer, 0.0, 1, 0.0, false,
+                "Santa Lucia")));
+        return registry;
+    }
+
+    @Test
+    void oneTypedPriceAboveTheirOfferIsOfferedBackAsAMove() {
+        DialogueTabModel tab = tabOffering(1332.0).tab(DIALOGUE);
+
+        assertEquals(Optional.of("Did you mean €2,000? Write '2000 for 6h' — or press Accept for their €1,332."),
+                ChatReplies.didYouMean("ok 2000", tab));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ok 2000", "2,000 then", "2.000 ok", "OK 2000!", "fine, 2000"})
+    void theWaysAPlayerWritesTwoThousandAreOneNumber(String typed) {
+        DialogueTabModel tab = tabOffering(1332.0).tab(DIALOGUE);
+
+        assertTrue(ChatReplies.didYouMean(typed, tab).orElseThrow().startsWith("Did you mean €2,000?"), typed);
+    }
+
+    /** At or below their offer, the guess would close the deal under the vessel's own price. */
+    @ParameterizedTest
+    @ValueSource(strings = {"ok 1000", "ok 1332", "ok 50", "ok", "ok 2000 for 6", "ok 1999.5", "2000 4h", ""})
+    void noGuessIsMadeWhenItCouldNotBeSafe(String typed) {
+        DialogueTabModel tab = tabOffering(1332.0).tab(DIALOGUE);
+
+        assertEquals(Optional.empty(), ChatReplies.didYouMean(typed, tab), typed);
+    }
+
+    @Test
+    void theHoursAreThePlayersOwnLastOnes() {
+        NegotiationTabRegistry registry = tabOffering(1332.0);
+        registry.recordPlayerOffer(DIALOGUE, 2400.0, 4);
+
+        assertTrue(ChatReplies.didYouMean("ok 2000", registry.tab(DIALOGUE)).orElseThrow().contains("'2000 for 4h'"));
+    }
+
+    @Test
+    void aClosedTabOrNoTabGetsNoGuess() {
+        NegotiationTabRegistry registry = tabOffering(1332.0);
+        assertEquals(Optional.empty(), ChatReplies.didYouMean("ok 2000", null));
+        assertEquals(Optional.empty(), ChatReplies.didYouMean(null, registry.tab(DIALOGUE)));
+
+        registry.onNegotiationClosed(new NegotiationClosedEvent(DIALOGUE, "W001", Deal.Outcome.TIMEOUT), 0L);
+        assertEquals(Optional.empty(), ChatReplies.didYouMean("ok 2000", registry.tab(DIALOGUE)));
     }
 }

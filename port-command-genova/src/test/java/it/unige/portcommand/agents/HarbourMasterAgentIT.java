@@ -1151,6 +1151,33 @@ class HarbourMasterAgentIT {
         assertNotNull(closed, "a granted deal must ALSO publish NegotiationClosedEvent (the chat tab's own bracket signal)");
         assertEquals("W005", closed.vesselId());
         assertEquals(Deal.Outcome.DEAL, closed.outcome());
+        // S18b (PT3, U3): the tab says what was agreed. No player price was ever dispatched here,
+        // so the deal is the vessel's own offer.
+        assertEquals(1600.0, closed.price(), 0.001);
+        assertEquals(6, closed.hours());
+        assertFalse(closed.vesselAccepted(), "no price of the player's stood: the vessel did not accept one");
+    }
+
+    /** S18b (PT3): "They accepted €1,700 for 6h" — a deal at the player's own last price. */
+    @Test
+    void aDealAtThePlayersOwnPriceIsReportedAsTheVesselAccepting() throws Exception {
+        HarbourMasterAgent hm = spawnHm(Map.of(), CNP_FRIENDLY_REAL_SECONDS_PER_DAY);
+        VesselSpec spec = new VesselSpec("W015", "cargo_vessel", 9.0, 150.0, 30000, "general_cargo", 0L);
+        Probe vessel = spawnProbe("t18b_vessel", null);
+        vessel.outbox.put(openingOffer(hm, spec, 1500.0, 6, "nego-W015"));
+        assertNotNull(awaitEvent(NegotiationOpenedEvent.class, e -> "nego-W015".equals(e.dialogueId()), 10_000),
+                "setup: opening offer must be forwarded");
+        // What DispatchPlayerCommandBehaviour records when the player's PROPOSE goes out.
+        hm.negotiationPlayerOffers().put("nego-W015", 1700.0);
+
+        vessel.outbox.put(dealConfirmed(hm, 1700.0, 6, "nego-W015"));
+
+        NegotiationClosedEvent closed = awaitEvent(NegotiationClosedEvent.class,
+                e -> "nego-W015".equals(e.dialogueId()), 10_000);
+        assertNotNull(closed);
+        assertEquals(1700.0, closed.price(), 0.001);
+        assertEquals(6, closed.hours());
+        assertTrue(closed.vesselAccepted(), "the deal is the player's own price: the vessel accepted it");
     }
 
     @Test

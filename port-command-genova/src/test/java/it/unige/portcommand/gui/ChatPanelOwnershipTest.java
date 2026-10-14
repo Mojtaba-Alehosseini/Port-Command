@@ -515,15 +515,15 @@ class ChatPanelOwnershipTest {
 
         assertFalse(view.markerRowVisibleForTest(), "nobody is negotiating in a finished negotiation");
         assertFalse(view.hintRowVisibleForTest());
-        assertEquals(List.of("Send", "Accept", "Reject"), view.buttonLabelsForTest());
-        assertFalse(view.buttonForTest("Send").isEnabled());
+        // S18b (PT6): the closed-tab look, whoever was negotiating — all four buttons greyed.
+        assertEquals(List.of("Send", "Hint", "Accept", "Reject"), view.buttonLabelsForTest());
+        for (String label : List.of("Send", "Hint", "Accept", "Reject")) {
+            assertFalse(view.buttonForTest(label).isEnabled(), label);
+        }
         assertFalse(view.inputFieldForTest().isEditable());
-        // S15's closed-tab behaviour, whoever was negotiating: the two buttons answer in the transcript.
-        assertTrue(view.buttonForTest("Accept").isEnabled() && view.buttonForTest("Reject").isEnabled());
+        int before = transcript(A).size();
         click(view, "Accept");
-        List<DialogueTabModel.ChatEntry> transcript = transcript(A);
-        assertEquals("This negotiation is closed — there is nothing to accept.",
-                transcript.get(transcript.size() - 1).text());
+        assertEquals(before, transcript(A).size(), "a greyed button writes nothing");
         assertEquals(List.of(), published(TakeOverEvent.class));
         assertEquals(List.of(), published(PlayerCommandEvent.class));
     }

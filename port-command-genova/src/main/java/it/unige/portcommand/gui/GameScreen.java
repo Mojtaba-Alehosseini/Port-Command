@@ -148,6 +148,8 @@ final class GameScreen extends JPanel {
     /**
      * The left column: "Waiting for you" at its natural height on top — it is as tall as the
      * vessels waiting, and one line when nobody is — and the Port table in everything below.
+     * S18b (PT5): "Finished" at the bottom, at its natural height too (never more than five lines;
+     * more scroll), so the Port table above it keeps its rows where they were.
      * {@code PortPanel} sets no name of its own; the shell names it here, in the one place the
      * tutorial's targets are defined.
      */
@@ -161,13 +163,19 @@ final class GameScreen extends JPanel {
         PortPanel port = new PortPanel(eventBus, portStateArtifact);
         port.setName(NAME_PORT);
 
+        FinishedListPanel finished = new FinishedListPanel(chatPanel);
+        JPanel finishedHolder = new JPanel(new BorderLayout());
+        finishedHolder.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, RULE));
+        finishedHolder.add(finished, BorderLayout.CENTER);
+
         JPanel column = new JPanel(new BorderLayout());
         column.add(waitingHolder, BorderLayout.NORTH);
         column.add(port, BorderLayout.CENTER);
+        column.add(finishedHolder, BorderLayout.SOUTH);
         column.setMinimumSize(new Dimension(LEFT_MIN_WIDTH, 0));
-        // Like the two panels it holds: a click in this column must never take the keyboard focus
+        // Like the panels it holds: a click in this column must never take the keyboard focus
         // out of the chat input.
-        for (JPanel part : new JPanel[] {column, waitingHolder}) {
+        for (JPanel part : new JPanel[] {column, waitingHolder, finishedHolder}) {
             part.setFocusable(false);
             part.setRequestFocusEnabled(false);
         }

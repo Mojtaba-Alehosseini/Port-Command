@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.OptionalLong;
 import java.util.function.Consumer;
 
+import it.unige.portcommand.gui.model.FinishedDialogue;
 import it.unige.portcommand.gui.model.OpenDialogue;
 
 /**
@@ -20,11 +21,21 @@ public interface DialogueDirectory {
     List<OpenDialogue> openDialogues();
 
     /**
-     * Selects that dialogue's tab and puts the keyboard focus in its input.
+     * Selects that dialogue's tab and puts the keyboard focus in its input. S18b (PT5): a finished
+     * dialogue whose tab has left the strip is put back on it first.
      *
-     * @return {@code false} if there is no such tab
+     * @return {@code false} if there is no such tab, and no finished dialogue of that id
      */
     boolean selectDialogue(String dialogueId);
+
+    /**
+     * S18b (playtest 2, PT5): every negotiation that has ended in this world, newest first — the
+     * left column's "Finished" list. A click on a line is {@link #selectDialogue}. Empty unless the
+     * directory keeps them (a fake for a test of another column need not).
+     */
+    default List<FinishedDialogue> finishedDialogues() {
+        return List.of();
+    }
 
     /**
      * The remaining time that tab's own counter last showed, in milliseconds — empty when the
@@ -33,9 +44,10 @@ public interface DialogueDirectory {
      */
     OptionalLong shownRemainingMillis(String dialogueId);
 
-    /** Runs {@code listener} whenever the answer to {@link #openDialogues()} or to
-     * {@link #shownRemainingMillis} may have changed: a tab opened, closed, left the strip, the
-     * world was replaced, and on every one-second counter refresh. */
+    /** Runs {@code listener} whenever the answer to {@link #openDialogues()}, to
+     * {@link #shownRemainingMillis} or (S18b) to {@link #finishedDialogues()} may have changed: a
+     * tab opened, closed, left the strip, the world was replaced, and on every one-second counter
+     * refresh. */
     void addDialoguesListener(Runnable listener);
 
     /** Tells {@code listener} the vessel id of the selected tab — {@code null} when there is

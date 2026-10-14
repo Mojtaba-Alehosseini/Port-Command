@@ -153,38 +153,50 @@ class InputExamplesTest {
     // ==================== the rotation ====================
 
     @Test
-    void aTabWithNoPlayerOfferCyclesItsFourExamples() {
+    void aTabWithNoPlayerOfferCyclesItsThreeExamples() {
         DialogueTabModel tab = registryWithOpening(1436.0, 6).tab(DIALOGUE);
 
-        assertEquals(List.of("1900 for 6h", "200 more", "deal", "make it 1750"), InputExamples.examplesFor(tab));
+        assertEquals(List.of("1900 for 6h", "200 more", "make it 1750"), InputExamples.examplesFor(tab));
         List<String> shown = new ArrayList<>();
-        for (int sends = 0; sends < 9; sends++) {
+        for (int sends = 0; sends < 7; sends++) {
             shown.add(InputExamples.exampleAt(tab, sends));
         }
-        assertEquals(List.of("1900 for 6h", "200 more", "deal", "make it 1750",
-                "1900 for 6h", "200 more", "deal", "make it 1750", "1900 for 6h"), shown);
+        assertEquals(List.of("1900 for 6h", "200 more", "make it 1750",
+                "1900 for 6h", "200 more", "make it 1750", "1900 for 6h"), shown);
     }
 
+    /** S18b (UI tree U2): an example under the player's own demand teaches conceding. */
     @Test
-    void splitTheDifferenceJoinsSecondOnceThePlayerHasOffered() {
+    void noPriceShownIsBelowThePlayersOwnDemand() {
         NegotiationTabRegistry registry = registryWithOpening(1436.0, 6);
         registry.recordPlayerOffer(DIALOGUE, 1900.0, 6);
         DialogueTabModel tab = registry.tab(DIALOGUE);
+        assertEquals(List.of("1900 for 6h", "200 more"), InputExamples.examplesFor(tab),
+                "'make it 1750' would concede 150 of the 1900 asked: left out");
+        assertEquals("1900 for 6h", InputExamples.exampleAt(tab, 2), "two examples now, then round again");
 
-        assertEquals(List.of("1900 for 6h", "split the difference", "200 more", "deal", "make it 1750"),
-                InputExamples.examplesFor(tab));
-        assertEquals("make it 1750", InputExamples.exampleAt(tab, 4));
-        assertEquals("1900 for 6h", InputExamples.exampleAt(tab, 5), "five examples now, then round again");
+        registry.recordPlayerOffer(DIALOGUE, 1975.0, 6);
+        assertEquals(List.of("2000 for 6h", "200 more"), InputExamples.examplesFor(tab),
+                "the demand rounded UP to the next 50: never below it");
+
+        registry.recordPlayerOffer(DIALOGUE, 1800.0, 6);
+        assertEquals(List.of("1900 for 6h", "200 more", "make it 1800"), InputExamples.examplesFor(tab),
+                "a demand between the two prices lifts only the lower one");
     }
 
+    /** S18b (UI tree U2): copied, "deal" takes the vessel's lowest price for good; "split the
+     * difference" is below the player's own demand by construction. Neither is an example. */
     @Test
-    void splitTheDifferenceIsNeverShownBeforeAnOffer() {
-        // On a fresh tab the grammar cannot parse it (there is nothing to split), so showing it
-        // would hand the player a sentence that only earns "I didn't get that".
-        DialogueTabModel tab = registryWithOpening(1436.0, 6).tab(DIALOGUE);
-
-        for (int sends = 0; sends <= 50; sends++) {
-            assertFalse(InputExamples.exampleAt(tab, sends).contains("split"), "after " + sends + " sends");
+    void neitherDealNorSplitTheDifferenceIsEverShown() {
+        NegotiationTabRegistry registry = registryWithOpening(1436.0, 6);
+        DialogueTabModel tab = registry.tab(DIALOGUE);
+        for (int round = 0; round < 2; round++) {
+            for (int sends = 0; sends <= 20; sends++) {
+                String example = InputExamples.exampleAt(tab, sends);
+                assertFalse(example.contains("split"), "after " + sends + " sends: " + example);
+                assertFalse(example.equals(InputExamples.ACCEPT_UTTERANCE), "after " + sends + " sends: " + example);
+            }
+            registry.recordPlayerOffer(DIALOGUE, 1900.0, 6); // and again with an offer standing
         }
     }
 
@@ -196,7 +208,7 @@ class InputExamplesTest {
         registry.recordPlayerOffer(DIALOGUE, 1900.0, 6);
         all.addAll(InputExamples.examplesFor(registry.tab(DIALOGUE)));
 
-        assertEquals(9, all.size(), "setup: both rotations");
+        assertEquals(5, all.size(), "setup: both rotations");
         for (String example : all) {
             assertFalse(example.equals(InputExamples.REJECT_UTTERANCE),
                     "the Reject literal is a button, not an example");
@@ -241,35 +253,36 @@ class InputExamplesTest {
         tab.appendPlayerMessage("hello there");
         assertEquals("e.g. 200 more", InputExamples.placeholderFor(tab), "one send, one step");
         tab.appendPlayerMessage("what berths are free");
-        assertEquals("e.g. deal", InputExamples.placeholderFor(tab));
+        assertEquals("e.g. make it 1750", InputExamples.placeholderFor(tab));
     }
 
     @Test
-    void rightAfterThePlayersFirstOfferTheExampleIsSplitTheDifference() {
+    void rightAfterThePlayersFirstOfferTheExampleIsTwoHundredMore() {
         // The natural first turn: the player copies the price example. One send, and an offer now
-        // stands — index 1 of the five-example rotation.
+        // stands — index 1 of the two-example rotation (S18b, U2: nothing under the 1900 asked).
         NegotiationTabRegistry registry = registryWithOpening(1436.0, 6);
         DialogueTabModel tab = registry.tab(DIALOGUE);
         tab.appendPlayerMessage("1900 for 6h");
         registry.recordPlayerOffer(DIALOGUE, 1900.0, 6, 1L);
 
-        assertEquals("e.g. split the difference", InputExamples.placeholderFor(tab));
+        assertEquals("e.g. 200 more", InputExamples.placeholderFor(tab));
     }
 
     @Test
-    void aRefusedFirstOfferTakesSplitTheDifferenceBackOut() {
+    void aRefusedFirstOfferBringsTheLowerExampleBack() {
         NegotiationTabRegistry registry = registryWithOpening(1436.0, 6);
         DialogueTabModel tab = registry.tab(DIALOGUE);
         tab.appendPlayerMessage("1900 for 6h");
         registry.recordPlayerOffer(DIALOGUE, 1900.0, 6, 7L);
-        assertTrue(InputExamples.examplesFor(tab).contains("split the difference"), "setup: offered at the send");
+        assertFalse(InputExamples.examplesFor(tab).contains("make it 1750"), "setup: offered 1900 at the send");
 
         registry.onPlayerCommandRefused(refused(7L, 0.0)); // the Prolog gate said no: nothing stands
 
         assertFalse(tab.playerHasOffered());
-        assertEquals(List.of("1900 for 6h", "200 more", "deal", "make it 1750"), InputExamples.examplesFor(tab));
+        assertEquals(List.of("1900 for 6h", "200 more", "make it 1750"), InputExamples.examplesFor(tab),
+                "no demand stands, so nothing lifts the lower price");
         assertEquals("e.g. 200 more", InputExamples.placeholderFor(tab),
-                "the send still counts as a send; the rotation is the four-example one again");
+                "the send still counts as a send");
     }
 
     @Test
@@ -280,7 +293,7 @@ class InputExamplesTest {
         DialogueTabModel tab = registry.tab(DIALOGUE);
 
         assertEquals("e.g. 2000 for 8h", InputExamples.placeholderFor(tab));
-        assertEquals("make it 1850", InputExamples.exampleAt(tab, 3));
+        assertEquals("make it 1850", InputExamples.exampleAt(tab, 2));
     }
 
     @Test
@@ -288,7 +301,7 @@ class InputExamplesTest {
         // The case that ruled out a fixed "1900 for 6h": copied here it would close at 1900.
         DialogueTabModel tab = registryWithOpening(6000.0, 6).tab(DIALOGUE);
 
-        assertEquals(List.of("7800 for 6h", "200 more", "deal", "make it 7200"), InputExamples.examplesFor(tab));
+        assertEquals(List.of("7800 for 6h", "200 more", "make it 7200"), InputExamples.examplesFor(tab));
     }
 
     // ==================== nothing to show ====================

@@ -27,6 +27,8 @@ import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.events.WithdrawalEvent;
+import it.unige.portcommand.gui.model.DialogueTabModel;
+import it.unige.portcommand.gui.model.FinishedDialogue;
 import it.unige.portcommand.gui.model.NegotiationTabRegistry;
 import it.unige.portcommand.gui.model.OpenDialogue;
 import it.unige.portcommand.nlp.ChatInputProcessor;
@@ -68,7 +70,12 @@ import it.unige.portcommand.util.Subscription;
 public final class ChatPanel extends JPanel implements DialogueDirectory {
 
     /**
-     * Audit C-07: how long a closed negotiation's tab stays readable before it leaves the strip —
+     * S18b (playtest 2, PT5; UI tree U4): the strip still lets a closed tab go after this dwell —
+     * F-9's pile-up of closed tabs is still real — but nothing is lost any more and nothing
+     * vanishes under the player: the tab the player has selected never leaves, and every ended
+     * negotiation stays in the left column's "Finished" list, which puts its tab back on a click.
+     *
+     * <p>Audit C-07: how long a closed negotiation's tab stays readable before it leaves the strip —
      * real seconds of RUNNING game time, measured on the shared SimClock like the tab's own
      * countdown, so a paused game (Esc, the end-of-day summary) keeps closed tabs visible. Closed
      * tabs used to accumulate until a load, scrolling the live vessel's tab out of view (F-9).
@@ -95,10 +102,32 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
     private final SimClock simClock;
     private final JTabbedPane tabbedPane = new JTabbedPane();
     private final Map<String, DialogueTabView> views = new LinkedHashMap<>();
+    /** S18b (playtest 2, PT15): the last line of the card shown while no negotiation is open. */
+    static final String WAITING_TEXT = "Waiting for a walk-in…";
+
+    /**
+     * S18b (playtest 2, PT15): the middle column was a big empty area while nobody was waiting. It
+     * now says how to play — in words only: no literal price, which copied onto a vessel already
+     * offering more would close that deal far too cheaply (the reason the input's examples are
+     * computed per tab, S15).
+     */
+    static final String HOW_TO_PLAY_HTML = "<html><body style='width:300px'>"
+            + "<p style='text-align:center'><b>How to play</b></p>"
+            + "<ul>"
+            + "<li>When a ship calls, its negotiation opens here.</li>"
+            + "<li>Type your price and hours — the grey example in the box fits that ship — or press "
+            + "<b>Accept</b> (their offer) or <b>Reject</b> (send them away).</li>"
+            + "<li><b>Hint</b> asks the Assistant what it would do.</li>"
+            + "<li><b>Next ship</b> in the top bar calls the next walk-in now.</li>"
+            + "<li>Press <b>Esc</b> to pause.</li>"
+            + "</ul>"
+            + "<p style='text-align:center'><i>" + WAITING_TEXT + "</i></p></body></html>";
+
     /** Focusable on purpose (C-07 review): when the last closed tab leaves while it holds focus,
      * focus is parked HERE, where keystrokes do nothing — not left to AWT, whose transfer lands
-     * on the comm-log filter combo and lets type-ahead change the filter (the #9 symptom). */
-    private final JLabel waitingPlaceholder = new JLabel("Waiting for a walk-in…", SwingConstants.CENTER);
+     * on the comm-log filter combo and lets type-ahead change the filter (the #9 symptom).
+     * S18b (PT15): it is the How to play card. */
+    private final JLabel waitingPlaceholder = new JLabel(HOW_TO_PLAY_HTML, SwingConstants.CENTER);
     /** S14: a Swing timer, so it fires on the EDT. It only READS the conversation clock (which is
      * driven by the game's own advancer, frozen by a pause) — it is a repaint cadence, not a
      * time source. Runs only while the panel is displayable. */
@@ -260,8 +289,10 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
      * {@link #removeNotify()}), so there is no extra timer and no wall-clock read; ticks stop
      * while paused, which is what keeps a closed tab on screen during a pause. */
     private void removeExpiredTabs() {
+        // S18b (UI tree U4): never the tab the player is reading — it goes at the first sweep
+        // after they have moved on (and stays one click away in the Finished list).
         List<String> expired = registry.sweepClosed(simClock.nowSimMillis(),
-                simClock.simMillisForRealSeconds(CLOSED_TAB_DWELL_REAL_SECONDS));
+                simClock.simMillisForRealSeconds(CLOSED_TAB_DWELL_REAL_SECONDS), selectedDialogueId());
         if (expired.isEmpty()) {
             return;
         }
@@ -312,6 +343,26 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
     }
 
     private void addTab(String dialogueId, NegotiationOpenedEvent event) {
+        DialogueTabView reading = selectedView();
+        DialogueTabView view = putOnStrip(dialogueId, tabTitle(event.snapshot()));
+        // S18b (UI tree U5): a new walk-in is brought forward when the tab the player is looking
+        // at is closed — there is nothing left to do there. An OPEN tab keeps the selection: the
+        // player may be typing in it. S15: the first tab of an empty strip selects itself (the
+        // pane's change event has already announced it; this is a no-op then).
+        if (reading != null && isClosed(reading)) {
+            tabbedPane.setSelectedComponent(view);
+        }
+        announceSelectedVessel();
+        // The new tab read the clock as it was built; the others re-read now, for the same reason.
+        refreshCounters();
+    }
+
+    /**
+     * Builds a dialogue's view and adds it at the end of the strip — the strip itself first, when
+     * it is not showing (it replaces the How to play card). Selects nothing: a JTabbedPane selects
+     * the first page it is given, by itself, and nothing else.
+     */
+    private DialogueTabView putOnStrip(String dialogueId, String title) {
         if (views.isEmpty()) {
             removeAll();
             // Scroll the tab strip instead of wrapping it: 4+ dialogue tabs were stacking
@@ -330,19 +381,50 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         DialogueTabView view = new DialogueTabView(dialogueId, registry, eventBus, processor, simClock,
                 id -> ownership.assistantOwns(id), this::refreshCounters);
         views.put(dialogueId, view);
-        tabbedPane.addTab(tabTitle(event), view);
+        tabbedPane.addTab(title, view);
         revalidate();
         repaint();
-        // S15: the first tab of an empty strip selects itself (the pane's change event has
-        // already announced it; this is a no-op then). A later tab leaves the selection alone.
-        announceSelectedVessel();
-        // The new tab read the clock as it was built; the others re-read now, for the same reason.
-        refreshCounters();
+        return view;
     }
 
-    private static String tabTitle(NegotiationOpenedEvent event) {
-        var snapshot = event.snapshot();
+    private static String tabTitle(it.unige.portcommand.assistant.WalkInDialogueSnapshot snapshot) {
         return snapshot.vesselName() + " (" + snapshot.vesselType() + ")";
+    }
+
+    /** Whether the view's negotiation is over. A view whose model is gone counts as closed. */
+    private boolean isClosed(DialogueTabView view) {
+        DialogueTabModel tab = registry.tab(view.dialogueId());
+        return tab == null || tab.isClosed();
+    }
+
+    /** Greys a closed tab's title and says it is closed. */
+    private void markClosed(DialogueTabView view) {
+        int index = tabbedPane.indexOfComponent(view);
+        if (index >= 0) {
+            tabbedPane.setForegroundAt(index, Color.GRAY);
+            tabbedPane.setTitleAt(index, tabbedPane.getTitleAt(index) + " (closed)");
+        }
+    }
+
+    /**
+     * S18b (playtest 2, PT5): a line of the Finished list was clicked and its tab had left the
+     * strip. The model is still in the registry ({@link NegotiationTabRegistry#reopenFinished}); a
+     * new view of it goes at the end of the strip, closed like any closed tab — read-only, every
+     * button greyed. It leaves again at the first sweep after the player has moved on.
+     *
+     * @return the view, or {@code null} when this world never finished that dialogue
+     */
+    private DialogueTabView reopenFinished(String dialogueId) {
+        if (!registry.reopenFinished(dialogueId)) {
+            return null;
+        }
+        DialogueTabModel tab = registry.tab(dialogueId);
+        if (tab == null) {
+            return null;
+        }
+        DialogueTabView view = putOnStrip(dialogueId, tabTitle(tab.snapshot()));
+        markClosed(view);
+        return view;
     }
 
     private void onNegotiationClosed(NegotiationClosedEvent event) {
@@ -353,14 +435,11 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         DialogueTabView view = views.get(dialogueId.get());
         if (view != null) {
             view.refresh();
-            int index = tabbedPane.indexOfComponent(view);
-            if (index >= 0) {
-                tabbedPane.setForegroundAt(index, Color.GRAY);
-                tabbedPane.setTitleAt(index, tabbedPane.getTitleAt(index) + " (closed)");
-            }
+            markClosed(view);
         }
         // S15: a closed negotiation is no longer waiting for the player, although its tab stays
         // on the strip for its dwell (and, if it is the selected one, still names its vessel).
+        // S18b (PT5): and it is a line of the Finished list from now on.
         fireDialoguesChanged();
     }
 
@@ -392,9 +471,16 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         return registry.openDialogues();
     }
 
+    /** S18b (playtest 2, PT5): every negotiation that ended in this world, newest first. */
+    @Override
+    public List<FinishedDialogue> finishedDialogues() {
+        return registry.finishedDialogues();
+    }
+
     /**
      * Brings that dialogue's tab forward and puts the keyboard focus in its input. Works for any
      * tab still on the strip, a closed one included (its input then swallows keystrokes, #9).
+     * S18b (PT5): and for a finished dialogue whose tab has left the strip — it is put back first.
      *
      * <p>The focus is requested here, not left to the pane's change listener: re-selecting the
      * tab that is already selected fires no change event at all, and the listener stands down
@@ -406,7 +492,10 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
     public boolean selectDialogue(String dialogueId) {
         DialogueTabView view = dialogueId == null ? null : views.get(dialogueId);
         if (view == null || tabbedPane.indexOfComponent(view) < 0) {
-            return false;
+            view = dialogueId == null ? null : reopenFinished(dialogueId);
+            if (view == null) {
+                return false;
+            }
         }
         if (tabbedPane.getSelectedComponent() != view) {
             tabbedPane.setSelectedComponent(view);

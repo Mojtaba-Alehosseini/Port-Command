@@ -46,6 +46,8 @@ import static org.junit.jupiter.api.Assertions.fail;
  * and after the player's first offer): every shown example parses; a priced one is a counter at
  * exactly the price it prints (and the hours it prints, where it prints any), above the vessel's
  * standing offer; none is a reject; and the two button literals mean accept and reject everywhere.
+ * S18b (UI tree U2): and none accepts or concedes — "deal" and "split the difference" left the
+ * rotation, and no price shown is below the player's own standing demand.
  */
 class InputExamplesDcgTest {
 
@@ -128,16 +130,10 @@ class InputExamplesDcgTest {
             Frame frame = parsed.get();
             assertTrue(validator.test(frame, example), "the ontology validator would stop it: " + what);
             assertNotEquals("reject", frame.move(), "an example must never turn the vessel away: " + what);
+            assertNotEquals("accept", frame.move(), "S18b (U2): an example must never accept for the player: " + what);
             assertNull(frame.element("addressee"), "an example is for the tab it is typed in: " + what);
 
-            if (example.equals(InputExamples.ACCEPT_UTTERANCE)) {
-                assertEquals(Map.of(Frame.MOVE, "accept"), frame.elements(), what);
-                assertEquals(ACLMessage.ACCEPT_PROPOSAL,
-                        FrameToAcl.build(frame, null, ctx.activeNegotiationId()).getPerformative(), what);
-                continue;
-            }
-
-            // Everything else is a priced counter: the tab sends it as a PROPOSE.
+            // Every example is a priced counter: the tab sends it as a PROPOSE.
             assertEquals("counter", frame.move(), what);
             assertEquals(ACLMessage.PROPOSE,
                     FrameToAcl.build(frame, null, ctx.activeNegotiationId()).getPerformative(), what);
@@ -145,6 +141,10 @@ class InputExamplesDcgTest {
             double price = moneyAmount(frame);
             assertTrue(price > s.lastVesselOffer(),
                     "the vessel takes any demand at or below its offer, so this would close on ITS terms: " + what);
+            if (tab.playerHasOffered()) {
+                assertTrue(price >= s.lastPlayerOffer(),
+                        "S18b (U2): an example below the player's own demand teaches conceding: " + what);
+            }
 
             Matcher priceAndHours = PRICE_AND_HOURS.matcher(example);
             Matcher makeIt = MAKE_IT.matcher(example);
@@ -164,10 +164,6 @@ class InputExamplesDcgTest {
                 double reference = tab.playerHasOffered() ? s.lastPlayerOffer() : s.lastVesselOffer();
                 assertEquals(reference + 200, price, what);
                 assertEquals((long) s.durationHours(), frame.element("duration"), what);
-            } else if (example.equals("split the difference")) {
-                assertTrue(tab.playerHasOffered(), "only shown once both sides have named a price: " + what);
-                assertEquals((double) Math.round((s.lastVesselOffer() + s.lastPlayerOffer()) / 2.0), price, what);
-                assertEquals((long) s.durationHours(), frame.element("duration"), what);
             } else {
                 fail("an example this test does not know how to prove: " + what);
             }
@@ -185,17 +181,19 @@ class InputExamplesDcgTest {
         int checked = assertEveryShownExampleParses(registry,
                 " (their offer " + vesselOffer + " for " + hours + "h, before my first offer)");
 
-        assertEquals(4, checked, "price-and-hours, 200 more, deal, make it");
+        assertEquals(3, checked, "price-and-hours, 200 more, make it");
     }
 
-    @ParameterizedTest(name = "their offer {0} for {1}h: split the difference does not parse yet")
+    @ParameterizedTest(name = "their offer {0} for {1}h: split the difference is never shown")
     @MethodSource("offersAndHours")
-    void splitTheDifferenceDoesNotParseBeforeAnOffer(double vesselOffer, int hours) {
-        // The reason the rotation is state-aware: with only the vessel's price on the table there
-        // is nothing to split, and the grammar refuses the sentence outright.
+    void splitTheDifferenceIsNeverShown(double vesselOffer, int hours) {
+        // Before an offer the grammar refuses it outright (there is nothing to split); after one it
+        // is the midpoint, below the player's own demand. S18b (U2): it is not an example either way.
         NegotiationTabRegistry registry = freshTab(vesselOffer, hours);
-
         assertEquals(Optional.empty(), parser.parse("split the difference", registry.buildCtx(VESSEL)));
+        assertFalse(InputExamples.examplesFor(registry.tab(DIALOGUE)).contains("split the difference"));
+
+        registry.recordPlayerOffer(DIALOGUE, InputExamples.priceExample(vesselOffer), hours);
         assertFalse(InputExamples.examplesFor(registry.tab(DIALOGUE)).contains("split the difference"));
     }
 
@@ -212,7 +210,8 @@ class InputExamplesDcgTest {
         int checked = assertEveryShownExampleParses(registry,
                 " (their offer " + vesselOffer + " for " + hours + "h, my offer " + myOffer + " standing)");
 
-        assertEquals(5, checked, "price-and-hours, split the difference, 200 more, deal, make it");
+        // S18b (U2): "make it" would only repeat the demand the player just made, and is left out.
+        assertEquals(2, checked, "price-and-hours at my own demand, 200 more");
     }
 
     @Test
@@ -225,13 +224,42 @@ class InputExamplesDcgTest {
         assertEquals(1636.0, moneyAmount(parser.parse("200 more", before).orElseThrow()), "their 1436 + 200");
         assertEquals(1750.0, moneyAmount(parser.parse("make it 1750", before).orElseThrow()));
 
+        assertEquals(List.of("1900 for 6h", "200 more", "make it 1750"),
+                InputExamples.examplesFor(registry.tab(DIALOGUE)), "the sentences shown before an offer");
+
         registry.recordPlayerOffer(DIALOGUE, 1900.0, 6);
         DialogueCtx after = registry.buildCtx(VESSEL);
-        assertEquals(1668.0, moneyAmount(parser.parse("split the difference", after).orElseThrow()),
-                "midway between their 1436 and my 1900");
         assertEquals(2100.0, moneyAmount(parser.parse("200 more", after).orElseThrow()), "my 1900 + 200");
-        assertEquals(List.of("1900 for 6h", "split the difference", "200 more", "deal", "make it 1750"),
+        // S18b (U2): "make it 1750" would concede 150 of the player's own 1900.
+        assertEquals(List.of("1900 for 6h", "200 more"),
                 InputExamples.examplesFor(registry.tab(DIALOGUE)), "and those are the sentences shown");
+    }
+
+    /** S18b (playtest 4, PT22): the sentence a "Did you mean" line offers is one the grammar reads
+     * as exactly that counter, in that tab. */
+    @Test
+    void theDidYouMeanSuggestionParsesAsTheCounterItPrints() {
+        NegotiationTabRegistry registry = freshTab(1332.0, 6);
+        String line = ChatReplies.didYouMean("ok 2000", registry.tab(DIALOGUE)).orElseThrow();
+        Matcher quoted = Pattern.compile("Write '([^']+)'").matcher(line);
+        assertTrue(quoted.find(), line);
+
+        Frame frame = parser.parse(quoted.group(1), registry.buildCtx(VESSEL)).orElseThrow();
+        assertEquals("counter", frame.move());
+        assertEquals(2000.0, moneyAmount(frame));
+        assertEquals(6L, frame.element("duration"));
+    }
+
+    @Test
+    void aDemandBetweenTheTwoPricesLiftsOnlyMakeIt() {
+        // S18b (U2): their 1436 gives 1900 and "make it 1750"; a standing demand of 1800 lifts the
+        // lower one to the demand itself and leaves the higher one alone.
+        NegotiationTabRegistry registry = freshTab(1436.0, 6);
+        registry.recordPlayerOffer(DIALOGUE, 1800.0, 6);
+
+        assertEquals(List.of("1900 for 6h", "200 more", "make it 1800"),
+                InputExamples.examplesFor(registry.tab(DIALOGUE)));
+        assertEquals(3, assertEveryShownExampleParses(registry, " (their 1436 for 6h, my 1800 standing)"));
     }
 
     @Test
@@ -241,16 +269,18 @@ class InputExamplesDcgTest {
         NegotiationTabRegistry registry = freshTab(1529.0, 6);
         registry.recordPlayerOffer(DIALOGUE, 4000.0, 4);
 
-        assertEquals(5, assertEveryShownExampleParses(registry, " (their 1529 for 6h, my 4000 for 4h)"));
+        assertEquals(2, assertEveryShownExampleParses(registry, " (their 1529 for 6h, my 4000 for 4h)"));
+        assertEquals(List.of("4000 for 6h", "200 more"), InputExamples.examplesFor(registry.tab(DIALOGUE)),
+                "S18b (U2): nothing under the player's own 4000");
     }
 
     @Test
     void theExamplesStillParseAgainstAnOfferThatIsNotAWholeNumber() {
         NegotiationTabRegistry registry = freshTab(1436.5, 6);
-        assertEquals(4, assertEveryShownExampleParses(registry, " (their 1436.5 for 6h, before my first offer)"));
+        assertEquals(3, assertEveryShownExampleParses(registry, " (their 1436.5 for 6h, before my first offer)"));
 
         registry.recordPlayerOffer(DIALOGUE, 1900.0, 6);
-        assertEquals(5, assertEveryShownExampleParses(registry, " (their 1436.5 for 6h, my 1900 standing)"));
+        assertEquals(2, assertEveryShownExampleParses(registry, " (their 1436.5 for 6h, my 1900 standing)"));
     }
 
     // ==================== a second vessel in the roster ====================
@@ -262,11 +292,11 @@ class InputExamplesDcgTest {
         openSecondVessel(registry);
         assertEquals(2, registry.buildCtx(VESSEL).roster().size(), "setup: two dialogues in the roster");
 
-        assertEquals(4, assertEveryShownExampleParses(registry,
+        assertEquals(3, assertEveryShownExampleParses(registry,
                 " (their offer " + vesselOffer + " for " + hours + "h, a tanker also waiting, before my first offer)"));
 
         registry.recordPlayerOffer(DIALOGUE, InputExamples.priceExample(vesselOffer), hours);
-        assertEquals(5, assertEveryShownExampleParses(registry,
+        assertEquals(2, assertEveryShownExampleParses(registry,
                 " (their offer " + vesselOffer + " for " + hours + "h, a tanker also waiting, my offer standing)"));
     }
 

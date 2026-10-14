@@ -1,9 +1,14 @@
 package it.unige.portcommand.gui.model;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 
 /**
  * What a chat tab answers when a typed line was read correctly and is not a move to send
@@ -31,7 +36,67 @@ public final class ChatReplies {
     /** Where policies are set — the same words the pipeline uses for a policy typed in chat. */
     static final String POLICIES = "Standing policies are set in Settings → Autopilot policy.";
 
+    /** S18b (PT22): a run of digits as typed, with any thousands marks or decimals inside it. */
+    private static final Pattern DIGITS = Pattern.compile("\\d(?:[\\d.,]*\\d)?");
+    /** {@code 2,000} / {@code 2.000} / {@code 12,500}: a whole number written with thousands marks. */
+    private static final Pattern GROUPED = Pattern.compile("\\d{1,3}(?:[.,]\\d{3})+");
+    /** Below this a lone number is more likely hours than a price, and is not offered back. */
+    static final long SMALLEST_PRICE = 100;
+
     private ChatReplies() {
+    }
+
+    /**
+     * S18b (playtest 4, PT22): "ok 2000" was neither a move the grammar knows nor one Rasa was sure
+     * of, and got the generic "I didn't get that". When the line holds exactly one number that
+     * reads as a price ABOVE the vessel's offer, the reply offers it back as a move to copy:
+     * {@code Did you mean €2,000? Write '2000 for 6h' — or press Accept for their €1,332.}
+     *
+     * <p>Nothing is sent — the player decides. A number at or below the vessel's offer is never
+     * offered back: copied, it would close the deal under the price the vessel itself put on the
+     * table (the vessel accepts any demand at or below its offer). A line with two numbers, a
+     * decimal, or no number at all gets no guess.
+     *
+     * @param typed the player's line as sent
+     * @param tab   the tab it was typed in
+     * @return the line, or empty when there is no safe guess to make
+     */
+    public static Optional<String> didYouMean(String typed, DialogueTabModel tab) {
+        if (typed == null || tab == null || tab.isClosed()) {
+            return Optional.empty();
+        }
+        WalkInDialogueSnapshot s = tab.snapshot();
+        double theirOffer = s.lastVesselOffer();
+        if (!(theirOffer > 0) || Double.isInfinite(theirOffer)) {
+            return Optional.empty();
+        }
+        List<String> numbers = new ArrayList<>();
+        Matcher digits = DIGITS.matcher(typed);
+        while (digits.find()) {
+            numbers.add(digits.group());
+        }
+        if (numbers.size() != 1) {
+            return Optional.empty();
+        }
+        String number = numbers.get(0);
+        String whole;
+        if (GROUPED.matcher(number).matches()) {
+            whole = number.replace(",", "").replace(".", "");
+        } else if (number.chars().allMatch(Character::isDigit)) {
+            whole = number;
+        } else {
+            return Optional.empty(); // a decimal: no guess at what it meant
+        }
+        if (whole.length() > 9) {
+            return Optional.empty();
+        }
+        long price = Long.parseLong(whole);
+        if (price < SMALLEST_PRICE || price <= theirOffer) {
+            return Optional.empty();
+        }
+        int hours = InputExamples.hoursExample(tab.lastPlayerHours() != null ? tab.lastPlayerHours() : s.durationHours());
+        return Optional.of("Did you mean " + Euros.of(price) + "? Write '" + price + " for " + hours
+                + "h' \u2014 or press Accept for their " + Euros.of(theirOffer) + ".");
     }
 
     /**

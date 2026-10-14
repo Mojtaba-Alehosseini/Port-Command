@@ -50,9 +50,9 @@ class OfferLineTest {
     void beforeThePlayerOffersItSaysSo() {
         OfferLine line = line(registryWithOpening(1436.0));
 
-        assertEquals("Their offer €1436 · 6h", line.theirs());
+        assertEquals("Their offer €1,436 · 6h", line.theirs());
         assertEquals("Your offer — · round 1 of 6", line.yoursAndRound());
-        assertEquals("Their offer €1436 · 6h / Your offer — · round 1 of 6", line.text());
+        assertEquals("Their offer €1,436 · 6h / Your offer — · round 1 of 6", line.text());
         assertFalse(line.text().contains("€0"), "no offer is not an offer of nothing: " + line.text());
         assertFalse(line.closed());
     }
@@ -65,11 +65,11 @@ class OfferLineTest {
 
         OfferLine line = line(registry);
 
-        assertEquals("Their offer €1500 · 6h", line.theirs());
-        assertEquals("Your offer €1900 · 4h", line.yours(), "the player's OWN hours, not the vessel's 6");
+        assertEquals("Their offer €1,500 · 6h", line.theirs());
+        assertEquals("Your offer €1,900 · 4h", line.yours(), "the player's OWN hours, not the vessel's 6");
         assertEquals("round 2 of 6", line.round());
-        assertEquals("Your offer €1900 · 4h · round 2 of 6", line.yoursAndRound());
-        assertEquals("Their offer €1500 · 6h / Your offer €1900 · 4h · round 2 of 6", line.text());
+        assertEquals("Your offer €1,900 · 4h · round 2 of 6", line.yoursAndRound());
+        assertEquals("Their offer €1,500 · 6h / Your offer €1,900 · 4h · round 2 of 6", line.text());
     }
 
     @Test
@@ -77,7 +77,7 @@ class OfferLineTest {
         NegotiationTabRegistry registry = registryWithOpening(1436.0);
         registry.recordPlayerOffer(DIALOGUE, 1900.0, null); // "make it 1900" names no hours
 
-        assertEquals("Your offer €1900 · 6h", line(registry).yours(),
+        assertEquals("Your offer €1,900 · 6h", line(registry).yours(),
                 "a price-only offer is heard at the hours on the table");
     }
 
@@ -89,14 +89,14 @@ class OfferLineTest {
         registry.onNegotiationOpened(offer(2, 1500.0, 2100.0));
 
         assertEquals(null, registry.tab(DIALOGUE).lastPlayerHours(), "setup: the tab recorded no hours");
-        assertEquals("Your offer €2100 · 6h · round 2 of 6", line(registry).yoursAndRound());
+        assertEquals("Your offer €2,100 · 6h · round 2 of 6", line(registry).yoursAndRound());
     }
 
     @Test
     void aRefusedFirstOfferReadsNoOfferAgain() {
         NegotiationTabRegistry registry = registryWithOpening(1436.0);
         registry.recordPlayerOffer(DIALOGUE, 1900.0, 4, 7L);
-        assertEquals("Your offer €1900 · 4h", line(registry).yours(), "setup: shown at the send");
+        assertEquals("Your offer €1,900 · 4h", line(registry).yours(), "setup: shown at the send");
 
         registry.onPlayerCommandRefused(new PlayerCommandRefusedEvent(DIALOGUE,
                 PlayerCommandEvent.PlayerCommandKind.PROPOSE, 7L, 0.0, "berth_2 is incompatible with a ferry [R7]"));
@@ -105,18 +105,52 @@ class OfferLineTest {
                 "the gate refused it, so no offer of the player's ever stood");
     }
 
+    /** S18b (UI tree U3): "Negotiation closed." alone told the player nothing about the deal. */
     @Test
-    void aClosedTabReadsNegotiationClosed() {
+    void aClosedDealKeepsItsAgreedFigures() {
         NegotiationTabRegistry registry = registryWithOpening(1436.0);
         registry.recordPlayerOffer(DIALOGUE, 1900.0, 4);
-        registry.onNegotiationClosed(new NegotiationClosedEvent(DIALOGUE, "W001", Deal.Outcome.DEAL), 0L);
+        registry.onNegotiationClosed(new NegotiationClosedEvent(DIALOGUE, "W001", Deal.Outcome.DEAL,
+                1900.0, 6, true), 0L);
 
         OfferLine line = line(registry);
 
         assertTrue(line.closed());
-        assertEquals("Negotiation closed.", line.text());
-        assertEquals("Negotiation closed.", line.theirs(), "row 1 carries the whole line");
+        assertEquals("Deal: €1,900 · 6h", line.text(), "the agreed terms, the vessel's hours included");
+        assertEquals("Deal: €1,900 · 6h", line.theirs(), "row 1 carries the whole line");
         assertEquals("", line.yoursAndRound(), "and row 2 is empty — no stray separator");
+    }
+
+    @Test
+    void aDealReportedWithoutTermsSaysOnlyThatItIsDone() {
+        NegotiationTabRegistry registry = registryWithOpening(1436.0);
+        registry.onNegotiationClosed(new NegotiationClosedEvent(DIALOGUE, "W001", Deal.Outcome.DEAL), 0L);
+
+        assertEquals("Deal done.", line(registry).text());
+    }
+
+    /** S18b (U3): without a deal, the closed line keeps the two last offers. */
+    @Test
+    void aNegotiationThatEndedWithoutADealKeepsBothLastOffers() {
+        NegotiationTabRegistry registry = registryWithOpening(1436.0);
+        registry.recordPlayerOffer(DIALOGUE, 1900.0, 4);
+        registry.onNegotiationClosed(new NegotiationClosedEvent(DIALOGUE, "W001", Deal.Outcome.WITHDRAW_PRICE), 0L);
+
+        OfferLine line = line(registry);
+
+        assertTrue(line.closed());
+        assertEquals("No deal — their last offer €1,436 · 6h", line.theirs());
+        assertEquals("Your last offer €1,900 · 4h", line.yoursAndRound(), "no round on a closed tab");
+        assertEquals(line.theirs() + " / " + line.yoursAndRound(), line.text());
+    }
+
+    @Test
+    void aNegotiationThatEndedBeforeThePlayerOfferedHasOneRow() {
+        NegotiationTabRegistry registry = registryWithOpening(1436.0);
+        registry.onNegotiationClosed(new NegotiationClosedEvent(DIALOGUE, "W001", Deal.Outcome.TIMEOUT), 0L);
+
+        assertEquals("No deal — their last offer €1,436 · 6h", line(registry).text());
+        assertEquals("", line(registry).yoursAndRound());
     }
 
     @Test
@@ -140,7 +174,7 @@ class OfferLineTest {
         String emDash = String.valueOf((char) 0x2014);
         OfferLine line = line(registryWithOpening(1436.0));
 
-        assertEquals("Their offer " + euro + "1436 " + middleDot + " 6h", line.theirs());
+        assertEquals("Their offer " + euro + "1,436 " + middleDot + " 6h", line.theirs());
         assertEquals("Your offer " + emDash, line.yours());
         assertEquals("Your offer " + emDash + " " + middleDot + " round 1 of 6", line.yoursAndRound());
     }
@@ -151,8 +185,20 @@ class OfferLineTest {
         registry.onNegotiationOpened(offer(3, 1500.0, 0.0));
 
         assertEquals("round 3 of 8", OfferLine.of(registry.tab(DIALOGUE), 8).round());
-        assertEquals("round 3 of 2", OfferLine.of(registry.tab(DIALOGUE), 2).round(),
-                "the limit is printed as given — this model does not judge it");
+        assertEquals("round 3 of 4", OfferLine.of(registry.tab(DIALOGUE), 4).round(), "the limit as given");
+    }
+
+    /** S18b (UI tree U9): "round 6 of 6" gave no cue that the next move is the last. The rule is
+     * the HarbourMaster's own finalRound (roundLimit + 1 - roundsUsed <= 1). */
+    @Test
+    void theLastRoundSaysItIsTheFinalOne() {
+        NegotiationTabRegistry registry = registryWithOpening(1436.0);
+        registry.onNegotiationOpened(offer(5, 1500.0, 0.0));
+        assertEquals("round 5 of 6", line(registry).round());
+
+        registry.onNegotiationOpened(offer(6, 1500.0, 0.0));
+        assertEquals("final round (6 of 6)", line(registry).round());
+        assertEquals("Your offer — · final round (6 of 6)", line(registry).yoursAndRound());
     }
 
     @Test
@@ -162,8 +208,8 @@ class OfferLineTest {
 
         OfferLine line = line(registry);
 
-        assertEquals("Their offer €1436 · 6h", line.theirs());
-        assertEquals("Your offer €1900 · 4h", line.yours());
+        assertEquals("Their offer €1,436 · 6h", line.theirs());
+        assertEquals("Your offer €1,900 · 4h", line.yours());
     }
 
     @Test
@@ -176,7 +222,7 @@ class OfferLineTest {
             // would be printed in Thai digits on such a desktop.
             Locale.setDefault(Locale.Category.FORMAT, Locale.forLanguageTag("th-TH-u-nu-thai"));
 
-            assertEquals("Their offer €1436 · 6h / Your offer €1900 · 4h · round 1 of 6", line(registry).text());
+            assertEquals("Their offer €1,436 · 6h / Your offer €1,900 · 4h · round 1 of 6", line(registry).text());
         } finally {
             Locale.setDefault(Locale.Category.FORMAT, previous);
         }

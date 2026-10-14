@@ -1,9 +1,9 @@
 package it.unige.portcommand.gui.model;
 
-import java.util.Locale;
 import java.util.Objects;
 
 import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
+import it.unige.portcommand.ontology.Deal;
 
 /**
  * Pure rendering model for the line above a walk-in tab's transcript (S15, 2026-10-12): what the
@@ -22,20 +22,35 @@ import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
  * offer of nothing; this line says there is none. The same sentinel comes back when the Prolog
  * gate refuses the player's first offer, so the line goes back to the dash with it.
  *
+ * <p><b>S18b: a closed tab keeps its figures; the last round says so.</b> A finished negotiation
+ * used to read just "Negotiation closed." (UI tree U3). It now shows what was agreed —
+ * {@code Deal: €1,700 · 6h} — or, without a deal, the two last offers. And the round
+ * the vessel's patience ends with reads {@code final round (6 of 6)} instead of a plain
+ * {@code round 6 of 6} (U9): the HarbourMaster's own {@code finalRound} rule, from the same two
+ * public numbers. Amounts are written as everywhere in the chat since S18b ({@link Euros}).
+ *
  * <p>Reads ONLY {@link WalkInDialogueSnapshot}'s observable fields (P-04 —
  * {@code NegotiationTabRegistryTest}'s grep gate covers this file too). It says nothing about the
  * time the vessel will still wait: the {@code m:ss} counter beside it is a bare number and stays
  * unexplained.
  *
- * @param theirs row 1 — {@code Their offer €1436 · 6h}; for a closed tab, {@link #CLOSED_TEXT}
- * @param yours  the player's half of row 2 — {@code Your offer €1900 · 4h}, or
- *               {@code Your offer —} when none stands; empty for a closed tab
- * @param round  the round's half of row 2 — {@code round 2 of 6}; empty for a closed tab
+ * @param theirs row 1 — {@code Their offer €1,436 · 6h}; for a closed tab the outcome
+ *               and its figures ({@code Deal: €1,700 · 6h},
+ *               {@code No deal — their last offer €1,436 · 6h})
+ * @param yours  the player's half of row 2 — {@code Your offer €1,900 · 4h}, or
+ *               {@code Your offer —} when none stands; for a closed tab without a deal, the
+ *               player's last offer ({@code Your last offer €1,900 · 4h}) or empty
+ * @param round  the round's half of row 2 — {@code round 2 of 6}, {@code final round (6 of 6)};
+ *               empty for a closed tab
  */
 public record OfferLine(String theirs, String yours, String round) {
 
-    /** The whole line once the negotiation is over (unchanged from the pre-S15 strip). */
-    public static final String CLOSED_TEXT = "Negotiation closed.";
+    /** Row 1 of a deal's closed tab, before its figures. */
+    static final String DEAL_PREFIX = "Deal: ";
+    /** Row 1 of a closed tab whose close named no figures (a deal reported without terms). */
+    static final String DEAL_DONE = "Deal done.";
+    /** Row 1 of a closed tab that ended without a deal, before the vessel's last offer. */
+    static final String NO_DEAL_PREFIX = "No deal \u2014 their last offer ";
 
     /** Between the terms inside one side's offer: space, U+00B7 MIDDLE DOT, space. */
     static final String DOT = " · ";
@@ -58,41 +73,54 @@ public record OfferLine(String theirs, String yours, String round) {
     public static OfferLine of(DialogueTabModel tab, int roundLimit) {
         Objects.requireNonNull(tab, "tab");
         if (tab.isClosed()) {
-            return new OfferLine(CLOSED_TEXT, "", "");
+            return closedLine(tab);
         }
         WalkInDialogueSnapshot s = tab.snapshot();
-        String theirs = "Their offer " + euros(s.lastVesselOffer()) + DOT + s.durationHours() + "h";
-        String yours;
-        if (tab.playerHasOffered()) {
-            // The hours the player's own last PROPOSE carried; null when the price on the strip
-            // was stamped by the HarbourMaster alone (an autopilot counter, a reload) — then, as
-            // before S15, the hours under discussion are what the vessel heard it at.
-            int playerHours = tab.lastPlayerHours() != null ? tab.lastPlayerHours() : s.durationHours();
-            yours = "Your offer " + euros(s.lastPlayerOffer()) + DOT + playerHours + "h";
-        } else {
-            yours = "Your offer " + NO_OFFER;
-        }
-        return new OfferLine(theirs, yours, "round " + s.roundsUsed() + " of " + roundLimit);
+        String theirs = "Their offer " + Euros.of(s.lastVesselOffer()) + DOT + s.durationHours() + "h";
+        String yours = tab.playerHasOffered() ? "Your offer " + playersTerms(tab) : "Your offer " + NO_OFFER;
+        // S18b (U9): the HarbourMaster's own finalRound rule (roundLimit + 1 - roundsUsed <= 1).
+        String round = s.roundsUsed() >= roundLimit
+                ? "final round (" + s.roundsUsed() + " of " + roundLimit + ")"
+                : "round " + s.roundsUsed() + " of " + roundLimit;
+        return new OfferLine(theirs, yours, round);
     }
 
-    /** True for a finished negotiation: the line is {@link #CLOSED_TEXT} and there is no row 2. */
+    /** S18b (U3): a finished negotiation keeps its figures — the deal's, or the two last offers. */
+    private static OfferLine closedLine(DialogueTabModel tab) {
+        if (tab.outcome() == Deal.Outcome.DEAL) {
+            return tab.agreedPrice() > 0
+                    ? new OfferLine(DEAL_PREFIX + Euros.of(tab.agreedPrice()) + DOT + tab.agreedHours() + "h", "", "")
+                    : new OfferLine(DEAL_DONE, "", "");
+        }
+        WalkInDialogueSnapshot s = tab.snapshot();
+        String theirs = NO_DEAL_PREFIX + Euros.of(s.lastVesselOffer()) + DOT + s.durationHours() + "h";
+        String yours = tab.playerHasOffered() ? "Your last offer " + playersTerms(tab) : "";
+        return new OfferLine(theirs, yours, "");
+    }
+
+    /** {@code €1,900 · 4h}: the player's standing price, with the hours their own last
+     * PROPOSE carried — or, when the price on the strip was stamped by the HarbourMaster alone
+     * (an autopilot counter, a reload), the hours under discussion, as before S15. */
+    private static String playersTerms(DialogueTabModel tab) {
+        WalkInDialogueSnapshot s = tab.snapshot();
+        int playerHours = tab.lastPlayerHours() != null ? tab.lastPlayerHours() : s.durationHours();
+        return Euros.of(s.lastPlayerOffer()) + DOT + playerHours + "h";
+    }
+
+    /** True for a finished negotiation: there is no round any more. */
     public boolean closed() {
         return round.isEmpty();
     }
 
-    /** Row 2 — {@code Your offer €1900 · 4h · round 2 of 6}; empty for a closed tab. */
+    /** Row 2 — {@code Your offer €1,900 · 4h · round 2 of 6}; for a closed tab the
+     * player's last offer alone (empty when there was none, or the negotiation ended in a deal). */
     public String yoursAndRound() {
-        return closed() ? "" : yours + DOT + round;
+        return closed() ? yours : yours + DOT + round;
     }
 
-    /** The whole line: row 1, {@code " / "}, row 2 — or just {@link #CLOSED_TEXT}. */
+    /** The whole line: row 1, {@code " / "}, row 2 — row 1 alone when there is no row 2. */
     public String text() {
-        return closed() ? theirs : theirs + ROW_BREAK + yoursAndRound();
-    }
-
-    /** Whole euros, as everywhere else on the strip. {@link Locale#ROOT} so the digits are the
-     * same on every machine (a default-locale format may print non-ASCII digits). */
-    private static String euros(double amount) {
-        return "€" + String.format(Locale.ROOT, "%.0f", amount);
+        String second = yoursAndRound();
+        return second.isEmpty() ? theirs : theirs + ROW_BREAK + second;
     }
 }

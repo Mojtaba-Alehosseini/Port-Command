@@ -241,7 +241,7 @@ class ChatPanelHintCardTest {
         List<DialogueTabModel.ChatEntry> transcript = transcript();
         assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.PLAYER, "1580 for 6h", "(DCG)"),
                 transcript.get(before));
-        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.SYSTEM, "→ Demanding €1580 for 6h."),
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.SYSTEM, "→ Demanding €1,580 for 6h."),
                 transcript.get(before + 1));
         List<PlayerCommandEvent> commands = published(PlayerCommandEvent.class);
         assertEquals(1, commands.size());
@@ -392,7 +392,9 @@ class ChatPanelHintCardTest {
 
         assertFalse(view.hintRowVisibleForTest(), "no advice to act on once the negotiation is over");
         assertFalse(view.markerRowVisibleForTest());
-        assertEquals(List.of("Send", "Accept", "Reject"), view.buttonLabelsForTest(), "a closed tab, as before S17a");
+        assertEquals(List.of("Send", "Hint", "Accept", "Reject"), view.buttonLabelsForTest(),
+                "a closed tab: all four greyed since S18b (PT6)");
+        assertFalse(view.buttonForTest("Hint").isEnabled());
 
         // Not even if the Assistant is said to own everything.
         ownership(true);

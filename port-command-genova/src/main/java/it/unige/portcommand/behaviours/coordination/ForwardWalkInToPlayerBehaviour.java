@@ -331,7 +331,13 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
         hm.eventBus().publish(new DealClosedEvent(new Deal("deal-" + spec.vesselId(), spec.vesselId(),
                 hm.negotiationBerths().get(dialogueId),
                 price, hours, hm.simClock().nowSimMillis(), Deal.Outcome.DEAL)));
-        hm.eventBus().publish(new NegotiationClosedEvent(dialogueId, spec.vesselId(), Deal.Outcome.DEAL));
+        // S18b (playtest 2, PT3): the tab says what was agreed, and whose price it was. The
+        // vessel accepts a demand at the player's own price; a deal at any other price is the
+        // vessel's offer, accepted on the player's side. Read before forgetDialogue drops it.
+        Double lastPlayerOffer = hm.negotiationPlayerOffers().get(dialogueId);
+        boolean vesselAccepted = lastPlayerOffer != null && Math.round(lastPlayerOffer) == Math.round(price);
+        hm.eventBus().publish(new NegotiationClosedEvent(dialogueId, spec.vesselId(), Deal.Outcome.DEAL,
+                price, hours, vesselAccepted));
         forgetDialogue(hm, dialogueId);
 
         // S5 (ADR-16): the berth is RE-PICKED here against live occupancy, not carried from the

@@ -471,7 +471,12 @@ class GameScreenCompositionTest {
             assertEquals(port.width, waiting.width, "the waiting list is as wide as the column");
             assertTrue(waiting.height > 0, "the waiting list shows at least its title and empty line");
             assertTrue(waiting.y + waiting.height <= port.y, "the Port table is below the waiting list");
-            assertEquals(chat.y + chat.height, port.y + port.height, "and fills the column to its bottom");
+            // S18b (PT5): "Finished" at the bottom; the Port table fills what lies between.
+            Rectangle finished = onScreen(FinishedListPanel.NAME);
+            assertEquals(port.width, finished.width, "the Finished list is as wide as the column");
+            assertTrue(finished.height > 0, "the Finished list shows at least its title and empty line");
+            assertTrue(port.y + port.height <= finished.y, "the Finished list is below the Port table");
+            assertEquals(chat.y + chat.height, finished.y + finished.height, "and ends at the column's bottom");
         });
     }
 

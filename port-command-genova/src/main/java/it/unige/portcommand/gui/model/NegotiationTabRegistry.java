@@ -59,6 +59,14 @@ public final class NegotiationTabRegistry {
      * changes every time a vessel counters. Kept in step with {@code tabs} at the three places a
      * tab is created or dropped (open, sweep, reset). */
     private final List<String> tabOrder = new ArrayList<>();
+    /**
+     * S18b (playtest 2, PT5): every dialogue that has ended in this world, in the order they
+     * ended — the "Finished" list, and the transcripts it brings back. A model stays here after
+     * its tab has left the strip ({@link #sweepClosed}); {@link #reopenFinished} puts it back on.
+     * Session-only: nothing here is saved, and {@link #reset()} (a load, a new game) empties it.
+     * Bounded by the game: one entry per walk-in that ever hailed.
+     */
+    private final LinkedHashMap<String, DialogueTabModel> finished = new LinkedHashMap<>();
     private Runnable onChange = () -> { };
 
     public void setOnChange(Runnable onChange) {
@@ -93,7 +101,9 @@ public final class NegotiationTabRegistry {
             }
             tab.updateSnapshot(snapshot);
         }
-        tab.appendVesselMessage(offerSummary(snapshot, tab.lastPlayerHours()));
+        // S18b (PT3): plain lines with the price and the hours ("They counter: €1,460 for 5h.").
+        tab.appendVesselMessage(snapshot.roundsUsed() <= 1 ? OutcomeLines.opening(snapshot)
+                : OutcomeLines.counter(snapshot, tab.lastPlayerHours()));
         tabs.put(dialogueId, tab);
 
         onChange.run();
@@ -175,15 +185,11 @@ public final class NegotiationTabRegistry {
         if (tab == null) {
             return Optional.empty();
         }
-        tab.close(event.outcome(), nowMillis);
-        String summary = switch (event.outcome()) {
-            case DEAL -> "Deal closed.";
-            case WITHDRAW_PRICE -> "Vessel withdrew (price never met).";
-            case WITHDRAW_DURATION -> "Vessel withdrew (you never granted the hours it needs).";
-            case TIMEOUT -> "Vessel withdrew (negotiation timed out).";
-            case PLAYER_REFUSED -> "You turned them away.";
-        };
-        tab.appendSystemMessage(summary);
+        tab.close(event.outcome(), nowMillis, event.price(), event.hours());
+        // S18b (PT3/U3): the line says how it ended, with the agreed terms of a deal.
+        tab.appendSystemMessage(OutcomeLines.closing(event.outcome(), event.price(), event.hours(),
+                event.vesselAccepted()));
+        finished.putIfAbsent(event.dialogueId(), tab); // a repeated close (C-11) keeps its place
         onChange.run();
         return Optional.of(event.dialogueId());
     }
@@ -204,6 +210,11 @@ public final class NegotiationTabRegistry {
      * @return the routed tab's dialogue id, or empty if nothing was shown or changed. */
     public Optional<String> onAssistantChat(AssistantChatEvent event) {
         DialogueTabModel tab = tabs.get(event.dialogueId());
+        if (tab == null) {
+            // S18b (PT5): a finished dialogue whose tab has left the strip still keeps what is
+            // said about it, for when the player opens it again from the Finished list.
+            tab = finished.get(event.dialogueId());
+        }
         if (tab == null) {
             return Optional.empty();
         }
@@ -231,9 +242,23 @@ public final class NegotiationTabRegistry {
      * same-id tab in the next world can never inherit an old expiry.
      */
     public List<String> sweepClosed(long nowMillis, long dwellMillis) {
+        return sweepClosed(nowMillis, dwellMillis, null);
+    }
+
+    /**
+     * S18b (UI tree U4, playtest 2 PT5): as {@link #sweepClosed(long, long)}, except that the tab
+     * {@code reading} — the one the player has selected — never leaves, however long it has been
+     * closed: a tab used to vanish under the player while they read its last lines. It goes at the
+     * first sweep after the player has moved on. Nothing is lost when a tab does leave: its model
+     * stays in the Finished list, and {@link #reopenFinished} brings it back.
+     *
+     * @param reading the selected dialogue's id, or {@code null} when none is selected
+     */
+    public List<String> sweepClosed(long nowMillis, long dwellMillis, String reading) {
         List<String> expired = new ArrayList<>();
         for (DialogueTabModel tab : tabs.values()) {
-            if (tab.isClosed() && nowMillis - tab.closedAtMillis() >= dwellMillis) {
+            if (tab.isClosed() && nowMillis - tab.closedAtMillis() >= dwellMillis
+                    && !tab.dialogueId().equals(reading)) {
                 expired.add(tab.dialogueId());
             }
         }
@@ -248,12 +273,50 @@ public final class NegotiationTabRegistry {
         return List.copyOf(expired);
     }
 
-    /** Task 22: a loaded game has no open dialogues — drop every tab and mapping. */
+    /** Task 22: a loaded game has no open dialogues — drop every tab and mapping. S18b (PT5): and
+     * no finished ones either; the Finished list belongs to the world that is gone. */
     public void reset() {
         tabs.clear();
         dialogueIdByVesselId.clear();
         tabOrder.clear();
+        finished.clear();
         onChange.run();
+    }
+
+    /**
+     * S18b (playtest 2, PT5): every negotiation that has ended in this world, newest first — the
+     * left column's "Finished" list. P-04: the vessel's display name and the close's own terms.
+     */
+    public List<FinishedDialogue> finishedDialogues() {
+        List<FinishedDialogue> newestFirst = new ArrayList<>();
+        for (DialogueTabModel tab : finished.values()) {
+            newestFirst.add(new FinishedDialogue(tab.dialogueId(), tab.snapshot().vesselName(), tab.outcome(),
+                    tab.agreedPrice(), tab.agreedHours()));
+        }
+        Collections.reverse(newestFirst);
+        return List.copyOf(newestFirst);
+    }
+
+    /**
+     * S18b (playtest 2, PT5): puts a finished dialogue's tab back on the strip, read-only as every
+     * closed tab is, at the end of the tab order. It keeps its original close time, so it leaves
+     * again at the first sweep after the player has moved on from it.
+     *
+     * @return {@code true} when the dialogue's tab is on the strip now (put back, or still there);
+     *         {@code false} for an id this world never finished
+     */
+    public boolean reopenFinished(String dialogueId) {
+        if (tabs.containsKey(dialogueId)) {
+            return true;
+        }
+        DialogueTabModel tab = finished.get(dialogueId);
+        if (tab == null) {
+            return false;
+        }
+        tabs.put(dialogueId, tab);
+        tabOrder.add(dialogueId);
+        onChange.run();
+        return true;
     }
 
     public DialogueTabModel tab(String dialogueId) {
@@ -314,22 +377,5 @@ public final class NegotiationTabRegistry {
      * existing, already P-04-gated {@link DialogueCtx#from} — no new privacy surface. */
     public DialogueCtx buildCtx(String focusVesselId) {
         return DialogueCtx.from(rosterSnapshots(), focusVesselId);
-    }
-
-    /**
-     * The vessel's transcript line for an opening/counter. Task 19b: when the vessel's hours
-     * term came back ABOVE the player's own proposed stay, this counter is the duration floor
-     * pushing back — say so ("they need at least Nh"), the §7.3 bargaining reply. Derived
-     * entirely from observable terms on the wire (the two hours values); no hidden belief is
-     * read — the floor's VALUE is public exactly when, and because, the vessel counters at it.
-     */
-    private static String offerSummary(WalkInDialogueSnapshot snapshot, Integer playerHours) {
-        String verb = snapshot.roundsUsed() <= 1 ? "Opens at" : "Counters at";
-        String line = verb + " €" + Math.round(snapshot.lastVesselOffer()) + " for "
-                + snapshot.durationHours() + "h at " + snapshot.berthId();
-        if (playerHours != null && snapshot.durationHours() > playerHours) {
-            line += " — they need at least " + snapshot.durationHours() + "h";
-        }
-        return line;
     }
 }

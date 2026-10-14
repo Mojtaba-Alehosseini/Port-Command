@@ -190,17 +190,27 @@ class ChatPanelSeamsTest {
         close("B");
         assertTrue(select("nego-B"));
         assertEquals("nego-B", ask(panel::selectedDialogueId));
-        // ...until its dwell has run out and it is gone.
+        // ...S18b (UI tree U4): and while it is selected it stays, however long it has been closed.
         dwellRunsOut();
-        assertFalse(select("nego-B"));
-        assertEquals("nego-C", ask(panel::selectedDialogueId), "the tab that took its place is selected");
+        assertEquals("nego-B", ask(panel::selectedDialogueId), "the tab being read never leaves");
+        assertEquals(3, panel.stripTabCountForTest());
+        // Once the player has moved on, it leaves at the next sweep...
+        assertTrue(select("nego-C"));
+        minuteTick();
+        assertNull(panel.viewForTest("nego-B"), "it left the strip");
+        assertEquals(2, panel.stripTabCountForTest());
+        // ...and S18b (PT5): a finished negotiation is one click away all the same — it comes back.
+        assertTrue(select("nego-B"), "the Finished list's click");
+        assertEquals("nego-B", ask(panel::selectedDialogueId));
+        assertEquals(3, panel.stripTabCountForTest());
+        assertTrue(panel.tabTitleForTest("nego-B").endsWith("(closed)"), panel.tabTitleForTest("nego-B"));
     }
 
     // --- the selected-vessel listener ------------------------------------------------------------
 
     @Test
     @Timeout(5)
-    void theSelectedVesselListenerHearsEachChangeAndNullWhenTheLastTabLeaves() throws Exception {
+    void theSelectedVesselListenerHearsEachChangeAndNullWhenNoTabIsLeft() throws Exception {
         List<String> heard = listenForSelectedVessel();
         assertTrue(heard.isEmpty(), "registering tells the listener nothing");
 
@@ -216,11 +226,17 @@ class ChatPanelSeamsTest {
         assertEquals(List.of("A", "B"), heard, "closing the selected tab does not deselect it");
         assertEquals("B", ask(panel::selectedVesselId), "a closed tab that is still selected still names its vessel");
 
-        dwellRunsOut(); // B leaves the strip; A takes its place
-        assertEquals(List.of("A", "B", "A"), heard);
+        dwellRunsOut(); // S18b (U4): B is being read, so it stays
+        assertEquals(List.of("A", "B"), heard, "the tab being read never leaves");
 
-        close("A");
-        dwellRunsOut(); // the last tab leaves
+        assertTrue(select("nego-A")); // the player moves on
+        assertEquals(List.of("A", "B", "A"), heard);
+        minuteTick(); // now B leaves the strip, behind the selection
+        assertEquals(List.of("A", "B", "A"), heard, "a tab leaving behind the selection is no change");
+
+        // A selected tab never leaves, so only a new world empties the strip.
+        bus.publish(new GameLoadedEvent(1, 0.0, 50));
+        flush();
         assertEquals(Arrays.asList("A", "B", "A", null), heard, "null once no tab is left");
         assertNull(ask(panel::selectedVesselId));
     }
@@ -327,10 +343,12 @@ class ChatPanelSeamsTest {
         minuteTick();
         assertEquals(5, fired[0], "a tick that removes nothing changes nothing");
         dwellRunsOut();
-        assertEquals(6, fired[0], "the closed tab left the strip");
+        assertEquals(5, fired[0], "S18b (U4): the closed tab is the one being read, so it stays");
 
-        open("B", "Carthago");
-        assertEquals(7, fired[0]);
+        open("B", "Carthago"); // S18b (U5): it takes the selection over from the closed tab
+        assertEquals(6, fired[0]);
+        minuteTick();
+        assertEquals(7, fired[0], "the closed tab left the strip");
         bus.publish(new GameLoadedEvent(1, 0.0, 50));
         flush();
         assertEquals(8, fired[0], "the world was replaced");
@@ -357,11 +375,16 @@ class ChatPanelSeamsTest {
         onEdt(() -> panel.addDialoguesListener(() -> seen.add(panel.openDialogues())));
 
         open("A", "Genoa Star");
+        open("B", "Carthago");
+        assertTrue(select("nego-B")); // A is not the tab being read, so it can leave (S18b, U4)
         close("A");
         dwellRunsOut();
 
-        assertEquals(List.of(List.of(new OpenDialogue("nego-A", "A", "Genoa Star")), List.of(), List.of()), seen,
-                "opened: one waiting; closed: none; removed: none");
+        OpenDialogue a = new OpenDialogue("nego-A", "A", "Genoa Star");
+        OpenDialogue b = new OpenDialogue("nego-B", "B", "Carthago");
+        assertEquals(List.of(List.of(a), List.of(a, b), List.of(b), List.of(b)), seen,
+                "opened: A; opened: A and B; A closed: B; A removed: B");
+        assertNull(panel.viewForTest("nego-A"), "setup: A left the strip");
     }
 
     @Test
@@ -373,6 +396,7 @@ class ChatPanelSeamsTest {
         open("A", "Genoa Star");
         open("B", "Carthago");
         open("C", "Tirreno");
+        assertTrue(select("nego-B")); // S18b (U4): a tab being read never leaves, so B is
         List<String> heard = listenForSelectedVessel();
         List<Boolean> selections = new ArrayList<>();
         onEdt(() -> panel.addDialoguesListener(() -> {
@@ -381,14 +405,14 @@ class ChatPanelSeamsTest {
             }
         }));
 
-        close("A"); // A is the selected tab
+        close("A"); // the first tab, not the selected one
         assertTrue(selections.isEmpty(), "setup: A is closed but still on the strip");
         dwellRunsOut();
 
         assertEquals(List.of(true), selections, "the selection made during the removal's callback succeeded");
         assertEquals("nego-C", ask(panel::selectedDialogueId));
-        assertEquals(List.of("B", "C"), heard,
-                "B took the removed tab's place (told once the strip had settled), then the listener chose C");
+        assertEquals(List.of("C"), heard,
+                "B kept the selection while A left (no change), then the listener chose C");
         assertEquals(2, panel.stripTabCountForTest());
     }
 

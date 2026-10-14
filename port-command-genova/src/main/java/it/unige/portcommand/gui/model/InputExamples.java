@@ -1,5 +1,6 @@
 package it.unige.portcommand.gui.model;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -18,13 +19,14 @@ import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
  * ({@link #priceExample}, {@link #makeItExample}), and the hours are the hours under discussion.
  * The relative examples ("200 more", "split the difference") are safe by construction.
  *
- * <p><b>Which examples, when.</b> "split the difference" needs both sides to have named a price —
- * on a fresh tab the grammar does not parse it at all — so it joins the rotation only while the
- * player has an offer standing ({@link DialogueTabModel#playerHasOffered()}), and leaves again if
- * the Prolog gate refuses that offer. No example ever refuses the vessel: a reject ends the
- * negotiation for good, and a prompt must not teach the player to do that by accident.
- * {@link #REJECT_UTTERANCE} exists only as what a button sends: Reject, and since S17a "Use this"
- * on a Hint that recommends saying no.
+ * <p><b>No example gives anything away (S18b, UI tree U2).</b> None refuses the vessel — a reject
+ * ends the negotiation for good — and since S18b none accepts it or concedes either. "deal" left
+ * the rotation: copied, it takes the vessel's lowest price for good. "split the difference" left
+ * too: it is the midpoint of the two offers, below the player's own demand by construction. And
+ * no price shown is below the player's own last demand ({@link DialogueTabModel#playerHasOffered()}):
+ * an example above the vessel's offer but under what the player asked teaches conceding.
+ * {@link #ACCEPT_UTTERANCE} and {@link #REJECT_UTTERANCE} exist as what the buttons send: Accept,
+ * Reject, and since S17a "Use this" on a Hint that recommends either.
  *
  * <p><b>It advances on a send, never on a timer.</b> The index is the number of messages the
  * player has sent in the tab ({@link DialogueTabModel#playerMessageCount()}): the prompt changes
@@ -36,18 +38,16 @@ import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
  */
 public final class InputExamples {
 
-    /** What the Accept button sends, and one of the rotation's examples. The grammar reads it as
-     * an accept in every context ({@code accept_phrase --> [deal]}). */
+    /** What the Accept button sends (never an example since S18b). The grammar reads it as an
+     * accept in every context ({@code accept_phrase --> [deal]}). */
     public static final String ACCEPT_UTTERANCE = "deal";
     /** What the Reject button sends (and "Use this" for a say-no Hint, S17a). A button literal
      * ONLY — never an example (see the class comment). The grammar reads it as a reject in every context ({@code reject_phrase --> [no]}). */
     public static final String REJECT_UTTERANCE = "no";
 
     /** A relative counter: the player's last offer plus 200 — or, before they have offered, the
-     * vessel's offer plus 200. Above the vessel's standing offer either way. */
+     * vessel's offer plus 200. Above the vessel's standing offer, and the player's demand, either way. */
     static final String DELTA = "200 more";
-    /** The midpoint of the two standing offers; parses only when both sides have named a price. */
-    static final String SPLIT = "split the difference";
     /** What the view puts in front of the example. */
     static final String PREFIX = "e.g. ";
 
@@ -99,6 +99,12 @@ public final class InputExamples {
         return priceExample(theirOffer) + " for " + hoursExample(durationHours) + "h";
     }
 
+    /** S18b (U2): the lowest price an example may name — the player's own last demand, rounded
+     * up to the next multiple of 50; nothing while they have not asked for anything. */
+    private static long demandFloor(double playerDemand) {
+        return playerDemand > 0 && !Double.isInfinite(playerDemand) ? roundUpToStep(playerDemand) : 0;
+    }
+
     /**
      * The price-and-hours sentence for this tab, for text that wants ONE worked example (the
      * "I didn't get that" line). Empty when the tab has nothing to show ({@link #examplesFor}).
@@ -109,16 +115,22 @@ public final class InputExamples {
     }
 
     /**
-     * The rotation for a vessel offering {@code theirOffer} for {@code durationHours}:
-     * price-and-hours, [split the difference,] 200 more, deal, make it … — "split the difference"
-     * only when {@code playerHasOffered}.
+     * The rotation for a vessel offering {@code theirOffer} for {@code durationHours}, to a player
+     * whose last demand was {@code playerDemand} ({@code 0} when they have none): price-and-hours,
+     * 200 more, make it … — every price at or above that demand (S18b, U2). When the demand
+     * lifts both prices to the same number, "make it" would only repeat it and is left out.
      */
-    public static List<String> examplesFor(double theirOffer, int durationHours, boolean playerHasOffered) {
-        String priceAndHours = priceAndHoursExample(theirOffer, durationHours);
-        String makeIt = "make it " + makeItExample(theirOffer);
-        return playerHasOffered
-                ? List.of(priceAndHours, SPLIT, DELTA, ACCEPT_UTTERANCE, makeIt)
-                : List.of(priceAndHours, DELTA, ACCEPT_UTTERANCE, makeIt);
+    public static List<String> examplesFor(double theirOffer, int durationHours, double playerDemand) {
+        long floor = demandFloor(playerDemand);
+        long price = Math.max(priceExample(theirOffer), floor);
+        long makeIt = Math.max(makeItExample(theirOffer), floor);
+        List<String> examples = new ArrayList<>(3);
+        examples.add(price + " for " + hoursExample(durationHours) + "h");
+        examples.add(DELTA);
+        if (makeIt != price) {
+            examples.add("make it " + makeIt);
+        }
+        return List.copyOf(examples);
     }
 
     /**
@@ -136,7 +148,7 @@ public final class InputExamples {
         if (!(theirOffer > 0) || Double.isInfinite(theirOffer)) { // also false for NaN
             return List.of();
         }
-        return examplesFor(theirOffer, s.durationHours(), tab.playerHasOffered());
+        return examplesFor(theirOffer, s.durationHours(), tab.playerHasOffered() ? s.lastPlayerOffer() : 0);
     }
 
     /**

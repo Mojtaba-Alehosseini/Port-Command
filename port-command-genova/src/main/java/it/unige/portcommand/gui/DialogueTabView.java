@@ -7,6 +7,7 @@ import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,10 +22,12 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
+import javax.swing.text.DefaultCaret;
 
 import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.core.Settings;
@@ -35,6 +38,7 @@ import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
 import it.unige.portcommand.gui.events.TakeOverEvent;
 import it.unige.portcommand.gui.model.DialogueTabModel;
 import it.unige.portcommand.gui.model.ChatReplies;
+import it.unige.portcommand.gui.model.Euros;
 import it.unige.portcommand.gui.model.HintRow;
 import it.unige.portcommand.gui.model.InputExamples;
 import it.unige.portcommand.gui.model.NegotiationTabRegistry;
@@ -160,6 +164,28 @@ final class DialogueTabView extends JPanel {
      * is the one on HER tab, not on this one. */
     private final java.util.function.Predicate<String> assistantOwnsDialogue;
     private final JTextPane transcriptPane = new JTextPane();
+    /** S18b (UI tree U7): the transcript's scroll pane, kept so the view can follow its bottom. */
+    private final JScrollPane transcriptScroll = new JScrollPane(transcriptPane);
+    /**
+     * S18b (UI tree U7): whether the transcript follows its newest line. Every refresh used to put
+     * the caret at the end (audit C-28), which scrolled a player who was reading higher up back
+     * down at each hint revision, counter or settings change — and, done before the layout, could
+     * leave the newest line half cut off. Now, as in the comm log: a refresh follows the bottom
+     * only while the view is at the bottom, the jump waits for the layout, and the player's own
+     * scrolling decides whether the view follows (see {@link #onTranscriptBarAdjusted}).
+     */
+    private boolean followTail = true;
+    /** U7: the scrollbar's extent and maximum at its last report — a change in either is a layout,
+     * not the player scrolling. */
+    private int lastBarExtent = -1;
+    private int lastBarMaximum = -1;
+    /** U7, test-only witness: whether the last refresh pinned the view to the bottom. */
+    private boolean lastRefreshPinned;
+    /**
+     * S18b (UI tree U8): true from an Accept or Reject click until the parse of what it sent has
+     * come back. Both buttons are disabled meanwhile: a double click used to send the move twice.
+     */
+    private boolean quickMoveInFlight;
     /** S15: the offer line's two rows — theirs above, yours and the round below. */
     private final JLabel theirOfferLabel = new JLabel();
     private final JLabel yourOfferLabel = new JLabel();
@@ -229,6 +255,9 @@ final class DialogueTabView extends JPanel {
 
         transcriptPane.setContentType("text/html");
         transcriptPane.setEditable(false);
+        // S18b (U7): only this view decides where the transcript is scrolled to, not the caret.
+        transcriptPane.setCaret(new StillCaret());
+        transcriptScroll.getVerticalScrollBar().addAdjustmentListener(e -> onTranscriptBarAdjusted());
 
         sendButton.addActionListener(e -> onSend());
         inputField.addActionListener(e -> onSend());
@@ -310,7 +339,7 @@ final class DialogueTabView extends JPanel {
         north.add(counterLabel, BorderLayout.EAST);
 
         add(north, BorderLayout.NORTH);
-        add(new JScrollPane(transcriptPane), BorderLayout.CENTER);
+        add(transcriptScroll, BorderLayout.CENTER);
         add(south, BorderLayout.SOUTH);
 
         refresh();
@@ -336,18 +365,15 @@ final class DialogueTabView extends JPanel {
             return;
         }
         transcriptPane.setText(ChatMessageRenderer.renderTranscript(tab.transcript()));
-        // Audit C-28 (2026-07-27): JEditorPane.setText replaces the document and leaves the caret
-        // at offset 0, and the default DefaultCaret update policy then scrolls the viewport TO the
-        // caret — i.e. to the TOP. Every new message therefore jumped a scrolling transcript back
-        // to the orientation line, putting the vessel's newest counter (the thing the player is
-        // supposed to answer) off-screen, every turn, in the panel the demo spends the most time
-        // in. CommLogPanel already handles the same hazard with its wasAtBottom/setCaretPosition
-        // logic; the chat tab had no equivalent. Pinning the caret at the end is unconditional
-        // here rather than stick-to-bottom-only, because a transcript grows at the end and the
-        // player has no reason to be parked mid-history when a new line lands. The one in-place
-        // edit (S12: a Hint's template replaced by the model's validated wording) re-renders the
-        // same way; the newest lines are what the player should be looking at then too.
-        transcriptPane.setCaretPosition(transcriptPane.getDocument().getLength());
+        // Audit C-28 (2026-07-27): setText left the caret at offset 0 and the stock caret then
+        // scrolled the view to the TOP at every message. S18b (UI tree U7): the caret no longer
+        // scrolls at all (StillCaret); the view follows the newest line only while the player is
+        // at the bottom, and the jump happens after the layout, so that line is shown whole.
+        lastRefreshPinned = followTail;
+        if (followTail) {
+            transcriptPane.setCaretPosition(transcriptPane.getDocument().getLength());
+            scrollTranscriptToBottom();
+        }
         boolean closed = tab.isClosed();
         showOfferLineAndExample(tab);
         OptionalLong shownBefore = shownRemainingMillis;
@@ -372,14 +398,18 @@ final class DialogueTabView extends JPanel {
         boolean playerCanSend = !closed && !locked;
         inputField.setEditable(playerCanSend);
         sendButton.setEnabled(playerCanSend);
-        hintButton.setVisible(playerCanSend);
-        // S15: Accept and Reject are never hidden, and on a closed tab never disabled: there they
-        // answer in the transcript that there is nothing left to act on (quickMove) — a button
-        // that goes grey the instant a vessel walks away, under the pointer, explains nothing.
-        // S17a: they ARE disabled while the Assistant owns the tab, and that explains itself —
-        // the marker row right above them says who is negotiating and how to take the tab back.
-        acceptButton.setEnabled(!locked);
-        rejectButton.setEnabled(!locked);
+        // S18b (playtest 2, PT6): a closed tab greys all four — Send, Hint, Accept and Reject. S15
+        // had kept Accept and Reject clickable there, to answer in the transcript that nothing was
+        // left to act on; the playtest read clickable buttons as "something is still possible".
+        // The offer line and the closing line say what happened. Hint is still hidden, not greyed,
+        // while the Assistant owns the tab (S17a): the marker row says why.
+        hintButton.setVisible(!locked);
+        hintButton.setEnabled(playerCanSend);
+        // S17a: Accept and Reject are disabled while the Assistant owns the tab, which explains
+        // itself — the marker row right above them says who is negotiating and how to take the
+        // tab back. S18b (UI tree U8): and while the move one of them sent is being read.
+        acceptButton.setEnabled(playerCanSend && !quickMoveInFlight);
+        rejectButton.setEnabled(playerCanSend && !quickMoveInFlight);
         if (!locked) {
             takeOverRequested = false; // the tab is the player's (or over): any request is settled
         }
@@ -522,6 +552,10 @@ final class DialogueTabView extends JPanel {
      * <p>On a CLOSED tab nothing is sent: the transcript says so, once (a second click does not
      * stack a second copy under the first). The same goes for an Accept with no offer on the
      * table — no tab is ever opened in that state, but "deal" answering nothing must not go out.
+     * S18b (PT6): both buttons are disabled on a closed tab, so the closed branch is a guard now.
+     *
+     * <p>S18b (UI tree U8): both buttons are disabled from the click until the parse of what it
+     * sent has come back ({@link #quickMoveInFlight}) — a double click used to send it twice.
      *
      * @param verb the button's verb, for the closed-tab line ("nothing to accept" / "to reject")
      */
@@ -538,7 +572,10 @@ final class DialogueTabView extends JPanel {
             appendSystemOnce("There is no offer on the table to accept.");
             return;
         }
-        sendText(utterance);
+        if (quickMoveInFlight) {
+            return; // U8: the buttons are disabled; this guards a caller that holds the view
+        }
+        sendText(utterance, true);
     }
 
     /**
@@ -590,6 +627,11 @@ final class DialogueTabView extends JPanel {
     /** Package-private so a headless test can drive a send without simulating real
      * JTextField/ActionEvent plumbing. */
     void sendText(String text) {
+        sendText(text, false);
+    }
+
+    /** @param fromButton S18b (U8): sent by Accept or Reject, which stay disabled until it is read */
+    private void sendText(String text, boolean fromButton) {
         DialogueTabModel tab = registry.tab(dialogueId);
         if (tab == null || tab.isClosed()) {
             return; // #9: Enter on a closed tab's (non-editable) field must not send.
@@ -602,6 +644,7 @@ final class DialogueTabView extends JPanel {
             return;
         }
         inputField.setText("");
+        quickMoveInFlight |= fromButton;
         // S15: the bubble's place in the transcript — the handle the parse note is written back
         // through once the result arrives (the bubble is on screen long before that).
         int messageIndex = tab.appendPlayerMessage(text);
@@ -617,7 +660,7 @@ final class DialogueTabView extends JPanel {
         // on the EDT races the roster iteration (CME swallowed into a bogus "couldn't parse",
         // or a stale roster). buildCtxOnEdt hops the call onto the EDT instead.
         processor.process(text, ctx, this::buildCtxOnEdt).whenComplete((result, error) -> SwingUtilities.invokeLater(() ->
-                handleResult(typingVesselId, tab, messageIndex,
+                handleResult(typingVesselId, tab, messageIndex, text, fromButton,
                         error != null ? new PipelineResult.Error(String.valueOf(error.getMessage())) : result)));
     }
 
@@ -656,8 +699,16 @@ final class DialogueTabView extends JPanel {
      * order each land on their own message.
      */
     private void handleResult(String typingVesselId, DialogueTabModel origin, int messageIndex,
-                              PipelineResult result) {
+                              String typed, boolean fromButton, PipelineResult result) {
+        if (fromButton) {
+            // S18b (U8): the move is read; every branch below re-renders, which enables the
+            // buttons again. The world-identity guard does not, so it re-renders itself.
+            quickMoveInFlight = false;
+        }
         if (registry.tab(dialogueId) != origin) {
+            if (fromButton) {
+                refresh();
+            }
             return;
         }
         switch (result) {
@@ -673,7 +724,7 @@ final class DialogueTabView extends JPanel {
                 }
                 dispatchRouted(typingVesselId, origin, routed);
             }
-            case PipelineResult.NeedsClarification nc -> showClarification(nc.message(), nc.aboutVesselId());
+            case PipelineResult.NeedsClarification nc -> showClarification(nc.message(), nc.aboutVesselId(), typed);
             case PipelineResult.Error e -> appendSystem("I couldn't parse that.");
         }
     }
@@ -753,7 +804,8 @@ final class DialogueTabView extends JPanel {
         // "deal" / "no" as text — so a click is echoed exactly like the typed word. (The old
         // quick-action buttons skipped this; their label bubble was the only trace they left.)
         appendSystem(interpretationEcho(kind, content, displayNameFor(targetVesselId),
-                targetVesselId.equals(typingVesselId)));
+                targetVesselId.equals(typingVesselId),
+                targetDialogueId == null ? null : registry.tab(targetDialogueId)));
     }
 
     /**
@@ -925,23 +977,29 @@ final class DialogueTabView extends JPanel {
         }
         WalkInDialogueSnapshot s = tab.snapshot();
         String subject = sameTab ? "Status" : "Status of " + displayNameFor(vesselId);
-        return String.format("%s — their offer: €%.0f · your offer: €%.0f · round %d of %d · %dh at %s.",
-                subject, s.lastVesselOffer(), s.lastPlayerOffer(), s.roundsUsed(), Settings.load().roundLimit(),
-                s.durationHours(), s.berthId());
+        return String.format("%s — their offer: %s · your offer: %s · round %d of %d · %dh at %s.",
+                subject, Euros.of(s.lastVesselOffer()), Euros.of(s.lastPlayerOffer()), s.roundsUsed(),
+                Settings.load().roundLimit(), s.durationHours(), s.berthId());
     }
 
     /** One line saying what the pipeline UNDERSTOOD, appended after every routed dispatch.
-     * {@code targetDisplay} is the addressee's display name (S8: human name where known). */
-    private static String interpretationEcho(PlayerCommandKind kind, Map<String, Object> content,
-                                             String targetDisplay, boolean sameTab) {
+     * {@code targetDisplay} is the addressee's display name (S8: human name where known).
+     * S18b (UI tree U6): an accept names what it accepts — the addressee's standing offer,
+     * {@code addressee} being its tab ({@code null} when it has none) — and amounts are written
+     * as everywhere in the chat ({@link Euros}). */
+    static String interpretationEcho(PlayerCommandKind kind, Map<String, Object> content,
+                                     String targetDisplay, boolean sameTab, DialogueTabModel addressee) {
         String target = sameTab ? "" : " (to " + targetDisplay + ")";
         return switch (kind) {
             case PROPOSE -> content.get("price") instanceof Number price
                     ? (content.get("hours") instanceof Number hours
-                            ? String.format("→ Demanding €%.0f for %dh%s.", price.doubleValue(), hours.intValue(), target)
-                            : String.format("→ Demanding €%.0f%s.", price.doubleValue(), target))
+                            ? "→ Demanding " + Euros.of(price.doubleValue()) + " for " + hours.intValue() + "h" + target + "."
+                            : "→ Demanding " + Euros.of(price.doubleValue()) + target + ".")
                     : "→ Making an offer" + target + ".";
-            case ACCEPT -> "→ Accepting their offer" + target + ".";
+            case ACCEPT -> addressee != null && addressee.snapshot().lastVesselOffer() > 0
+                    ? "→ Accepting " + Euros.of(addressee.snapshot().lastVesselOffer()) + " for "
+                            + addressee.snapshot().durationHours() + "h" + target + "."
+                    : "→ Accepting their offer" + target + ".";
             case REJECT -> "→ Turning them away" + target + ".";
             case WITHDRAW -> "→ Withdrawing from this negotiation" + target + ".";
             case ASK -> "→ Checking status" + target + "."; // unreachable (ASK answered locally)
@@ -961,9 +1019,9 @@ final class DialogueTabView extends JPanel {
      * fed is gone, so they are not passed in. The generic line points at what the tab does have:
      * a worked example and the two buttons.
      */
-    private void showClarification(String message, String aboutVesselId) {
+    private void showClarification(String message, String aboutVesselId, String typed) {
         if (message == null || message.isBlank()) {
-            appendSystem(clarificationLine());
+            appendSystem(clarificationLine(typed));
             return;
         }
         // S18a (ADR-23): a message that wants a worked example leaves a slot for it, because only
@@ -984,9 +1042,15 @@ final class DialogueTabView extends JPanel {
      * copied onto a vessel already offering more would close the deal far too cheaply (the vessel
      * accepts any demand at or below its standing offer), so the number comes from
      * {@link InputExamples}, above the offer on the table. With nothing to build an example from
-     * (the tab closed while the parse was in flight) the line makes no suggestion it cannot back. */
-    private String clarificationLine() {
+     * (the tab closed while the parse was in flight) the line makes no suggestion it cannot back.
+     * S18b (playtest 4, PT22): a line with one price in it, above the vessel's offer, is answered
+     * with that price as a move to copy ({@link ChatReplies#didYouMean}). */
+    private String clarificationLine(String typed) {
         DialogueTabModel tab = registry.tab(dialogueId);
+        Optional<String> guess = ChatReplies.didYouMean(typed, tab);
+        if (guess.isPresent()) {
+            return guess.get();
+        }
         String example = tab == null ? "" : InputExamples.priceAndHoursExample(tab);
         if (!example.isEmpty()) {
             return "I didn't get that — try something like '" + example + "', or press Accept or Reject.";
@@ -1058,9 +1122,79 @@ final class DialogueTabView extends JPanel {
         }
     }
 
+    /**
+     * S18b (UI tree U7): the one way the transcript goes to its newest line — the scrollbar is
+     * set one EDT turn later, after the scroll pane has been laid out for the new document, so the
+     * maximum is the real one and the newest line is shown whole.
+     */
+    private void scrollTranscriptToBottom() {
+        SwingUtilities.invokeLater(() -> {
+            if (followTail) {
+                JScrollBar bar = transcriptScroll.getVerticalScrollBar();
+                bar.setValue(bar.getMaximum()); // the model clamps this to maximum - extent
+            }
+        });
+    }
+
+    /**
+     * S18b (UI tree U7), the comm log's rule: a report in which the bar's extent and maximum did
+     * not change is the player scrolling, and decides whether the view follows the bottom; a
+     * report that changed them is a layout — a new line, a narrower window, the tab coming to the
+     * front — and a view that follows the bottom goes back to it.
+     */
+    private void onTranscriptBarAdjusted() {
+        JScrollBar bar = transcriptScroll.getVerticalScrollBar();
+        boolean layoutChanged = bar.getVisibleAmount() != lastBarExtent || bar.getMaximum() != lastBarMaximum;
+        lastBarExtent = bar.getVisibleAmount();
+        lastBarMaximum = bar.getMaximum();
+        if (!layoutChanged) {
+            followTail = bar.getValue() + bar.getVisibleAmount() >= bar.getMaximum() - 4;
+        } else if (followTail) {
+            scrollTranscriptToBottom();
+        }
+    }
+
+    /**
+     * A caret that never moves the view (the comm log's, S15). The stock one scrolls its position
+     * into view after a document change and after a mouse press; here only
+     * {@link #scrollTranscriptToBottom()} may scroll. Selecting and copying work as before.
+     */
+    private static final class StillCaret extends DefaultCaret {
+        private static final long serialVersionUID = 1L;
+
+        StillCaret() {
+            setUpdatePolicy(NEVER_UPDATE);
+        }
+
+        @Override
+        protected void adjustVisibility(Rectangle newLocation) {
+            // never
+        }
+    }
+
     /** Test-only accessors. */
     JTextField inputFieldForTest() {
         return inputField;
+    }
+
+    /** Test-only (S18b, U7): whether the transcript follows its newest line. */
+    boolean followingTailForTest() {
+        return followTail;
+    }
+
+    /** Test-only (S18b, U7): the player scrolled away from the bottom, or back to it. */
+    void setFollowingTailForTest(boolean follow) {
+        followTail = follow;
+    }
+
+    /** Test-only (S18b, U7): whether the last refresh pinned the view to the newest line. */
+    boolean lastRefreshPinnedForTest() {
+        return lastRefreshPinned;
+    }
+
+    /** Test-only (S18b, U7): the transcript itself, to find the scroll pane around it. */
+    JTextPane transcriptPaneForTest() {
+        return transcriptPane;
     }
 
     /** Test-only: where the transcript caret sits (audit C-28 — it must be at the end). */

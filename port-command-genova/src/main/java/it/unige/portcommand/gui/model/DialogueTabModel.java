@@ -59,6 +59,10 @@ public final class DialogueTabModel {
     private boolean closed;
     private Deal.Outcome outcome;
     private long closedAtMillis;
+    /** S18b (UI tree U3): what a deal was agreed at, from the close itself; 0 until then, and for
+     * a negotiation that ended without one. */
+    private double agreedPrice;
+    private int agreedHours;
     /** S12: the newest Hint shown in this tab, and where its entry sits — the only one a revision
      * may replace. The transcript never removes or reorders entries, so the index stays valid. */
     private long latestHintId = AssistantChatEvent.NO_HINT;
@@ -318,5 +322,27 @@ public final class DialogueTabModel {
         }
         this.closed = true;
         this.outcome = Objects.requireNonNull(outcome, "outcome");
+    }
+
+    /**
+     * S18b (UI tree U3): as {@link #close(Deal.Outcome, long)}, with the terms a {@code DEAL} was
+     * agreed at. Terms are kept only for a deal that names a price; any other close keeps none.
+     */
+    public void close(Deal.Outcome outcome, long atMillis, double price, int hours) {
+        close(outcome, atMillis);
+        if (outcome == Deal.Outcome.DEAL && price > 0) {
+            agreedPrice = price;
+            agreedHours = hours;
+        }
+    }
+
+    /** S18b (U3): the price a deal was agreed at; 0 for an open tab and for any other outcome. */
+    public double agreedPrice() {
+        return agreedPrice;
+    }
+
+    /** S18b (U3): the stay a deal was agreed at; 0 for an open tab and for any other outcome. */
+    public int agreedHours() {
+        return agreedHours;
     }
 }
