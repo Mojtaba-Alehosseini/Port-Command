@@ -214,6 +214,133 @@ class DcgTokenizerTest {
         assertFalse(goal.contains("],fail,["), "injection must not survive quoting: " + goal);
     }
 
+    // --- S18a (ADR-23): number forms that used to become the WRONG number ---------------------
+
+    /**
+     * Decision N2 - born red. The game is set in Genova, and a European writes one thousand nine
+     * hundred as "1.900". The dot survived between digits (it must, for "1800.50"), the token
+     * went into the goal as the Prolog float 1.9, and the vessel was offered a berth for EUR 1.90.
+     */
+    @ParameterizedTest(name = "[{0}] is one whole number")
+    @org.junit.jupiter.params.provider.CsvSource({
+            "1.900, 1900",
+            "12.500, 12500",
+            "1.900.000, 1900000",
+            "999.999, 999999",
+    })
+    void europeanThousandsDotsAreCollapsed(String form, String expected) {
+        assertEquals(List.of(expected), tokens(form));
+    }
+
+    @Test
+    void europeanThousandsWorkWithACurrencySymbolAndInASentence() {
+        assertEquals(List.of("1900", "eur"), tokens("€1.900"));
+        assertEquals(List.of("1900", "eur"), tokens("1.900€"));
+        assertEquals(List.of("1900", "for", "6", "h"), tokens("1.900 for 6h"));
+        assertEquals(List.of("make", "it", "2500", "eur"), tokens("make it 2.500€"));
+    }
+
+    /**
+     * Review finding - born red. A sentence ends with a full stop, and "make it 2.200." was still
+     * read as 2.2: the first version refused any dot beside the number. Only a dot that goes on
+     * into more DIGITS says "this is not a thousands group".
+     */
+    @Test
+    void europeanThousandsSurviveTheSentencesOwnPunctuation() {
+        assertEquals(List.of("make", "it", "2200"), tokens("make it 2.200."));
+        assertEquals(List.of("1900", "eur"), tokens("€1.900."));
+        assertEquals(List.of("1900"), tokens("1.900..."));
+        assertEquals(List.of("hmm", "1900"), tokens("hmm...1.900"));
+        assertEquals(List.of("i'll", "give", "you", "1900"), tokens("I'll give you 1.900."));
+        assertEquals(List.of("25000"), tokens("25.000."));
+        assertEquals(List.of("1900", "6", "h"), tokens("1.900,6h"), "a comma before hours is a comma");
+    }
+
+    /** ...and the decimal comma that goes with the thousands dot is a decimal point. */
+    @Test
+    void aDecimalCommaBehindAThousandsDotIsADecimal() {
+        assertEquals(List.of("1900.50"), tokens("1.900,50"));
+        assertEquals(List.of("1900.50", "eur"), tokens("€1.900,50"));
+        assertEquals(List.of("1900", "6", "h"), tokens("1.900, 6h"));
+    }
+
+    /** The other reading must survive: a dot followed by one or two digits is a decimal point. */
+    @Test
+    void aDecimalPointIsNotAThousandsSeparator() {
+        assertEquals(List.of("1800.50"), tokens("1800.50"));
+        assertEquals(List.of("1.5"), tokens("1.5"));
+        assertEquals(List.of("0.500"), tokens("0.500"), "a leading zero is a decimal, never 500");
+        assertEquals(List.of("1.9000"), tokens("1.9000"), "four digits after the dot is not a thousands group");
+    }
+
+    /**
+     * Decision N1 - born red. "+200" and "-200" lost their sign in the punctuation strip and
+     * arrived as a bare 200: a counter of EUR 200. A signed number is a change to the offer on the
+     * table, which the grammar already knows as "200 more" / "200 less".
+     */
+    @Test
+    void aSignedNumberIsAChangeNotAPrice() {
+        assertEquals(List.of("200", "more"), tokens("+200"));
+        assertEquals(List.of("200", "less"), tokens("-200"));
+        assertEquals(List.of("200", "more"), tokens("+ 200"));
+        assertEquals(List.of("200", "less"), tokens("−200"), "the typographic minus sign too");
+        assertEquals(List.of("200", "more"), tokens("+€200"), "the currency of a change is the offer's");
+        assertEquals(List.of("200", "more"), tokens("+200€"));
+        assertEquals(List.of("10", "percent", "more"), tokens("+10%"));
+        assertEquals(List.of("5", "percent", "less"), tokens("-5%"));
+        assertEquals(List.of("1900", "more"), tokens("+1.900"), "the thousands dot is read first");
+    }
+
+    /** Review finding - born red: the sign was only seen in three of the shapes it is typed in. */
+    @Test
+    void aSignedNumberIsReadInEveryShapeItIsTypedIn() {
+        assertEquals(List.of("200", "more"), tokens("+200 eur"), "a currency WORD is dropped like the symbol");
+        assertEquals(List.of("200", "more"), tokens("+200 euros"));
+        assertEquals(List.of("200", "less"), tokens("-200 euro"));
+        assertEquals(List.of("200", "less"), tokens("- 200"), "a line that opens with the sign");
+        assertEquals(List.of("200", "less"), tokens("  −  200"));
+        assertEquals(List.of("carthago", ":", "200", "more"), tokens("Carthago:+200"));
+        assertEquals(List.of("200", "more"), tokens("(+200)"));
+        assertEquals(List.of("200", "more", "europe"), tokens("+200 europe"), "not every word that starts with eur");
+    }
+
+    /**
+     * A sign in front of HOURS is a separator, not a change: "2000 + 6 hours" is a price and a
+     * stay, and it parsed as one before S18a. Only a signed number that could be money is
+     * rewritten - and the whole number is looked at, so "+60 hours" is not split into a 6 and a 0.
+     */
+    @Test
+    void aSignInFrontOfHoursIsNotAPriceChange() {
+        assertEquals(List.of("2000", "6", "h"), tokens("2000 + 6 hours"));
+        assertEquals(List.of("2000", "6", "h"), tokens("2000 +6h"));
+        assertEquals(List.of("2000", "6", "h"), tokens("2000 -6h"));
+        assertEquals(List.of("2000", "6", "h"), tokens("2000 -6 hrs"));
+        assertEquals(List.of("60", "h"), tokens("+60 hours"));
+        assertEquals(List.of("6", "h"), tokens("+ 6 hour"));
+        assertEquals(List.of("200", "more", "for", "6", "h"), tokens("+200 for 6 hours"),
+                "the price change is still read when hours follow the price");
+    }
+
+    /** A hyphen that is not a sign stays punctuation: it joins words, ranges and berth ids. */
+    @Test
+    void aHyphenThatIsNotASignIsStillASeparator() {
+        assertEquals(List.of("berth", "5"), tokens("berth-5"));
+        assertEquals(List.of("ok", "2000"), tokens("ok - 2000"), "a dash between words is a dash");
+        assertEquals(List.of("5", "6", "h"), tokens("5-6 hours"));
+        assertEquals(List.of("auto", "accept"), tokens("auto-accept"));
+        assertEquals(List.of("2000", "for", "6", "h"), tokens("2000 - for 6h"));
+    }
+
+    /** Playtest 2, PT7: every spelling of a berth reaches the grammar as [berth, N] - the valid
+     * ones parse, and an invalid one can then be answered by number. A PIN, not a born-red test:
+     * these spellings already normalised before S18a (the playtest's "berth-5" failed on the
+     * NUMBER, not the hyphen); it is here so the answer-by-number has something to stand on. */
+    @ParameterizedTest(name = "[{0}] normalises to berth 5")
+    @ValueSource(strings = {"berth 5", "berth5", "berth-5", "berth_5", "Berth #5", "BERTH-5"})
+    void everySpellingOfABerthIsBerthPlusNumber(String berthForm) {
+        assertEquals(List.of("berth", "5"), tokens(berthForm));
+    }
+
     // --- degenerate input --------------------------------------------------------------------
 
     @ParameterizedTest

@@ -40,6 +40,35 @@ class PreprocessRegexTest {
                 Arguments.of("My offer is 1600 for 6h", 1600.0));
     }
 
+    /** S18a (decision N2): the pre-pass reads "1.900" as the tokeniser does - one thousand nine
+     * hundred - so the two never disagree about whether a sentence carries a price. Born red:
+     * it read EUR 1.90. */
+    @Test
+    void europeanThousandsAreReadAsWholeNumbers() {
+        assertEquals(1900.0, preprocess.extract("€1.900 for 6 hours").price().orElseThrow(), 1e-9);
+        assertEquals(1900.0, preprocess.extract("ok, 1.900").price().orElseThrow(), 1e-9);
+        assertEquals(12500.0, preprocess.extract("12.500 euros").price().orElseThrow(), 1e-9);
+        assertEquals(1800.5, preprocess.extract("1800.50 euros").price().orElseThrow(), 1e-9,
+                "a decimal point stays a decimal point");
+    }
+
+    /** Review finding - born red: with a full stop behind it "ok, 1.900." was a price of 900. */
+    @Test
+    void europeanThousandsSurviveTheSentencesOwnPunctuation() {
+        assertEquals(1900.0, preprocess.extract("ok, 1.900.").price().orElseThrow(), 1e-9);
+        assertEquals(1900.0, preprocess.extract("€1.900.").price().orElseThrow(), 1e-9);
+        assertEquals(1900.5, preprocess.extract("1.900,50 euros").price().orElseThrow(), 1e-9,
+                "the decimal comma, read as the tokeniser reads it");
+    }
+
+    /** "1.5k" is one and a half thousand, and so is "1.500k": a number with a k behind it is not
+     * a thousands group (it read 1500 before S18a and must still). */
+    @Test
+    void aKSuffixKeepsItsDecimalPoint() {
+        assertEquals(1500.0, preprocess.extract("1.500k").price().orElseThrow(), 1e-9);
+        assertEquals(1500.0, preprocess.extract("1.5k").price().orElseThrow(), 1e-9);
+    }
+
     @Test
     void noPriceCandidateIsEmptyNotException() {
         assertTrue(preprocess.extract("hello there").price().isEmpty());

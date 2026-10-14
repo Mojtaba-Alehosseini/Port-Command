@@ -58,7 +58,8 @@ public final class PreprocessRegex {
             return Extracted.NONE;
         }
         Optional<Integer> duration = extractDuration(text);
-        Optional<Double> price = extractPrice(text);
+        // S18a (ADR-23, N2): "1.900" is read as the tokeniser reads it - 1900, not 1.9.
+        Optional<Double> price = extractPrice(NumberForms.collapseEuropeanThousands(text));
         Optional<String> berthId = extractBerth(text);
         Optional<LocalTime> deadline = extractDeadline(text);
         Optional<LocalTime> time = extractTime(text);

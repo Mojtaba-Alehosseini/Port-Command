@@ -53,6 +53,34 @@ public final class DcgTokenizer {
      * comma ("2000, please") is left for the punctuation strip to turn into a separator. */
     private static final Pattern THOUSANDS_SEPARATOR = Pattern.compile("(?<=\\d),(?=\\d{3}(?!\\d))");
 
+    /**
+     * S18a (ADR-23, decision N1): a signed number is a CHANGE to the offer on the table, not a
+     * price - {@code +200} is "200 more", {@code -200} is "200 less", {@code +10%} is "10% more".
+     * Before this the punctuation strip deleted the sign and a bare 200 went to the grammar: a
+     * counter of EUR 200. The sign must open a word ({@code (?<!\S)}), so the hyphen of
+     * {@code berth-5}, {@code 5-6 hours} and {@code auto-accept} is not one. A plus may be
+     * followed by a space ({@code + 200}); a minus may not, because a spaced dash between words
+     * ("ok - 2000") is a dash. A currency symbol or word beside the number is dropped ("+200€",
+     * "+200 euros"): the change is in the offer's own currency.
+     *
+     * <p>A sign in front of HOURS is not a change: "2000 + 6 hours" and "2000 -6h" use it as a
+     * separator between a price and a stay, and both parsed before S18a. The number is matched
+     * possessively ({@code \\d++}) so the hour-unit lookahead judges the WHOLE number - without
+     * that, "+60 hours" would be retried as "+6" followed by "0 hours".
+     */
+    private static final String SIGNED_NUMBER =
+            "(\\d++(?:\\.\\d++)?+)(?!\\s?(?:h|hrs?|hours?)\\b)(\\s?%)?"
+                    + "\\s?(?:[€$]|(?:eur(?:os?)?|usd|dollars?)\\b)?";
+    /** Where a sign may stand: at the start, after a space, or straight after the colon of a
+     * vocative ("Carthago:+200") or an opening bracket. Never after a letter or a digit. */
+    private static final String SIGN_OPENS = "(?<![^\\s:(])";
+    private static final Pattern SIGNED_PLUS =
+            Pattern.compile(SIGN_OPENS + "\\+\\s?[€$]?" + SIGNED_NUMBER);
+    /** A minus followed by a space is a dash between words - except when it opens the whole line
+     * ("- 200"), where there is no word before it for it to join. */
+    private static final Pattern SIGNED_MINUS =
+            Pattern.compile("(?:^\\s*[-−]\\s*|" + SIGN_OPENS + "[-−])[€$]?" + SIGNED_NUMBER);
+
     /** Each captures the WHOLE number, not just the adjacent digit: the replacement appends the
      * currency token after the amount, so {@code €2000} must capture {@code 2000} — capturing
      * only {@code 2} yields {@code "2 eur000"}. Thousands separators are already gone by here. */
@@ -103,6 +131,12 @@ public final class DcgTokenizer {
         String t = text.toLowerCase(Locale.ROOT).replace('’', '\'');
 
         t = THOUSANDS_SEPARATOR.matcher(t).replaceAll("");
+        // S18a (N2): "1.900" is one thousand nine hundred - before anything reads the dot as a
+        // decimal point, and before the currency step captures the number.
+        t = NumberForms.collapseEuropeanThousands(t);
+        // S18a (N1): "+200" / "-200" -> "200 more" / "200 less", while the sign is still there.
+        t = SIGNED_PLUS.matcher(t).replaceAll("$1$2 more ");
+        t = SIGNED_MINUS.matcher(t).replaceAll("$1$2 less ");
 
         t = EUR_PREFIX.matcher(t).replaceAll("$1 eur");
         t = EUR_SUFFIX.matcher(t).replaceAll("$1 eur");
