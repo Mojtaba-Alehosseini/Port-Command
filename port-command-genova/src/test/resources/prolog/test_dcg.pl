@@ -312,7 +312,16 @@ test('the grammar admits exactly one parse per utterance') :-
                     [too,low],
                     [no,deal],
                     [what,berths,are,free],
-                    [where,is,my,berth] ]),
+                    [where,is,my,berth],
+                    % S18a (N9): the everyday cues and words add no second derivation.
+                    [can,you,do,1800],
+                    [i,want,1900],
+                    ['i\'d',like,2000,at,berth,2],
+                    [i,would,like,2100],
+                    [how,about,1900,and,6,hours],
+                    [sure],
+                    [yeah,deal],
+                    ['let\'s',do,it] ]),
            ( findall(F, phrase(negotiation_move(F), Tokens, []), Parses),
              sort(Parses, Distinct),
              assertion(Parses == Distinct),
@@ -525,6 +534,12 @@ m2_unambiguous([same, but, 6, hours]).
 m2_unambiguous([200, more]).
 m2_unambiguous([10, percent, less]).
 m2_unambiguous([split, the, difference]).
+m2_unambiguous([what, about, 6, hours]).               % S18a (N9): a cue with only hours
+m2_unambiguous([i, want, 6, hours]).                   % S18a (N9)
+m2_unambiguous([make, it, 1900, and, 8, hours]).       % S18a (N9): hours after and/with
+m2_unambiguous([1900, with, 8, h]).                    % S18a (N9)
+m2_unambiguous([20, percent, higher]).                 % S18a (PT16)
+m2_unambiguous([200, lower]).                          % S18a (PT16)
 m2_unambiguous([nothing, below, 2000]).
 m2_unambiguous([1800, for, that, berth]).
 m2_unambiguous([deal, the, tanker]).

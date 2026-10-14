@@ -375,6 +375,139 @@ class DCGParserTest {
                 () -> "should MISS without ctx: " + utterance);
     }
 
+    // --- S18a (ADR-23, decisions N9 and PT16): the phrasings a player actually types ------------
+    // Each positive below was a MISS before S18a (born red): the sentence fell through to Rasa,
+    // which answered a clear offer with "I didn't get that" or, worse, bound an accept. The
+    // additions are small and closed; the must-miss lists after them are what keeps them honest.
+
+    @ParameterizedTest(name = "[{0}] is an acceptance")
+    @ValueSource(strings = {"yeah", "yep", "sure", "alright", "let's do it", "Let’s do it.",
+            "lets do it", "Yeah, deal", "ok sure", "Alright then", "Sure, thanks"})
+    void everydayAcceptWordsAreAcceptances(String utterance) {
+        Frame f = parse(utterance);
+        assertEquals("accept", f.move());
+        assertEquals(1, f.elements().size(), "an acceptance carries no terms of its own");
+    }
+
+    @ParameterizedTest(name = "[{0}] is a counter of {1}")
+    @CsvSource(delimiter = '|', value = {
+            "can you do 1800         | 1800",
+            "Can you do 1800?        | 1800",
+            "I want 1900             | 1900",
+            "I'd like 2000           | 2000",
+            "I would like 2000 euros | 2000",
+    })
+    void everydayCounterCuesAreCounters(String utterance, long amount) {
+        Frame f = parse(utterance);
+        assertEquals("counter", f.move());
+        assertEquals(eur(amount), f.element("money"));
+    }
+
+    @Test
+    void anEverydayCounterCueKeepsItsHoursAndBerth() {
+        Frame f = parse("can you do 1800 for 6 hours at berth 2");
+        assertEquals("counter", f.move());
+        assertEquals(eur(1800), f.element("money"));
+        assertEquals(6L, f.element("duration"));
+        assertEquals("berth_2", f.element("berth"));
+    }
+
+    /** "what about 6 hours" asks for other hours at the price on the table - the reference offer
+     * is the player's own last bid (1500), exactly as for "make it 6 hours". */
+    @ParameterizedTest(name = "[{0}] changes only the hours")
+    @ValueSource(strings = {"what about 6 hours", "How about 6h?", "can you do 6 hours",
+            "I want 6 hours", "I'd like 6 hours"})
+    void aCounterCueWithOnlyHoursChangesOnlyTheHours(String utterance) {
+        Frame f = parseCtx(utterance);
+        assertEquals("counter", f.move());
+        assertEquals(eur(1500), f.element("money"), "the price is the reference offer's");
+        assertEquals(6L, f.element("duration"));
+        assertEquals("berth_3", f.element("berth"));
+        assertEquals(Optional.empty(), parser.parse(utterance, DialogueCtx.NONE),
+                "with no offer on the table there is no price to keep - a miss, never a guess");
+    }
+
+    @ParameterizedTest(name = "[{0}] reads the hours after and/with")
+    @ValueSource(strings = {"make it 1900 and 8 hours", "1900 with 8h", "1900 and 8 hours",
+            "make it 1900 with 8 hours"})
+    void andOrWithMayIntroduceTheHours(String utterance) {
+        Frame f = parseCtx(utterance);
+        assertEquals("counter", f.move());
+        assertEquals(eur(1900), f.element("money"));
+        assertEquals(8L, f.element("duration"), "the hours the player wrote, not the offer's 5");
+        assertEquals("berth_3", f.element("berth"));
+    }
+
+    /** The sign-as-separator form, end to end: it parsed before S18a and still does. */
+    @Test
+    void aPlusBetweenThePriceAndTheHoursIsStillAPriceAndAStay() {
+        Frame f = parseCtx("1900 + 6 hours");
+        assertEquals("counter", f.move());
+        assertEquals(eur(1900), f.element("money"));
+        assertEquals(6L, f.element("duration"));
+    }
+
+    @Test
+    void andOrWithWorksInAPlainCounterToo() {
+        Frame f = parse("how about 1900 and 6 hours");
+        assertEquals("counter", f.move());
+        assertEquals(eur(1900), f.element("money"));
+        assertEquals(6L, f.element("duration"));
+    }
+
+    /** PT16 - born red: "20 percent higher" was a miss while "20% more" worked. The reference is
+     * the player's own bid of 1500, as for every delta. */
+    @ParameterizedTest(name = "[{0}] -> {1}")
+    @CsvSource({
+            "'20 percent higher',  1800",
+            "'20 percent lower',   1200",
+            "'20% higher',         1800",
+            "'20% lower',          1200",
+            "'200 higher',         1700",
+            "'200 lower',          1300",
+            "'20 percent more',    1800",
+            "'20 percent less',    1200",
+    })
+    void higherAndLowerAreMoreAndLess(String utterance, long amount) {
+        Frame f = parseCtx(utterance);
+        assertEquals("counter", f.move());
+        assertEquals(eur(amount), f.element("money"));
+        assertEquals(5L, f.element("duration"));
+        assertEquals(Optional.empty(), parser.parse(utterance, DialogueCtx.NONE),
+                "a change needs an offer to change");
+    }
+
+    /**
+     * The other side of every addition above: the new words must not turn a sentence that says
+     * MORE into a move that says less. Each of these still misses - with the offer on the table
+     * too - and so reaches Rasa and the input-safety checks, never a binding message.
+     */
+    @ParameterizedTest(name = "[{0}] still misses")
+    @ValueSource(strings = {
+            "sure, but 2000",                    // an acceptance with a price is not an acceptance
+            "yeah if you drop to 1500",
+            "alright, 6 hours",
+            "let's do it for 1500",
+            "not sure",
+            "are you sure",
+            "I want three tugs on that berth",   // "i want" + a non-price
+            "I want 2 tugs",
+            "I'd like to think about it",
+            "can you do better",
+            "what about the tugs",
+            "20 percent higher than that",
+            "make it 1900 and 99 hours",         // the mention guard covers the new connectives
+            "1900 with 0 hours",
+            "1900 and 3 tugs",
+            "what about 99 hours",
+    })
+    void theNewPhrasingsDoNotSwallowWhatTheyDoNotUnderstand(String utterance) {
+        assertEquals(Optional.empty(), parser.parse(utterance, M2CTX),
+                () -> "expected NO parse with an offer on the table for: " + utterance);
+        assertEquals(Optional.empty(), parser.parse(utterance, DialogueCtx.NONE),
+                () -> "expected NO parse without context for: " + utterance);
+    }
+
     /** The other half of the injection surface: a hostile vessel NAME in the context reaches the
      * goal string via the roster term. It must stay an inert quoted atom — the parse resolves the
      * tanker by TYPE (unaffected by the name), and the payload never runs. */

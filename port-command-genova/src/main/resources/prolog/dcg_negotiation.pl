@@ -318,7 +318,22 @@ duration_phrase(D) -->
     time_unit.
 
 optional_duration([duration=D]) --> duration_phrase(D).
+optional_duration([duration=D]) --> linked_duration(D).
 optional_duration([]) --> \+ duration_mention.
+
+% DCG: S18a (ADR-23, decision N9) - "1900 and 8 hours" / "1900 with 8h": the connective a player
+% writes between the price and the hours. It is its OWN nonterminal, used only where a price has
+% just been read (optional_duration, ellipsis_more_duration), so a bare "and 6 hours" stays a
+% miss and optional_for keeps meaning exactly "for". An out-of-range "and 99 hours" needs no
+% mention guard of its own: nothing consumes the connective, so it is left in the residue and
+% parse_move refuses the whole sentence.
+duration_link --> [and].
+duration_link --> [with].
+
+linked_duration(D) -->
+    duration_link,
+    duration_count(D),
+    time_unit.
 
 % DCG: "a duration was attempted here". The empty clause above is guarded by \+ this, so an
 % OUT-OF-RANGE duration FAILS the parse instead of silently dropping the slot: without the
@@ -403,11 +418,25 @@ counter_phrase --> [how, about].
 counter_phrase --> [what, about].
 counter_phrase --> [instead].
 counter_phrase --> [only].
+% DCG: S18a (ADR-23, decision N9) - the everyday askings: "can you do 1800", "I want 1900",
+% "I'd like 2000". Closed, whole-cue forms: "i want" is listed with its subject (there is no bare
+% [want] for optional_lead's [i] to combine with), so each cue has exactly ONE derivation and the
+% one-parse probes hold. A cue followed by anything but a price ("I want three tugs", "can you
+% do better") still misses - the amount is what makes it a counter.
+counter_phrase --> [can, you, do].
+counter_phrase --> [i, would, like].
+counter_phrase --> ['i\'d', like].
+counter_phrase --> [i, want].
 
 % --- Terminals: acceptance ---
 
 % DCG: bare acceptances. Multi-token forms first so a prefix never wins early.
 accept_phrase --> [sounds, good].
+% DCG: S18a (ADR-23, decision N9) - "let's do it" and the spoken yes-words below ("yeah", "yep",
+% "sure", "alright"). An acceptance is still refused when anything meaningful follows it
+% (parse_move's residue check): "sure, but 2000" and "alright, 6 hours" miss.
+accept_phrase --> ['let\'s', do, it].
+accept_phrase --> [lets, do, it].
 accept_phrase --> [you, got, it].
 accept_phrase --> [that, works].
 accept_phrase --> [deal].
@@ -420,6 +449,10 @@ accept_phrase --> [okay].
 accept_phrase --> [ok].
 accept_phrase --> [fine].
 accept_phrase --> [done].
+accept_phrase --> [yeah].
+accept_phrase --> [yep].
+accept_phrase --> [sure].
+accept_phrase --> [alright].
 
 % --- Terminals: rejection ---
 
@@ -554,10 +587,19 @@ ellipsis_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
     [same, but], duration_phrase(D),
     { ctx_standing(Ctx, S), reference_offer(S, Ref), complete_from(Ref, [duration=D], Slots) }.
 
+% DCG: S18a (ADR-23, decision N9) - "what about 6 hours" / "can you do 6 hours": a counter cue
+% with ONLY hours asks for other hours at the price on the table, exactly like "make it 6 hours".
+% The plain counter_move cannot take it (its amount refuses a number followed by an hour unit),
+% so this is the only reading; with no offer on the table reference_offer fails -> a miss.
+ellipsis_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    counter_phrase, duration_phrase(D),
+    { ctx_standing(Ctx, S), reference_offer(S, Ref), complete_from(Ref, [duration=D], Slots) }.
+
 make_it_lead --> [make, it].
 make_it_lead --> [].
 
 ellipsis_more_duration([duration=D]) --> duration_phrase(D).
+ellipsis_more_duration([duration=D]) --> linked_duration(D).
 ellipsis_more_duration([]) --> [].
 
 % --- Block 2: delta — arithmetic over the standing offer ---
@@ -575,6 +617,21 @@ delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
     { delta_apply(Ctx, pct(N, +1), Slots) }.
 delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
     price_term(N), [percent, less],
+    { delta_apply(Ctx, pct(N, -1), Slots) }.
+% DCG: S18a (playtest decision PT16) - "20 percent higher" / "200 lower": higher and lower are
+% more and less. Four clauses beside the four above rather than a shared word class, so the
+% existing delta clauses are untouched.
+delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    price_term(N), [higher],
+    { delta_apply(Ctx, add(N), Slots) }.
+delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    price_term(N), [lower],
+    { delta_apply(Ctx, sub(N), Slots) }.
+delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    price_term(N), [percent, higher],
+    { delta_apply(Ctx, pct(N, +1), Slots) }.
+delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
+    price_term(N), [percent, lower],
     { delta_apply(Ctx, pct(N, -1), Slots) }.
 delta_move(frame(commerce_sell, [move=counter | Slots]), Ctx) -->
     midpoint_phrase,

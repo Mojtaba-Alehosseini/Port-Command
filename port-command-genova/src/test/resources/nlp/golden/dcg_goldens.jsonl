@@ -160,3 +160,49 @@
 {"block":"command","ctx":"focus","utterance":"send two tugs to the Ferrari","frame":null,"note":"unknown target name -> refuse"}
 {"block":"vocative","ctx":"focus","utterance":"Genoa Sttar: deal","frame":"commerce_sell","elements":{"move":"accept","addressee":"C001"},"note":"S6 MED (P2-1): distance-1 typo fuzz-matches the roster name; exact matches stay untouched"}
 {"block":"command","ctx":"focus","utterance":"send two tugs to the Carthagoo","frame":"command","elements":{"action":"send","quantifier":2,"patient":"tug","target":"T001"},"note":"S6 MED (P2-1): distance-1 typo on the command target resolves via the fuzzy layer"}
+{"block":"plain","ctx":"none","utterance":"yeah","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"Yep","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"Sure","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"alright then","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"let's do it","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"yep, deal","frame":"commerce_sell","elements":{"move":"accept"}}
+{"block":"plain","ctx":"none","utterance":"sure, but 2000","frame":null,"note":"S18a: an acceptance word followed by a price is not an acceptance"}
+{"block":"plain","ctx":"none","utterance":"let's do it for 1500","frame":null,"note":"S18a: the price after the acceptance would vanish"}
+{"block":"plain","ctx":"none","utterance":"are you sure about that","frame":null,"note":"S18a: 'sure' is an acceptance only on its own"}
+{"block":"plain","ctx":"none","utterance":"can you do 1800","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1800,"currency":"EUR"}}}
+{"block":"plain","ctx":"none","utterance":"I want 1900 for 6 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1900,"currency":"EUR"},"duration":6}}
+{"block":"plain","ctx":"none","utterance":"I'd like 2000 at berth 2","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2000,"currency":"EUR"},"berth":"berth_2"}}
+{"block":"plain","ctx":"none","utterance":"I would like 2100","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2100,"currency":"EUR"}}}
+{"block":"plain","ctx":"none","utterance":"I want 2 tugs","frame":null,"note":"S18a: 'i want' is a counter cue only before a price"}
+{"block":"plain","ctx":"none","utterance":"can you do better","frame":null,"note":"S18a: a counter cue with no amount"}
+{"block":"plain","ctx":"none","utterance":"how about 1900 and 6 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1900,"currency":"EUR"},"duration":6}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 with 5 hours","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"},"duration":5}}
+{"block":"plain","ctx":"none","utterance":"how about 1900 and 99 hours","frame":null,"note":"S18a: out-of-range hours after and/with are left in the residue, so the parse is refused"}
+{"block":"plain","ctx":"none","utterance":"how about 1900 and 3 tugs","frame":null,"note":"S18a: 'and' introduces hours, nothing else"}
+{"block":"ellipsis","ctx":"focus","utterance":"make it 1900 and 8 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1900,"currency":"EUR"},"duration":8,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"1900 with 8h","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1900,"currency":"EUR"},"duration":8,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"and 6 hours","frame":null,"note":"S18a: the connective needs a price before it"}
+{"block":"ellipsis","ctx":"focus","utterance":"what about 6 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1500,"currency":"EUR"},"duration":6,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"can you do 8 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1500,"currency":"EUR"},"duration":8,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"one_sided","utterance":"how about 6 hours","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2000,"currency":"EUR"},"duration":6,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"none","utterance":"what about 6 hours","frame":null,"note":"S18a: no offer on the table, so no price to keep"}
+{"block":"ellipsis","ctx":"focus","utterance":"what about 99 hours","frame":null,"note":"S18a: out-of-range hours"}
+{"block":"delta","ctx":"focus","utterance":"20 percent higher","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1800,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"20 percent lower","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1200,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"20% higher","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1800,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"200 higher","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1700,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"200 lower","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1300,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"20 percent more","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1800,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"none","utterance":"20 percent higher","frame":null,"note":"S18a: a change needs an offer to change"}
+{"block":"delta","ctx":"focus","utterance":"20 percent higher than that","frame":null,"note":"S18a: meaningful residue"}
+{"block":"delta","ctx":"focus","utterance":"+200","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1700,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"-200","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1300,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"focus","utterance":"+10%","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1650,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"delta","ctx":"none","utterance":"+200","frame":null,"note":"S18a: a signed number is a change, never a price of 200"}
+{"block":"plain","ctx":"none","utterance":"I will give you 1.900 for 6 hours","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":1900,"currency":"EUR"},"duration":6}}
+{"block":"plain","ctx":"none","utterance":"how about €1.900","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1900,"currency":"EUR"}}}
+{"block":"ellipsis","ctx":"focus","utterance":"1.900 for 6h","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":1900,"currency":"EUR"},"duration":6,"berth":"berth_3"}}
+{"block":"ellipsis","ctx":"focus","utterance":"make it 2.200","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2200,"currency":"EUR"},"duration":5,"berth":"berth_3"}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 at berth-3","frame":"commerce_sell","elements":{"move":"propose","money":{"amount":2000,"currency":"EUR"},"berth":"berth_3"}}
+{"block":"plain","ctx":"none","utterance":"how about 2000 for berth3","frame":"commerce_sell","elements":{"move":"counter","money":{"amount":2000,"currency":"EUR"},"berth":"berth_3"}}
+{"block":"plain","ctx":"none","utterance":"I will give you 2000 at berth-5","frame":null,"note":"S18a: there is no berth 5 (the pipeline answers by number)"}
