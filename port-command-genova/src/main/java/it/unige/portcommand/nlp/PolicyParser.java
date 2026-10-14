@@ -46,7 +46,7 @@ public final class PolicyParser {
      * a re-gate of the F1, which a demo freeze does not get.
      */
     public static final String GRAMMAR_HINT =
-            "auto (accept | reject | counter +N%) if (price | duration | rounds_used) "
+            "[auto] (accept | reject | counter +N%) if (price | duration | rounds_used) "
                     + "(> | < | >= | <= | =) NUMBER [and ...] "
                     + "[for (tankers | container_vessels | cargo_vessels | ferries | cruise_ships)]";
 
@@ -58,8 +58,10 @@ public final class PolicyParser {
      */
     public static final String GRAMMAR_EXAMPLE = "auto accept if price > 6000 for tankers";
 
+    /** S18b (playtest 4, PT20): the leading "auto" is optional - "accept if price>1500" is what a
+     * player types. The condition clause already allowed an operator without spaces. */
     private static final Pattern TOP_LEVEL = Pattern.compile(
-            "^auto\\s+(.+?)\\s+if\\s+(.+?)(?:\\s+for\\s+(\\S+))?$", Pattern.CASE_INSENSITIVE);
+            "^(?:auto\\s+)?(.+?)\\s+if\\s+(.+?)(?:\\s+for\\s+(\\S+))?$", Pattern.CASE_INSENSITIVE);
     private static final Pattern COUNTER_ACTION = Pattern.compile(
             "^counter\\s*\\+?\\s*(\\d+)\\s*%$", Pattern.CASE_INSENSITIVE);
     private static final Pattern CONDITION_CLAUSE = Pattern.compile(

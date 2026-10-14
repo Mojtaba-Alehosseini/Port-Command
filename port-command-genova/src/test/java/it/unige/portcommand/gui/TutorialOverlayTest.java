@@ -63,7 +63,13 @@ class TutorialOverlayTest {
             bus.publish(new TutorialStepAdvancedEvent(step, "scripted step " + step));
         }
         SwingUtilities.invokeAndWait(() -> { });
+        // S18b (PT18): steps that arrive while a card is read wait for its "Got it".
+        for (int step = 1; step < TutorialOverlay.TOTAL_STEPS; step++) {
+            SwingUtilities.invokeAndWait(overlay::advanceForTest);
+        }
+        SwingUtilities.invokeAndWait(() -> { });
         assertTrue(overlay.isShowingAStep(), "the final scripted step must be shown before it clears");
+        assertTrue(overlay.captionForTest().contains("scripted step 5"), overlay.captionForTest());
 
         assertTrue(awaitDismissed(overlay),
                 "the scrim must clear itself after the last scripted step — there is no sixth event "
@@ -156,6 +162,132 @@ class TutorialOverlayTest {
     }
 
     // ==================== S15: what the five canonical steps say and point at ====================
+
+    // ---- S18b (playtests 3-4: PT1, PT18, P10) ----
+
+    private static void publishAndFlush(EventBus bus, int step) throws Exception {
+        bus.publish(new TutorialStepAdvancedEvent(step, "scripted step " + step));
+        SwingUtilities.invokeAndWait(() -> { });
+    }
+
+    /** PT18: "come back after Close (step 4/5)". Closing is for the rest of this game. */
+    @Test
+    @Timeout(20)
+    void aClosedTutorialShowsNoMoreStepsInThisGame() throws Exception {
+        EventBus bus = new EventBus();
+        TutorialOverlay overlay = overlay(bus);
+        publishAndFlush(bus, 1);
+        SwingUtilities.invokeAndWait(overlay::closeForTest);
+        assertFalse(overlay.isShowingAStep());
+
+        publishAndFlush(bus, 4);
+        publishAndFlush(bus, 5);
+        assertFalse(overlay.isShowingAStep(), "after Close no later step may show");
+    }
+
+    @Test
+    @Timeout(20)
+    void skipEndsTheTutorialLikeClose() throws Exception {
+        EventBus bus = new EventBus();
+        TutorialOverlay overlay = overlay(bus);
+        publishAndFlush(bus, 2);
+        SwingUtilities.invokeAndWait(overlay::skipForTest);
+
+        publishAndFlush(bus, 3);
+        assertFalse(overlay.isShowingAStep());
+    }
+
+    /** PT1: "step 5 card shows again after clicking Done". Done ends it, whichever driver. */
+    @Test
+    @Timeout(20)
+    void doneOnTheLastStepEndsTheTutorialForThisGame() throws Exception {
+        EventBus bus = new EventBus();
+        TutorialOverlay overlay = overlay(bus);
+        SwingUtilities.invokeAndWait(overlay::startFromBeginning);
+        for (int step = 1; step <= TutorialOverlay.TOTAL_STEPS; step++) {
+            SwingUtilities.invokeAndWait(overlay::advanceForTest); // Next x4, then Done
+        }
+        assertFalse(overlay.isShowingAStep());
+
+        publishAndFlush(bus, 5);
+        assertFalse(overlay.isShowingAStep(), "the script's step 5 must not bring the card back");
+    }
+
+    /** PT18: "move on without Next". A step that arrives while a card is read waits for it. */
+    @Test
+    @Timeout(20)
+    void aScriptedStepNeverReplacesTheCardBeingRead() throws Exception {
+        EventBus bus = new EventBus();
+        TutorialOverlay overlay = overlay(bus);
+        publishAndFlush(bus, 1);
+        assertEquals("Got it", overlay.nextLabelForTest(), "a scripted card is read, not paged");
+
+        publishAndFlush(bus, 2);
+        assertTrue(overlay.captionForTest().contains("scripted step 1"), overlay.captionForTest());
+
+        SwingUtilities.invokeAndWait(overlay::advanceForTest);
+        assertTrue(overlay.captionForTest().contains("scripted step 2"), "Got it shows the step that waited");
+        SwingUtilities.invokeAndWait(overlay::advanceForTest);
+        assertFalse(overlay.isShowingAStep(), "nothing waits: the card is put away until the next step");
+
+        publishAndFlush(bus, 3);
+        assertTrue(overlay.captionForTest().contains("scripted step 3"));
+    }
+
+    /** PT1: each step shows once - a step already shown, or an older one, is not shown again. */
+    @Test
+    @Timeout(20)
+    void eachStepShowsOnce() throws Exception {
+        EventBus bus = new EventBus();
+        TutorialOverlay overlay = overlay(bus);
+        publishAndFlush(bus, 3);
+        SwingUtilities.invokeAndWait(overlay::advanceForTest);
+
+        publishAndFlush(bus, 3);
+        publishAndFlush(bus, 1);
+        assertFalse(overlay.isShowingAStep());
+    }
+
+    @Test
+    @Timeout(20)
+    void aNewGameHasItsOwnTutorial() throws Exception {
+        EventBus bus = new EventBus();
+        TutorialOverlay overlay = overlay(bus);
+        publishAndFlush(bus, 1);
+        SwingUtilities.invokeAndWait(overlay::closeForTest);
+
+        bus.publish(new GameLoadedEvent(1, 15_000.0, 50));
+        publishAndFlush(bus, 1);
+        assertTrue(overlay.isShowingAStep(), "a new world starts the tutorial afresh");
+    }
+
+    /** P10: the window remembers an ended tutorial (a preference) through this callback. */
+    @Test
+    @Timeout(20)
+    void endingTheTutorialIsReportedOnceEachTime() throws Exception {
+        EventBus bus = new EventBus();
+        TutorialOverlay overlay = overlay(bus);
+        int[] told = new int[1];
+        overlay.onClosedForGood(() -> told[0]++);
+
+        publishAndFlush(bus, 1);
+        SwingUtilities.invokeAndWait(overlay::advanceForTest); // "Got it" is not an ending
+        assertEquals(0, told[0]);
+        SwingUtilities.invokeAndWait(overlay::startFromBeginning);
+        SwingUtilities.invokeAndWait(overlay::closeForTest);
+        assertEquals(1, told[0]);
+    }
+
+    /** PT18: "the step-5 box (about the top bar) sits at the bottom". It goes under the bar. */
+    @Test
+    void theTopBarsCardSitsUnderTheBar() {
+        java.awt.Rectangle topBar = new java.awt.Rectangle(0, 0, 1200, 48);
+        assertEquals(56, TutorialOverlay.cardY(topBar, true, 800, 120));
+        assertEquals(800 - 120 - 24, TutorialOverlay.cardY(topBar, false, 800, 120),
+                "any other highlight in the top half still puts the card in the bottom half");
+        assertEquals(24, TutorialOverlay.cardY(new java.awt.Rectangle(0, 600, 1200, 100), false, 800, 120));
+        assertEquals(24, TutorialOverlay.cardY(null, true, 800, 120), "no highlight found: the top, as before");
+    }
 
     @Test
     void theFirstStepDescribesAndHighlightsThePortTable() {

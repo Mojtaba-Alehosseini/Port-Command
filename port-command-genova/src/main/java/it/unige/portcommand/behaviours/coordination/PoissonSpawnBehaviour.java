@@ -187,7 +187,7 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
             return "Two ships are already waiting for your answer \u2014 answer one first.";
         }
         if (hm.walkInsInPort() >= MAX_ACTIVE_WALKINS) {
-            return "Four walk-in ships are in port already \u2014 wait for one to leave.";
+            return fullPortRefusal(hm);
         }
         spawnWalkIn();
         reset(gap.armUntil(simClock.nowSimMillis() + nextGapSimMillis(draw)));
@@ -199,12 +199,11 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
      * callers are {@link #onWake()}, behind the {@code canSpawnNow} gate, and since S17b
      * {@link #callNext()}, which checks the same two limits itself to say which one refused. */
     public void spawnWalkIn() {
-        List<String> types = List.copyOf(VesselTemplates.types());
-        String vesselType = types.get(draw.nextInt(types.size()));
-        VesselTemplate template = VesselTemplates.forType(vesselType);
-        double draft = template.sampleDraft(draw);
-        double length = template.sampleLength(draw);
-        int tonnage = template.sampleTonnage(draw);
+        it.unige.portcommand.harbourmaster.WalkInArrivals.Candidate next = nextArrival();
+        String vesselType = next.vesselType();
+        double draft = next.draft();
+        double length = next.length();
+        int tonnage = next.tonnage();
 
         String vesselId = "WALKIN-" + (++spawnCount);
         // S8 (GOAL 3, ADR-17): the display name is drawn HERE, once, and persisted verbatim —
@@ -222,6 +221,45 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
         ((HarbourMasterAgent) myAgent).walkInSpawned(vesselId);
         log.info("Poisson spawn: {} ({}) draft={} length={} tonnage={}",
                 vesselId, vesselType, draft, length, tonnage);
+    }
+
+    /**
+     * S18b (playtest 4, PT21): the ship that comes next. One ship of every type is sampled, and
+     * the arrival is drawn among those that fit a berth that is free NOW - the R8 search
+     * ({@code find_compatible_berths}) minus the berths held or closed, the very test a granted
+     * berth passes ({@link ForwardWalkInToPlayerBehaviour#freeCompatibleBerths}). With nothing
+     * free for anyone it is drawn among all of them, as before. Before PT21 the type was uniform
+     * over the five: container ships and cruise ships fit only berth 2, so with berth 2 taken
+     * they queued for hours while berths 1 and 3 stood empty. Scenario scripts name their own
+     * ships and do not come through here. Public for {@code PoissonSpawnBehaviourIT}.
+     */
+    public it.unige.portcommand.harbourmaster.WalkInArrivals.Candidate nextArrival() {
+        HarbourMasterAgent hm = (HarbourMasterAgent) myAgent;
+        List<it.unige.portcommand.harbourmaster.WalkInArrivals.Candidate> candidates = new java.util.ArrayList<>();
+        for (String type : List.copyOf(VesselTemplates.types())) {
+            VesselTemplate template = VesselTemplates.forType(type);
+            candidates.add(new it.unige.portcommand.harbourmaster.WalkInArrivals.Candidate(type,
+                    template.sampleDraft(draw), template.sampleLength(draw), template.sampleTonnage(draw)));
+        }
+        return it.unige.portcommand.harbourmaster.WalkInArrivals.choose(candidates,
+                c -> !ForwardWalkInToPlayerBehaviour.freeCompatibleBerths(hm, new VesselSpec("candidate",
+                        c.vesselType(), c.draft(), c.length(), c.tonnage(), CARGO_CLASS, 0L)).isEmpty(),
+                draw);
+    }
+
+    /** S18b (PT21): "Four walk-ins in port (2 waiting for berth 2) - wait for one to leave." The
+     * bracket groups the berth queue by the berths each waiting ship could take (R8). */
+    private static String fullPortRefusal(HarbourMasterAgent hm) {
+        List<List<String>> waiting = new java.util.ArrayList<>();
+        for (it.unige.portcommand.harbourmaster.BerthWaitQueue.Waiting w : hm.berthWaitQueue().inArrivalOrder()) {
+            it.unige.portcommand.harbourmaster.VesselTracking t = hm.activeVessels().get(w.vesselId());
+            if (t != null) {
+                VesselSpec s = t.spec();
+                waiting.add(it.unige.portcommand.prolog.PrologQueries.findCompatibleBerths(
+                        s.vesselType(), s.draft(), s.length(), s.tonnage()));
+            }
+        }
+        return it.unige.portcommand.harbourmaster.WalkInArrivals.fullPortRefusal(waiting);
     }
 
     /**

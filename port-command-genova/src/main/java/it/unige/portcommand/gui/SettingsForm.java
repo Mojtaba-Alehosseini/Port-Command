@@ -90,6 +90,21 @@ final class SettingsForm extends JPanel {
      * nothing until Apply, and a policy does nothing while the autopilot is off. */
     private boolean autopilotLive;
     private final JComboBox<String> difficultyCombo = new JComboBox<>(DIFFICULTIES);
+    /** S18b (PT20): whether the last press of Set policy set one - so that pressing it again on
+     * the field it just emptied does not replace "Policy set." with "Type a policy first.". */
+    private boolean lastPolicySet;
+    /**
+     * S18b (playtest 4, PT19): asked before every policy is forgotten. Moji's log showed a policy
+     * registered and, 24 seconds later, cleared - by this button, the only sender of the clear;
+     * one press, no question, no word in the form. Replaceable so headless tests can answer it.
+     */
+    private transient java.util.function.IntPredicate confirmClear = count ->
+            javax.swing.JOptionPane.showConfirmDialog(this,
+                    "Forget " + (count == 1 ? "the autopilot policy" : "all " + count + " autopilot policies")
+                            + "? The autopilot stops following "
+                            + (count == 1 ? "it" : "them") + " at once.",
+                    CLEAR_POLICIES_LABEL, javax.swing.JOptionPane.YES_NO_OPTION,
+                    javax.swing.JOptionPane.WARNING_MESSAGE) == javax.swing.JOptionPane.YES_OPTION;
     /** S14: the slider's value is a STEP INDEX into {@link DayLengthSteps}, never seconds. */
     private final JSlider dayLengthSlider = new JSlider(0, DayLengthSteps.count() - 1, 0);
     private final JLabel dayLengthReadout = new JLabel();
@@ -200,7 +215,10 @@ final class SettingsForm extends JPanel {
         policyList.setFont(policyList.getFont().deriveFont(java.awt.Font.PLAIN));
         clearPoliciesButton.setToolTipText("Forget every autopilot policy. The first policy that "
                 + "matches a vessel wins, so an old one can hide a newer one.");
-        clearPoliciesButton.addActionListener(e -> eventBus.publish(new PolicyClearRequestEvent()));
+        // S18b (PT19): never fired by a key press meant for something else (Space on the focused
+        // button), and never without a question.
+        clearPoliciesButton.setFocusable(false);
+        clearPoliciesButton.addActionListener(e -> clearPolicies());
         JPanel policyListRow = new JPanel(new java.awt.BorderLayout(6, 0));
         policyListRow.add(policyList, java.awt.BorderLayout.CENTER);
         JPanel clearHolder = new JPanel(new java.awt.BorderLayout());
@@ -304,7 +322,9 @@ final class SettingsForm extends JPanel {
     private void submitPolicy() {
         String text = policyField.getText().trim();
         if (text.isEmpty()) {
-            showPolicyHint("Type a policy first.");
+            if (!lastPolicySet) { // S18b (PT20): right after a success the field is empty on purpose
+                showPolicyHint("Type a policy first.");
+            }
             return;
         }
         policyParser.parse(text, eventBus).ifPresentOrElse(rule -> {
@@ -313,7 +333,25 @@ final class SettingsForm extends JPanel {
                     + escape(rule.description()) + " <i>(" + whenItActs()
                     + " Cancel will not undo it)</i></div></html>");
             policyField.setText("");
-        }, () -> showPolicyHint("Not understood."));
+            lastPolicySet = true;
+        }, () -> {
+            lastPolicySet = false;
+            showPolicyHint("Not understood.");
+        });
+    }
+
+    /** S18b (PT19): "Clear policies" - asked, then said. The list itself empties when the
+     * Assistant answers ({@code PolicyListEvent}); the line says what the press did. */
+    private void clearPolicies() {
+        int count = policies.descriptions().size();
+        if (count == 0 || !confirmClear.test(count)) {
+            return;
+        }
+        eventBus.publish(new PolicyClearRequestEvent());
+        lastPolicySet = false;
+        policyFeedback.setForeground(new java.awt.Color(60, 60, 60));
+        policyFeedback.setText("<html><b>Policies cleared.</b> The autopilot follows none until you set one."
+                + "</html>");
     }
 
     /**
@@ -475,5 +513,10 @@ final class SettingsForm extends JPanel {
 
     JButton clearPoliciesButtonForTest() {
         return clearPoliciesButton;
+    }
+
+    /** S18b (PT19): answers the "forget the policies?" question for a headless test. */
+    void confirmClearForTest(java.util.function.IntPredicate answer) {
+        confirmClear = answer;
     }
 }

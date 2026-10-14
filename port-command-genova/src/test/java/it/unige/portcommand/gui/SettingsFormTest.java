@@ -169,6 +169,7 @@ class SettingsFormTest {
         PolicyListModel policies = new PolicyListModel();
         policies.set(List.of("accept when price > 6000"));
         SettingsForm form = formShowing(bus, policies);
+        form.confirmClearForTest(count -> true);
 
         form.clearPoliciesButtonForTest().doClick();
 
@@ -179,6 +180,44 @@ class SettingsFormTest {
         policies.set(List.of());
         assertEquals("none", form.policyListForTest());
         assertFalse(form.clearPoliciesButtonForTest().isEnabled());
+    }
+
+    /**
+     * Playtest 4, PT19. Moji's log: a policy registered, then cleared 24 seconds later by this
+     * button - the only sender of the clear - with no question and no word in the form, so the
+     * reopened Settings looked as if the policy had been lost. A clear now asks first, cannot be
+     * fired by a key press meant for something else, and says what it did.
+     */
+    @Test
+    @Timeout(5)
+    void aClearIsAskedFirstAndSaysWhatItDid() {
+        EventBus bus = new EventBus();
+        List<PolicyClearRequestEvent> asked = new ArrayList<>();
+        bus.subscribe(PolicyClearRequestEvent.class, asked::add, DeliveryMode.CALLER_THREAD);
+        PolicyListModel policies = new PolicyListModel();
+        policies.set(List.of("accept when price > 6000", "reject when price < 1000"));
+        SettingsForm form = formShowing(bus, policies);
+        List<Integer> questions = new ArrayList<>();
+
+        form.confirmClearForTest(count -> {
+            questions.add(count);
+            return false;
+        });
+        form.clearPoliciesButtonForTest().doClick();
+        assertEquals(List.of(2), questions, "the question names how many policies would go");
+        assertTrue(asked.isEmpty(), "a clear the player did not confirm sends nothing");
+        assertFalse(form.policyFeedbackForTest().contains("cleared"), form.policyFeedbackForTest());
+
+        form.confirmClearForTest(count -> true);
+        form.clearPoliciesButtonForTest().doClick();
+        assertEquals(1, asked.size());
+        assertTrue(form.policyFeedbackForTest().contains("Policies cleared."), form.policyFeedbackForTest());
+    }
+
+    @Test
+    @Timeout(5)
+    void theClearButtonCannotBeFiredByAKeyPressMeantForSomethingElse() {
+        assertFalse(formShowing(new EventBus(), new PolicyListModel()).clearPoliciesButtonForTest().isFocusable());
     }
 
     /** The model belongs to the window and outlives every dialog; a closed form must not go on
@@ -220,6 +259,35 @@ class SettingsFormTest {
                 "a working example: " + feedback);
         assertFalse(form.policyFieldForTest().getText().isEmpty(),
                 "a rejected policy keeps the text so it can be corrected, not retyped");
+    }
+
+    /**
+     * Playtest 4, PT20 - born red. A policy that is set clears the field; a second press of Set
+     * policy (or Enter) on the now empty field replaced "Policy set." with "Type a policy first."
+     * - which read as if the text had not been there at all. Right after a success, an empty
+     * field leaves the success line where it is.
+     */
+    @Test
+    @Timeout(5)
+    void anEmptyFieldRightAfterASuccessKeepsTheSuccessLine() {
+        EventBus bus = new EventBus();
+        SettingsForm form = form(bus, new ArrayList<>());
+        form.policyFieldForTest().setText(PolicyParser.GRAMMAR_EXAMPLE);
+        form.clickSetPolicyForTest();
+        assertTrue(form.policyFeedbackForTest().contains("Policy set"), form.policyFeedbackForTest());
+
+        form.clickSetPolicyForTest();
+
+        assertTrue(form.policyFeedbackForTest().contains("Policy set"),
+                "the second press must not erase what the first one did: " + form.policyFeedbackForTest());
+
+        form.policyFieldForTest().setText("accept anything above 2500");
+        form.clickSetPolicyForTest();
+        assertTrue(form.policyFeedbackForTest().contains("Not understood"), form.policyFeedbackForTest());
+        form.policyFieldForTest().setText("");
+        form.clickSetPolicyForTest();
+        assertTrue(form.policyFeedbackForTest().contains("Type a policy first"),
+                "an empty field after anything but a success is still asked for: " + form.policyFeedbackForTest());
     }
 
     @Test

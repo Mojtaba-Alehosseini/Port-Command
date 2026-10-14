@@ -109,9 +109,23 @@ public final class TutorialOverlay extends JComponent {
     private final JLabel stepIndicator = new JLabel();
     private final JButton nextButton = new JButton("Next");
     private final JButton closeButton = new JButton("×");
+    /** S18b (PT18): the second way out, in words. */
+    private final JButton skipButton = new JButton("Skip tutorial");
 
     private boolean ready;
     private int currentStep; // 1..TOTAL_STEPS while shown; 0 when never shown
+    /** S18b (playtest 3-4, PT1/PT18): the player closed the tutorial - ×, Skip, or Done on the last
+     * step. Nothing more of it shows in this game; a new world starts it afresh. */
+    private boolean closedForGame;
+    /** S18b (PT1): the highest scripted step shown in this game - each step is shown once. */
+    private int shownUpTo;
+    /** S18b (PT18): whether the card on screen came from the scenario script. */
+    private boolean scriptedCard;
+    /** S18b (PT18): scripted steps that arrived while a card was being read - shown in turn, one
+     * per "Got it", instead of pulling the card from under the reader. */
+    private final java.util.TreeMap<Integer, String> waitingSteps = new java.util.TreeMap<>();
+    /** S18b (P10): told when the player ends the tutorial, so the window can remember it. */
+    private transient Runnable onClosedForGood = () -> { };
 
     /**
      * @param eventBus   the shared bus (GuiReady + scripted tutorial steps)
@@ -132,12 +146,15 @@ public final class TutorialOverlay extends JComponent {
         caption.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
         stepIndicator.setForeground(new Color(90, 90, 90));
         nextButton.addActionListener(e -> advance());
-        closeButton.addActionListener(e -> dismiss());
-        closeButton.setToolTipText("Dismiss the tutorial (reopen from Help → Show tutorial)");
+        closeButton.addActionListener(e -> closeForGood());
+        closeButton.setToolTipText("End the tutorial (reopen it from Help → Show tutorial)");
+        skipButton.addActionListener(e -> closeForGood());
+        skipButton.setToolTipText("End the tutorial (reopen it from Help → Show tutorial)");
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         controls.setOpaque(false);
         controls.add(stepIndicator);
+        controls.add(skipButton);
         controls.add(nextButton);
         controls.add(closeButton);
         card.setBackground(new Color(250, 250, 250));
@@ -149,7 +166,7 @@ public final class TutorialOverlay extends JComponent {
         card.setVisible(false);
         add(card);
 
-        this.autoDismissTimer = new Timer(autoDismissMillis, e -> dismiss());
+        this.autoDismissTimer = new Timer(autoDismissMillis, e -> closeForGood()); // the last card: over
         this.autoDismissTimer.setRepeats(false);
 
         this.readySubscription = eventBus.subscribe(GuiReadyEvent.class, e -> {
@@ -157,12 +174,35 @@ public final class TutorialOverlay extends JComponent {
             repaint();
         }, DeliveryMode.EDT);
         this.stepSubscription = eventBus.subscribe(TutorialStepAdvancedEvent.class,
-                e -> showStep(e.step(), e.text()), DeliveryMode.EDT);
+                e -> onScriptedStep(e.step(), e.text()), DeliveryMode.EDT);
         // Audit C-13 (2026-07-27): the scrim must not outlive the world it explains. Switching
         // Tutorial -> Storm mid-demo (DEMO_SCRIPT Beat 5) otherwise left the tutorial's step-5
         // card and its 60% scrim sitting over the storm. ChatPanel/CommLogPanel already reset on
         // this event; the overlay was one of the three surfaces that did not.
-        this.loadedSubscription = eventBus.subscribe(GameLoadedEvent.class, e -> dismiss(), DeliveryMode.EDT);
+        this.loadedSubscription = eventBus.subscribe(GameLoadedEvent.class, e -> resetForANewGame(),
+                DeliveryMode.EDT);
+    }
+
+    /** S18b (P10): what to run when the player ends the tutorial (the window remembers it). */
+    public void onClosedForGood(Runnable action) {
+        this.onClosedForGood = action == null ? () -> { } : action;
+    }
+
+    /**
+     * S18b (playtest 3-4, PT1/PT18): a step the scenario script fires. It is dropped once the
+     * player has closed the tutorial in this game, and when it was already shown; while another
+     * card is being read it waits for that card's "Got it" - the cards used to change under the
+     * reader on the script's clock, and come back after Close.
+     */
+    private void onScriptedStep(int step, String text) {
+        if (closedForGame || step < 1 || step > TOTAL_STEPS || step <= shownUpTo) {
+            return;
+        }
+        if (isShowingAStep()) {
+            waitingSteps.put(step, text);
+            return;
+        }
+        showStep(step, text);
     }
 
     /** Help → "Show tutorial" / first launch: page from step 1 with the canonical text. */
@@ -182,10 +222,16 @@ public final class TutorialOverlay extends JComponent {
         }
         boolean scripted = scenarioText != null && !scenarioText.isBlank();
         currentStep = step;
+        scriptedCard = scripted;
+        if (scripted) {
+            shownUpTo = Math.max(shownUpTo, step);
+        }
         caption.setText("<html><div style='width:320px'>" + escape(
                 scripted ? scenarioText : STEP_TEXT[step - 1]) + "</div></html>");
         stepIndicator.setText("Step " + step + " of " + TOTAL_STEPS);
-        nextButton.setText(step == TOTAL_STEPS ? "Done" : "Next");
+        // S18b (PT18): a scripted card is read, not paged - "Got it" puts it away until the
+        // script's next step (or shows a step that arrived meanwhile).
+        nextButton.setText(step == TOTAL_STEPS ? "Done" : scripted ? "Got it" : "Next");
         card.setVisible(true);
         setVisible(true);
         layoutCard();
@@ -209,17 +255,47 @@ public final class TutorialOverlay extends JComponent {
 
     private void advance() {
         if (currentStep >= TOTAL_STEPS) {
-            dismiss();
-        } else {
-            showStep(currentStep + 1, null);
+            closeForGood(); // Done
+            return;
         }
+        if (scriptedCard) {
+            java.util.Map.Entry<Integer, String> next = waitingSteps.pollFirstEntry();
+            while (next != null && next.getKey() <= shownUpTo) {
+                next = waitingSteps.pollFirstEntry();
+            }
+            if (next == null) {
+                hideCard();
+            } else {
+                showStep(next.getKey(), next.getValue());
+            }
+            return;
+        }
+        showStep(currentStep + 1, null);
     }
 
-    private void dismiss() {
+    /** Puts the card away; the tutorial goes on (a later scripted step may show). */
+    private void hideCard() {
         autoDismissTimer.stop();
         card.setVisible(false);
         setVisible(false);
         currentStep = 0;
+    }
+
+    /** S18b (PT1/PT18/P10): ×, Skip, Done on the last step, or the last card's own timer - no
+     * more tutorial in this game, and the window is told so it can remember it. */
+    private void closeForGood() {
+        hideCard();
+        closedForGame = true;
+        waitingSteps.clear();
+        onClosedForGood.run();
+    }
+
+    /** A new world (a new game or a load) gets its own tutorial; nothing of the last one stays. */
+    private void resetForANewGame() {
+        hideCard();
+        closedForGame = false;
+        shownUpTo = 0;
+        waitingSteps.clear();
     }
 
     /**
@@ -240,6 +316,26 @@ public final class TutorialOverlay extends JComponent {
      * driver without synthesising an {@code ActionEvent} on a button that is never realized. */
     void advanceForTest() {
         advance();
+    }
+
+    /** S18b: the × button, as a click would press it. */
+    void closeForTest() {
+        closeButton.doClick();
+    }
+
+    /** S18b: the "Skip tutorial" button, as a click would press it. */
+    void skipForTest() {
+        skipButton.doClick();
+    }
+
+    /** S18b: the caption on the card now (HTML). */
+    String captionForTest() {
+        return caption.getText();
+    }
+
+    /** S18b: the label of the paging button now (Next / Got it / Done). */
+    String nextLabelForTest() {
+        return nextButton.getText();
     }
 
     /** Test-only (S15): the canonical text of step {@code step} (1..{@link #TOTAL_STEPS}) — what
@@ -328,9 +424,21 @@ public final class TutorialOverlay extends JComponent {
         int cardH = Math.min(Math.max(pref.height, 90), Math.max(90, h - 40));
         int x = Math.max(20, (w - cardW) / 2);
         Rectangle cut = currentCutout();
-        boolean highlightInTopHalf = cut != null && cut.y + cut.height / 2 < h / 2;
-        int y = highlightInTopHalf ? Math.max(20, h - cardH - 24) : 24;
-        card.setBounds(x, y, cardW, cardH);
+        boolean topBar = currentStep > 0 && GameScreen.NAME_HUD.equals(STEP_TARGET[currentStep - 1]);
+        card.setBounds(x, cardY(cut, topBar, h, cardH), cardW, cardH);
+    }
+
+    /**
+     * Where the card goes. Clear of the highlight: the opposite half from it - except for the top
+     * bar, where the card sits just UNDER the bar (S18b, PT18: at the bottom of the window it was
+     * far from what it explains). Pure, so the placement is testable without a screen.
+     */
+    static int cardY(Rectangle cut, boolean targetIsTopBar, int overlayHeight, int cardHeight) {
+        if (targetIsTopBar && cut != null) {
+            return Math.min(cut.y + cut.height + 8, Math.max(20, overlayHeight - cardHeight - 24));
+        }
+        boolean highlightInTopHalf = cut != null && cut.y + cut.height / 2 < overlayHeight / 2;
+        return highlightInTopHalf ? Math.max(20, overlayHeight - cardHeight - 24) : 24;
     }
 
     @Override

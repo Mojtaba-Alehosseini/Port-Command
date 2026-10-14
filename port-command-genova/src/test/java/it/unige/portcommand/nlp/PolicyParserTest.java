@@ -104,6 +104,51 @@ class PolicyParserTest {
         assertFalse(published.stream().anyMatch(PolicyParsedEvent.class::isInstance));
     }
 
+    /**
+     * Playtest 4, PT20 - born red: the grammar was stricter than the player. "accept if
+     * price>1500" failed twice over - no "auto", no spaces around the operator. Both are optional
+     * now, and so is any extra spacing and the case of the words.
+     */
+    @org.junit.jupiter.params.ParameterizedTest(name = "[{0}] is a policy")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "accept if price>1500",
+            "accept if price > 1500 for tankers",
+            "  auto   accept  if  price>=1500  ",
+            "reject if price<1000",
+            "counter +10% if rounds_used<3 for ferries",
+            "Accept If Price > 1500",
+            "auto accept if price > 6000 for tankers",
+    })
+    void theWordAutoAndTheSpacesAreOptional(String text) {
+        assertTrue(new PolicyParser().parseQuietly(text).isPresent(), text);
+    }
+
+    @Test
+    void theLooseFormMeansWhatTheStrictFormMeans() {
+        PolicyRule loose = new PolicyParser().parseQuietly("accept if price>1500 for tankers").orElseThrow();
+
+        assertTrue(loose.predicate().test(tanker(1600.0)));
+        assertFalse(loose.predicate().test(tanker(1400.0)));
+        assertFalse(loose.predicate().test(cargoVessel(1600.0)), "the scope still applies");
+        assertEquals(PolicyRule.PolicyAction.accept(), loose.action());
+    }
+
+    /** ...and a sentence that is not a policy is still not one: the words around "if" must be
+     * an action and a condition the DSL knows. */
+    @org.junit.jupiter.params.ParameterizedTest(name = "[{0}] is not a policy")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "accept the tanker if you can",
+            "accept if you pay 2000",
+            "deal if price > 1500",
+            "if price > 1500",
+            "accept if",
+            "accept anything above 2500",
+            "please accept tankers somehow",
+    })
+    void aSentenceThatIsNotAPolicyIsStillNotOne(String text) {
+        assertTrue(new PolicyParser().parseQuietly(text).isEmpty(), text);
+    }
+
     @Test
     void unknownVesselTypeWordFailsToParse() {
         PolicyParser parser = new PolicyParser();

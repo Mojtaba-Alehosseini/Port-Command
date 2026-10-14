@@ -214,6 +214,21 @@ class ScriptedEventBehaviourTest {
         assertEquals(5, behaviour.firedEventIdsSorted().size(), "all 5 due by start+1500s");
     }
 
+    /** S18b (playtest 3, PT1): a tutorial step is the card's business alone. The "Tutorial n/5"
+     * chip it also published duplicated the card, and was still on the strip after the scenario
+     * had ended. */
+    @Test
+    void aTutorialStepPublishesTheStepAndNoChip() {
+        new it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent(0, 1, "s1").apply(ctx);
+
+        java.util.List<it.unige.portcommand.util.Event> published =
+                it.unige.portcommand.util.EventBusProbe.published(bus);
+        assertTrue(published.stream().anyMatch(e ->
+                e instanceof it.unige.portcommand.scenario.events.TutorialStepAdvancedEvent t && t.step() == 1));
+        assertTrue(published.stream().noneMatch(e -> e instanceof it.unige.portcommand.gui.events.NotificationEvent),
+                "no chip beside the card: " + published);
+    }
+
     // ---- Poisson suppression window ----
 
     @Test

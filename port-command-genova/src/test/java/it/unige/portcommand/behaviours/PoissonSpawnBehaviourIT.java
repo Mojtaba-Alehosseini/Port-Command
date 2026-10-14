@@ -18,6 +18,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -147,6 +148,54 @@ class PoissonSpawnBehaviourIT {
         hm.activeVessels().put("WALKIN-2", walkIn("WALKIN-2", Stage.NEGOTIATING));
         assertFalse(behaviour.canSpawnNow(),
                 "fixture sanity: a second NEGOTIATING walk-in is what does hold the next arrival");
+    }
+
+    /**
+     * Playtest 4, PT21 - born red. Container ships and cruise ships fit only berth 2; with the type
+     * drawn uniformly, two fifths of all walk-ins needed the one berth, and with berth 2 taken
+     * they queued for hours while berths 1 and 3 stood empty. With berth 2 held, no new arrival
+     * may be one of them; with it free, they come again.
+     */
+    @Test
+    void aWalkInIsDrawnAmongTheShipsThatFitABerthThatIsFreeNow() throws Exception {
+        HarbourMasterAgent hm = spawnHm();
+        PoissonSpawnBehaviour behaviour = new PoissonSpawnBehaviour(hm, boot.getSimClock(),
+                boot.getRandomSource(), boot.getSpawner(), boot.getMarketHistoryArtifact());
+        VesselSpec container = new VesselSpec("WALKIN-1", "container_vessel", 12.0, 280.0, 60000, "general_cargo", 0L);
+        hm.activeVessels().put("WALKIN-1", VesselTracking.arriving("WALKIN-1", container, Channel.WALK_IN,
+                new AID("WALKIN-1", AID.ISGUID)).withStage(Stage.DOCKED).withBerth("berth_2"));
+
+        java.util.Set<String> whileTaken = new java.util.HashSet<>();
+        for (int i = 0; i < 60; i++) {
+            whileTaken.add(behaviour.nextArrival().vesselType());
+        }
+        assertFalse(whileTaken.contains("container_vessel"), "berth 2 is taken: " + whileTaken);
+        assertFalse(whileTaken.contains("cruise_ship"), "berth 2 is taken: " + whileTaken);
+
+        hm.activeVessels().remove("WALKIN-1");
+        java.util.Set<String> whileFree = new java.util.HashSet<>();
+        for (int i = 0; i < 60; i++) {
+            whileFree.add(behaviour.nextArrival().vesselType());
+        }
+        assertTrue(whileFree.contains("container_vessel") && whileFree.contains("cruise_ship"),
+                "berth 2 is free again: " + whileFree);
+    }
+
+    /** PT21: "Next ship" in a full port says who is waiting for what. */
+    @Test
+    void aFullPortRefusalNamesTheBerthQueue() throws Exception {
+        HarbourMasterAgent hm = spawnHm();
+        PoissonSpawnBehaviour behaviour = new PoissonSpawnBehaviour(hm, boot.getSimClock(),
+                boot.getRandomSource(), boot.getSpawner(), boot.getMarketHistoryArtifact());
+        VesselSpec container = new VesselSpec("WALKIN-4", "container_vessel", 12.0, 280.0, 60000, "general_cargo", 0L);
+        hm.activeVessels().put("WALKIN-1", walkIn("WALKIN-1", Stage.DOCKED));
+        hm.activeVessels().put("WALKIN-2", walkIn("WALKIN-2", Stage.DOCKED));
+        hm.activeVessels().put("WALKIN-3", walkIn("WALKIN-3", Stage.IN_TRANSIT));
+        hm.activeVessels().put("WALKIN-4", VesselTracking.arriving("WALKIN-4", container, Channel.WALK_IN,
+                new AID("WALKIN-4", AID.ISGUID)).withStage(Stage.AWAITING_BERTH));
+        hm.berthWaitQueue().enqueue("WALKIN-4", 4000.0, 8, boot.getSimClock().nowSimMillis());
+
+        assertEquals("Four walk-ins in port (1 waiting for berth 2) \u2014 wait for one to leave.", behaviour.callNext());
     }
 
     private static VesselTracking walkIn(String vesselId, Stage stage) {

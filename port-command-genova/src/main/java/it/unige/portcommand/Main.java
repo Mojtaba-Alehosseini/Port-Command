@@ -108,7 +108,8 @@ public final class Main {
             // SchemaVersion/CorruptSave surface on the console.
             case LOAD -> session.loadGame(loadPath);
             // Task 23 — headless-testable scenario boot.
-            case SCENARIO -> session.startScenario(scenarioKey);
+            // S18b (PT2): with a window to show it in, the scenario waits for the player.
+            case SCENARIO -> session.startScenario(scenarioKey, guiRequested);
             // S15: no world yet. The shell alone gives the window everything its constructor
             // dereferences (lifecycle, bus, clock, port artifact, NLP pipeline); the player then
             // picks a game in the New Game dialog the window opens with.

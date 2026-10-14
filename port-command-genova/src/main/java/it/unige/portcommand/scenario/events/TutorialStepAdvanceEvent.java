@@ -1,6 +1,5 @@
 package it.unige.portcommand.scenario.events;
 
-import it.unige.portcommand.gui.events.NotificationEvent;
 import it.unige.portcommand.scenario.GameContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,12 +22,15 @@ public record TutorialStepAdvanceEvent(long simTimeSeconds, int step, String tex
     /** The tutorial's step count (§3.15: 5 steps). */
     public static final int TOTAL_STEPS = 5;
 
+    /**
+     * S18b (playtest 3, PT1): only the step event. The "Tutorial N/5" chip this used to publish
+     * as well was the placeholder from before the overlay existed (see the class note); with the
+     * card on screen it said everything twice, and it was still there - stale - after the
+     * scenario had ended. The overlay is the one rendering now.
+     */
     @Override
     public void apply(GameContext ctx) {
         ctx.eventBus().publish(new TutorialStepAdvancedEvent(step, text));
-        ctx.eventBus().publish(new NotificationEvent(
-                "Tutorial " + step + "/" + TOTAL_STEPS + " — " + text,
-                NotificationEvent.Severity.INFO, ctx.simClock().nowSimMillis()));
         log.info("tutorial step {} advanced", step);
     }
 }

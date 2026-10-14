@@ -216,7 +216,8 @@ class ScenarioScoreIT {
 
         // Four walk-ins in port: the in-port limit refuses the fifth.
         boot.getEventBus().publish(new CallNextShipEvent());
-        assertNotNull(awaitEvent(NotificationEvent.class, e -> e.text().contains("in port already"), 10_000),
+        // S18b (PT21): the sentence now names the berth queue - "Four walk-ins in port (…) - wait".
+        assertNotNull(awaitEvent(NotificationEvent.class, e -> e.text().startsWith("Four walk-ins in port"), 10_000),
                 "the in-port limit is said in the strip: " + strip());
         assertEquals(4, walkInsInPort(hm), "four walk-ins, not five");
         assertEquals(0, countSafety(MovementSafetyEvent.Kind.UNSAFE_MOVE), "nothing unsafe was ordered");

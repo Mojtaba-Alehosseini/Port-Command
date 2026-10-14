@@ -357,6 +357,27 @@ class FreePlaySessionIT {
                 "…and the autopilot policies in force, which Settings would otherwise show as none");
     }
 
+    /**
+     * S18b (playtest 2, PT2): "game time already passed when the player first sees the scenario".
+     * A scenario the window starts waits for the player: the world is up and paused, the clock
+     * still at the scenario's opening minute. The plain start - headless runs, the smoke run, every
+     * other IT - still runs at once.
+     */
+    @Test
+    void aScenarioStartedForTheWindowWaitsForThePlayer() throws Exception {
+        GameSession session = newSession(300);
+        session.startScenario("tutorial", true);
+
+        assertEquals(GameMode.PAUSED, session.lifecycle().mode());
+        assertTrue(boot.getSimClock().isPaused(), "the clock does not run behind the first card");
+        long atStart = boot.getSimClock().nowSimMillis();
+        assertFalse(waitUntil(() -> boot.getSimClock().nowSimMillis() != atStart, 1_500),
+                "no game time passes while it waits");
+
+        session.lifecycle().resume();
+        assertEquals(GameMode.RUNNING, session.lifecycle().mode(), "the player's ▶ starts it");
+    }
+
     // ---- fixtures ----
 
     private GameSession newSession(long realSecondsPerGameDay) {

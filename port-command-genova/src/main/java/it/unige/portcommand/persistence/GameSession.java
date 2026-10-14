@@ -158,6 +158,16 @@ public final class GameSession {
      * pinned seed, never a sentinel.
      */
     public synchronized void startScenario(String key) throws CorruptSaveException {
+        startScenario(key, false);
+    }
+
+    /**
+     * S18b (playtest 2, PT2): as {@link #startScenario(String)}, and with {@code paused} the
+     * world is paused the moment it is up - the player first sees the scenario at its start, reads
+     * the first card, and presses ▶ (or Esc). The window asks for it; headless runs, the smoke run
+     * and the ITs keep the running start they have always had.
+     */
+    public synchronized void startScenario(String key, boolean paused) throws CorruptSaveException {
         it.unige.portcommand.scenario.Scenario scenario = scenarioRegistry.findByKey(key)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "unknown scenario '" + key + "' — valid keys: "
@@ -177,6 +187,9 @@ public final class GameSession {
                 boot.getSimClock().nowSimMillis()));
         log.info("scenario '{}' started (seed {}, day length {}s)", key, seed,
                 state.simClock().realSecondsPerGameDay());
+        if (paused) {
+            lifecycle.pauseIfRunning();
+        }
     }
 
     /**

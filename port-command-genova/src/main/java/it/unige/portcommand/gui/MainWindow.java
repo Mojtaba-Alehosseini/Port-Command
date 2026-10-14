@@ -126,6 +126,10 @@ public final class MainWindow extends JFrame {
 
     /** The scenario whose own scripted cards ARE the tutorial (see {@link #maybeAutoOpenTutorial}). */
     private static final String TUTORIAL_SCENARIO_KEY = "tutorial";
+    /** S18b (P10): set once the player has ended the tutorial (×, Skip or Done) - the cards do
+     * not open by themselves on any later launch. Help → Show tutorial still shows them. */
+    static final String PREF_TUTORIAL_CLOSED = "tutorial.closed";
+
 
     /** S16: shown when a changed day length reaches {@link #applySettings} under the script lock. */
     static final String DAY_LENGTH_LOCKED_TEXT =
@@ -248,6 +252,7 @@ public final class MainWindow extends JFrame {
         // PauseOverlay) above the content; it searches the content pane's tree for the named
         // highlight targets and paints nothing until the window is up (GuiReadyEvent).
         this.tutorialOverlay = new TutorialOverlay(eventBus, getContentPane());
+        tutorialOverlay.onClosedForGood(() -> prefs.putBoolean(PREF_TUTORIAL_CLOSED, true));
         getLayeredPane().add(tutorialOverlay, JLayeredPane.MODAL_LAYER);
         // Task 21: apply the four-knob Settings screen. Day length is genuinely live (re-paces the
         // shared SimClock); the other three are mirrored for the dialog's next open (difficulty is
@@ -386,6 +391,7 @@ public final class MainWindow extends JFrame {
         } else {
             // A game was started on the command line (--scenario / --load) and is already
             // running: for the first-launch tutorial, "the first game has started" is now.
+            showTheTutorialsFirstCard(); // S18b (PT2): a --scenario tutorial launch starts paused
             maybeAutoOpenTutorial();
         }
     }
@@ -423,9 +429,35 @@ public final class MainWindow extends JFrame {
         }
         tutorialAutoOpenConsidered = true;
         if (session.saveLoadManager().isFirstLaunch()
+                && !prefs.getBoolean(PREF_TUTORIAL_CLOSED, false) // S18b (P10)
                 && !TUTORIAL_SCENARIO_KEY.equals(session.activeScenarioKey())) {
             tutorialOverlay.startFromBeginning();
         }
+    }
+
+    /**
+     * S18b (PT2): the Tutorial starts paused, so its first card has to be on screen without the
+     * clock - the script's own step 1 fires on the first tick, which a paused world never takes.
+     * The overlay shows each step once, so the script's step 1 is dropped when it does come.
+     */
+    private void showTheTutorialsFirstCard() {
+        if (!TUTORIAL_SCENARIO_KEY.equals(session.activeScenarioKey())) {
+            return;
+        }
+        session.scenarioRegistry().findByKey(TUTORIAL_SCENARIO_KEY)
+                .flatMap(MainWindow::firstScriptedTutorialStep)
+                .ifPresent(text -> eventBus.publish(
+                        new it.unige.portcommand.scenario.events.TutorialStepAdvancedEvent(1, text)));
+    }
+
+    /** S18b (PT2): the text of a scenario's scripted tutorial step 1, if it has one. Static and
+     * pure so a headless test can read it from the real scenario file. */
+    static Optional<String> firstScriptedTutorialStep(it.unige.portcommand.scenario.Scenario scenario) {
+        return scenario.events().stream()
+                .filter(e -> e instanceof it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent t
+                        && t.step() == 1)
+                .map(e -> ((it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent) e).text())
+                .findFirst();
     }
 
     /** Keeps the tutorial overlay exactly over the content area as the window resizes. */
@@ -825,7 +857,7 @@ public final class MainWindow extends JFrame {
                 if (chosen.isFreePlay()) {
                     session.startSandbox();
                 } else {
-                    session.startScenario(chosen.scenarioKey());
+                    session.startScenario(chosen.scenarioKey(), true); // S18b (PT2): starts paused
                 }
             } catch (Exception e) {
                 failure = e;
@@ -839,6 +871,7 @@ public final class MainWindow extends JFrame {
                             "New Game", JOptionPane.ERROR_MESSAGE);
                 } else {
                     // S15: a game is running now — the moment the first-launch tutorial waits for.
+                    showTheTutorialsFirstCard();
                     maybeAutoOpenTutorial();
                 }
             });
