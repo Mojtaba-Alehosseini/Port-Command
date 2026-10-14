@@ -101,6 +101,13 @@ class SaveLoadSessionIT {
         // --- 22.7: while that negotiation is live, a manual save is REFUSED. ---
         assertThrows(SaveNotAllowedException.class, session::saveNow,
                 "save during a live negotiation must be blocked with the polite message");
+        // S18b (PLAYABILITY_DECISIONS §10): ...with the refusal the window turns into the question
+        // "Open negotiations will be lost. Save anyway?" - and a yes saves without the walk-in.
+        assertThrows(OpenNegotiationException.class, session::saveNow);
+        Path withoutTheNegotiation = session.saveNow(true);
+        assertEquals(0, new SaveLoadManager(tempDir).load(withoutTheNegotiation).agents().activeVessels().size(),
+                "the negotiating walk-in is left out of the file");
+        // (The negotiation itself goes on in the running game: the deal below closes over it.)
 
         // --- Close the deal through the REAL wire path (bus → dispatch → vessel → CONFIRM). ---
         boot.getEventBus().publish(new PlayerCommandEvent(PlayerCommandKind.ACCEPT, "WALKIN-T1", Map.of()));

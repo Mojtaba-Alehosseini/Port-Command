@@ -119,6 +119,19 @@ public final class HUDPanel extends JPanel {
     static final String NEXT_SHIP_TOOLTIP = "Call the next walk-in ship in now";
     static final String NEXT_SHIP_LOCKED_TOOLTIP = "The scenario's own ships are still arriving";
 
+    /** S18b (playtest 2, PT4): the pause button, first in the speed box. */
+    static final String NAME_PAUSE = "hud-pause";
+    /** U+23F8 DOUBLE VERTICAL BAR and U+25B6 BLACK RIGHT-POINTING TRIANGLE — or, on a machine
+     * whose font has no glyph for them, the words. */
+    static final String PAUSE_GLYPH = "\u23F8";
+    static final String RESUME_GLYPH = "\u25B6";
+    static final String PAUSE_TOOLTIP = "Pause the game (Esc)";
+    static final String RESUME_TOOLTIP = "Resume the game (Esc)";
+    /** S18b (PT4): ⏸ while the game runs, ▶ while it is paused; {@code null} on a bar without the game controls. */
+    private javax.swing.JButton pauseButton;
+    /** What the pause button does: the window's one pause funnel (Esc, Game ▸ Pause, this). */
+    private Runnable onPauseToggle = () -> { };
+
     /** A HUD with no speed control (headless panel tests that only watch the labels). */
     public HUDPanel(EventBus eventBus) {
         this(eventBus, null);
@@ -152,6 +165,7 @@ public final class HUDPanel extends JPanel {
 
     private void addSpeedToggles(EventBus eventBus, GameSpeedControl speedControl) {
         JPanel box = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        addPauseButton(box);
         box.add(new JLabel("Speed"));
         ButtonGroup group = new ButtonGroup();
         for (int speed : GameSpeedModel.options()) {
@@ -175,6 +189,72 @@ public final class HUDPanel extends JPanel {
     }
 
     private static final String SPEED_PROPERTY = "hud.speed";
+
+    /**
+     * S18b (playtest 2, PT4): "No pause button." ⏸ / ▶ beside the speed toggles. It only
+     * calls the window's pause funnel, which knows when a toggle is refused (a save or a load in
+     * flight); the window then shows the new state here ({@link #showPauseState}). While the game
+     * is paused this one button stays clickable through the PAUSED overlay — it is how a
+     * scenario that starts paused (PT2) is started. Not focusable, like everything on the bar.
+     */
+    private void addPauseButton(JPanel box) {
+        pauseButton = new javax.swing.JButton();
+        pauseButton.setName(NAME_PAUSE);
+        pauseButton.setFocusable(false);
+        pauseButton.setMargin(new java.awt.Insets(1, 6, 1, 6));
+        pauseButton.addActionListener(e -> onPauseToggle.run());
+        box.add(pauseButton);
+        box.add(javax.swing.Box.createHorizontalStrut(6));
+        showPauseState(false, false);
+    }
+
+    /** S18b (PT4): what the pause button does. */
+    public void onPauseToggle(Runnable action) {
+        this.onPauseToggle = java.util.Objects.requireNonNull(action, "action");
+    }
+
+    /**
+     * S18b (PT4): ▶ while the game is paused, ⏸ otherwise; disabled when there is nothing to
+     * toggle (no game, a load in flight).
+     */
+    public void showPauseState(boolean paused, boolean enabled) {
+        if (pauseButton == null) {
+            return;
+        }
+        pauseButton.setText(paused ? glyphOr(RESUME_GLYPH, "Resume") : glyphOr(PAUSE_GLYPH, "Pause"));
+        pauseButton.setToolTipText(paused ? RESUME_TOOLTIP : PAUSE_TOOLTIP);
+        pauseButton.setEnabled(enabled);
+    }
+
+    /** The glyph, or the words where the button's font cannot draw it. */
+    private String glyphOr(String glyph, String words) {
+        java.awt.Font font = pauseButton.getFont();
+        return font == null || font.canDisplayUpTo(glyph) == -1 ? glyph : words;
+    }
+
+    /**
+     * S18b (U13): no game is running — every value cell shows "—" instead of a day 1 at
+     * midnight that looks frozen. The values come back as soon as a game runs.
+     */
+    public void showNoGame(boolean noGame) {
+        model.setNoGame(noGame);
+        refreshLabels();
+    }
+
+    /** S18b (PT4): the pause button's rectangle in {@code target}'s coordinates, or an empty one
+     * when the bar has none. The PAUSED overlay lets clicks through there; whether the bar is
+     * showing at all is the window's question. */
+    java.awt.Rectangle pauseButtonBoundsIn(java.awt.Component target) {
+        if (pauseButton == null || pauseButton.getParent() == null || target == null) {
+            return new java.awt.Rectangle();
+        }
+        return javax.swing.SwingUtilities.convertRectangle(pauseButton.getParent(), pauseButton.getBounds(), target);
+    }
+
+    /** Test-only: the pause button, or {@code null} on a bar without the game controls. */
+    javax.swing.JButton pauseButtonForTest() {
+        return pauseButton;
+    }
 
     /**
      * S17b (playtest 2, PT8): "Next ship" - the next walk-in comes now instead of when its arrival

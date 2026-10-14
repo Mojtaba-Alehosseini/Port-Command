@@ -95,6 +95,10 @@ final class GameScreen extends JPanel {
 
     private final ChatPanel chatPanel;
     private final CommLogPanel commLogPanel;
+    /** S18b: kept for the window — the pause button (PT4) and the empty shell's "—" (U13). */
+    private final HUDPanel hud;
+    /** S18b (U13): kept for the empty shell's pinned hint. */
+    private final NotificationStrip notificationStrip;
     private final JSplitPane outerSplit;
     private final JSplitPane innerSplit;
     /** True while {@link #applyDividerProportions} is moving the dividers itself, so that is never
@@ -114,8 +118,9 @@ final class GameScreen extends JPanel {
                SimClock simClock, GameSpeedControl speedControl) {
         super(new BorderLayout());
 
-        HUDPanel hud = new HUDPanel(eventBus, speedControl);
+        hud = new HUDPanel(eventBus, speedControl);
         hud.setName(NAME_HUD);
+        notificationStrip = new NotificationStrip(eventBus);
 
         chatPanel = new ChatPanel(eventBus, chatInputProcessor, simClock);
         chatPanel.setName(NAME_CHAT);
@@ -142,7 +147,7 @@ final class GameScreen extends JPanel {
 
         add(hud, BorderLayout.NORTH);
         add(outerSplit, BorderLayout.CENTER);
-        add(new NotificationStrip(eventBus), BorderLayout.SOUTH);
+        add(notificationStrip, BorderLayout.SOUTH);
     }
 
     /**
@@ -280,6 +285,63 @@ final class GameScreen extends JPanel {
      */
     Rectangle columnsBoundsIn(Component target) {
         return boundsIn(outerSplit, target);
+    }
+
+    /** S18b (PT4): what the top bar's pause button does — the window's one pause funnel. */
+    void onPauseToggle(Runnable action) {
+        hud.onPauseToggle(action);
+    }
+
+    /**
+     * S18b: the window's mode, shown where this screen shows it — the pause button's ⏸ / ▶
+     * (PT4), and for the empty shell (U13) "—" in the top bar, "No game running" in the chat
+     * column and a hint pinned in the notification strip. EDT only.
+     *
+     * @param noGame    the empty shell: no game is running
+     * @param paused    the game is paused
+     * @param canToggle the pause button may be pressed (a running or paused game, nothing loading)
+     */
+    void showGameState(boolean noGame, boolean paused, boolean canToggle) {
+        hud.showNoGame(noGame);
+        hud.showPauseState(paused, canToggle);
+        chatPanel.showNoGame(noGame);
+        notificationStrip.showPinnedHint(noGame ? MainWindow.NO_GAME_RUNNING_TEXT : null);
+    }
+
+    /** S18b (PT4): the top bar's pause button in {@code target}'s coordinates, or empty. */
+    Rectangle pauseButtonBoundsIn(Component target) {
+        return hud.pauseButtonBoundsIn(target);
+    }
+
+    /**
+     * S18b (TREE_ANALYSIS_DECISIONS T8): where the PAUSED caption goes — over the top bar, left
+     * of the pause button, in {@code target}'s coordinates. The caption used to sit in the middle
+     * of the window, over the chat column the player may be typing in. Empty while the bar is not
+     * laid out; with no pause button, the whole bar.
+     */
+    Rectangle pauseCaptionAreaIn(Component target) {
+        Rectangle bar = boundsIn(hud, target);
+        if (bar.isEmpty()) {
+            return bar;
+        }
+        Rectangle button = hud.pauseButtonBoundsIn(target);
+        if (!button.isEmpty()) {
+            bar.width = Math.max(0, button.x - HUDPanel.HGAP - bar.x);
+        }
+        return bar.width > 0 ? bar : new Rectangle();
+    }
+
+    /** Test-only (S18b): the parts the window drives. */
+    HUDPanel hudForTest() {
+        return hud;
+    }
+
+    NotificationStrip notificationStripForTest() {
+        return notificationStrip;
+    }
+
+    ChatPanel chatPanelForTest() {
+        return chatPanel;
     }
 
     /** The chat column alone, as a rectangle in {@code target}'s coordinate space. */

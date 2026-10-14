@@ -2,12 +2,10 @@ package it.unige.portcommand.gui;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
 import java.awt.KeyboardFocusManager;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -41,11 +39,19 @@ import javax.swing.SwingUtilities;
  * a pause is exactly when the player wants to scroll the log or pick the next vessel from the
  * waiting list, and a dimmed, unclickable list beside a live chat would only look broken.
  *
- * <p>The overlay's own PAUSED box stays where it was, centred on the window — which in the
- * three-column layout puts it over the chat column: {@link #captionBox()} — the caption, its hint
- * line and the Resume button, with a small margin — keeps both its dim and its clicks inside the
- * pass-through area, because white text on an undimmed transcript is not a pause indicator
- * (adversarial review, S14).
+ * <p>The overlay's own PAUSED box: {@link #captionBox()} — the caption, its hint line and the
+ * Resume button, with a small margin — keeps both its dim and its clicks inside the pass-through
+ * area, because white text on an undimmed transcript is not a pause indicator (adversarial
+ * review, S14).
+ *
+ * <h2>S18b: the caption sits on the top bar, and the bar's ▶ can be clicked</h2>
+ * Until S18b the box was centred on the window — in the three-column layout, over the chat
+ * column the player may be typing in while paused (TREE_ANALYSIS_DECISIONS T8). Given a
+ * {@code captionArea} (the top bar left of its pause button, {@code GameScreen.pauseCaptionAreaIn}),
+ * it is one row there instead — "PAUSED  press ▶ or Esc to continue  [Resume]" — and the
+ * columns are clear. Without one, or when the row would not fit, it is centred as before. And the
+ * top bar's pause button (playtest 2, PT4) is a third pass-through region: it is how a scenario
+ * that starts paused is started, so it must work through the scrim.
  *
  * <h2>The menu bar is deliberately NOT swallowed (audit C-04, 2026-07-27)</h2>
  * {@code JRootPane.RootLayout} sizes the glass pane to the ENTIRE root pane — which includes the
@@ -73,6 +79,23 @@ final class PauseOverlay extends JPanel {
      * rectangle, widened in S15 to all three columns. Re-read on every hit-test and paint, like
      * the menu strip: a window resize changes it. */
     private final transient Supplier<Rectangle> columnsRegion;
+    /** S18b (T8): where the caption row goes (the top bar, left of its pause button), or empty. */
+    private final transient Supplier<Rectangle> captionArea;
+    /** S18b (PT4): the top bar's pause button — clicks through, undimmed — or empty. */
+    private final transient Supplier<Rectangle> playButtonRegion;
+
+    /** S18b (T8): the hint's words; ▶ is the top bar's button (PT4). */
+    static final String HINT_TEXT = "press ▶ or Esc to continue";
+    /** Gap between the caption row's three parts, and between the stacked layout's rows. */
+    private static final int GAP = 12;
+    private static final int STACK_GAP = 12;
+    /** The caption's size stacked in the middle (as before S18b), and in a row on the top bar. */
+    private static final float STACKED_POINTS = 36f;
+    private static final float ROW_POINTS = 18f;
+
+    private final JLabel label = new JLabel("PAUSED", SwingConstants.CENTER);
+    private final JLabel hint = new JLabel(HINT_TEXT, SwingConstants.CENTER);
+    private final JButton resume = new JButton("Resume");
 
     PauseOverlay(Runnable onResume) {
         this(onResume, Rectangle::new);
@@ -82,36 +105,82 @@ final class PauseOverlay extends JPanel {
         this(onResume, passThroughRegion, Rectangle::new);
     }
 
+    PauseOverlay(Runnable onResume, Supplier<Rectangle> passThroughRegion, Supplier<Rectangle> columnsRegion) {
+        this(onResume, passThroughRegion, columnsRegion, Rectangle::new, Rectangle::new);
+    }
+
     /**
      * @param passThroughRegion the menu-bar strip, in this component's coordinates
      * @param columnsRegion     the three-column area, in this component's coordinates
      *                          ({@code GameScreen.columnsBoundsIn(overlay)} in the real window)
      */
-    PauseOverlay(Runnable onResume, Supplier<Rectangle> passThroughRegion, Supplier<Rectangle> columnsRegion) {
-        super(new GridBagLayout());
+    /**
+     * @param captionArea      S18b (T8): where the caption row goes, in this component's coordinates
+     * @param playButtonRegion S18b (PT4): the top bar's pause button, in this component's coordinates
+     */
+    PauseOverlay(Runnable onResume, Supplier<Rectangle> passThroughRegion, Supplier<Rectangle> columnsRegion,
+                 Supplier<Rectangle> captionArea, Supplier<Rectangle> playButtonRegion) {
+        super(null);
         this.passThroughRegion = passThroughRegion;
         this.columnsRegion = columnsRegion;
+        this.captionArea = captionArea;
+        this.playButtonRegion = playButtonRegion;
         setOpaque(false);
         setFocusable(true);
         addMouseListener(new MouseAdapter() { });
 
-        JLabel label = new JLabel("PAUSED", SwingConstants.CENTER);
-        label.setFont(label.getFont().deriveFont(Font.BOLD, 36f));
+        label.setFont(label.getFont().deriveFont(Font.BOLD, STACKED_POINTS));
         label.setForeground(Color.WHITE);
-        JLabel hint = new JLabel("press Esc or Resume to continue", SwingConstants.CENTER);
         hint.setForeground(Color.LIGHT_GRAY);
-        JButton resume = new JButton("Resume");
         resume.addActionListener(e -> onResume.run());
+        add(label);
+        add(hint);
+        add(resume);
+    }
 
-        GridBagConstraints c = new GridBagConstraints();
-        c.gridx = 0;
-        c.insets = new Insets(6, 0, 6, 0);
-        c.gridy = 0;
-        add(label, c);
-        c.gridy = 1;
-        add(hint, c);
-        c.gridy = 2;
-        add(resume, c);
+    /**
+     * S18b (T8): one row on the top bar when there is an area for it and the row fits there;
+     * otherwise stacked in the middle of the overlay, as before S18b.
+     */
+    @Override
+    public void doLayout() {
+        Rectangle area = captionArea.get();
+        setLabelPoints(ROW_POINTS);
+        Dimension l = label.getPreferredSize();
+        Dimension h = hint.getPreferredSize();
+        Dimension b = resume.getPreferredSize();
+        int rowWidth = l.width + GAP + h.width + GAP + b.width;
+        int rowHeight = Math.max(l.height, Math.max(h.height, b.height));
+        if (!area.isEmpty() && rowWidth <= area.width && rowHeight <= area.height + 8) {
+            int x = area.x + (area.width - rowWidth) / 2;
+            int middle = area.y + area.height / 2;
+            label.setBounds(x, middle - l.height / 2, l.width, l.height);
+            x += l.width + GAP;
+            hint.setBounds(x, middle - h.height / 2, h.width, h.height);
+            x += h.width + GAP;
+            resume.setBounds(x, middle - b.height / 2, b.width, b.height);
+            return;
+        }
+        setLabelPoints(STACKED_POINTS);
+        l = label.getPreferredSize();
+        int total = l.height + STACK_GAP + h.height + STACK_GAP + b.height;
+        int y = (getHeight() - total) / 2;
+        label.setBounds((getWidth() - l.width) / 2, y, l.width, l.height);
+        y += l.height + STACK_GAP;
+        hint.setBounds((getWidth() - h.width) / 2, y, h.width, h.height);
+        y += h.height + STACK_GAP;
+        resume.setBounds((getWidth() - b.width) / 2, y, b.width, b.height);
+    }
+
+    private void setLabelPoints(float points) {
+        if (label.getFont().getSize2D() != points) {
+            label.setFont(label.getFont().deriveFont(points));
+        }
+    }
+
+    /** S18b (T8): whether the caption is the row on the top bar (as last laid out). */
+    boolean captionIsOnTheTopBarForTest() {
+        return label.getFont().getSize2D() == ROW_POINTS;
     }
 
     /**
@@ -123,6 +192,10 @@ final class PauseOverlay extends JPanel {
     @Override
     public boolean contains(int x, int y) {
         if (passThroughRegion.get().contains(x, y)) {
+            return false;
+        }
+        // S18b (PT4): the top bar's ▶ is how a paused game is started; it must take the click.
+        if (playButtonRegion.get().contains(x, y)) {
             return false;
         }
         // S14/S15: the columns pass through too — but never under the overlay's own PAUSED box,
@@ -154,6 +227,12 @@ final class PauseOverlay extends JPanel {
             return new Rectangle();
         }
         box.grow(CAPTION_MARGIN, CAPTION_MARGIN);
+        // S18b (T8): on the top bar the margin stays on the bar — it must not dim or block the
+        // top of the columns under it.
+        Rectangle area = captionArea.get();
+        if (!area.isEmpty() && area.contains(label.getBounds())) {
+            return box.intersection(area);
+        }
         return box;
     }
 
@@ -174,6 +253,11 @@ final class PauseOverlay extends JPanel {
             scrim.add(new Area(captionBox().intersection(new Rectangle(0, top, getWidth(),
                     Math.max(0, getHeight() - top)))));
         }
+        // S18b (PT4): and the top bar's pause button is left clear — it is clickable.
+        Rectangle play = playButtonRegion.get();
+        if (!play.isEmpty()) {
+            scrim.subtract(new Area(play));
+        }
         Graphics2D g2 = (Graphics2D) g.create();
         try {
             g2.setColor(new Color(0, 0, 0, 140));
@@ -186,6 +270,9 @@ final class PauseOverlay extends JPanel {
     @Override
     public void setVisible(boolean visible) {
         super.setVisible(visible);
+        if (visible) {
+            revalidate(); // S18b (T8): the top bar may have moved since the caption was last placed
+        }
         if (visible && !focusIsInColumns()) {
             // Pull focus out of whatever is now blocked — but NOT out of a component inside the
             // pass-through columns, the chat input above all: the player may type while paused

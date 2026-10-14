@@ -26,21 +26,30 @@ import it.unige.portcommand.util.Subscription;
  *
  * <p>Same thin-view contract as {@link EndOfDaySummaryDialog}: every string comes from the
  * headless-tested {@link GameOverModel}; this class cannot run in the test lanes at all
- * (HeadlessException). [Restart] is deliberately absent — restarting means re-running a scenario
- * boot, which is task 23's {@code NewGameDialog}; a dead button would be worse than none.
- * [Close] keeps the window open for a post-mortem look at the Port table and the comm log (the world is frozen
- * at GAME_OVER); [Exit] leaves the game.
+ * (HeadlessException). [Close] keeps the window open for a post-mortem look at the Port table and
+ * the comm log (the world is frozen at GAME_OVER); [Exit] leaves the game. S18b
+ * (REMAINING_AREAS_DECISIONS P11): [New Game…] opens task 23's {@code NewGameDialog} — the
+ * "Restart" this dialog deliberately never had as a dead button.
  */
 public final class GameOverDialog extends JDialog {
 
     private final Subscription<GameOverEvent> subscription;
     private final Leaderboard leaderboard;
     private final Runnable onExit;
+    /** S18b (P11): what New Game… does once this dialog is closed. */
+    private final Runnable onNewGame;
 
     public GameOverDialog(Window owner, EventBus eventBus, Leaderboard leaderboard, Runnable onExit) {
+        this(owner, eventBus, leaderboard, onExit, () -> { });
+    }
+
+    /** @param onNewGame S18b (P11): opens the New Game dialog; run after this one has closed */
+    public GameOverDialog(Window owner, EventBus eventBus, Leaderboard leaderboard, Runnable onExit,
+                          Runnable onNewGame) {
         super(owner, "Game Over", ModalityType.APPLICATION_MODAL);
         this.leaderboard = leaderboard;
         this.onExit = onExit;
+        this.onNewGame = onNewGame;
         this.subscription = eventBus.subscribe(GameOverEvent.class, this::show, DeliveryMode.EDT);
     }
 
@@ -63,9 +72,15 @@ public final class GameOverDialog extends JDialog {
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 8));
         JButton close = new JButton("Close");
         close.addActionListener(e -> setVisible(false));
+        JButton newGame = new JButton("New Game…");
+        newGame.addActionListener(e -> {
+            setVisible(false);
+            onNewGame.run();
+        });
         JButton exit = new JButton("Exit Game");
         exit.addActionListener(e -> onExit.run());
         buttons.add(close);
+        buttons.add(newGame);
         buttons.add(exit);
 
         JPanel content = new JPanel(new BorderLayout());

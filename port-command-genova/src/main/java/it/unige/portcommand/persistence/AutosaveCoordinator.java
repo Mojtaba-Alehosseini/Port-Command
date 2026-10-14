@@ -65,6 +65,11 @@ public final class AutosaveCoordinator {
             throw new IllegalStateException("autosave must drop, never refuse", e); // unreachable
         } catch (IOException | RuntimeException e) {
             log.error("autosave for day {} failed — game continues", event.day(), e);
+            // S18b (REMAINING_AREAS_DECISIONS P5): said, not only logged. The success is said by
+            // the window, from the GameSavedEvent above.
+            eventBus.publish(new it.unige.portcommand.gui.events.NotificationEvent(
+                    "Autosave failed: " + reasonOf(e),
+                    it.unige.portcommand.gui.events.NotificationEvent.Severity.WARNING, nowOr0()));
         }
     }
 
@@ -76,6 +81,21 @@ public final class AutosaveCoordinator {
     /** Symmetry with the other session-scoped bus subscribers. */
     public void close() {
         subscription.cancel();
+    }
+
+    /** The exception's own message, or its type when it has none. */
+    static String reasonOf(Exception e) {
+        String message = e.getMessage();
+        return message == null || message.isBlank() ? e.getClass().getSimpleName() : message;
+    }
+
+    /** The game clock's time for the notice, if the sources still answer; 0 otherwise. */
+    private long nowOr0() {
+        try {
+            return sources.get().simClock().nowSimMillis();
+        } catch (RuntimeException e) {
+            return 0L;
+        }
     }
 
     private static long sizeOf(java.nio.file.Path path) {

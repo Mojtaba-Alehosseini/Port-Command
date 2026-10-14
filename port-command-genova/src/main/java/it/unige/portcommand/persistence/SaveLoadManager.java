@@ -88,30 +88,70 @@ public final class SaveLoadManager {
     }
 
     /**
+     * S18b (REMAINING_AREAS_DECISIONS P6): what a slot holds, for the Save/Load dialog — nothing,
+     * a save it can summarise, or a file it cannot read, with the reason. A damaged or
+     * future-version file used to show as "— empty —", which hides that something IS there.
+     */
+    public sealed interface SlotState permits SlotState.Empty, SlotState.Readable, SlotState.Unreadable {
+
+        /** No file in the slot. */
+        record Empty() implements SlotState {
+        }
+
+        record Readable(SaveSlotInfo info) implements SlotState {
+        }
+
+        /** @param reason a few words for the player: "damaged file", "saved by another version" */
+        record Unreadable(String reason) implements SlotState {
+        }
+    }
+
+    /** P6: the reason words the dialog shows in "Unreadable save (…)". */
+    static final String DAMAGED = "damaged file";
+    static final String OTHER_VERSION = "saved by another version";
+    static final String CANNOT_READ = "cannot be read";
+
+    /**
+     * S18b (P6): reads a slot without materialising a {@link GameState}, as {@link #peek} does,
+     * and says why when a file is there but cannot be summarised. Never throws.
+     */
+    public SlotState inspect(Path source) {
+        if (!Files.exists(source)) {
+            return new SlotState.Empty();
+        }
+        try (var in = Files.newInputStream(source)) {
+            JsonNode root = mapper.readTree(in);
+            if (root == null || !root.isObject()) {
+                return new SlotState.Unreadable(DAMAGED);
+            }
+            if (root.path("schemaVersion").asInt(-1) != SCHEMA_VERSION) {
+                return new SlotState.Unreadable(OTHER_VERSION);
+            }
+            long simMillis = root.path("simClock").path("simMillis").asLong(0L);
+            double wallet = root.path("wallet").asDouble(0.0);
+            String savedAt = root.path("savedAt").isMissingNode() || root.path("savedAt").isNull()
+                    ? null : root.path("savedAt").asText();
+            return new SlotState.Readable(new SaveSlotInfo(
+                    it.unige.portcommand.util.SimClock.gameDayOf(simMillis), wallet, savedAt));
+        } catch (com.fasterxml.jackson.core.JacksonException e) {
+            log.warn("inspect of {}: not a readable save", source, e);
+            return new SlotState.Unreadable(DAMAGED);
+        } catch (IOException e) {
+            log.warn("inspect of {} failed", source, e);
+            return new SlotState.Unreadable(CANNOT_READ);
+        }
+    }
+
+    /**
      * Reads a slot's {@link SaveSlotInfo} without materialising a {@link GameState}. Returns empty
      * for a missing file, unreadable JSON, a non-object root, or a wrong-{@code schemaVersion}
      * file — the preview simply shows "empty" for any slot it cannot summarise, and never throws
      * on the EDT.
      */
     public java.util.Optional<SaveSlotInfo> peek(Path source) {
-        if (!Files.exists(source)) {
-            return java.util.Optional.empty();
-        }
-        try (var in = Files.newInputStream(source)) {
-            JsonNode root = mapper.readTree(in);
-            if (root == null || !root.isObject() || root.path("schemaVersion").asInt(-1) != SCHEMA_VERSION) {
-                return java.util.Optional.empty();
-            }
-            long simMillis = root.path("simClock").path("simMillis").asLong(0L);
-            double wallet = root.path("wallet").asDouble(0.0);
-            String savedAt = root.path("savedAt").isMissingNode() || root.path("savedAt").isNull()
-                    ? null : root.path("savedAt").asText();
-            return java.util.Optional.of(new SaveSlotInfo(
-                    it.unige.portcommand.util.SimClock.gameDayOf(simMillis), wallet, savedAt));
-        } catch (IOException e) {
-            log.warn("peek of {} failed — slot shown as empty", source, e);
-            return java.util.Optional.empty();
-        }
+        return inspect(source) instanceof SlotState.Readable readable
+                ? java.util.Optional.of(readable.info())
+                : java.util.Optional.empty();
     }
 
     /** The shared, identically-configured mapper — fixtures and agents' Mementoable impls use it

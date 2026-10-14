@@ -65,12 +65,27 @@ public final class HUDModel {
         this.scenarioName = null;
     }
 
+    /**
+     * S18b (UI tree U13): the empty shell — no game is running, so no cell has a value. The
+     * shell used to read "Day 1 of 30  00:00", which looks like a game frozen at midnight. The
+     * values themselves are kept; they show again once a game runs.
+     */
+    private boolean noGame;
+
+    public void setNoGame(boolean noGame) {
+        this.noGame = noGame;
+    }
+
+    public boolean noGame() {
+        return noGame;
+    }
+
     public String walletLabel() {
-        return "Wallet: " + (wallet == null ? NO_DATA : String.format(Locale.ROOT, "€%,.0f", wallet));
+        return "Wallet: " + (noGame || wallet == null ? NO_DATA : String.format(Locale.ROOT, "€%,.0f", wallet));
     }
 
     public String reputationLabel() {
-        return "Reputation: " + (reputation == null ? NO_DATA : String.valueOf(Math.round(reputation)));
+        return "Reputation: " + (noGame || reputation == null ? NO_DATA : String.valueOf(Math.round(reputation)));
     }
 
     /**
@@ -81,7 +96,7 @@ public final class HUDModel {
      * read once from Settings.
      */
     public String profitLabel() {
-        if (score == null) {
+        if (noGame || score == null) {
             return "Today: " + NO_DATA;
         }
         return "Today: " + euro(score.netProfit()) + " / " + euro(score.targetEur());
@@ -95,7 +110,7 @@ public final class HUDModel {
 
     /** S17b: "Score 88" - the four parts added up; a dash until a world announces its score. */
     public String scoreLabel() {
-        return score == null ? "Score: " + NO_DATA : "Score " + score.total();
+        return noGame || score == null ? "Score: " + NO_DATA : "Score " + score.total();
     }
 
     /**
@@ -145,6 +160,9 @@ public final class HUDModel {
      * name ("Tutorial"); {@link #dayTooltip()} has the whole one.
      */
     public String dayLabel() {
+        if (noGame) {
+            return NO_DATA;
+        }
         if (scenarioName != null) {
             int dash = scenarioName.indexOf(" — ");
             return dash > 0 ? scenarioName.substring(0, dash) : scenarioName;
@@ -157,6 +175,9 @@ public final class HUDModel {
     }
 
     public String timeLabel() {
+        if (noGame) {
+            return NO_DATA;
+        }
         return String.format("%02d:%02d", simHour, simMinute);
     }
 

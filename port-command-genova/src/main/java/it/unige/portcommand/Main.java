@@ -106,7 +106,8 @@ public final class Main {
         GameSession session = new GameSession(boot, cfg, new SaveLoadManager(), leaderboard);
         switch (mode) {
             // SchemaVersion/CorruptSave surface on the console.
-            case LOAD -> session.loadGame(loadPath);
+            // S18b (P8): with a window to show it in, the loaded game waits for the player too.
+            case LOAD -> session.loadGame(loadPath, guiRequested);
             // Task 23 — headless-testable scenario boot.
             // S18b (PT2): with a window to show it in, the scenario waits for the player.
             case SCENARIO -> session.startScenario(scenarioKey, guiRequested);

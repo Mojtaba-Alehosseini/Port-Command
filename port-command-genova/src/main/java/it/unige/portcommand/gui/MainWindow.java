@@ -103,7 +103,7 @@ public final class MainWindow extends JFrame {
      * {@code GameScreenCompositionTest} can pin the relation.
      */
     static final int MIN_WIDTH = 1000;
-    private static final int MIN_HEIGHT = 600;
+    static final int MIN_HEIGHT = 600; // S18b (U18): package-private for WindowSizingTest
 
     /** S14: component name of the Game ▸ Speed submenu. (The names the {@link TutorialOverlay}
      * highlights by moved to {@link GameScreen} in S15, with the panels they name.) */
@@ -129,6 +129,23 @@ public final class MainWindow extends JFrame {
     /** S18b (P10): set once the player has ended the tutorial (×, Skip or Done) - the cards do
      * not open by themselves on any later launch. Help → Show tutorial still shows them. */
     static final String PREF_TUTORIAL_CLOSED = "tutorial.closed";
+
+    /** S18b (REMAINING_AREAS_DECISIONS P1): the window's ✕ and Game ▸ Exit ask first. */
+    static final String QUIT_TEXT = "Quit? Unsaved progress since the last autosave will be lost.";
+    static final String SAVE_AND_QUIT = "Save & quit";
+    static final String QUIT = "Quit";
+    static final String CANCEL = "Cancel";
+    /** S18b (PLAYABILITY_DECISIONS §10): a manual save with negotiations open. */
+    static final String OPEN_NEGOTIATIONS_TEXT = "Open negotiations will be lost. Save anyway?";
+    /** S18b (P11): New Game… over a running game. */
+    static final String REPLACE_GAME_TEXT =
+            "Start a new game? The current game ends — progress since the last save will be lost.";
+    /** S18b (P8): a game the window loaded waits for the player. */
+    static final String GAME_LOADED_TEXT = "Game loaded — press ▶ or Esc to continue.";
+    /** S18b (P5): an autosave is said; a failed one is said by the autosave itself. */
+    static String autosavedText(int endedDay) {
+        return "Autosaved (end of day " + endedDay + ")";
+    }
 
 
     /** S16: shown when a changed day length reaches {@link #applySettings} under the script lock. */
@@ -164,6 +181,8 @@ public final class MainWindow extends JFrame {
      * cards are considered once per process, whatever the answer was. EDT-only. */
     private boolean tutorialAutoOpenConsidered;
     private JMenuItem newGameItem;
+    /** S18b (U13): disabled in the empty shell, where its three items have no game to act on. */
+    private JMenu debugMenu;
     private JMenuItem pauseItem;
     private JMenuItem resumeItem;
     private JMenuItem quitItem;
@@ -240,8 +259,10 @@ public final class MainWindow extends JFrame {
         // S15: the second region it passes through is the whole three-column area (was the chat
         // alone in S14) — the waiting list and the comm log are read-only views, and a paused
         // game is exactly when the player wants to read them.
+        // S18b: the caption sits on the top bar (T8), and the bar's pause button clicks through (PT4).
         this.pauseOverlay = new PauseOverlay(this::toggleMenuResume, this::menuBarBoundsInGlassPane,
-                this::columnsBoundsInGlassPane);
+                this::columnsBoundsInGlassPane, this::pauseCaptionAreaInGlassPane, this::pauseButtonInGlassPane);
+        screen.onPauseToggle(this::toggleMenuResume); // S18b (PT4): the top bar's ⏸/▶
         setGlassPane(pauseOverlay);
         setJMenuBar(buildMenuBar(eventBus, onClose));
         setLayout(new BorderLayout());
@@ -270,6 +291,14 @@ public final class MainWindow extends JFrame {
         // and the Game ▸ Speed items disable themselves on that announcement.
         eventBus.subscribe(ScriptedWaveEvent.class,
                 e -> speedControl.setScriptPending(e.pending()), DeliveryMode.EDT);
+        // S18b (REMAINING_AREAS_DECISIONS P5): the autosave used to be silent. A failure is
+        // reported by the autosave itself; a manual save has its own dialog.
+        eventBus.subscribe(it.unige.portcommand.persistence.events.GameSavedEvent.class, e -> {
+            if (e.autosave()) {
+                eventBus.publish(new NotificationEvent(autosavedText(e.gameDay()), NotificationEvent.Severity.INFO,
+                        lifecycle.simClock().nowSimMillis()));
+            }
+        }, DeliveryMode.EDT);
 
         // Lifecycle mirror: the overlay + menu enablement follow the bus, never poll. The
         // EndOfDayCompletedEvent handler is subscribed BEFORE the dialog is constructed so the
@@ -306,7 +335,7 @@ public final class MainWindow extends JFrame {
                 // paused - Resume (or Esc) is then "continue in free play" after all.
                 if (endOfDayDialog.takeCloseRequested()) {
                     pausedForEndOfDay = false;
-                    chooseAndStartGame();
+                    chooseAndStartGame(false); // the scenario is over: nothing to confirm (S18b, P11)
                     return;
                 }
                 if (pausedForEndOfDay) {
@@ -315,13 +344,15 @@ public final class MainWindow extends JFrame {
                 }
             }
         });
-        this.gameOverDialog = new GameOverDialog(this, eventBus, leaderboard, () -> shutdownAndExit(onClose));
+        // S18b (P11): New Game… on the game-over report; the game is over, so nothing to confirm.
+        this.gameOverDialog = new GameOverDialog(this, eventBus, leaderboard, () -> shutdownAndExit(onClose),
+                () -> chooseAndStartGame(false));
         reflectMode();
 
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                shutdownAndExit(onClose);
+                requestExit(onClose); // S18b (P1): asks first while a game is running
             }
 
             @Override
@@ -333,7 +364,11 @@ public final class MainWindow extends JFrame {
                 onWindowShown();
             }
         });
-        setMinimumSize(new Dimension(MIN_WIDTH, MIN_HEIGHT));
+        Rectangle usable = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        // S18b (UI tree U18): the minimum height gives way to a desktop shorter than it (1366x768 at
+        // 125%), so the notification strip is never pushed behind the taskbar.
+        int minHeight = minimumHeightFor(usable);
+        setMinimumSize(new Dimension(MIN_WIDTH, minHeight));
         // Clamp to the USABLE desktop, not the raw screen (2026-08-10, audit P1-13 / demo-laptop
         // risk C-19). Two distinct failures, and 125% vs 150% scaling hits a different one each:
         // at 150% the desktop reports 1280x720, so a flat setSize(1280, 800) simply does not FIT;
@@ -344,9 +379,18 @@ public final class MainWindow extends JFrame {
         // already excludes the taskbar. It throws under -Djava.awt.headless=true (both Gradle test
         // lanes set it), so the call stays HERE and only the arithmetic is extracted, mirroring
         // makePopupsHeavyweight/MenuPopupWeightTest.
-        setBounds(clampToUsableBounds(
-                GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds(),
-                DEFAULT_WIDTH, DEFAULT_HEIGHT, MIN_WIDTH, MIN_HEIGHT));
+        setBounds(clampToUsableBounds(usable, DEFAULT_WIDTH, DEFAULT_HEIGHT, MIN_WIDTH, minHeight));
+    }
+
+    /**
+     * S18b (UI tree U18): the window's minimum height on a desktop whose usable area is
+     * {@code usable} — {@link #MIN_HEIGHT}, or less on a desktop that is shorter than that. A
+     * window taller than the desktop pushed the notification strip behind the taskbar (1366x768
+     * at 125% scaling leaves about 574 px). The width keeps its minimum: below it the three
+     * columns cannot all have theirs. Pure, for {@code WindowSizingTest}.
+     */
+    static int minimumHeightFor(Rectangle usable) {
+        return usable == null || usable.height <= 0 ? MIN_HEIGHT : Math.min(MIN_HEIGHT, usable.height);
     }
 
     /**
@@ -402,10 +446,10 @@ public final class MainWindow extends JFrame {
      * leaves the empty shell up and says where to go from there.
      */
     private void offerNewGame() {
-        if (!chooseAndStartGame()) {
-            eventBus.publish(new NotificationEvent(NO_GAME_RUNNING_TEXT, NotificationEvent.Severity.INFO,
-                    lifecycle.simClock().nowSimMillis()));
-        }
+        // S18b (UI tree U13): a Cancel leaves the empty shell, and the shell says what to do itself
+        // — a hint pinned in the notification strip, "No game running" in the chat column (see
+        // reflectMode). The 8-second chip that used to say it is gone.
+        chooseAndStartGame(false);
     }
 
     /**
@@ -494,7 +538,7 @@ public final class MainWindow extends JFrame {
         // replaced — the dialog's explicit Start IS the confirmation, mirroring confirmAndLoad's
         // dialog.
         newGameItem = new JMenuItem("New Game…");
-        newGameItem.addActionListener(e -> chooseAndStartGame());
+        newGameItem.addActionListener(e -> chooseAndStartGame(true)); // S18b (P11): asks over a live game
         game.add(newGameItem);
         game.addSeparator();
         pauseItem = new JMenuItem("Pause");
@@ -512,7 +556,7 @@ public final class MainWindow extends JFrame {
         quitItem = new JMenuItem("Quit Game…");
         quitItem.addActionListener(e -> confirmQuit());
         JMenuItem exit = new JMenuItem("Exit");
-        exit.addActionListener(e -> shutdownAndExit(onClose));
+        exit.addActionListener(e -> requestExit(onClose)); // S18b (P1)
         // S17b (playtest 2, PT8): the same request as the top bar's "Next ship" button.
         callNextShipItem = new JMenuItem("Call Next Ship");
         callNextShipItem.addActionListener(
@@ -530,7 +574,8 @@ public final class MainWindow extends JFrame {
         game.add(exit);
         bar.add(game);
         bar.add(buildSettingsMenu(eventBus));
-        bar.add(buildDebugMenu(eventBus));
+        debugMenu = buildDebugMenu(eventBus);
+        bar.add(debugMenu);
         bar.add(buildHelpMenu());
         makePopupsHeavyweight(bar);
         return bar;
@@ -649,9 +694,11 @@ public final class MainWindow extends JFrame {
     private JMenu buildSettingsMenu(EventBus eventBus) {
         JMenu settings = new JMenu("Settings");
         settingsItem = new JMenuItem("Settings…");
-        settingsItem.addActionListener(e -> SettingsDialog.open(this, eventBus, Settings.load().difficulty(),
-                lifecycle.simClock().realSecondsPerGameDay(), Settings.load().autopilotEnabled(),
-                Settings.load().llmModel(), speedControl.scriptPending(), policyList));
+        // S18b (P2): the game pauses while the dialog is open, and goes on as it was when it closes.
+        settingsItem.addActionListener(e -> whilePaused(() -> SettingsDialog.open(this, eventBus,
+                Settings.load().difficulty(), lifecycle.simClock().realSecondsPerGameDay(),
+                Settings.load().autopilotEnabled(), Settings.load().llmModel(), speedControl.scriptPending(),
+                policyList)));
         settings.add(settingsItem);
         return settings;
     }
@@ -674,7 +721,7 @@ public final class MainWindow extends JFrame {
     private JMenu buildHelpMenu() {
         JMenu help = new JMenu("Help");
         JMenuItem helpItem = new JMenuItem("Help…");
-        helpItem.addActionListener(e -> new HelpDialog(this).setVisible(true));
+        helpItem.addActionListener(e -> whilePaused(() -> new HelpDialog(this).setVisible(true))); // S18b (P2)
         JMenuItem tutorial = new JMenuItem("Show tutorial");
         tutorial.addActionListener(e -> tutorialOverlay.startFromBeginning());
         JMenuItem about = new JMenuItem("About");
@@ -689,12 +736,42 @@ public final class MainWindow extends JFrame {
         return help;
     }
 
-    private void openSaveDialog() {
-        SaveLoadDialog.open(this, session.saveLoadManager(), SaveLoadDialog.Mode.SAVE, this::saveGame, null);
+    /** S18b (P2): runs a modal dialog with the game paused behind it ({@link DialogPause}). */
+    private void whilePaused(Runnable modalDialog) {
+        DialogPause pause = new DialogPause(lifecycle);
+        try {
+            modalDialog.run();
+        } finally {
+            pause.release();
+        }
     }
 
+    /** S18b (P2): the save that the dialog starts releases the dialog's pause when it is done —
+     * not when the dialog closes, which is before the snapshot is taken (the save's quiesce IS
+     * that pause, audit C-08). */
+    private void openSaveDialog() {
+        DialogPause pause = new DialogPause(lifecycle);
+        boolean[] saving = {false};
+        SaveLoadDialog.open(this, session.saveLoadManager(), SaveLoadDialog.Mode.SAVE, () -> {
+            saving[0] = true;
+            saveGame(false, null, pause);
+        }, null);
+        if (!saving[0]) {
+            pause.release();
+        }
+    }
+
+    /** S18b (P2): a load that starts replaces the world, which then comes up paused (P8). */
     private void openLoadDialog() {
-        SaveLoadDialog.open(this, session.saveLoadManager(), SaveLoadDialog.Mode.LOAD, null, this::confirmAndLoad);
+        DialogPause pause = new DialogPause(lifecycle);
+        boolean[] loading = {false};
+        SaveLoadDialog.open(this, session.saveLoadManager(), SaveLoadDialog.Mode.LOAD, null,
+                path -> loading[0] = confirmAndLoad(path));
+        if (loading[0]) {
+            pause.forget();
+        } else {
+            pause.release();
+        }
     }
 
     /** Applies a {@link SettingsChangedEvent} (task 21). The day length re-paces the shared
@@ -752,15 +829,32 @@ public final class MainWindow extends JFrame {
      * review #5 — the bounded snapshot wait is normally milliseconds, but a wedged
      * HarbourMaster thread must freeze the save, not the whole UI); polite dialog if
      * refused (22.7). The menu item disables for the duration, so no double-save.
+     *
+     * <p>S18b (PLAYABILITY_DECISIONS §10): a refusal for an OPEN NEGOTIATION is a question now —
+     * "Open negotiations will be lost. Save anyway?" — and a yes saves without those vessels,
+     * as the autosave always has; they go on in the running game. The other refusals are as
+     * before.
+     *
+     * @param dropOpenNegotiations the player has already said yes to that question
+     * @param afterSuccess         S18b (P1): what follows a save that was written (Save &amp; quit
+     *                             exits) instead of the "Game saved" message; {@code null} for that message
+     * @param pause                S18b (P2): the Save dialog's pause, released when the save is
+     *                             done; {@code null} when there is none
      */
-    private void saveGame() {
-        saveItem.setEnabled(false);
+    private void saveGame(boolean dropOpenNegotiations, Runnable afterSuccess, DialogPause pause) {
         saveInProgress = true; // audit C-08: Esc must not un-pause the world mid-quiesce
+        reflectMode();
         Thread worker = new Thread(() -> {
             String info = null;
             String error = null;
+            boolean saved = false;
+            boolean openNegotiation = false;
             try {
-                info = "Game saved to " + session.saveNow() + ".";
+                info = "Game saved to " + session.saveNow(dropOpenNegotiations) + ".";
+                saved = true;
+            } catch (it.unige.portcommand.persistence.OpenNegotiationException e) {
+                openNegotiation = true;
+                info = e.getMessage();
             } catch (it.unige.portcommand.persistence.SaveNotAllowedException e) {
                 info = e.getMessage();
             } catch (Exception e) {
@@ -768,13 +862,31 @@ public final class MainWindow extends JFrame {
             }
             String infoMessage = info;
             String errorMessage = error;
+            boolean written = saved;
+            boolean askAboutNegotiations = openNegotiation;
             javax.swing.SwingUtilities.invokeLater(() -> {
                 saveInProgress = false;
                 reflectMode();
+                if (askAboutNegotiations) {
+                    if (JOptionPane.showConfirmDialog(this, OPEN_NEGOTIATIONS_TEXT, "Save Game",
+                            JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE) == JOptionPane.OK_OPTION) {
+                        saveGame(true, afterSuccess, pause);
+                    } else if (pause != null) {
+                        pause.release();
+                    }
+                    return;
+                }
+                if (written && afterSuccess != null) {
+                    afterSuccess.run();
+                    return;
+                }
                 if (errorMessage != null) {
                     JOptionPane.showMessageDialog(this, errorMessage, "Save Game", JOptionPane.ERROR_MESSAGE);
                 } else {
                     JOptionPane.showMessageDialog(this, infoMessage, "Save Game", JOptionPane.INFORMATION_MESSAGE);
+                }
+                if (pause != null) {
+                    pause.release();
                 }
             });
         }, "game-saver");
@@ -783,31 +895,83 @@ public final class MainWindow extends JFrame {
     }
 
     /**
+     * S18b (REMAINING_AREAS_DECISIONS P1): the window's ✕ and Game ▸ Exit. With a game running
+     * they ask first — "Quit? Unsaved progress since the last autosave will be lost." with Save
+     * &amp; quit / Quit / Cancel — because an hour of play could go with one click. With no
+     * game, or a finished one, there is nothing to lose and the window simply closes.
+     */
+    private void requestExit(Runnable onClose) {
+        if (!exitAsksFirst(lifecycle.mode(), loadInProgress || saveInProgress)) {
+            shutdownAndExit(onClose);
+            return;
+        }
+        DialogPause pause = new DialogPause(lifecycle);
+        Object[] options = {SAVE_AND_QUIT, QUIT, CANCEL};
+        int choice = JOptionPane.showOptionDialog(this, QUIT_TEXT, "Exit", JOptionPane.DEFAULT_OPTION,
+                JOptionPane.WARNING_MESSAGE, null, options, options[0]);
+        if (choice == 0) {
+            saveGame(false, () -> shutdownAndExit(onClose), pause);
+        } else if (choice == 1) {
+            shutdownAndExit(onClose);
+        } else {
+            pause.release();
+        }
+    }
+
+    /**
+     * S18b (P1): whether closing the window asks first — with a game running or paused, and
+     * nothing in flight. A save or a load in flight closes at once, as before: neither can be
+     * waited out from a dialog. Pure, for {@code MainWindowSaveTextTest}.
+     */
+    static boolean exitAsksFirst(GameMode mode, boolean busy) {
+        return !busy && (mode == GameMode.RUNNING || mode == GameMode.PAUSED);
+    }
+
+    /**
+     * S18b (P11): whether New Game… asks before replacing the game — a running or paused one,
+     * from the menu. The game-over report and a finished scenario's Close start one without
+     * asking: the game is over already. Pure, for {@code MainWindowSaveTextTest}.
+     */
+    static boolean newGameAsksFirst(GameMode mode, boolean fromTheMenu) {
+        return fromTheMenu && (mode == GameMode.RUNNING || mode == GameMode.PAUSED);
+    }
+
+    /**
+     * S18b (UI tree U19): the load confirmation. "The current game will be replaced." only when
+     * there is one — the empty shell used to say it too. Pure, for {@code MainWindowSaveTextTest}.
+     */
+    static String loadConfirmation(String fileName, GameMode mode) {
+        boolean live = mode == GameMode.RUNNING || mode == GameMode.PAUSED;
+        return "Load " + fileName + "?" + (live ? " The current game will be replaced." : "");
+    }
+
+    /**
      * Game → Load: confirm (the running world is replaced), then run the teardown/rebuild
      * on a worker thread — it takes seconds and must never block the EDT. The GUI refreshes
      * itself from the loader's events; menus re-enable when the worker finishes.
      */
-    private void confirmAndLoad(java.nio.file.Path source) {
+    /** @return S18b (P2): whether a load was started (the world is then replaced) */
+    private boolean confirmAndLoad(java.nio.file.Path source) {
         if (loadInProgress) {
-            return;
+            return false;
         }
         if (!java.nio.file.Files.exists(source)) {
             JOptionPane.showMessageDialog(this, "No save file at " + source + " yet.",
                     "Load Game", JOptionPane.INFORMATION_MESSAGE);
-            return;
+            return false;
         }
         int choice = JOptionPane.showConfirmDialog(this,
-                "Load " + source.getFileName() + "? The current game will be replaced.",
+                loadConfirmation(String.valueOf(source.getFileName()), lifecycle.mode()), // S18b (U19)
                 "Load Game", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
         if (choice != JOptionPane.OK_OPTION) {
-            return;
+            return false;
         }
         loadInProgress = true;
         reflectMode();
         Thread worker = new Thread(() -> {
             Exception failure = null;
             try {
-                session.loadGame(source);
+                session.loadGame(source, true); // S18b (P8): the loaded game waits for the player
             } catch (Exception e) {
                 failure = e;
             }
@@ -818,11 +982,15 @@ public final class MainWindow extends JFrame {
                 if (reported != null) {
                     JOptionPane.showMessageDialog(this, reported.getMessage(),
                             "Load Game", JOptionPane.ERROR_MESSAGE);
+                } else {
+                    eventBus.publish(new NotificationEvent(GAME_LOADED_TEXT, NotificationEvent.Severity.INFO,
+                            lifecycle.simClock().nowSimMillis()));
                 }
             });
         }, "game-loader");
         worker.setDaemon(true);
         worker.start();
+        return true;
     }
 
     /**
@@ -837,17 +1005,29 @@ public final class MainWindow extends JFrame {
      * clock nor the seed), while this menu item must work from the empty shell and as a
      * replacement for a running, paused or ended game alike.
      *
+     * <p>S18b: the game pauses behind the dialog (P2) — and goes on as it was if the player
+     * cancels; and over a running or paused game a start is confirmed first (P11), as a load is.
+     *
+     * @param confirmReplace S18b (P11): ask before replacing a running or paused game — the menu
+     *                       item; not the game-over report's button, nor the end-of-day Close
+     *                       after a scenario's end, where the game is over already
      * @return whether a game start was launched — {@code false} when the player closed the
      *         dialog without pressing Start, or a load already owns the world
      */
-    private boolean chooseAndStartGame() {
+    private boolean chooseAndStartGame(boolean confirmReplace) {
         if (loadInProgress) {
             return false;
         }
+        boolean asks = newGameAsksFirst(lifecycle.mode(), confirmReplace);
+        DialogPause pause = new DialogPause(lifecycle);
         Optional<NewGameChoice> choice = NewGameDialog.choose(this, session.scenarioRegistry().all());
-        if (choice.isEmpty()) {
+        if (choice.isEmpty() || (asks && JOptionPane.showConfirmDialog(this,
+                REPLACE_GAME_TEXT, "New Game", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE)
+                != JOptionPane.OK_OPTION)) {
+            pause.release();
             return false;
         }
+        pause.forget(); // the new world decides for itself whether it runs
         NewGameChoice chosen = choice.get();
         loadInProgress = true;
         reflectMode();
@@ -922,6 +1102,16 @@ public final class MainWindow extends JFrame {
         return screen.columnsBoundsIn(pauseOverlay);
     }
 
+    /** S18b (T8): where the PAUSED caption goes — the top bar left of its pause button, or empty. */
+    private java.awt.Rectangle pauseCaptionAreaInGlassPane() {
+        return screen.isShowing() ? screen.pauseCaptionAreaIn(pauseOverlay) : new java.awt.Rectangle();
+    }
+
+    /** S18b (PT4): the top bar's pause button, which clicks through the PAUSED overlay. */
+    private java.awt.Rectangle pauseButtonInGlassPane() {
+        return screen.isShowing() ? screen.pauseButtonBoundsIn(pauseOverlay) : new java.awt.Rectangle();
+    }
+
     /** Esc toggles pause/resume — bound WHEN_IN_FOCUSED_WINDOW so it works from any panel. */
     private void installEscBinding() {
         getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
@@ -983,7 +1173,7 @@ public final class MainWindow extends JFrame {
         resumeItem.setEnabled(!loadInProgress && mode == GameMode.PAUSED);
         quitItem.setEnabled(!loadInProgress && (mode == GameMode.RUNNING || mode == GameMode.PAUSED));
         boolean live = mode == GameMode.RUNNING || mode == GameMode.PAUSED;
-        saveItem.setEnabled(!loadInProgress && live);
+        saveItem.setEnabled(!loadInProgress && !saveInProgress && live);
         // Loading is legal from a live game, from GAME_OVER (continue from the autosave slot) and
         // — S15 — from MENU: the window can now be open with no game running (the New Game dialog
         // was cancelled, or a boot failed), and a player who cancelled in order to load must not
@@ -994,6 +1184,12 @@ public final class MainWindow extends JFrame {
         loadItem.setEnabled(!loadInProgress && loadable);
         settingsItem.setEnabled(settingsAvailableIn(mode)); // S15: not in the empty shell
         reflectCallNextShip();
+        // S18b (UI tree U13): the empty shell looks like one — "—" in the top bar, "No game
+        // running" in the chat column, the hint pinned in the strip, and a Debug menu that has
+        // no game to act on is off. S18b (PT4): the top bar's ⏸/▶ follows the mode.
+        boolean noGame = mode == GameMode.MENU;
+        debugMenu.setEnabled(!noGame);
+        screen.showGameState(noGame, mode == GameMode.PAUSED, !loadInProgress && !saveInProgress && live);
     }
 
     /**

@@ -226,6 +226,83 @@ class PauseOverlayTest {
         assertTrue(overlay.contains(100, 400), "...the left column's too");
     }
 
+    // ============ S18b: the caption on the top bar (T8), the bar's ▶ clicks through (PT4) ============
+
+    /** The top bar's left part, up to a gap before its pause button (GameScreen.pauseCaptionAreaIn). */
+    private static final Rectangle TOP_BAR_LEFT = new Rectangle(0, 24, 620, 36);
+    /** The top bar's pause button. */
+    private static final Rectangle PLAY_BUTTON = new Rectangle(636, 29, 32, 26);
+
+    private static PauseOverlay overlayOnTheTopBar() {
+        PauseOverlay overlay = new PauseOverlay(() -> { }, () -> MENU_BAR, () -> COLUMNS,
+                () -> TOP_BAR_LEFT, () -> PLAY_BUTTON);
+        overlay.setBounds(0, 0, 1280, 800);
+        overlay.doLayout();
+        return overlay;
+    }
+
+    /** T8: "The PAUSED box sits over the middle of the chat column." */
+    @Test
+    void onTheTopBarTheCaptionIsOneRowAndTheColumnsAreLeftClear() {
+        PauseOverlay overlay = overlayOnTheTopBar();
+
+        assertTrue(overlay.captionIsOnTheTopBarForTest(), "there is room on the bar: one row there");
+        Rectangle box = overlay.captionBox();
+        assertTrue(TOP_BAR_LEFT.contains(box), "the whole PAUSED group is on the bar: " + box);
+        assertTrue(box.intersection(COLUMNS).isEmpty(), "nothing of it over the columns");
+        assertFalse(overlay.contains(CHAT_COLUMN.x + CHAT_COLUMN.width / 2, CHAT_COLUMN.y + CHAT_COLUMN.height / 2),
+                "the middle of the chat column, where the box used to be, passes through now");
+        javax.swing.JButton resume = null;
+        for (java.awt.Component child : overlay.getComponents()) {
+            if (child instanceof javax.swing.JButton button) {
+                resume = button;
+            }
+        }
+        Rectangle button = resume.getBounds();
+        assertTrue(overlay.contains(button.x + button.width / 2, button.y + button.height / 2),
+                "the row's Resume button is the overlay's");
+    }
+
+    /** PT4: the top bar's ▶ is how a paused game is started — it works through the scrim. */
+    @Test
+    void theTopBarsPlayButtonTakesTheClickThroughTheScrim() {
+        PauseOverlay overlay = overlayOnTheTopBar();
+
+        assertFalse(overlay.contains(PLAY_BUTTON.x + 5, PLAY_BUTTON.y + 5), "▶ must be clickable while paused");
+        assertTrue(overlay.contains(PLAY_BUTTON.x + PLAY_BUTTON.width + 20, PLAY_BUTTON.y + 5),
+                "the rest of the bar stays blocked");
+
+        java.awt.image.BufferedImage image =
+                new java.awt.image.BufferedImage(1280, 800, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = image.createGraphics();
+        try {
+            g.setColor(java.awt.Color.WHITE);
+            g.fillRect(0, 0, 1280, 800);
+            overlay.paint(g);
+        } finally {
+            g.dispose();
+        }
+        assertEquals(0xFFFFFF, image.getRGB(PLAY_BUTTON.x + 3, PLAY_BUTTON.y + 3) & 0xFFFFFF,
+                "and it is not dimmed: it does not look disabled");
+        assertTrue((image.getRGB(PLAY_BUTTON.x + PLAY_BUTTON.width + 20, PLAY_BUTTON.y + 3) & 0xFFFFFF) != 0xFFFFFF,
+                "the bar beside it is");
+    }
+
+    @Test
+    void withoutRoomOnTheTopBarTheCaptionIsCentredAsBefore() {
+        PauseOverlay overlay = new PauseOverlay(() -> { }, () -> MENU_BAR, () -> COLUMNS,
+                () -> new Rectangle(0, 24, 120, 36), () -> PLAY_BUTTON);
+        overlay.setBounds(0, 0, 1280, 800);
+        overlay.doLayout();
+
+        assertFalse(overlay.captionIsOnTheTopBarForTest(), "a row that does not fit is stacked in the middle");
+    }
+
+    @Test
+    void theHintPointsAtThePlayButtonAndEsc() {
+        assertEquals("press ▶ or Esc to continue", PauseOverlay.HINT_TEXT);
+    }
+
     @Test
     void showingTheOverlayHeadlessDoesNotThrow() {
         // setVisible consults the focus owner to decide whether to take focus; with no window

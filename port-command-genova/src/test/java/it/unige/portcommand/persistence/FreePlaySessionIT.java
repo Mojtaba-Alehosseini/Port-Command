@@ -378,6 +378,28 @@ class FreePlaySessionIT {
         assertEquals(GameMode.RUNNING, session.lifecycle().mode(), "the player's ▶ starts it");
     }
 
+    /**
+     * S18b (REMAINING_AREAS_DECISIONS P8): "A load always resumes running." A game the window
+     * loads waits for the player, paused, like a scenario it starts (PT2); the plain load - the
+     * other ITs, a headless --load - still runs at once.
+     */
+    @Test
+    void aGameLoadedForTheWindowWaitsForThePlayer() throws Exception {
+        GameSession session = newSession(300);
+        Path saved = new SaveLoadManager(tempDir).save(tempDir.resolve("waits.json"),
+                GameStateBuilder.freshSandbox(7L, 300L, "2026-10-14T09:00:00Z"));
+
+        session.loadGame(saved, true);
+
+        assertEquals(GameMode.PAUSED, session.lifecycle().mode());
+        assertTrue(boot.getSimClock().isPaused(), "the clock does not run behind the PAUSED caption");
+        long atLoad = boot.getSimClock().nowSimMillis();
+        assertFalse(waitUntil(() -> boot.getSimClock().nowSimMillis() != atLoad, 1_500),
+                "no game time passes while it waits");
+        session.lifecycle().resume();
+        assertEquals(GameMode.RUNNING, session.lifecycle().mode(), "the player's ▶ starts it");
+    }
+
     // ---- fixtures ----
 
     private GameSession newSession(long realSecondsPerGameDay) {

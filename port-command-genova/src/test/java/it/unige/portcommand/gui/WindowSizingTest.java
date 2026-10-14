@@ -106,6 +106,20 @@ class WindowSizingTest {
         assertEquals(0, w.y, "and pinned to the origin rather than centred to a negative y");
     }
 
+    /** S18b (UI tree U18): a desktop shorter than the minimum height gets a shorter minimum. */
+    @Test
+    void theMinimumHeightGivesWayToAShortDesktop() {
+        assertEquals(MainWindow.MIN_HEIGHT, MainWindow.minimumHeightFor(new Rectangle(0, 0, 1920, 1040)));
+        assertEquals(574, MainWindow.minimumHeightFor(new Rectangle(0, 0, 1093, 574)),
+                "1366x768 at 125% with its taskbar: the whole usable height, no more");
+        assertEquals(MainWindow.MIN_HEIGHT, MainWindow.minimumHeightFor(new Rectangle()),
+                "no usable area reported: the old minimum");
+        Rectangle placed = MainWindow.clampToUsableBounds(new Rectangle(0, 0, 1093, 574), 1280, 800, 1000,
+                MainWindow.minimumHeightFor(new Rectangle(0, 0, 1093, 574)));
+        assertEquals(574, placed.height, "the window fits the desktop's height");
+        assertEquals(0, placed.y);
+    }
+
     @Test
     void theOldUnclampedBehaviourWouldHaveFailedTheseCases() {
         // Non-vacuity: the pre-fix code was setSize(1280, 800) + centre-on-full-screen. Against

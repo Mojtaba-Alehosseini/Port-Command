@@ -7,7 +7,6 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Window;
 import java.nio.file.Path;
-import java.util.Optional;
 import java.util.function.Consumer;
 
 import javax.swing.BorderFactory;
@@ -22,7 +21,8 @@ import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 
 import it.unige.portcommand.persistence.SaveLoadManager;
-import it.unige.portcommand.persistence.SaveLoadManager.SaveSlotInfo;
+import it.unige.portcommand.gui.model.SaveSlotText;
+import it.unige.portcommand.persistence.SaveLoadManager.SlotState;
 
 /**
  * The two-slot Save / Load chooser (task 21, planning/21 §21.2, reconciled 2026-07-18). v1 has
@@ -52,8 +52,11 @@ public final class SaveLoadDialog extends JDialog {
 
         Path autosave = manager.autosavePath();
         Path savegame = manager.savegamePath();
-        Optional<SaveSlotInfo> autoInfo = manager.peek(autosave);
-        Optional<SaveSlotInfo> manualInfo = manager.peek(savegame);
+        // S18b (P6): what each slot holds — nothing, a save, or a file that cannot be read.
+        SlotState autoState = manager.inspect(autosave);
+        SlotState manualState = manager.inspect(savegame);
+        boolean autoReadable = autoState instanceof SlotState.Readable;
+        boolean manualReadable = manualState instanceof SlotState.Readable;
 
         JPanel slots = new JPanel();
         slots.setLayout(new BoxLayout(slots, BoxLayout.Y_AXIS));
@@ -65,12 +68,12 @@ public final class SaveLoadDialog extends JDialog {
             // Both slots are selectable in LOAD; autosave pinned first. Empty slots are shown but
             // not selectable. Preselect the first non-empty slot and gate Load on a real pick.
             ButtonGroup group = new ButtonGroup();
-            JRadioButton autoButton = loadRow(slots, group, "Autosave (end of day)", autoInfo);
-            JRadioButton manualButton = loadRow(slots, group, "Manual save", manualInfo);
-            primary.setEnabled(autoInfo.isPresent() || manualInfo.isPresent());
-            if (autoInfo.isPresent()) {
+            JRadioButton autoButton = loadRow(slots, group, "Autosave (end of day)", autoState, true);
+            JRadioButton manualButton = loadRow(slots, group, "Manual save", manualState, false);
+            primary.setEnabled(autoReadable || manualReadable);
+            if (autoReadable) {
                 autoButton.setSelected(true);
-            } else if (manualInfo.isPresent()) {
+            } else if (manualReadable) {
                 manualButton.setSelected(true);
             }
             primary.addActionListener(e -> {
@@ -81,11 +84,12 @@ public final class SaveLoadDialog extends JDialog {
         } else {
             // SAVE targets the manual slot only (autosave is the end-of-day system's). The
             // autosave row is shown read-only for context.
-            slots.add(infoRow("Autosave (end of day)", autoInfo));
+            slots.add(infoRow("Autosave (end of day)", autoState, true));
             slots.add(Box.createVerticalStrut(6));
-            slots.add(infoRow("Manual save", manualInfo));
+            slots.add(infoRow("Manual save", manualState, false));
             primary.addActionListener(e -> {
-                if (manualInfo.isEmpty() || confirmOverwrite()) {
+                // S18b (P6): an unreadable file is still a file — overwriting it is asked too.
+                if (manualState instanceof SlotState.Empty || confirmOverwrite()) {
                     dispose();
                     saveAction.run();
                 }
@@ -114,9 +118,9 @@ public final class SaveLoadDialog extends JDialog {
     }
 
     private static JRadioButton loadRow(JPanel parent, ButtonGroup group, String title,
-                                        Optional<SaveSlotInfo> info) {
-        JRadioButton button = new JRadioButton("<html><b>" + title + "</b><br>" + preview(info) + "</html>");
-        button.setEnabled(info.isPresent());
+                                        SlotState state, boolean autosave) {
+        JRadioButton button = new JRadioButton("<html><b>" + title + "</b><br>" + preview(state, autosave) + "</html>");
+        button.setEnabled(state instanceof SlotState.Readable);
         button.setAlignmentX(Component.LEFT_ALIGNMENT);
         button.setBorder(BorderFactory.createEmptyBorder(2, 0, 6, 0));
         group.add(button);
@@ -124,31 +128,19 @@ public final class SaveLoadDialog extends JDialog {
         return button;
     }
 
-    private static JPanel infoRow(String title, Optional<SaveSlotInfo> info) {
+    private static JPanel infoRow(String title, SlotState state, boolean autosave) {
         JPanel row = new JPanel(new BorderLayout());
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel name = new JLabel(title);
         name.setFont(name.getFont().deriveFont(Font.BOLD));
         row.add(name, BorderLayout.NORTH);
-        row.add(new JLabel(preview(info)), BorderLayout.CENTER);
+        row.add(new JLabel(preview(state, autosave)), BorderLayout.CENTER);
         return row;
     }
 
-    /** Slot preview line: day / wallet / save time, or an em-dash for an empty or unreadable slot. */
-    private static String preview(Optional<SaveSlotInfo> info) {
-        if (info.isEmpty()) {
-            return "— empty —";
-        }
-        SaveSlotInfo s = info.get();
-        String when = s.savedAt() == null ? "" : "  ·  " + prettyInstant(s.savedAt());
-        return String.format("Day %d  ·  €%,.0f%s", s.day(), s.wallet(), when);
-    }
-
-    /** ISO-8601 → a compact {@code YYYY-MM-DD HH:MM} for the preview; falls back to the raw text
-     * if it is shorter/oddly-shaped than expected (never throws in the render path). */
-    private static String prettyInstant(String iso) {
-        String t = iso.replace('T', ' ');
-        return t.length() >= 16 ? t.substring(0, 16) : t;
+    /** S18b (P6, P9): {@link SaveSlotText} in the player's own time zone. */
+    private static String preview(SlotState state, boolean autosave) {
+        return SaveSlotText.preview(state, autosave, java.time.ZoneId.systemDefault());
     }
 
     private boolean confirmOverwrite() {

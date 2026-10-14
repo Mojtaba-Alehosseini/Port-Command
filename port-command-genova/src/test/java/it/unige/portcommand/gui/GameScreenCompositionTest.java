@@ -480,6 +480,48 @@ class GameScreenCompositionTest {
         });
     }
 
+    /** S18b (T8, PT4): the PAUSED caption goes on the top bar, left of its pause button. */
+    @Test
+    @Timeout(20)
+    void thePausedCaptionGoesOnTheTopBarLeftOfThePauseButton() throws Exception {
+        HeadlessSwing.onEdt(() -> {
+            showAtDefaults(WIDTH, HEIGHT);
+            Rectangle hud = onScreen(GameScreen.NAME_HUD);
+            Rectangle button = screen.pauseButtonBoundsIn(screen);
+            Rectangle area = screen.pauseCaptionAreaIn(screen);
+
+            assertFalse(button.isEmpty(), "the top bar has its pause button");
+            assertTrue(hud.contains(button), "on the top bar: " + button + " in " + hud);
+            assertEquals(hud.y, area.y);
+            assertEquals(hud.height, area.height);
+            assertEquals(button.x - HUDPanel.HGAP, area.x + area.width, "it ends a gap before the button");
+            assertTrue(area.width > 300, "room for the one-row caption: " + area);
+        });
+    }
+
+    /** S18b (U13): the empty shell says so in the top bar, the chat column and the strip. */
+    @Test
+    @Timeout(20)
+    void theEmptyShellSaysSoInAllThreePlaces() throws Exception {
+        HeadlessSwing.onEdt(() -> {
+            screen.showGameState(true, false, false);
+            assertEquals("—", screen.hudForTest().model().dayLabel());
+            assertTrue(((javax.swing.JLabel) screen.chatPanelForTest().getComponent(0)).getText()
+                    .contains(MainWindow.NO_GAME_RUNNING_TEXT), "no game running, in the chat column");
+            assertEquals("[i] " + MainWindow.NO_GAME_RUNNING_TEXT,
+                    screen.notificationStripForTest().pinnedHintForTest(), "and pinned in the strip");
+            assertFalse(screen.hudForTest().pauseButtonForTest().isEnabled(), "nothing to pause");
+
+            screen.showGameState(false, true, true);
+            assertTrue(screen.hudForTest().model().dayLabel().startsWith("Day "));
+            assertTrue(((javax.swing.JLabel) screen.chatPanelForTest().getComponent(0)).getText()
+                    .contains(ChatPanel.WAITING_TEXT), "a game: waiting for a walk-in again");
+            assertEquals("", screen.notificationStripForTest().pinnedHintForTest(), "the hint is gone");
+            assertEquals(HUDPanel.RESUME_GLYPH, screen.hudForTest().pauseButtonForTest().getText());
+            assertTrue(screen.hudForTest().pauseButtonForTest().isEnabled());
+        });
+    }
+
     @Test
     @Timeout(20)
     void theColumnsAreaIsTheThreeColumnsAndNothingElse() throws Exception {

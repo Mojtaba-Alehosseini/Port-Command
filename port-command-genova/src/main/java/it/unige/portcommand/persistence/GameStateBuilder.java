@@ -46,7 +46,10 @@ import org.slf4j.LoggerFactory;
  * been reported yet — the grant is still on the wire) has no clean resumable state.
  * The MANUAL save refuses ({@link SaveNotAllowedException}, planning/22 Step 22.7); the
  * AUTOSAVE — which cannot refuse, it is the EOD hook — DROPS those vessels from the
- * snapshot: in the saved timeline the walk-in never appeared. Berth reservations are
+ * snapshot: in the saved timeline the walk-in never appeared. S18b (PLAYABILITY_DECISIONS §10):
+ * a manual save may drop the open negotiations too, once the player has said yes to "Open
+ * negotiations will be lost. Save anyway?" ({@link OpenNegotiationException} is the refusal that
+ * question answers); a vessel between two phases still refuses it — that passes in a moment. Berth reservations are
  * reconciled against the surviving vessel set at load ({@link #reconcileTerminals}), so
  * nothing leaks (decision dated 2026-07-17). One stated residual (S10 bug hunt, hunter A
  * finding 8): "never appeared" is not quite true for the WALLET — a grant whose income
@@ -83,10 +86,24 @@ public final class GameStateBuilder {
      */
     public static GameState build(Sources src, String savedAt, boolean dropNegotiating)
             throws SaveNotAllowedException {
+        return build(src, savedAt, dropNegotiating, dropNegotiating);
+    }
+
+    /**
+     * S18b (§10): as {@link #build(Sources, String, boolean)}, with the two kinds of unfinished
+     * vessel decided apart.
+     *
+     * @param dropNegotiating   drop the vessels still negotiating (or still arriving) instead of
+     *                          refusing with an {@link OpenNegotiationException}
+     * @param dropBetweenPhases drop the vessels whose last order is still on the wire instead of
+     *                          refusing — the autosave only
+     */
+    public static GameState build(Sources src, String savedAt, boolean dropNegotiating, boolean dropBetweenPhases)
+            throws SaveNotAllowedException {
         HarbourMasterAgent hm = (HarbourMasterAgent) src.directory().byName("harbour_master")
                 .orElseThrow(() -> new IllegalStateException("harbour_master not in AgentDirectory"));
 
-        List<VesselStateDTO> vessels = snapshotVessels(hm, src.directory(), dropNegotiating);
+        List<VesselStateDTO> vessels = snapshotVessels(hm, src.directory(), dropNegotiating, dropBetweenPhases);
 
         List<TugStateDTO> tugs = src.directory().byType(TugAgent.class).stream()
                 .map(TugAgent::snapshotDto)
@@ -134,7 +151,7 @@ public final class GameStateBuilder {
      * Sorted by vessel id (determinism rule).
      */
     private static List<VesselStateDTO> snapshotVessels(HarbourMasterAgent hm, AgentDirectory directory,
-                                                        boolean dropNegotiating)
+                                                        boolean dropNegotiating, boolean dropBetweenPhases)
             throws SaveNotAllowedException {
         List<VesselStateDTO> out = new ArrayList<>();
         List<VesselTracking> tracked = hm.activeVessels().values().stream()
@@ -143,11 +160,11 @@ public final class GameStateBuilder {
         for (VesselTracking tracking : tracked) {
             if (tracking.stage() == Stage.NEGOTIATING || tracking.stage() == Stage.ARRIVING) {
                 if (!dropNegotiating) {
-                    throw new SaveNotAllowedException(
+                    throw new OpenNegotiationException(
                             "Finish the current negotiation with " + tracking.vesselId() + " before saving.");
                 }
-                log.info("autosave: dropping {} (stage {}) from the snapshot", tracking.vesselId(),
-                        tracking.stage());
+                log.info("{}: dropping {} (stage {}) from the snapshot", dropBetweenPhases ? "autosave" : "save",
+                        tracking.vesselId(), tracking.stage());
                 continue;
             }
             BaseVesselAgent agent = directory.byName(AgentRoster.vesselLocalName(tracking.spec()))
@@ -158,7 +175,7 @@ public final class GameStateBuilder {
                 // The grant is still on the wire (vessel never reported a phase) or the agent
                 // is already gone: no resumable state. Manual saves refuse — this is the same
                 // "no clean phase boundary" case as an open negotiation; autosaves drop.
-                if (!dropNegotiating) {
+                if (!dropBetweenPhases) {
                     throw new SaveNotAllowedException(
                             "Vessel " + tracking.vesselId() + " is between phases; try again in a moment.");
                 }
@@ -176,7 +193,7 @@ public final class GameStateBuilder {
                 // (requeueAwaitingBerth filters on the TRACKING stage, which says the grant
                 // already happened) while redispatchTugless CNPs real tugs to an empty berth.
                 // Same "no clean phase boundary" rule as the null case.
-                if (!dropNegotiating) {
+                if (!dropBetweenPhases) {
                     throw new SaveNotAllowedException(
                             "Vessel " + tracking.vesselId() + " is between phases; try again in a moment.");
                 }
@@ -191,7 +208,7 @@ public final class GameStateBuilder {
                 // the HarbourMaster wrote IN_TRANSIT on send, the ship has not consumed it. The
                 // same rule as the grant above, for the same reason: a save here restores a ship
                 // that waits for an order the rebuilt HarbourMaster believes it already gave.
-                if (!dropNegotiating) {
+                if (!dropBetweenPhases) {
                     throw new SaveNotAllowedException(
                             "Vessel " + tracking.vesselId() + " is between phases; try again in a moment.");
                 }

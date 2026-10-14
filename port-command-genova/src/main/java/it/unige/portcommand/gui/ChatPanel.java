@@ -111,17 +111,25 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
      * offering more would close that deal far too cheaply (the reason the input's examples are
      * computed per tab, S15).
      */
-    static final String HOW_TO_PLAY_HTML = "<html><body style='width:300px'>"
-            + "<p style='text-align:center'><b>How to play</b></p>"
-            + "<ul>"
-            + "<li>When a ship calls, its negotiation opens here.</li>"
-            + "<li>Type your price and hours — the grey example in the box fits that ship — or press "
-            + "<b>Accept</b> (their offer) or <b>Reject</b> (send them away).</li>"
-            + "<li><b>Hint</b> asks the Assistant what it would do.</li>"
-            + "<li><b>Next ship</b> in the top bar calls the next walk-in now.</li>"
-            + "<li>Press <b>Esc</b> to pause.</li>"
-            + "</ul>"
-            + "<p style='text-align:center'><i>" + WAITING_TEXT + "</i></p></body></html>";
+    static final String HOW_TO_PLAY_HTML = howToPlayHtml(WAITING_TEXT);
+
+    /** S18b (UI tree U13): the card's last line in the empty shell — no walk-in is coming there. */
+    static String howToPlayHtml(String lastLine) {
+        return "<html><body style='width:300px'>"
+                + "<p style='text-align:center'><b>How to play</b></p>"
+                + "<ul>"
+                + "<li>When a ship calls, its negotiation opens here.</li>"
+                + "<li>Type your price and hours — the grey example in the box fits that ship — or press "
+                + "<b>Accept</b> (their offer) or <b>Reject</b> (send them away).</li>"
+                + "<li><b>Hint</b> asks the Assistant what it would do.</li>"
+                + "<li><b>Next ship</b> in the top bar calls the next walk-in now.</li>"
+                + "<li>Press <b>Esc</b> to pause.</li>"
+                + "</ul>"
+                + "<p style='text-align:center'><i>" + lastLine + "</i></p></body></html>";
+    }
+
+    /** S18b (U13): whether the window is the empty shell (no game). */
+    private boolean noGame;
 
     /** Focusable on purpose (C-07 review): when the last closed tab leaves while it holds focus,
      * focus is parked HERE, where keystrokes do nothing — not left to AWT, whose transfer lands
@@ -230,6 +238,19 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
     private void showWaitingPlaceholder() {
         removeAll();
         add(waitingPlaceholder, BorderLayout.CENTER);
+    }
+
+    /**
+     * S18b (UI tree U13): the empty shell says "No game running" where a running game says
+     * "Waiting for a walk-in…" — the shell used to wait, visibly, for a ship that could not
+     * come. EDT only.
+     */
+    public void showNoGame(boolean noGame) {
+        if (this.noGame == noGame) {
+            return;
+        }
+        this.noGame = noGame;
+        waitingPlaceholder.setText(howToPlayHtml(noGame ? MainWindow.NO_GAME_RUNNING_TEXT : WAITING_TEXT));
     }
 
     /** S17a (ADR-21): the Assistant restated who is negotiating where. The event is the whole

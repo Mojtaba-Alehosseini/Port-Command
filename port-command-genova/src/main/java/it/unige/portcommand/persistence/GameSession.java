@@ -255,9 +255,20 @@ public final class GameSession {
      * atomically. Callable from the EDT — the bounded future wait is the planning-file
      * quiesce ("bounded timeout"), and the game is paused for its duration.
      *
-     * @throws SaveNotAllowedException while a negotiation is live (Step 22.7)
+     * @throws OpenNegotiationException while a negotiation is live (Step 22.7) — S18b: the
+     *         refusal {@link #saveNow(boolean)} can be told to waive
      */
     public Path saveNow() throws SaveNotAllowedException, IOException {
+        return saveNow(false);
+    }
+
+    /**
+     * S18b (PLAYABILITY_DECISIONS §10): as {@link #saveNow()}; with {@code dropOpenNegotiations}
+     * the vessels still negotiating are left out of the file instead of refusing the save — the
+     * player said yes to "Open negotiations will be lost. Save anyway?". They are lost to the
+     * SAVE only: in the running game the negotiations go on. The other refusals stand.
+     */
+    public Path saveNow(boolean dropOpenNegotiations) throws SaveNotAllowedException, IOException {
         boolean pausedHere = lifecycle.pauseIfRunning();
         try {
             // S17b (adversarial review): not in the game minute between a midnight and its
@@ -268,7 +279,7 @@ public final class GameSession {
             if (boot.getSimClock().midnightPending()) {
                 throw new SaveNotAllowedException("The day is just ending — save again in a moment.");
             }
-            GameState state = buildOnHarbourMasterThread();
+            GameState state = buildOnHarbourMasterThread(dropOpenNegotiations);
             Path written = saveLoadManager.save(saveLoadManager.savegamePath(), state);
             boot.getEventBus().publish(new GameSavedEvent(written.toString(),
                     java.nio.file.Files.size(written), false,
@@ -288,7 +299,8 @@ public final class GameSession {
      * waits, bounded. Never called from the HM thread itself (the autosave path, which IS
      * on that thread, builds inline via {@link AutosaveCoordinator}).
      */
-    private GameState buildOnHarbourMasterThread() throws SaveNotAllowedException, IOException {
+    private GameState buildOnHarbourMasterThread(boolean dropOpenNegotiations)
+            throws SaveNotAllowedException, IOException {
         HarbourMasterAgent hm = (HarbourMasterAgent) directory.byName("harbour_master")
                 .orElseThrow(() -> new IOException("No running game to save (harbour_master absent)"));
         CompletableFuture<GameState> future = new CompletableFuture<>();
@@ -298,7 +310,7 @@ public final class GameSession {
             @Override
             public void action() {
                 try {
-                    future.complete(GameStateBuilder.build(sources, savedAt, false));
+                    future.complete(GameStateBuilder.build(sources, savedAt, dropOpenNegotiations, false));
                 } catch (Exception e) {
                     future.completeExceptionally(e);
                 }
@@ -328,8 +340,22 @@ public final class GameSession {
      */
     public synchronized void loadGame(Path source)
             throws SchemaVersionException, CorruptSaveException {
+        loadGame(source, false);
+    }
+
+    /**
+     * S18b (REMAINING_AREAS_DECISIONS P8): as {@link #loadGame(Path)}; with {@code paused} the
+     * loaded world comes up PAUSED and waits for the player (▶ or Esc), as a scenario the
+     * window starts does (PT2). The window loads this way; headless runs and the ITs keep the
+     * running load.
+     */
+    public synchronized void loadGame(Path source, boolean paused)
+            throws SchemaVersionException, CorruptSaveException {
         GameState state = saveLoadManager.load(source); // validate FIRST — running game untouched on failure
         bootWorld(state, runtimeFor(state), source.toString());
+        if (paused) {
+            lifecycle.pauseIfRunning();
+        }
         log.info("loaded {} — day {}, wallet {}, {} restored vessel(s)", source,
                 SimClock.gameDayOf(state.simClock().simMillis()), state.wallet(),
                 state.agents().activeVessels().size());

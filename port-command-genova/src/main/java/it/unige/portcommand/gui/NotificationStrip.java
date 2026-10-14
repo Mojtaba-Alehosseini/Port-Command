@@ -39,6 +39,13 @@ public final class NotificationStrip extends JPanel {
     private final long autoDismissMs;
     private final Map<Long, Timer> dismissTimers = new HashMap<>();
     private final Map<Long, JPanel> chipComponents = new HashMap<>();
+    /**
+     * S18b (UI tree U13): a hint that stays until it is taken away — "No game running — Game ▸
+     * New Game… or Load Game… to start." in the empty shell. It used to be a chip like any
+     * other, gone after 8 s, leaving an empty window with nothing on it to say what to do. First
+     * in the strip, never auto-dismissed, never counted among the chips.
+     */
+    private final JLabel pinnedHint = new JLabel();
 
     public NotificationStrip(EventBus eventBus) {
         this(eventBus, DEFAULT_AUTO_DISMISS_MS);
@@ -47,6 +54,11 @@ public final class NotificationStrip extends JPanel {
     NotificationStrip(EventBus eventBus, long autoDismissMs) {
         super(new FlowLayout(FlowLayout.LEFT));
         this.autoDismissMs = autoDismissMs;
+        pinnedHint.setVisible(false);
+        pinnedHint.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(borderColour(NotificationEvent.Severity.INFO)),
+                BorderFactory.createEmptyBorder(2, 4, 2, 4)));
+        add(pinnedHint);
         this.subscription = eventBus.subscribe(NotificationEvent.class, this::onNotification, DeliveryMode.EDT);
     }
 
@@ -135,6 +147,24 @@ public final class NotificationStrip extends JPanel {
         for (Timer timer : dismissTimers.values()) {
             timer.stop();
         }
+    }
+
+    /** S18b (U13): shows {@code text} as the strip's pinned hint, or takes the hint away ({@code null}). */
+    public void showPinnedHint(String text) {
+        boolean show = text != null && !text.isBlank();
+        String shown = show ? severityMarker(NotificationEvent.Severity.INFO) + " " + text : "";
+        if (pinnedHint.isVisible() == show && pinnedHint.getText().equals(shown)) {
+            return;
+        }
+        pinnedHint.setText(shown);
+        pinnedHint.setVisible(show);
+        revalidate();
+        repaint();
+    }
+
+    /** Test-only (S18b, U13): the pinned hint as shown, or empty when there is none. */
+    String pinnedHintForTest() {
+        return pinnedHint.isVisible() ? pinnedHint.getText() : "";
     }
 
     /** Test-only: the model backing this panel's chip list. */
