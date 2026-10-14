@@ -20,13 +20,16 @@ import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 
 import it.unige.portcommand.commlog.PerformativeColours;
+import it.unige.portcommand.gui.model.HelpText;
 import jade.lang.acl.ACLMessage;
 
 /**
- * Read-only Help screen (task 21, planning/21 §21.4): keyboard shortcuts, the natural-language
- * command surface (§3.9 examples), and the FIPA performative colour legend — the legend swatches
- * are painted with the SAME {@link PerformativeColours} the comm log uses, so the key matches the
- * live colours the player sees rather than a hand-copied palette that could drift.
+ * Read-only Help screen (task 21, planning/21 §21.4): S18b (REMAINING_AREAS_DECISIONS P7) — the
+ * current game, the window, the moves a chat tab understands (with the phrasings S18a added), the
+ * Assistant, the keys and saving, all from {@link HelpText}; then the FIPA performative colour
+ * legend — the legend swatches are painted with the SAME {@link PerformativeColours} the comm log
+ * uses, so the key matches the live colours the player sees rather than a hand-copied palette that
+ * could drift.
  *
  * <p>A {@link JDialog} (a {@link Window}) so it throws {@code HeadlessException} in the test lanes
  * and is verified via the manual {@code --gui} smoke path, exactly like {@link GameOverDialog} /
@@ -42,22 +45,8 @@ public final class HelpDialog extends JDialog {
             ACLMessage.DISCONFIRM,
     };
 
-    private static final String[][] SHORTCUTS = {
-            {"Esc", "Pause / resume the game"},
-            {"Enter", "Send the typed message in the focused chat tab"},
-            {"Hint button", "Ask the Assistant for a recommended counter-offer"},
-    };
-
-    private static final String[][] COMMANDS = {
-            {"how about 6500 for 10 hours", "Counter-offer a fee and a berth duration"},
-            {"6500", "Counter with just a fee (keeps the duration under discussion)"},
-            {"deal  ·  accept  ·  yes", "Accept the vessel's current offer"},
-            {"no  ·  reject  ·  turn them away", "Reject the offer"},
-            {"withdraw  ·  cancel", "Walk away from this negotiation"},
-            {"status  ·  how are we doing", "Ask what's on the table right now"},
-            {"Genoa Star: 2000 for 5h", "Vocative — address one vessel by name across tabs"},
-            {"tell the tanker: deal", "Vocative — route a move to the tanker's dialogue"},
-    };
+    /** The width the meanings wrap at, in pixels. */
+    private static final int MEANING_WIDTH = 330;
 
     public HelpDialog(Window owner) {
         super(owner, "Help — Port Command Genova", ModalityType.APPLICATION_MODAL);
@@ -67,15 +56,17 @@ public final class HelpDialog extends JDialog {
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
         body.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
 
-        body.add(sectionHeader("Keyboard shortcuts"));
-        body.add(twoColumn(SHORTCUTS));
-        body.add(gap());
-        body.add(sectionHeader("Talking to vessels"));
-        // S15 (2026-10-12): was "...or use the quick-action buttons". That row of buttons is gone;
-        // a chat tab now has Accept and Reject next to its input, which send "deal" and "no".
-        body.add(new JLabel("Type in a walk-in's chat tab — or press its Accept or Reject button:"));
-        body.add(twoColumn(COMMANDS));
-        body.add(gap());
+        for (HelpText.Section section : HelpText.sections()) {
+            body.add(sectionHeader(section.title()));
+            if (section.intro() != null) {
+                JLabel intro = new JLabel(wrapped(section.intro(), MEANING_WIDTH + 160));
+                intro.setAlignmentX(Component.LEFT_ALIGNMENT);
+                intro.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
+                body.add(intro);
+            }
+            body.add(rows(section));
+            body.add(gap());
+        }
         body.add(sectionHeader("Comm-log colour legend"));
         body.add(legend());
 
@@ -93,7 +84,7 @@ public final class HelpDialog extends JDialog {
         add(scroll, BorderLayout.CENTER);
         add(footer, BorderLayout.SOUTH);
         getRootPane().setDefaultButton(close);
-        setPreferredSize(new Dimension(520, 560));
+        setPreferredSize(new Dimension(640, 640));
         pack();
         setLocationRelativeTo(owner);
     }
@@ -106,16 +97,38 @@ public final class HelpDialog extends JDialog {
         return label;
     }
 
-    private static JPanel twoColumn(String[][] rows) {
-        JPanel grid = new JPanel(new GridLayout(rows.length, 2, 12, 4));
+    /** One section's rows: the key at its natural width (fixed-width for what is typed), the
+     * meaning wrapping beside it. */
+    private static JPanel rows(HelpText.Section section) {
+        JPanel grid = new JPanel(new java.awt.GridBagLayout());
         grid.setAlignmentX(Component.LEFT_ALIGNMENT);
-        for (String[] row : rows) {
-            JLabel key = new JLabel(row[0]);
-            key.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-            grid.add(key);
-            grid.add(new JLabel(row[1]));
+        java.awt.GridBagConstraints c = new java.awt.GridBagConstraints();
+        c.anchor = java.awt.GridBagConstraints.FIRST_LINE_START;
+        c.insets = new java.awt.Insets(2, 0, 4, 12);
+        int y = 0;
+        for (HelpText.Row row : section.rows()) {
+            JLabel key = new JLabel(row.key());
+            if (section.typed()) {
+                key.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+            } else {
+                key.setFont(key.getFont().deriveFont(Font.BOLD));
+            }
+            c.gridx = 0;
+            c.gridy = y;
+            c.weightx = 0;
+            grid.add(key, c);
+            c.gridx = 1;
+            c.weightx = 1;
+            grid.add(new JLabel(wrapped(row.meaning(), MEANING_WIDTH)), c);
+            y++;
         }
         return grid;
+    }
+
+    /** Text that wraps at {@code width} pixels; escaped, so nothing in it is read as markup. */
+    private static String wrapped(String text, int width) {
+        String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        return "<html><body style='width:" + width + "px'>" + escaped + "</body></html>";
     }
 
     private static JPanel legend() {

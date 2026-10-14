@@ -328,20 +328,41 @@ class SettingsFormTest {
     void applyPublishesAnEventCarryingTheEditedWidgetValues() {
         EventBus bus = new EventBus();
         List<SettingsChangedEvent> events = new ArrayList<>();
-        SettingsForm form = form(bus, events);
+        SettingsForm form = new SettingsForm(bus, "HARD", 3_600L, false, "google/gemma-3-4b-it", () -> { });
+        bus.subscribe(SettingsChangedEvent.class, events::add, DeliveryMode.CALLER_THREAD);
 
-        form.difficultyComboForTest().setSelectedItem("HARD");
         form.dayLengthSliderForTest().setValue(DayLengthSteps.nearestIndex(2_700)); // the 45 min step
         form.autopilotCheckForTest().setSelected(true);
-        form.llmComboForTest().setSelectedItem("google/gemma-3-4b-it");
         form.clickApplyForTest();
 
         assertEquals(1, events.size(), "Apply must publish exactly one SettingsChangedEvent");
         SettingsChangedEvent e = events.get(0);
-        assertEquals("HARD", e.difficulty());
         assertEquals(2_700L, e.realSecondsPerGameDay(), "the slider publishes SECONDS, not its step index");
         assertTrue(e.autopilotEnabled());
+        // S18b (P3, P4): no control for either, so they go out exactly as the form opened on them.
+        assertEquals("HARD", e.difficulty());
         assertEquals("google/gemma-3-4b-it", e.llmModel());
+    }
+
+    /** S18b (REMAINING_AREAS_DECISIONS P3, P4): the two controls that changed nothing are gone. */
+    @Test
+    @Timeout(5)
+    void thereIsNoDifficultyAndNoModelToChoose() {
+        SettingsForm form = new SettingsForm(new EventBus(), "NORMAL", 3_600L, false,
+                "microsoft/Phi-4-mini-instruct", () -> { });
+        java.util.List<java.awt.Component> all = new java.util.ArrayList<>();
+        java.util.Deque<java.awt.Container> todo = new java.util.ArrayDeque<>(java.util.List.of(form));
+        while (!todo.isEmpty()) {
+            for (java.awt.Component child : todo.pop().getComponents()) {
+                all.add(child);
+                if (child instanceof java.awt.Container nested) {
+                    todo.push(nested);
+                }
+            }
+        }
+        assertTrue(all.stream().noneMatch(c -> c instanceof javax.swing.JComboBox), "no combo box on the form");
+        assertTrue(all.stream().filter(c -> c instanceof javax.swing.JLabel).map(c -> ((javax.swing.JLabel) c).getText())
+                .noneMatch(t -> t != null && (t.contains("Difficulty") || t.contains("LLM model"))), "and no row for either");
     }
 
     @Test
@@ -355,15 +376,15 @@ class SettingsFormTest {
 
         form.resetToDefaultsForTest();
 
-        assertEquals("NORMAL", form.difficultyComboForTest().getSelectedItem());
         assertEquals(DayLengthSteps.nearestIndex(defaultDay), form.dayLengthSliderForTest().getValue());
         assertFalse(form.autopilotCheckForTest().isSelected());
-        assertEquals("microsoft/Phi-4-mini-instruct", form.llmComboForTest().getSelectedItem());
         assertTrue(events.isEmpty(), "Reset must not publish — only Apply/OK do");
 
         form.clickApplyForTest();
         assertEquals(1, events.size());
-        assertEquals("NORMAL", events.get(0).difficulty());
+        // S18b (P3, P4): Reset touches only what the form shows; the two hidden values are kept.
+        assertEquals("HARD", events.get(0).difficulty());
+        assertEquals("google/gemma-3-4b-it", events.get(0).llmModel());
         assertEquals(defaultDay, events.get(0).realSecondsPerGameDay());
         assertEquals(3_600L, defaultDay, "S14: the default day is 60 real minutes");
     }
@@ -510,8 +531,6 @@ class SettingsFormTest {
 
         // Only the day length is locked.
         assertTrue(form.autopilotCheckForTest().isEnabled(), "autopilot is not locked by the script");
-        assertTrue(form.difficultyComboForTest().isEnabled());
-        assertTrue(form.llmComboForTest().isEnabled());
     }
 
     @Test
@@ -524,13 +543,12 @@ class SettingsFormTest {
         // No mouse can do this to a disabled slider; whatever else might must not get a new pace out.
         form.dayLengthSliderForTest().setValue(DayLengthSteps.nearestIndex(7_200));
         form.autopilotCheckForTest().setSelected(false);
-        form.difficultyComboForTest().setSelectedItem("EASY");
         form.clickApplyForTest();
 
         assertEquals(1, events.size());
         assertEquals(900L, events.get(0).realSecondsPerGameDay(), "the day length the form opened on, untouched");
         assertFalse(events.get(0).autopilotEnabled(), "autopilot is applied as edited: it is not locked");
-        assertEquals("EASY", events.get(0).difficulty());
+        assertEquals("HARD", events.get(0).difficulty(), "S18b: the value the form opened on");
         assertEquals("15 min per game day", form.dayLengthReadoutForTest(),
                 "and the readout keeps saying what is in force");
     }
@@ -549,14 +567,12 @@ class SettingsFormTest {
 
         assertEquals(sliderBefore, form.dayLengthSliderForTest().getValue(), "Reset is not a way round the lock");
         assertEquals("15 min per game day", form.dayLengthReadoutForTest());
-        assertEquals("NORMAL", form.difficultyComboForTest().getSelectedItem(), "the other knobs are reset");
-        assertFalse(form.autopilotCheckForTest().isSelected());
-        assertEquals("microsoft/Phi-4-mini-instruct", form.llmComboForTest().getSelectedItem());
+        assertFalse(form.autopilotCheckForTest().isSelected(), "the other knob is reset");
         assertTrue(events.isEmpty(), "Reset still publishes nothing");
 
         form.clickApplyForTest();
         assertEquals(900L, events.get(0).realSecondsPerGameDay(), "not the default 3600 s");
-        assertEquals("NORMAL", events.get(0).difficulty());
+        assertEquals("HARD", events.get(0).difficulty(), "S18b (P4): no control, so Reset does not touch it");
     }
 
     @Test

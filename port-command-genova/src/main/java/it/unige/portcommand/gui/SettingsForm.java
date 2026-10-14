@@ -10,7 +10,6 @@ import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
-import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
@@ -25,9 +24,15 @@ import it.unige.portcommand.nlp.PolicyParser;
 import it.unige.portcommand.util.EventBus;
 
 /**
- * The settings form (task 21, planning/21 §21.1): the four user-editable knobs — difficulty,
- * real-seconds-per-game-day, autopilot, and LLM model — plus Reset / Apply / OK / Cancel.
- * Everything else in {@code defaults.json} stays fixed (not editable in v1).
+ * The settings form (task 21, planning/21 §21.1): the user-editable knobs — real-seconds-per-game-
+ * day and autopilot — plus Reset / Apply / OK / Cancel. Everything else in {@code defaults.json}
+ * stays fixed (not editable in v1).
+ *
+ * <p><b>S18b (REMAINING_AREAS_DECISIONS P3, P4): no Difficulty, no LLM model.</b> Neither control
+ * did anything a player could see: nothing reads the difficulty, and the model was a choice for
+ * the next launch of a sidecar the launcher starts with its own setting. Both VALUES stay — in
+ * {@code Settings}, in every save (the schema is unchanged) and in the {@link SettingsChangedEvent}
+ * — carried through exactly as the form opened on them.
  *
  * <p><b>Plus one action that is not a knob (2026-07-28, audit C-01/D-02): the autopilot policy
  * field.</b> It does not ride the {@link SettingsChangedEvent} and is not undone by Cancel — it
@@ -58,15 +63,15 @@ import it.unige.portcommand.util.EventBus;
  * a scenario.
  *
  * <p><b>Honest per-knob apply</b> (see {@link SettingsChangedEvent}): day-length is live
- * (SimClock), autopilot is live (Assistant + Hint button), {@code llmModel} takes effect on the
- * next launch (sidecar restart — labelled as such), and {@code difficulty} is recorded only — no
- * runtime consumer reads it in v1. The form still exposes all four (they are the canonical §21.1
- * knobs) and the event carries all four; the form does not pretend the inert ones do more.
+ * (SimClock) and autopilot is live (Assistant + Hint button). The event still carries all four
+ * §21.1 values; {@code llmModel} and {@code difficulty} go out exactly as the form received them
+ * (S18b: it no longer offers a control that would pretend to change them).
  */
 final class SettingsForm extends JPanel {
 
-    private static final String[] DIFFICULTIES = {"EASY", "NORMAL", "HARD"};
-    private static final String[] LLM_MODELS = {"microsoft/Phi-4-mini-instruct", "google/gemma-3-4b-it"};
+    /** S18b (P3, P4): carried through unchanged — the form has no control for either any more. */
+    private final String difficulty;
+    private final String llmModel;
 
     static final String CLEAR_POLICIES_LABEL = "Clear policies";
 
@@ -89,7 +94,6 @@ final class SettingsForm extends JPanel {
      * on, then whatever was last applied. The checkbox alone does not say: ticking it changes
      * nothing until Apply, and a policy does nothing while the autopilot is off. */
     private boolean autopilotLive;
-    private final JComboBox<String> difficultyCombo = new JComboBox<>(DIFFICULTIES);
     /** S18b (PT20): whether the last press of Set policy set one - so that pressing it again on
      * the field it just emptied does not replace "Policy set." with "Type a policy first.". */
     private boolean lastPolicySet;
@@ -111,7 +115,6 @@ final class SettingsForm extends JPanel {
     /** S16: on the form only while the day length is locked. */
     private final JLabel dayLengthLockNote = new JLabel(DAY_LENGTH_LOCK_NOTE);
     private final JCheckBox autopilotCheck = new JCheckBox("Enable Channel-B autopilot");
-    private final JComboBox<String> llmCombo = new JComboBox<>(LLM_MODELS);
     private final JButton applyButton = new JButton("Apply");
 
     /** The TRUE live day length the form opened on. Every shipped pace is one of the steps, but a
@@ -158,11 +161,9 @@ final class SettingsForm extends JPanel {
         this.dayLengthLocked = dayLengthLocked;
         this.policies = policies;
         this.autopilotLive = autopilotEnabled;
+        this.difficulty = difficulty;
+        this.llmModel = llmModel;
         setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
-
-        difficultyCombo.setSelectedItem(difficulty);
-        difficultyCombo.setToolTipText("Challenge level, recorded with your save "
-                + "(engine balancing hooks are not wired in v1).");
 
         dayLengthSlider.setValue(DayLengthSteps.nearestIndex(initialDayLengthSeconds));
         dayLengthSlider.setMajorTickSpacing(1);
@@ -188,9 +189,6 @@ final class SettingsForm extends JPanel {
         autopilotCheck.setToolTipText("When on, the Assistant auto-acts on walk-ins and per-tab "
                 + "Hint buttons hide.");
 
-        llmCombo.setSelectedItem(llmModel);
-        llmCombo.setToolTipText("Consumed by the Flask LLM sidecar — takes effect on the next launch.");
-
         policyField.setToolTipText("A fixed grammar, not free text: " + PolicyParser.GRAMMAR_HINT);
         policyField.addActionListener(e -> submitPolicy()); // Enter submits
         policyButton.addActionListener(e -> submitPolicy());
@@ -201,7 +199,6 @@ final class SettingsForm extends JPanel {
         policyRow.add(policyButton, java.awt.BorderLayout.EAST);
 
         int row = 0;
-        addRow(row++, "Difficulty:", difficultyCombo);
         addRow(row++, "Game day length (at \u00d71 speed):", dayLengthSlider);
         addRow(row++, "", dayLengthReadout);
         if (dayLengthLocked) {
@@ -225,8 +222,6 @@ final class SettingsForm extends JPanel {
         clearHolder.add(clearPoliciesButton, java.awt.BorderLayout.NORTH);
         policyListRow.add(clearHolder, java.awt.BorderLayout.EAST);
         addRow(row++, "Active policies:", policyListRow);
-        addRow(row++, "LLM model:", llmCombo);
-        addRow(row++, "", new JLabel("(LLM model takes effect on next launch)"));
 
         JButton reset = new JButton("Reset to defaults");
         reset.addActionListener(e -> resetToDefaults());
@@ -430,17 +425,13 @@ final class SettingsForm extends JPanel {
     /** Publishes the current widget values. Apply and OK both call this; Reset does not (a reset is
      * not applied until the player confirms with Apply/OK). */
     private void apply() {
-        eventBus.publish(new SettingsChangedEvent(
-                (String) difficultyCombo.getSelectedItem(),
-                effectiveDayLength(),
-                autopilotCheck.isSelected(),
-                (String) llmCombo.getSelectedItem()));
+        eventBus.publish(new SettingsChangedEvent(difficulty, effectiveDayLength(), autopilotCheck.isSelected(),
+                llmModel)); // S18b (P3, P4): the two values the form has no control for, as they were
         autopilotLive = autopilotCheck.isSelected(); // S18a: what was just applied is what is live
     }
 
     private void resetToDefaults() {
         Settings d = Settings.defaults();
-        difficultyCombo.setSelectedItem(d.difficulty());
         if (!dayLengthLocked) {
             // S16: a locked day length is not Reset's to change — the default (1 h) is not the
             // scenario's pace, and Reset must not be the one button that gets past the lock.
@@ -449,14 +440,9 @@ final class SettingsForm extends JPanel {
             updateDayReadout();
         }
         autopilotCheck.setSelected(d.autopilotEnabled());
-        llmCombo.setSelectedItem(d.llmModel());
     }
 
     // ---- test seams (headless) ----
-
-    JComboBox<String> difficultyComboForTest() {
-        return difficultyCombo;
-    }
 
     JSlider dayLengthSliderForTest() {
         return dayLengthSlider;
@@ -477,9 +463,6 @@ final class SettingsForm extends JPanel {
         return autopilotCheck;
     }
 
-    JComboBox<String> llmComboForTest() {
-        return llmCombo;
-    }
 
     /** Drives the Apply button exactly as a click would (publishes the {@link SettingsChangedEvent}). */
     void clickApplyForTest() {

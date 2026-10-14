@@ -147,6 +147,11 @@ public final class MainWindow extends JFrame {
         return "Autosaved (end of day " + endedDay + ")";
     }
 
+    /** S18b (P13): set by {@code Main} for {@code --no-rasa} (the launchers' -NoRasa). */
+    public static final String RASA_OFF_PROPERTY = "portcommand.rasa.off";
+    /** S18b (P13): the honest notice of a game launched without Rasa. */
+    static final String RASA_OFF_TEXT = "Rasa is off: only the grammar reads what you type — the moves in "
+            + "Help work, anything else is asked about.";
 
     /** S16: shown when a changed day length reaches {@link #applySettings} under the script lock. */
     static final String DAY_LENGTH_LOCKED_TEXT =
@@ -314,6 +319,7 @@ public final class MainWindow extends JFrame {
         // restored run settles its own first midnight.
         eventBus.subscribe(GameLoadedEvent.class, e -> {
             latestSummary = null;
+            sayIfRasaIsOff(); // S18b (P13): each game the player starts hears it
             // S9: the old `currentAutopilot = false` line here compensated for a respawned
             // AssistantAgent booting autopilot OFF unconditionally. Both halves are gone: the
             // agent now seeds its flag from Settings.load() (which bootWorld applied from the
@@ -420,6 +426,7 @@ public final class MainWindow extends JFrame {
      * {@code windowOpened}. */
     private void onWindowShown() {
         syncTutorialOverlayBounds();
+        sayIfRasaIsOff(); // S18b (P13)
         getContentPane().addComponentListener(new ComponentAdapter() {
             @Override
             public void componentResized(ComponentEvent e) {
@@ -437,6 +444,14 @@ public final class MainWindow extends JFrame {
             // running: for the first-launch tutorial, "the first game has started" is now.
             showTheTutorialsFirstCard(); // S18b (PT2): a --scenario tutorial launch starts paused
             maybeAutoOpenTutorial();
+        }
+    }
+
+    /** S18b (P13): a game launched without Rasa says so, honestly, in the notification strip. */
+    private void sayIfRasaIsOff() {
+        if (Boolean.getBoolean(RASA_OFF_PROPERTY)) {
+            eventBus.publish(new NotificationEvent(RASA_OFF_TEXT, NotificationEvent.Severity.WARNING,
+                    lifecycle.simClock().nowSimMillis(), "rasa-off"));
         }
     }
 

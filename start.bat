@@ -14,6 +14,7 @@ REM   start.bat -Scenario busy_day       boot straight into a scenario
 REM   start.bat -Profile                 record logs/profile.jfr for 15 minutes
 REM   start.bat -NoServices              game only (services already running)
 REM   start.bat -NoLlm                   skip the sidecar (plain-template explanations)
+REM   start.bat -NoRasa                  skip Rasa (the grammar alone reads what you type)
 REM   start.bat -JadePort 11099          if something else holds RMI port 1099
 setlocal
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start.ps1" %*

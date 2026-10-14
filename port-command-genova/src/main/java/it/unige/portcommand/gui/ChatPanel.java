@@ -21,12 +21,10 @@ import javax.swing.Timer;
 import it.unige.portcommand.core.Settings;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.AutopilotOwnershipEvent;
-import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
 import it.unige.portcommand.gui.events.SimClockTickEvent;
-import it.unige.portcommand.gui.events.WithdrawalEvent;
 import it.unige.portcommand.gui.model.DialogueTabModel;
 import it.unige.portcommand.gui.model.FinishedDialogue;
 import it.unige.portcommand.gui.model.NegotiationTabRegistry;
@@ -45,11 +43,15 @@ import it.unige.portcommand.util.Subscription;
  * {@link NegotiationOpenedEvent} the registry hasn't seen before, (b) forward every
  * other server-originated event to the registry and refresh whichever tab it names.
  *
- * <p>{@link DealClosedEvent}/{@link WithdrawalEvent} are subscribed only to keep the
- * lifecycle bracket documented at the call site — the same information always
- * arrives paired with a {@link NegotiationClosedEvent} (see that event's own
- * javadoc), which is the one this panel actually acts on; the other two are the
- * HUD's (task 20) more specific signal.
+ * <p>The panel subscribes to {@link NegotiationOpenedEvent}, {@link NegotiationClosedEvent},
+ * {@code AssistantChatEvent}, {@code PlayerCommandRefusedEvent}, {@code SimClockTickEvent},
+ * {@code AutopilotOwnershipEvent} and {@code GameLoadedEvent} — the fields below, and nothing
+ * else. NOT to {@code DealClosedEvent} or {@code WithdrawalEvent}: the same information arrives
+ * paired with a {@link NegotiationClosedEvent} (see that event's javadoc) — since S18b with a
+ * deal's terms — and that is the one a tab closes on; the other two are the HUD's (task 20) more
+ * specific signal. S18b (UI tree U22): this paragraph used to say the panel subscribed to both
+ * "to keep the lifecycle bracket documented"; it never did ({@code ChatPanelTest}
+ * {@code dealClosedAndWithdrawalEventsAloneDoNotCloseATab}).
  *
  * <p><b>S15 (2026-10-12): the middle column, and what the other two ask of it.</b> The chat is
  * now the centre of a three-column screen, and it is the only place that knows which negotiations
@@ -123,7 +125,7 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
                 + "<b>Accept</b> (their offer) or <b>Reject</b> (send them away).</li>"
                 + "<li><b>Hint</b> asks the Assistant what it would do.</li>"
                 + "<li><b>Next ship</b> in the top bar calls the next walk-in now.</li>"
-                + "<li>Press <b>Esc</b> to pause.</li>"
+                + "<li><b>⏸</b> in the top bar (or <b>Esc</b>) pauses; <b>▶</b> goes on.</li>"
                 + "</ul>"
                 + "<p style='text-align:center'><i>" + lastLine + "</i></p></body></html>";
     }

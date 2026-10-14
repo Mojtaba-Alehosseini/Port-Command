@@ -89,6 +89,11 @@ public final class Main {
             System.exit(SmokeRunner.runAll() == 0 ? 0 : 1);
         }
         boolean guiRequested = argList.contains("--gui");
+        // S18b (REMAINING_AREAS_DECISIONS P13): launched without Rasa (start -NoRasa) - the
+        // window says so; the pipeline is unchanged (its Rasa calls fail fast with nothing on :5005).
+        if (argList.contains("--no-rasa")) {
+            System.setProperty(it.unige.portcommand.gui.MainWindow.RASA_OFF_PROPERTY, "true");
+        }
         applyDayLengthOverride(argList);
         Path loadPath = loadPathArg(argList);
         String scenarioKey = scenarioArg(argList);

@@ -37,7 +37,11 @@ param(
     # Launch the game only - assume Rasa and the sidecar are already running.
     [switch]$NoServices,
     # Skip the LLM sidecar. Explanations fall back to the plain template; nothing else changes.
-    [switch]$NoLlm
+    # S18b (P13): its venv is then not needed either, and not checked.
+    [switch]$NoLlm,
+    # S18b (P13): skip Rasa. Only the grammar reads what is typed - the moves Help lists work,
+    # anything else is asked about - and the game says so in its notification strip.
+    [switch]$NoRasa
 )
 
 $ErrorActionPreference = 'Stop'
@@ -191,17 +195,17 @@ function Stop-AllStarted {
 
 # --- preflight ---------------------------------------------------------------------------
 if (-not $NoServices) {
-    if (-not (Test-Path $RasaPy)) {
+    if (-not $NoRasa -and -not (Test-Path $RasaPy)) {
         throw "nlp-python\.venv-rasa is missing. Create it:`n" +
               "  py -3.10 -m venv nlp-python\.venv-rasa`n" +
               "  nlp-python\.venv-rasa\Scripts\pip install -r nlp-python\requirements-rasa.txt"
     }
-    if (-not (Test-Path $SidecarPy)) {
+    if (-not $NoLlm -and -not (Test-Path $SidecarPy)) {
         throw "nlp-python\.venv is missing. Create it:`n" +
               "  py -3.11 -m venv nlp-python\.venv`n" +
               "  nlp-python\.venv\Scripts\pip install -r nlp-python\requirements-llm.txt"
     }
-    if (-not (Test-Path $Model)) {
+    if (-not $NoRasa -and -not (Test-Path $Model)) {
         throw "No trained Rasa model at $Model. Train it (~3 min):`n" +
               "  bash nlp-python/train_rasa.sh"
     }
@@ -215,7 +219,10 @@ try {
     if (-not $NoServices) {
         Stop-StaleProcesses
 
-        # 1) Rasa, from its OWN 3.10 venv.
+        # 1) Rasa, from its OWN 3.10 venv - unless -NoRasa (S18b, P13).
+        if ($NoRasa) {
+            Write-Warn '-NoRasa: skipping Rasa. Only the grammar reads what you type; the game says so.'
+        } else {
         $rasa = Start-Service-Process 'rasa' $RasaPy `
             @('run', '--enable-api', '--port', '5005', '--model', 'models\portcmd_nlu.tar.gz') `
             (Join-Path $Nlp 'rasa')
@@ -228,6 +235,7 @@ try {
         # 200 (a model that did not load). A miss aborts the whole launch - the finally block
         # stops the Rasa we just started and the sidecar below never runs.
         Wait-ForHealth 'rasa' 'http://localhost:5005/status' 60 $rasa -HardCapSeconds 600 -AnswerIsFinal
+        }
 
         # 2) The Flask LLM sidecar, from the OTHER (3.11) venv, on the fast ONNX-INT4 backend.
         #    LLM_QUANT=onnx is what makes an explanation take seconds instead of ~9 min (BUILD_LOG
@@ -298,6 +306,7 @@ try {
     # 3) The game, in the FOREGROUND - this call is what the finally block is guarding.
     $gameArgs = @('--gui')
     if ($Scenario) { $gameArgs += @('--scenario', $Scenario) }
+    if ($NoRasa) { $gameArgs += '--no-rasa' } # S18b (P13): the game's honest notice
     # -PjadePort, not -Djade.main.port: a -D on the gradlew command line lands on the Gradle
     # DAEMON, and the forked application JVM does not inherit it, so the port override would be
     # silently ignored. build.gradle.kts forwards the project property as a systemProperty.

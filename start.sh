@@ -23,6 +23,7 @@
 #   ./start.sh --profile             record logs/profile.jfr for 15 minutes
 #   ./start.sh --no-services         game only (services already running)
 #   ./start.sh --no-llm              skip the sidecar (explanations use the plain template)
+#   ./start.sh --no-rasa             skip Rasa: the grammar alone reads what you type (S18b)
 #   ./start.sh --jade-port 11099     if something else holds RMI port 1099
 set -euo pipefail
 
@@ -39,6 +40,7 @@ SCENARIO=""
 JADE_PORT=1099
 NO_SERVICES=0
 NO_LLM=0
+NO_RASA=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --profile)          PROFILE=1; shift ;;
@@ -47,7 +49,8 @@ while [ $# -gt 0 ]; do
     --jade-port)        JADE_PORT="$2"; shift 2 ;;
     --no-services)      NO_SERVICES=1; shift ;;
     --no-llm)           NO_LLM=1; shift ;;
-    -h|--help)          sed -n '2,25p' "$0"; exit 0 ;;
+    --no-rasa)          NO_RASA=1; shift ;;
+    -h|--help)          sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "unknown option: $1 (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -160,9 +163,10 @@ wait_for_health() {
 }
 
 if [ "$NO_SERVICES" -eq 0 ]; then
-  [ -e "$RASA" ] || { echo "error: nlp-python/.venv-rasa missing. py -3.10 -m venv nlp-python/.venv-rasa && nlp-python/.venv-rasa/bin/pip install -r nlp-python/requirements-rasa.txt" >&2; exit 1; }
-  [ -e "$SIDECAR_PY" ] || { echo "error: nlp-python/.venv missing. py -3.11 -m venv nlp-python/.venv && nlp-python/.venv/bin/pip install -r nlp-python/requirements-llm.txt" >&2; exit 1; }
-  [ -f "$MODEL" ] || { echo "error: no trained Rasa model at $MODEL - run: bash nlp-python/train_rasa.sh" >&2; exit 1; }
+  # S18b (P13): a skipped service's venv is not needed, and not checked.
+  [ "$NO_RASA" -eq 1 ] || [ -e "$RASA" ] || { echo "error: nlp-python/.venv-rasa missing. py -3.10 -m venv nlp-python/.venv-rasa && nlp-python/.venv-rasa/bin/pip install -r nlp-python/requirements-rasa.txt" >&2; exit 1; }
+  [ "$NO_LLM" -eq 1 ] || [ -e "$SIDECAR_PY" ] || { echo "error: nlp-python/.venv missing. py -3.11 -m venv nlp-python/.venv && nlp-python/.venv/bin/pip install -r nlp-python/requirements-llm.txt" >&2; exit 1; }
+  [ "$NO_RASA" -eq 1 ] || [ -f "$MODEL" ] || { echo "error: no trained Rasa model at $MODEL - run: bash nlp-python/train_rasa.sh" >&2; exit 1; }
 fi
 [ -f "$GAME/lib/jade-4.6.0.jar" ] || { echo "error: $GAME/lib/jade-4.6.0.jar missing (license: not committed). Download from https://jade.tilab.com/" >&2; exit 1; }
 
@@ -170,6 +174,10 @@ if [ "$NO_SERVICES" -eq 0 ]; then
   reap_stale
 
   # 1) Rasa, from its OWN 3.10 venv. setsid where available so the whole tree dies together.
+  #    S18b (P13): unless --no-rasa.
+  if [ "$NO_RASA" -eq 1 ]; then
+    step "--no-rasa: skipping Rasa. Only the grammar reads what you type; the game says so."
+  else
   step "booting Rasa on :5005 (.venv-rasa)..."
   ( cd "$NLP/rasa" && exec "$RASA" run --enable-api --port 5005 --model models/portcmd_nlu.tar.gz ) \
       > "$LOGDIR/rasa.log" 2>&1 &
@@ -184,6 +192,7 @@ if [ "$NO_SERVICES" -eq 0 ]; then
   # load). A miss aborts the whole launch - the EXIT trap kills the Rasa we just started and the
   # sidecar below never runs.
   wait_for_health rasa "http://localhost:5005/status" 60 "$RASA_PID" 600 1
+  fi
 
   # 2) The Flask LLM sidecar, from the OTHER (3.11) venv, on the fast ONNX-INT4 backend.
   #    LLM_QUANT=onnx is what makes an explanation take seconds instead of ~9 min (BUILD_LOG task
@@ -237,6 +246,7 @@ fi
 
 GAME_ARGS="--gui"
 [ -n "$SCENARIO" ] && GAME_ARGS="$GAME_ARGS --scenario $SCENARIO"
+[ "$NO_RASA" -eq 1 ] && GAME_ARGS="$GAME_ARGS --no-rasa"
 # -PjadePort, not -Djade.main.port: a -D on the gradlew command line lands on the Gradle DAEMON,
 # and the forked application JVM does not inherit it, so the override would be silently ignored.
 # build.gradle.kts forwards the project property as a systemProperty.

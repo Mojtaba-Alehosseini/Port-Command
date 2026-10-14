@@ -53,6 +53,14 @@ class MainWindowSaveTextTest {
                 "from the game-over report or a finished scenario's Close: the game is over already");
     }
 
+    /** S18b (P13): a game launched with -NoRasa says so, and says what still works. */
+    @Test
+    void aGameWithoutRasaSaysSoHonestly() {
+        assertTrue(MainWindow.RASA_OFF_TEXT.startsWith("Rasa is off"), MainWindow.RASA_OFF_TEXT);
+        assertTrue(MainWindow.RASA_OFF_TEXT.contains("Help"), "it points at the moves that still work");
+        assertEquals("portcommand.rasa.off", MainWindow.RASA_OFF_PROPERTY, "the property Main sets for --no-rasa");
+    }
+
     /** P1, P8, P11, §10: the decided wording. */
     @Test
     void theQuestionsAreTheDecidedOnes() {
