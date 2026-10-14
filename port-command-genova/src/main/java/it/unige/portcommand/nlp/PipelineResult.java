@@ -48,12 +48,23 @@ public sealed interface PipelineResult {
      *                which must name both vessels — "I didn't get that" would be actively
      *                misleading there, because the pipeline understood the sentence perfectly and
      *                declined it on purpose. Mirrors {@link Routed}'s optional-addressee shape.
+     * @param aboutVesselId S18a (ADR-23): the vessel the refused move was FOR, when that is not
+     *                the vessel of the tab it was typed in (a vocative); {@code null} otherwise.
+     *                The chat takes the message's worked example from that vessel's tab - an
+     *                example that is safe for the tab on screen can be far below another
+     *                vessel's offer.
      */
-    record NeedsClarification(List<ButtonOption> buttons, String message) implements PipelineResult {
+    record NeedsClarification(List<ButtonOption> buttons, String message, String aboutVesselId)
+            implements PipelineResult {
 
         /** The generic clarification (no specific reason). */
         public NeedsClarification(List<ButtonOption> buttons) {
-            this(buttons, null);
+            this(buttons, null, null);
+        }
+
+        /** A specific reason, about the vessel of the tab it was typed in. */
+        public NeedsClarification(List<ButtonOption> buttons, String message) {
+            this(buttons, message, null);
         }
     }
 

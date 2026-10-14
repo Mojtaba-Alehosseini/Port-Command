@@ -406,8 +406,12 @@ class ChatPanelTest {
         // makes (neither dispatches; both leave exactly one system bubble) is unchanged.
         assertEquals(2, systemTexts.size() - 1, "exactly one system bubble per send, as before");
         assertEquals("Noted.", systemTexts.get(1));
-        assertTrue(systemTexts.get(2).contains("fleet-wide"),
-                "a REQUEST with no help/policy marker is the fleet-wide case: " + systemTexts.get(2));
+        // S18a (decision N7): an unmarked REQUEST is what Rasa's set_constraint looks like, and
+        // "fleet-wide" was a guess about it. The line now says only what is true of every such
+        // turn - it was read, and nothing of the kind is executed.
+        assertEquals("I read that as an instruction for the port — but instructions are not executed in "
+                        + "this version, so nothing was sent. To move this negotiation write '1950 for 6h'.",
+                systemTexts.get(2));
         assertFalse(systemTexts.get(2).contains("Assistant"),
                 "an unmarked REQUEST must NOT be re-routed to the Assistant");
     }
@@ -551,7 +555,11 @@ class ChatPanelTest {
      */
     @Test
     @Timeout(5)
-    void aTypedHelpRequestReachesTheAssistantJustLikeTheButton() throws Exception {
+    void aTypedHelpIsAnsweredWithWhatThisTabUnderstands() throws Exception {
+        // S18a (decision N8) - born red. Until S18a a typed "help" pressed the Hint button for the
+        // player: the Assistant then recommended a PRICE, which is an answer to another question.
+        // "help" asks what can be typed here, and the tab knows: its own examples (computed above
+        // this vessel's offer), the two words the buttons send, "status", and where policies live.
         EventBus bus = new EventBus();
         StubProcessor processor = new StubProcessor();
         ChatPanel panel = new ChatPanel(bus, processor);
@@ -562,9 +570,12 @@ class ChatPanelTest {
         panel.viewForTest("nego-A").sendText("help");
         SwingUtilities.invokeAndWait(() -> { });
 
-        List<HintButtonEvent> hints = published(bus, HintButtonEvent.class);
-        assertEquals(1, hints.size(), "a typed help must fire the same HintButtonEvent as the button");
-        assertEquals("nego-A", hints.get(0).dialogueId());
+        assertEquals("You can type an offer ('1950 for 6h', '200 more', 'make it 1800'), 'deal' or 'no', "
+                        + "or 'status'. Accept and Reject send 'deal' and 'no'; Hint asks the Assistant for a "
+                        + "suggestion. Standing policies are set in Settings → Autopilot policy.",
+                lastEntry(panel, "nego-A").text());
+        assertTrue(published(bus, HintButtonEvent.class).isEmpty(),
+                "asking what can be typed is not asking the Assistant for a price");
         assertTrue(published(bus, PlayerCommandEvent.class).isEmpty(),
                 "help is not a per-dialogue move — nothing binding may be dispatched");
     }
@@ -592,6 +603,159 @@ class ChatPanelTest {
         assertTrue(published(bus, PlayerCommandEvent.class).isEmpty(), "nothing fleet-wide is dispatched in v1");
         String transcript = panel.registry().tab("nego-A").transcript().toString();
         assertTrue(transcript.contains("fleet-wide"), "the player must be told what was understood: " + transcript);
+        // S18a (decision N7): and told, in the same line, that it does nothing and what does.
+        assertEquals("Understood as a fleet-wide command — but commands are not executed in this version, "
+                        + "so nothing was sent. To move this negotiation write '1950 for 6h'.",
+                lastEntry(panel, "nego-A").text());
+    }
+
+    /**
+     * S18a (decision N7) - born red. The grammar's negation block reads "nothing below 2000" as a
+     * limit the player sets on THIS negotiation, and the tab called it "a fleet-wide instruction":
+     * a correct parse answered with a false description. A limit is not fleet-wide, and it is not
+     * enforced either - the line says both, and what to type to actually move the price.
+     */
+    @Test
+    @Timeout(5)
+    void aLimitIsNotCalledFleetWideAndIsHonestAboutDoingNothing() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+
+        Map<String, Object> limit = new LinkedHashMap<>();
+        limit.put("move", "constrain");
+        limit.put("polarity", "negative");
+        limit.put("bound", "below");
+        limit.put("money", Map.of("amount", 2000, "currency", "EUR"));
+        processor.returning(new PipelineResult.Routed(acl(ACLMessage.REQUEST, limit), null, ParseProvenance.DCG));
+        panel.viewForTest("nego-A").sendText("nothing below 2000");
+        flush();
+
+        assertEquals("Understood as a limit for this negotiation — but limits are not enforced in this "
+                        + "version, so nothing was sent. To move this negotiation write '1950 for 6h'.",
+                lastEntry(panel, "nego-A").text());
+        assertEquals("(DCG)", playerEntries(panel, "nego-A").get(0).tag(), "the reading is still credited");
+        assertTrue(published(bus, PlayerCommandEvent.class).isEmpty());
+    }
+
+    /** S18a (decision N5, the Rasa half): a policy only Rasa recognised gets the same answer the
+     * pipeline gives one the policy DSL parses - where policies are set. */
+    @Test
+    @Timeout(5)
+    void aPolicyTypedInChatIsPointedAtSettings() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+
+        processor.returning(new PipelineResult.Routed(
+                acl(ACLMessage.REQUEST, Map.of("policy_text", "always take tankers above 6000"))));
+        panel.viewForTest("nego-A").sendText("always take tankers above 6000");
+        flush();
+
+        assertEquals("Policies are set in Settings → Autopilot policy — nothing was sent to the vessel.",
+                lastEntry(panel, "nego-A").text());
+        assertTrue(published(bus, PlayerCommandEvent.class).isEmpty());
+    }
+
+    /**
+     * S18a (decision N6) - born red. Every question used to get the same status line: "what
+     * berths are free" was answered with this negotiation's round and price. A question about the
+     * port is answered with where the port's answer is on screen; one about this negotiation
+     * with this negotiation.
+     */
+    @Test
+    @Timeout(5)
+    void aQuestionIsAnsweredByItsTopic() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        DialogueTabView view = panel.viewForTest("nego-A");
+
+        Map<String, String> answers = new LinkedHashMap<>();
+        answers.put("free_berths", "Free berths are in the Port table on the left — a berth's row reads "
+                + "'free' when nothing holds it.");
+        answers.put("tug_availability", "Tugs are in the Port table on the left — the Tugs line counts "
+                + "the free and the busy ones.");
+        answers.put("weather", "The weather is in the top bar — click it for the forecast.");
+        answers.put("berth_assignment", "This negotiation is for berth 1 for 6h — the Port table on the "
+                + "left shows who holds each berth.");
+        for (Map.Entry<String, String> answer : answers.entrySet()) {
+            processor.returning(new PipelineResult.Routed(
+                    acl(ACLMessage.QUERY_REF, Map.of("move", "ask", "topic", answer.getKey())),
+                    null, ParseProvenance.DCG));
+            view.sendText("a question about " + answer.getKey());
+            flush();
+            assertEquals(answer.getValue(), lastEntry(panel, "nego-A").text(), answer.getKey());
+        }
+
+        // "what's your best price" and a plain "status" are about this negotiation: the status line.
+        for (Map<String, Object> content : List.<Map<String, Object>>of(
+                Map.of("move", "ask", "topic", "best_price"), Map.of())) {
+            processor.returning(new PipelineResult.Routed(acl(ACLMessage.QUERY_REF, content)));
+            view.sendText("status");
+            flush();
+            assertTrue(lastEntry(panel, "nego-A").text().startsWith("Status — their offer: €1500"),
+                    content + " -> " + lastEntry(panel, "nego-A").text());
+        }
+        assertTrue(published(bus, PlayerCommandEvent.class).isEmpty(), "a question sends nothing");
+    }
+
+    /** S18a (ADR-23): a pipeline message that wants a worked example gets THIS tab's - the
+     * pipeline cannot know a number that is safely above this vessel's offer; the tab does. */
+    @Test
+    @Timeout(5)
+    void aPipelineMessageGetsThisTabsOwnExample() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+
+        processor.returning(new PipelineResult.NeedsClarification(ClarificationButtons.defaultOptions(),
+                "I see an offer but couldn't read the terms — write it like '{example}'."));
+        panel.viewForTest("nego-A").sendText("could you stretch to nineteen hundred");
+        flush();
+
+        assertEquals("I see an offer but couldn't read the terms — write it like '1950 for 6h'.",
+                lastEntry(panel, "nego-A").text());
+    }
+
+    /**
+     * Review finding. A refusal about ANOTHER tab's vessel ("Carthago: 1000", typed in A's tab)
+     * used to get THIS tab's example - EUR 1950, safely above A's EUR 1500 and far below
+     * Carthago's EUR 4500. Typed to Carthago it would have closed EUR 2,550 under its offer. The
+     * example is Carthago's, written with the name in front so that copying it sends it there.
+     */
+    @Test
+    @Timeout(5)
+    void aRefusalAboutAnotherVesselGetsThatVesselsExample() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        openTab(bus, panel, "nego-B", "B", "tanker", "Carthago");
+        bus.publish(counterEvent("nego-B", "B", "tanker", "Carthago", 4500.0, 2));
+        flush();
+
+        processor.returning(new PipelineResult.NeedsClarification(ClarificationButtons.defaultOptions(),
+                "Did you mean €1000? That is less than half of Carthago's offer (€4500), so nothing was "
+                        + "sent — a price looks like '{example}'.", "B"));
+        panel.viewForTest("nego-A").sendText("Carthago: 1000");
+        flush();
+
+        assertEquals("Did you mean €1000? That is less than half of Carthago's offer (€4500), so nothing "
+                        + "was sent — a price looks like 'Carthago: 5850 for 6h'.",
+                lastEntry(panel, "nego-A").text());
+
+        // A vessel with no tab to take an example from: the generic shape, never this tab's number.
+        processor.returning(new PipelineResult.NeedsClarification(ClarificationButtons.defaultOptions(),
+                "a price looks like '{example}'.", "nobody-here"));
+        panel.viewForTest("nego-A").sendText("Nobody: 1000");
+        flush();
+
+        assertEquals("a price looks like 'PRICE for Nh'.", lastEntry(panel, "nego-A").text());
     }
 
     /**

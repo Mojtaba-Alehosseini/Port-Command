@@ -34,6 +34,7 @@ import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
 import it.unige.portcommand.gui.events.TakeOverEvent;
 import it.unige.portcommand.gui.model.DialogueTabModel;
+import it.unige.portcommand.gui.model.ChatReplies;
 import it.unige.portcommand.gui.model.HintRow;
 import it.unige.portcommand.gui.model.InputExamples;
 import it.unige.portcommand.gui.model.NegotiationTabRegistry;
@@ -42,6 +43,7 @@ import it.unige.portcommand.gui.model.ParseTag;
 import it.unige.portcommand.gui.model.PatienceCounterModel;
 import it.unige.portcommand.nlp.ChatInputProcessor;
 import it.unige.portcommand.nlp.DialogueCtx;
+import it.unige.portcommand.nlp.InputSafety;
 import it.unige.portcommand.nlp.NLPPipeline;
 import it.unige.portcommand.nlp.PipelineResult;
 import it.unige.portcommand.util.ConversationClock;
@@ -671,7 +673,7 @@ final class DialogueTabView extends JPanel {
                 }
                 dispatchRouted(typingVesselId, origin, routed);
             }
-            case PipelineResult.NeedsClarification nc -> showClarification(nc.message());
+            case PipelineResult.NeedsClarification nc -> showClarification(nc.message(), nc.aboutVesselId());
             case PipelineResult.Error e -> appendSystem("I couldn't parse that.");
         }
     }
@@ -693,9 +695,7 @@ final class DialogueTabView extends JPanel {
         // guarding it cost the player the final figures they were asking for. A closed tab's
         // statusLine() already speaks in the past tense.
         if (kind == PlayerCommandKind.ASK) {
-            appendSystem(targetVesselId.equals(typingVesselId)
-                    ? statusLine()
-                    : statusLineFor(targetVesselId, false));
+            appendSystem(askReply(routed, targetVesselId, targetVesselId.equals(typingVesselId)));
             return;
         }
         if (origin.isClosed()) {
@@ -756,6 +756,35 @@ final class DialogueTabView extends JPanel {
                 targetVesselId.equals(typingVesselId)));
     }
 
+    /**
+     * S18a (ADR-23, decision N6): the reply to a question, by what it asks. Until S18a every
+     * question got the status line, so "what berths are free" was answered with this
+     * negotiation's round and price. The grammar names the topic of an {@code ask} frame; a
+     * question about the PORT is pointed at the panel that holds the port's answer (the tab holds
+     * none of that state and does not pretend to), "which berth do I get" is answered from the
+     * vessel's own negotiation, and everything else - "what's your best price", Rasa's
+     * topic-less {@code query_status} - keeps the status line, which is the right answer to it.
+     */
+    private String askReply(PipelineResult.Routed routed, String vesselId, boolean sameTab) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> content =
+                (Map<String, Object>) TerminalJson.readOrNull(routed.msg().getContent(), Map.class);
+        Object topic = content == null ? null : content.get("topic");
+        Optional<String> aboutThePort = ChatReplies.portAnswer(topic);
+        if (aboutThePort.isPresent()) {
+            return aboutThePort.get();
+        }
+        if (ChatReplies.asksForTheBerth(topic)) {
+            DialogueTabModel asked = registry.dialogueIdForVessel(vesselId).map(registry::tab).orElse(null);
+            if (asked != null) {
+                WalkInDialogueSnapshot s = asked.snapshot();
+                return ChatReplies.berthAnswer(sameTab ? null : displayNameFor(vesselId),
+                        s.berthId(), s.durationHours());
+            }
+        }
+        return sameTab ? statusLine() : statusLineFor(vesselId, false);
+    }
+
     /** S17a: what a move that was not sent says - the Assistant is negotiating with that vessel. */
     static String assistantIsNegotiatingLine(String vesselName, boolean thisTab) {
         return thisTab
@@ -787,10 +816,11 @@ final class DialogueTabView extends JPanel {
      * the GUI then said something untrue about it.
      *
      * <p>This does not invent new dispatch — none of these has an in-game consumer in v1, which is
-     * a scope fact and is stated as such. What it does is (a) send the typed {@code help} to the
-     * Assistant, exactly as the Hint button does (before S15 a "Talk to the assistant" quick-action
-     * button did the same; only the typed form was dead); and (b) say something true about the
-     * other four.
+     * a scope fact and is stated as such. What it does is say something true about each. S18a
+     * (ADR-23, decisions N5, N7, N8) rewrote all three replies, which now come from
+     * {@link ChatReplies} and {@link InputSafety}: a typed {@code help} is answered with what the
+     * tab understands (it used to press the Hint button), a policy is pointed at Settings, and a
+     * limit or command says it was understood, is not carried out, and what to type instead.
      */
     private void handleUnroutableRequest(PipelineResult.Routed routed) {
         if (routed.msg().getPerformative() == ACLMessage.INFORM) {
@@ -800,22 +830,28 @@ final class DialogueTabView extends JPanel {
         @SuppressWarnings("unchecked")
         Map<String, Object> content =
                 (Map<String, Object>) TerminalJson.readOrNull(routed.msg().getContent(), Map.class);
+        DialogueTabModel tab = registry.tab(dialogueId);
         if (content != null && Boolean.TRUE.equals(content.get(NLPPipeline.HELP_REQUEST_KEY))) {
-            appendSystem("→ Asking the Assistant.");
-            onHint();
+            // S18a (ADR-23, decision N8): "help" asks what can be typed here, and the tab answers
+            // that itself, in its own numbers. Until S18a it pressed the Hint button for the
+            // player - but the Assistant recommends a PRICE, which answers another question (and
+            // costs a model call). The line names the Hint button for whoever wanted that.
+            appendSystem(ChatReplies.help(tab == null ? List.of() : InputExamples.examplesFor(tab),
+                    hintButton.isVisible()));
             return;
         }
         if (content != null && content.get("policy_text") != null) {
-            // Deliberately says what happened HERE, not what the game does or does not support:
-            // whether a policy input surface exists is an open decision (audit C-01/D-02), and a
-            // message asserting "v1 has none" would silently become false the moment that decision
-            // goes the other way. Found by the adversarial review, 2026-07-27.
-            appendSystem("I read that as a standing policy. A chat tab dispatches per-dialogue moves "
-                    + "only, so nothing was set from here — handle this negotiation directly.");
+            // S18a (decision N5): the policy input exists (Settings, since 2026-07-28), so the
+            // line can say where it is - the same sentence the pipeline answers with when the
+            // policy DSL itself parses what was typed.
+            appendSystem(InputSafety.POLICY_IN_CHAT);
             return;
         }
-        appendSystem("I understood a fleet-wide instruction, but v1 only dispatches per-dialogue "
-                + "moves — nothing fleet-wide was sent.");
+        // S18a (decision N7): the DCG's constrain and command frames and Rasa's set_constraint.
+        // All three are read correctly and none is carried out in this version; the one old line
+        // called every one of them "a fleet-wide instruction", which a limit is not.
+        appendSystem(ChatReplies.notExecuted(content,
+                tab == null ? "" : InputExamples.priceAndHoursExample(tab)));
     }
 
     /**
@@ -925,8 +961,23 @@ final class DialogueTabView extends JPanel {
      * fed is gone, so they are not passed in. The generic line points at what the tab does have:
      * a worked example and the two buttons.
      */
-    private void showClarification(String message) {
-        appendSystem(message != null && !message.isBlank() ? message : clarificationLine());
+    private void showClarification(String message, String aboutVesselId) {
+        if (message == null || message.isBlank()) {
+            appendSystem(clarificationLine());
+            return;
+        }
+        // S18a (ADR-23): a message that wants a worked example leaves a slot for it, because only
+        // a tab knows a number that is safely above ITS vessel's offer (see InputSafety). When
+        // the refused move was for another tab's vessel (a vocative), the example is that tab's
+        // - written with the vessel's name in front, so that copying it sends it to the vessel it
+        // is safe for. This tab's own example could be far below the other vessel's offer.
+        DialogueTabModel tab = aboutVesselId == null ? registry.tab(dialogueId)
+                : registry.dialogueIdForVessel(aboutVesselId).map(registry::tab).orElse(null);
+        String example = tab == null ? "" : InputExamples.priceAndHoursExample(tab);
+        if (aboutVesselId != null && !example.isEmpty()) {
+            example = displayNameFor(aboutVesselId) + ": " + example;
+        }
+        appendSystem(InputSafety.fillExample(message, example));
     }
 
     /** S15: the generic "I didn't get that" line. Its example is THIS vessel's — a fixed price

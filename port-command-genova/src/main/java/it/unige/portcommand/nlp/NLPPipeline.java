@@ -44,6 +44,9 @@ public final class NLPPipeline {
     private final DCGParser dcgParser;
     private final BiPredicate<Frame, String> frameValidator;
     private final ExecutorService executor;
+    /** S18a (ADR-23, decision N5): recognises a policy typed into a chat tab. Stateless; only its
+     * quiet parse is used here, so nothing is published and nothing is registered. */
+    private final PolicyParser policyParser = new PolicyParser();
 
     /**
      * @param frameValidator the frame-path "WordNet/validate" seam (planning/14): whatever the
@@ -94,6 +97,12 @@ public final class NLPPipeline {
             java.util.function.Function<String, DialogueCtx> ctxByVesselId) {
         try {
             Objects.requireNonNull(text, "text");
+            // S18a (ADR-23, decision N5): a sentence the policy DSL parses IS a policy, whatever a
+            // classifier would make of it (Rasa has called one an acceptance). It is answered
+            // here, before the grammar or Rasa see it, with where policies are set.
+            if (policyParser.parseQuietly(text).isPresent()) {
+                return asked(InputSafety.POLICY_IN_CHAT);
+            }
             // S6 (audit P2-3): the pre-pass is a PRE-ANNOTATION LAYER, no longer computed and
             // discarded. Its hits ride to the Rasa path, where they FILL entities the classifier
             // missed (entitiesContent) — never overriding a parsed value. The DCG path takes
@@ -105,7 +114,21 @@ public final class NLPPipeline {
 
             Optional<Frame> frame = dcgParser.parse(text, ctx);
             if (frame.isPresent()) {
-                return routeFrame(frame.get(), ctx, text, ctxByVesselId);
+                return routeFrame(frame.get(), ctx, text, ctxByVesselId, null);
+            }
+
+            // S18a (playtest decision PT7): the grammar refuses a berth that does not exist, and
+            // then that refusal is the whole reason for the miss - under any context. Say so by
+            // number instead of handing the sentence to Rasa to guess at.
+            Optional<String> noSuchBerth = InputSafety.noSuchBerth(PREFIX_TOKENIZER.tokenize(text));
+            if (noSuchBerth.isPresent()) {
+                return asked(noSuchBerth.get());
+            }
+            // S18a (decision N8): the chat's help line tells the player to type "status". That
+            // one word must not depend on a classifier being up, so it is read here; the chat
+            // answers a QUERY_REF itself (the status line). UNKNOWN: neither stage read it.
+            if (InputSafety.isStatusWord(text)) {
+                return routed(ACLMessage.QUERY_REF, "{}", ctx, ParseProvenance.UNKNOWN);
             }
 
             // S8 (D-05 two-step, hook 2): a vocative can MISS under the focused ctx yet succeed
@@ -122,7 +145,7 @@ public final class NLPPipeline {
                     if (addresseeCtx != null) {
                         Optional<Frame> refocused = dcgParser.parse(text, addresseeCtx);
                         if (refocused.isPresent()) {
-                            return routeFrame(refocused.get(), addresseeCtx, text, null);
+                            return routeFrame(refocused.get(), addresseeCtx, text, null, prefixId.get());
                         }
                     }
                 }
@@ -143,8 +166,15 @@ public final class NLPPipeline {
      * neither is addressed or focused. A command / constraint / query is not tied to one dialogue. */
     private static final Set<String> PER_DIALOGUE_MOVES = Set.of("propose", "counter", "accept", "reject");
 
+    /**
+     * @param otherTabsVessel S18a: {@code null} for a move typed in the tab of the vessel it is
+     *                        for. On the two-step re-parse it is the ADDRESSEE's id: {@code ctx}
+     *                        is then that vessel's context, but the line was typed in another
+     *                        tab, and a refusal has to say whose offer it means and take its
+     *                        worked example from that vessel, not from the tab on screen
+     */
     private PipelineResult routeFrame(Frame frame, DialogueCtx ctx, String text,
-            java.util.function.Function<String, DialogueCtx> ctxByVesselId) {
+            java.util.function.Function<String, DialogueCtx> ctxByVesselId, String otherTabsVessel) {
         if (!frameValidator.test(frame, text)) {
             return clarification();
         }
@@ -180,7 +210,7 @@ public final class NLPPipeline {
             if (addresseeCtx != null) {
                 Optional<Frame> refocused = dcgParser.parse(text, addresseeCtx);
                 if (refocused.isPresent()) {
-                    return routeFrame(refocused.get(), addresseeCtx, text, null);
+                    return routeFrame(refocused.get(), addresseeCtx, text, null, String.valueOf(addressee));
                 }
                 String to = displayName(ctx, String.valueOf(addressee));
                 log.info("two-step vocative: {}'s context cannot complete the move — clarifying", to);
@@ -193,6 +223,37 @@ public final class NLPPipeline {
         PipelineResult crossTalk = crossTabContextGuard(frame, ctx, text, addressee);
         if (crossTalk != null) {
             return crossTalk;
+        }
+        // S18a (ADR-23, decision N1): the last check before the wire, and the only place every
+        // grammar route passes (the first parse and both two-step re-parses return through here).
+        // The vessel accepts any demand at or below its own offer, so a price that cannot be meant
+        // is asked about, not sent. "Their offer" is the offer of the vessel this move is FOR:
+        // `ctx` is that vessel's own context when the move is unaddressed, addressed to the tab
+        // it was typed in, or was re-parsed under its addressee (the two-step); a fully explicit
+        // move addressed elsewhere with no way to look that vessel up is checked against the
+        // absolute rule only - this tab's offer says nothing about another vessel.
+        boolean forThisDialogue = addressee == null
+                || String.valueOf(addressee).equals(ctx.activeNegotiationId());
+        // Whose move this is, when it is not the vessel of the tab on screen: the two-step's
+        // addressee, or an explicit move to a vessel that could not be looked up. A refusal then
+        // names that vessel, and the chat takes the worked example from ITS tab - a number that
+        // is safe for the tab on screen can be far below the other vessel's offer (review).
+        String aboutVessel = otherTabsVessel != null ? otherTabsVessel
+                : forThisDialogue ? null : String.valueOf(addressee);
+        String whose = aboutVessel == null ? "their" : displayName(ctx, aboutVessel) + "'s";
+        Double theirOffer = forThisDialogue ? ctx.standingOffer().vesselOffer().price() : null;
+        Optional<String> implausible = InputSafety.implausiblePrice(frame, theirOffer, whose);
+        if (implausible.isPresent()) {
+            return asked(implausible.get(), aboutVessel);
+        }
+        // S18a (review): hours typed with no price, on a tab where the player has not bid yet.
+        // The grammar completes the move with the VESSEL's own price - a demand of exactly what
+        // it offers, which it accepts on the spot. "8h" or "what about 6 hours" would close the
+        // deal at the opening price; that is an acceptance nobody typed, so it is asked about.
+        Optional<String> herPrice = InputSafety.closesAtTheirPrice(frame, theirOffer,
+                ctx.standingOffer().playerOffer().isPresent(), PREFIX_TOKENIZER.tokenize(text), whose);
+        if (herPrice.isPresent()) {
+            return asked(herPrice.get(), aboutVessel);
         }
         ACLMessage msg = FrameToAcl.build(frame, null, ctx.activeNegotiationId());
         // S15 (2026-10-12): every frame that reaches this line came out of the grammar — the first
@@ -382,8 +443,32 @@ public final class NLPPipeline {
         // to nothing but the result records: the wire floor above and the accept floor below still
         // read `r.confidence()` themselves, and the switch still decides on `intent` alone.
         ParseProvenance source = ParseProvenance.rasa(r.confidence());
+        // S18a (ADR-23, decision N4): Rasa labels the whole sentence and ignores what else is in
+        // it - "ok, 2000" is accept_deal at 0.99, and routing it accepts the VESSEL's price. An
+        // acceptance or refusal that also names a price, hours or a berth (the regex pre-pass
+        // found one) is asked about. Checked before the accept floor below, so the specific
+        // sentence wins over the generic one whatever the confidence.
+        if (intent.equals("accept_deal") || intent.equals("reject_deal")) {
+            // The pre-pass alone is not enough (review): it needs three digits for a bare price
+            // and a unit for hours, so "ok 8" and "ok two thousand" named terms it cannot see.
+            // The sentence itself and Rasa's own term entities are asked as well.
+            java.util.List<String> rasaTerms = new java.util.ArrayList<>();
+            for (String entity : java.util.List.of("price_expression", "time_expression", "berth_id")) {
+                EntityHit hit = r.entities().get(entity);
+                if (hit != null && hit.value() != null && !hit.value().isBlank()) {
+                    rasaTerms.add(hit.value());
+                }
+            }
+            Optional<String> terms = InputSafety.termsBesideADecision(
+                    intent.equals("accept_deal"), extracted, text, rasaTerms);
+            if (terms.isPresent()) {
+                return asked(terms.get());
+            }
+        }
         return switch (intent) {
-            case "propose_offer", "counter_offer" -> clarification();
+            // S18a (decision N10): the classifier is sure this is an offer, the grammar could not
+            // read its terms - a different situation from "I didn't get that", and said as such.
+            case "propose_offer", "counter_offer" -> asked(InputSafety.UNREADABLE_OFFER);
             case "accept_deal" -> r.confidence() >= BINDING_ACCEPT_MIN_CONFIDENCE
                     ? routed(ACLMessage.ACCEPT_PROPOSAL, entitiesContent(text, r, extracted), ctx, source)
                     : clarification();
@@ -424,21 +509,25 @@ public final class NLPPipeline {
      * <ul>
      *   <li>no active negotiation -&gt; the target is an issued assignment (tug dispatch,
      *       berth booking) -&gt; CANCEL</li>
-     *   <li>active negotiation with a standing offer on the table -&gt; withdrawal of that
-     *       proposal -&gt; REJECT_PROPOSAL</li>
+     *   <li>active negotiation with a standing offer on the table -&gt; <b>asked about, not
+     *       sent</b> (S18a, ADR-23, decision N3). Until S18a this was a REJECT_PROPOSAL: the
+     *       vessel left on a typed "cancel", "never mind" or "nvm", which a player types far more
+     *       often to take back their own last line than to end the negotiation. A departure
+     *       cannot be undone, so the Reject button is the one way to it.</li>
      *   <li>active negotiation, nothing currently on the table -&gt; plain withdrawal -&gt;
      *       INFORM</li>
      * </ul>
      *
      * @param source S15 (2026-10-12): the Rasa parse this cancel came from — reported on the
-     *               result, never consulted here (the three branches read only {@code ctx})
+     *               two routed results, never consulted here (the three branches read only
+     *               {@code ctx})
      */
     private PipelineResult routeCancelAction(DialogueCtx ctx, ParseProvenance source) {
         if (ctx.activeNegotiationId() == null) {
             return routed(ACLMessage.CANCEL, "{}", ctx, source);
         }
         if (ctx.hasStandingOffer()) {
-            return routed(ACLMessage.REJECT_PROPOSAL, "{}", ctx, source);
+            return asked(InputSafety.CANCEL_IN_A_NEGOTIATION);
         }
         return routed(ACLMessage.INFORM, "{}", ctx, source);
     }
@@ -548,5 +637,18 @@ public final class NLPPipeline {
 
     private static PipelineResult clarification() {
         return new PipelineResult.NeedsClarification(ClarificationButtons.defaultOptions());
+    }
+
+    /** S18a (ADR-23): a turn that was read well enough to be refused on purpose - the sentence
+     * says what was read and what to do instead (see {@link InputSafety}). Nothing is sent. */
+    private static PipelineResult asked(String message) {
+        return asked(message, null);
+    }
+
+    /** @param aboutVesselId the vessel the refused move was for when that is not the vessel of the
+     *                       tab it was typed in; {@code null} otherwise */
+    private static PipelineResult asked(String message, String aboutVesselId) {
+        return new PipelineResult.NeedsClarification(ClarificationButtons.defaultOptions(), message,
+                aboutVesselId);
     }
 }
