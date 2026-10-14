@@ -348,6 +348,8 @@ class ChatPanelSeamsTest {
         open("B", "Carthago"); // S18b (U5): it takes the selection over from the closed tab
         assertEquals(6, fired[0]);
         minuteTick();
+        assertEquals(6, fired[0], "S18b (review): the closed tab keeps a dwell from the walk-in's arrival");
+        dwellRunsOut();
         assertEquals(7, fired[0], "the closed tab left the strip");
         bus.publish(new GameLoadedEvent(1, 0.0, 50));
         flush();

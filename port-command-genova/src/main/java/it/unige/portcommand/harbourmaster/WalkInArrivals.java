@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.function.Predicate;
 
+import it.unige.portcommand.ontology.VesselSpec;
+
 /**
  * Which walk-in comes next, and what "Next ship" says when the port is full (S18b, playtest 4,
  * PT21). Pure: no agent, no clock, no Prolog - the caller hands in the test "does this ship fit a
@@ -63,6 +65,26 @@ public final class WalkInArrivals {
         List<String> parts = new ArrayList<>();
         byBerths.forEach((berths, count) -> parts.add(count + " waiting for " + berths));
         return "(" + String.join(", ", parts) + ")";
+    }
+
+    /**
+     * S18b (adversarial review): the ships the refusal's bracket is about - the WALK-INS in the
+     * berth queue, in queue order. A contracted ship can wait in the same queue, for the berth its
+     * contract pins; it is not one of the four walk-ins, and R8's list for its type is not what it
+     * waits for.
+     *
+     * @param queue  the berth queue's vessel ids, in arrival order
+     * @param inPort the HarbourMaster's tracked vessels, by id
+     */
+    public static List<VesselSpec> waitingWalkIns(List<String> queue, Map<String, VesselTracking> inPort) {
+        List<VesselSpec> walkIns = new ArrayList<>();
+        for (String vesselId : queue) {
+            VesselTracking tracked = inPort.get(vesselId);
+            if (tracked != null && tracked.channel() == VesselTracking.Channel.WALK_IN) {
+                walkIns.add(tracked.spec());
+            }
+        }
+        return walkIns;
     }
 
     /** The whole "Next ship" refusal for a port that already holds the most walk-ins it takes. */

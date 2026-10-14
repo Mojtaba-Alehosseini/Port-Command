@@ -1,10 +1,12 @@
 package it.unige.portcommand.harbourmaster;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
 import it.unige.portcommand.harbourmaster.WalkInArrivals.Candidate;
+import it.unige.portcommand.ontology.VesselSpec;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -78,6 +80,27 @@ class WalkInArrivalsTest {
     void withNobodyWaitingTheRefusalSaysOnlyThatThePortIsFull() {
         assertEquals("Four walk-ins in port — wait for one to leave.", WalkInArrivals.fullPortRefusal(List.of()));
         assertEquals("", WalkInArrivals.waitingNote(List.of(List.of())), "a ship that fits nowhere is not a queue");
+    }
+
+    /** S18b (adversarial review): a contracted ship queued for the berth its contract pins is not
+     * one of the four walk-ins - the bracket counts the walk-ins only, in queue order. */
+    @Test
+    void theBracketCountsTheWalkInsInTheQueueOnly() {
+        VesselSpec walkIn = new VesselSpec("WALKIN-1", "container_vessel", 13.0, 280.0, 60000, "general_cargo", 0L);
+        VesselSpec contract = new VesselSpec("CONTRACT-1", "tanker", 12.0, 200.0, 40000, "general_cargo", 0L);
+        VesselSpec later = new VesselSpec("WALKIN-2", "ferry", 6.0, 180.0, 20000, "general_cargo", 0L);
+        Map<String, VesselTracking> inPort = Map.of(
+                "WALKIN-1", waiting(walkIn, VesselTracking.Channel.WALK_IN),
+                "CONTRACT-1", waiting(contract, VesselTracking.Channel.CONTRACTED),
+                "WALKIN-2", waiting(later, VesselTracking.Channel.WALK_IN));
+
+        assertEquals(List.of(walkIn, later), WalkInArrivals.waitingWalkIns(
+                List.of("CONTRACT-1", "WALKIN-1", "gone", "WALKIN-2"), inPort));
+    }
+
+    private static VesselTracking waiting(VesselSpec spec, VesselTracking.Channel channel) {
+        return VesselTracking.arriving(spec.vesselId(), spec, channel, null)
+                .withStage(VesselTracking.Stage.AWAITING_BERTH);
     }
 
     @Test

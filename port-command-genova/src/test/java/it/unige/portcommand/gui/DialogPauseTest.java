@@ -62,12 +62,29 @@ class DialogPauseTest {
         assertEquals(GameMode.PAUSED, lifecycle.mode(), "a second release must not undo the player's pause");
     }
 
+    /** S18b (adversarial review): a pause is never released into another world. Help, open under
+     * an end-of-day report that started the Tutorial (which waits, paused - PT2), resumed the new
+     * world behind its first card when it closed. */
     @Test
     void aPauseWhoseWorldIsReplacedPutsNothingBack() {
         DialogPause pause = new DialogPause(lifecycle);
-        pause.forget(); // a load or a new game replaces the world
+        assertTrue(pause.held());
+        lifecycle.beginLoading(); // a load or a new game replaces the world...
+        lifecycle.completeLoading();
+        lifecycle.pause(); // ...which comes up paused, as the window starts and loads one (PT2, P8)
 
         pause.release();
         assertEquals(GameMode.PAUSED, lifecycle.mode(), "the new world decides for itself whether it runs");
+    }
+
+    /** S18b (adversarial review): a load that fails before its teardown leaves the world as it was,
+     * and the Load dialog's pause goes back to it - the game runs on (P2). */
+    @Test
+    void aWorldThatStayedGetsItsPauseBack() {
+        DialogPause pause = new DialogPause(lifecycle);
+        // the save file failed its checks: no teardown, no new world
+
+        pause.release();
+        assertEquals(GameMode.RUNNING, lifecycle.mode());
     }
 }

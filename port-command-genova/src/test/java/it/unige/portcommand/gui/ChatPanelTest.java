@@ -169,6 +169,14 @@ class ChatPanelTest {
 
     /** S15: a player's click on one of the tab's buttons — on the EDT, where a click happens —
      * and then one more EDT pass for the parse result the click may have queued. */
+    /** S18b (UI tree U8, adversarial review): the HarbourMaster's gate refused a move of the tab -
+     * an answer, after which the tab's Accept and Reject are back. */
+    private static void refused(EventBus bus, String dialogueId, PlayerCommandKind kind) throws Exception {
+        bus.publish(new it.unige.portcommand.gui.events.PlayerCommandRefusedEvent(dialogueId, kind,
+                PlayerCommandEvent.NO_COMMAND_ID, 0.0, "refused"));
+        flush();
+    }
+
     private static void click(DialogueTabView view, String label) throws Exception {
         SwingUtilities.invokeAndWait(() -> view.clickForTest(label));
         flush();
@@ -500,6 +508,7 @@ class ChatPanelTest {
 
         processor.returning(new PipelineResult.Routed(acl(ACLMessage.ACCEPT_PROPOSAL, Map.of())));
         click(view, "Accept");
+        refused(bus, "nego-A", PlayerCommandKind.ACCEPT); // S18b (U8, review): each move is answered first
         processor.returning(new PipelineResult.Routed(acl(ACLMessage.REJECT_PROPOSAL, Map.of())));
         click(view, "Reject");
 
@@ -517,6 +526,7 @@ class ChatPanelTest {
 
         // A button is not a way round the pipeline: when the pipeline does not route the word,
         // nothing goes out — the player gets the same "I didn't get that" a typed turn gets.
+        refused(bus, "nego-A", PlayerCommandKind.REJECT);
         processor.returning(new PipelineResult.NeedsClarification(ClarificationButtons.defaultOptions()));
         click(view, "Accept");
 
@@ -1702,7 +1712,17 @@ class ChatPanelTest {
         assertEquals("nego-C", panel.selectedDialogueId(), "S18b (U5): the new walk-in takes the closed tab's place");
         bus.publish(tick(clock));
         SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(1, panel.stripTabCountForTest(), "and the closed tab leaves at the next sweep");
+        // S18b (adversarial review): the walk-in moved the selection, not the player - the tab they
+        // were reading keeps a full dwell from that moment, one click away on the strip.
+        assertEquals(2, panel.stripTabCountForTest(), "the closed tab is not swept from under the reader");
+        clock.advance(29_000);
+        bus.publish(tick(clock));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(2, panel.stripTabCountForTest(), "its dwell counts from the walk-in's arrival");
+        clock.advance(1_000);
+        bus.publish(tick(clock));
+        SwingUtilities.invokeAndWait(() -> { });
+        assertEquals(1, panel.stripTabCountForTest(), "then it leaves, for the Finished list");
         assertEquals("Lanterna Rossa (ferry)", panel.tabTitleForTest("nego-C"));
 
         bus.publish(new it.unige.portcommand.persistence.events.GameLoadedEvent(1, 15_000.0, 50));
@@ -1743,10 +1763,12 @@ class ChatPanelTest {
         assertEquals("nego-C", panel.selectedDialogueId(), "nothing is left to do in the closed tab");
     }
 
-    /** UI tree U8: a double click on Accept used to send it twice. */
+    /** UI tree U8: a double click on Accept used to send it twice. S18b (adversarial review): the
+     * parse of "deal" is back in milliseconds, well inside a double click - so once the move is
+     * sent, the buttons wait for the vessel side's answer to it, not only for the parse. */
     @Test
     @Timeout(5)
-    void acceptAndRejectAreGreyedUntilTheirOwnSendIsRead() throws Exception {
+    void acceptAndRejectAreGreyedUntilTheirMoveIsAnswered() throws Exception {
         EventBus bus = new EventBus();
         DeferredProcessor processor = new DeferredProcessor();
         ChatPanel panel = new ChatPanel(bus, processor);
@@ -1764,8 +1786,54 @@ class ChatPanelTest {
         processor.complete(0, new PipelineResult.Routed(acl(ACLMessage.ACCEPT_PROPOSAL, Map.of())));
         flush();
         assertEquals(1, published(bus, PlayerCommandEvent.class).size());
-        assertTrue(view.buttonForTest("Accept").isEnabled(), "read: the buttons are back");
+        assertFalse(view.buttonForTest("Accept").isEnabled(), "read and sent: they wait for the answer");
+        assertFalse(view.buttonForTest("Reject").isEnabled());
+        click(view, "Accept");
+        assertEquals(1, processor.pendingCount(), "a click while the move waits sends nothing");
+
+        bus.publish(new it.unige.portcommand.gui.events.PlayerCommandRefusedEvent("nego-A",
+                PlayerCommandEvent.PlayerCommandKind.ACCEPT, PlayerCommandEvent.NO_COMMAND_ID, 0.0, "R16"));
+        flush();
+        assertTrue(view.buttonForTest("Accept").isEnabled(), "answered - refused, here: the buttons are back");
         assertTrue(view.buttonForTest("Reject").isEnabled());
+    }
+
+    /** S18b (adversarial review): a quick move that is not sent waits for nothing. */
+    @Test
+    @Timeout(5)
+    void aQuickMoveThatIsNotSentGivesTheButtonsBackAtOnce() throws Exception {
+        EventBus bus = new EventBus();
+        DeferredProcessor processor = new DeferredProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        DialogueTabView view = panel.viewForTest("nego-A");
+
+        click(view, "Reject");
+        processor.complete(0, new PipelineResult.NeedsClarification(List.of(), "Which offer?", null));
+        flush();
+
+        assertTrue(published(bus, PlayerCommandEvent.class).isEmpty(), "nothing went out");
+        assertTrue(view.buttonForTest("Accept").isEnabled());
+        assertTrue(view.buttonForTest("Reject").isEnabled());
+    }
+
+    /** S18b (adversarial review): a new round from the vessel answers the move too. */
+    @Test
+    @Timeout(5)
+    void aNewRoundAnswersTheMoveTheButtonsWaitedOn() throws Exception {
+        EventBus bus = new EventBus();
+        DeferredProcessor processor = new DeferredProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        DialogueTabView view = panel.viewForTest("nego-A");
+
+        click(view, "Accept");
+        processor.complete(0, new PipelineResult.Routed(acl(ACLMessage.ACCEPT_PROPOSAL, Map.of())));
+        flush();
+        assertFalse(view.buttonForTest("Accept").isEnabled(), "setup: the move waits");
+
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A"); // the vessel's next round
+        assertTrue(view.buttonForTest("Accept").isEnabled());
     }
 
     @Test

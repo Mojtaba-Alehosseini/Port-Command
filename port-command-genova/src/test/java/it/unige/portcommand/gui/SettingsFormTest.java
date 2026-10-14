@@ -344,6 +344,20 @@ class SettingsFormTest {
         assertEquals("google/gemma-3-4b-it", e.llmModel());
     }
 
+    /** S18b (adversarial review): the clear's question defaults to keeping the policies - Enter
+     * or Space, the keys the Clear button itself no longer takes, press "Keep", not "Forget". */
+    @Test
+    void theClearQuestionDefaultsToKeepingThePolicies() {
+        javax.swing.JOptionPane question = SettingsForm.clearQuestion(2);
+
+        assertEquals(SettingsForm.KEEP_POLICIES, question.getInitialValue(), "the default button keeps them");
+        assertEquals(List.of(SettingsForm.FORGET_POLICIES, SettingsForm.KEEP_POLICIES), List.of(question.getOptions()));
+        assertEquals("Forget all 2 autopilot policies? The autopilot stops following them at once.",
+                question.getMessage());
+        assertEquals("Forget the autopilot policy? The autopilot stops following it at once.",
+                SettingsForm.clearQuestion(1).getMessage());
+    }
+
     /** S18b (REMAINING_AREAS_DECISIONS P3, P4): the two controls that changed nothing are gone. */
     @Test
     @Timeout(5)

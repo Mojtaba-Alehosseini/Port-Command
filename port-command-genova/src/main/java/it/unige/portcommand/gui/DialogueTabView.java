@@ -186,6 +186,14 @@ final class DialogueTabView extends JPanel {
      * come back. Both buttons are disabled meanwhile: a double click used to send the move twice.
      */
     private boolean quickMoveInFlight;
+    /**
+     * S18b (UI tree U8; adversarial review): true from the moment the move an Accept or Reject
+     * click sent reached the vessel side until that side answers this tab - a new round, a refused
+     * move ({@link #answerArrived}) or the close. The parse of "deal" is back in milliseconds, well
+     * inside a double click, so the buttons waiting for the parse alone let the second click send
+     * the move again.
+     */
+    private boolean quickMoveAwaitingAnswer;
     /** S15: the offer line's two rows — theirs above, yours and the round below. */
     private final JLabel theirOfferLabel = new JLabel();
     private final JLabel yourOfferLabel = new JLabel();
@@ -408,8 +416,8 @@ final class DialogueTabView extends JPanel {
         // S17a: Accept and Reject are disabled while the Assistant owns the tab, which explains
         // itself — the marker row right above them says who is negotiating and how to take the
         // tab back. S18b (UI tree U8): and while the move one of them sent is being read.
-        acceptButton.setEnabled(playerCanSend && !quickMoveInFlight);
-        rejectButton.setEnabled(playerCanSend && !quickMoveInFlight);
+        acceptButton.setEnabled(playerCanSend && !quickMoveInFlight && !quickMoveAwaitingAnswer);
+        rejectButton.setEnabled(playerCanSend && !quickMoveInFlight && !quickMoveAwaitingAnswer);
         if (!locked) {
             takeOverRequested = false; // the tab is the player's (or over): any request is settled
         }
@@ -572,7 +580,7 @@ final class DialogueTabView extends JPanel {
             appendSystemOnce("There is no offer on the table to accept.");
             return;
         }
-        if (quickMoveInFlight) {
+        if (quickMoveInFlight || quickMoveAwaitingAnswer) {
             return; // U8: the buttons are disabled; this guards a caller that holds the view
         }
         sendText(utterance, true);
@@ -664,6 +672,17 @@ final class DialogueTabView extends JPanel {
                         error != null ? new PipelineResult.Error(String.valueOf(error.getMessage())) : result)));
     }
 
+    /**
+     * S18b (UI tree U8; adversarial review): the vessel side has answered this tab - a new round,
+     * or a refused move. Accept and Reject are back, if a move of theirs was waiting for it.
+     */
+    void answerArrived() {
+        if (quickMoveAwaitingAnswer) {
+            quickMoveAwaitingAnswer = false;
+            refresh();
+        }
+    }
+
     /** S10 (hunter C finding 1): the registry is EDT-confined; the pipeline calls this from its
      * executor thread. An interrupted hop refuses context ({@code DialogueCtx.NONE} — the
      * pipeline treats an empty roster as "no re-focus available") rather than guessing. */
@@ -722,7 +741,7 @@ final class DialogueTabView extends JPanel {
                 if (!note.isEmpty()) {
                     origin.tagPlayerMessage(messageIndex, note);
                 }
-                dispatchRouted(typingVesselId, origin, routed);
+                dispatchRouted(typingVesselId, origin, routed, fromButton);
             }
             case PipelineResult.NeedsClarification nc -> showClarification(nc.message(), nc.aboutVesselId(), typed);
             case PipelineResult.Error e -> appendSystem("I couldn't parse that.");
@@ -732,7 +751,8 @@ final class DialogueTabView extends JPanel {
     /** {@code targetVesselId} may differ from the tab typed into (a 16-M2 vocative, e.g.
      * "tell the tanker: deal") — that's fine, it's just the published event's payload;
      * nothing about rendering THIS tab depends on which vessel ends up targeted. */
-    private void dispatchRouted(String typingVesselId, DialogueTabModel origin, PipelineResult.Routed routed) {
+    private void dispatchRouted(String typingVesselId, DialogueTabModel origin, PipelineResult.Routed routed,
+                                boolean fromButton) {
         String targetVesselId = routed.addressee() != null ? routed.addressee() : typingVesselId;
         PlayerCommandKind kind = kindFor(routed.msg().getPerformative());
         // Status is an OBSERVABLE, GUI-local concept — the tab already holds everything a
@@ -797,6 +817,8 @@ final class DialogueTabView extends JPanel {
             registry.dialogueIdForVessel(targetVesselId)
                     .ifPresent(id -> registry.recordPlayerOffer(id, price.doubleValue(), proposedHours, sendId));
         }
+        // S18b (UI tree U8, adversarial review): a move Accept or Reject sent waits for its answer.
+        quickMoveAwaitingAnswer |= fromButton;
         eventBus.publish(new PlayerCommandEvent(kind, targetVesselId, content, commandId));
         // Echo how the NL was INTERPRETED (task 19 play-test: Rasa read a bare "so?" as an
         // acceptance and the deal closed with no visible cause — every routed action must be

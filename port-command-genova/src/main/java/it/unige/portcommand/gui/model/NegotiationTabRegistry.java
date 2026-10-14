@@ -257,7 +257,7 @@ public final class NegotiationTabRegistry {
     public List<String> sweepClosed(long nowMillis, long dwellMillis, String reading) {
         List<String> expired = new ArrayList<>();
         for (DialogueTabModel tab : tabs.values()) {
-            if (tab.isClosed() && nowMillis - tab.closedAtMillis() >= dwellMillis
+            if (tab.isClosed() && nowMillis - tab.dwellFromMillis() >= dwellMillis
                     && !tab.dialogueId().equals(reading)) {
                 expired.add(tab.dialogueId());
             }
@@ -271,6 +271,15 @@ public final class NegotiationTabRegistry {
             onChange.run();
         }
         return List.copyOf(expired);
+    }
+
+    /** S18b (adversarial review): the closed tab's dwell starts again - a new walk-in, not the
+     * player, took the selection away from it (U5), and it was being read (U4). */
+    public void restartDwell(String dialogueId, long nowMillis) {
+        DialogueTabModel tab = tabs.get(dialogueId);
+        if (tab != null) {
+            tab.restartDwell(nowMillis);
+        }
     }
 
     /** Task 22: a loaded game has no open dialogues — drop every tab and mapping. S18b (PT5): and

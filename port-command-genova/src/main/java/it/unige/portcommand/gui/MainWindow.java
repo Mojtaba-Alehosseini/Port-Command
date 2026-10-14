@@ -504,9 +504,26 @@ public final class MainWindow extends JFrame {
             return;
         }
         session.scenarioRegistry().findByKey(TUTORIAL_SCENARIO_KEY)
+                .filter(tutorial -> firstCardStillToCome(tutorial, lifecycle.simClock().nowSimMillis()))
                 .flatMap(MainWindow::firstScriptedTutorialStep)
                 .ifPresent(text -> eventBus.publish(
                         new it.unige.portcommand.scenario.events.TutorialStepAdvancedEvent(1, text)));
+    }
+
+    /**
+     * S18b (adversarial review): whether the scenario's first tutorial card is still to come at
+     * {@code nowSimMillis} - at the opening minute a fresh start waits on, paused (PT2), and not in
+     * a game that is past it: {@code --load} of a tutorial save showed card 1 again, although its
+     * script had shown it long before. Pure, for {@code MainWindowTutorialStartTest}.
+     */
+    static boolean firstCardStillToCome(it.unige.portcommand.scenario.Scenario scenario, long nowSimMillis) {
+        // The opening MINUTE: a world the window starts runs for an instant before it is paused
+        // (GameSession.startScenario), and one advancer tick in it moves the clock a few seconds.
+        long opening = scenario.initialState() == null ? 0L : scenario.initialState().startSimMillis();
+        return scenario.events().stream()
+                .filter(e -> e instanceof it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent t
+                        && t.step() == 1)
+                .anyMatch(e -> nowSimMillis <= opening + e.simTimeSeconds() * 1000L + 60_000L);
     }
 
     /** S18b (PT2): the text of a scenario's scripted tutorial step 1, if it has one. Static and
@@ -556,10 +573,20 @@ public final class MainWindow extends JFrame {
         newGameItem.addActionListener(e -> chooseAndStartGame(true)); // S18b (P11): asks over a live game
         game.add(newGameItem);
         game.addSeparator();
+        // S18b (adversarial review): behind the gate Esc and the top bar's ⏸/▶ have - never while
+        // a save's quiesce or a load owns the world (audit C-08); the items are greyed then too.
         pauseItem = new JMenuItem("Pause");
-        pauseItem.addActionListener(e -> lifecycle.pause());
+        pauseItem.addActionListener(e -> {
+            if (!saveInProgress && !loadInProgress) {
+                lifecycle.pauseIfRunning();
+            }
+        });
         resumeItem = new JMenuItem("Resume");
-        resumeItem.addActionListener(e -> lifecycle.resume());
+        resumeItem.addActionListener(e -> {
+            if (!saveInProgress && !loadInProgress) {
+                lifecycle.resumeIfPaused();
+            }
+        });
         // Task 21: the two fixed slots (savegame.json / autosave.json) now go through
         // SaveLoadDialog — a two-slot chooser with day/wallet previews and an overwrite confirm —
         // rather than the task-22 fixed-path menu items. The dialog is a chooser only; it delegates
@@ -735,6 +762,26 @@ public final class MainWindow extends JFrame {
         return mode != GameMode.MENU;
     }
 
+    /** S18b (adversarial review): what the Game menu and Settings… allow (see {@link #menuState}). */
+    record MenuState(boolean newGame, boolean pause, boolean resume, boolean load, boolean settings) {
+    }
+
+    /**
+     * S18b (adversarial review): the menu items {@link #reflectMode} enables. A load or a new game
+     * owns the world while it is replaced, and a manual save's pause is its quiesce until the file
+     * is written (audit C-08); neither may be cut short from the menu - Game ▸ Resume used to
+     * restart the clock under the save's snapshot, and a load could start in the middle of it.
+     * Settings… waits for a load too: a policy set while the world was being replaced reached an
+     * Assistant that was leaving or not yet there, and was lost behind a green "Policy set." (a
+     * second way to the empty list of PT19). Pure, for {@code MainWindowSettingsGateTest}.
+     */
+    static MenuState menuState(GameMode mode, boolean loadInProgress, boolean saveInProgress) {
+        boolean settled = !loadInProgress && !saveInProgress;
+        return new MenuState(settled, settled && mode == GameMode.RUNNING, settled && mode == GameMode.PAUSED,
+                settled && mode != GameMode.LOADING,
+                settingsAvailableIn(mode) && mode != GameMode.LOADING && !loadInProgress);
+    }
+
     /** Help → Help… (read-only reference), Show tutorial (reopens the overlay from step 1 — the
      * always-available path, since first-launch auto-open is suppressed once a save exists), About. */
     private JMenu buildHelpMenu() {
@@ -780,15 +827,15 @@ public final class MainWindow extends JFrame {
         }
     }
 
-    /** S18b (P2): a load that starts replaces the world, which then comes up paused (P8). */
+    /** S18b (P2): a load that starts replaces the world, which then comes up paused (P8). The
+     * dialog's pause is released when the load is over — into the old game only if that is still
+     * up (a save file that failed its checks): see {@link DialogPause}. */
     private void openLoadDialog() {
         DialogPause pause = new DialogPause(lifecycle);
         boolean[] loading = {false};
         SaveLoadDialog.open(this, session.saveLoadManager(), SaveLoadDialog.Mode.LOAD, null,
-                path -> loading[0] = confirmAndLoad(path));
-        if (loading[0]) {
-            pause.forget();
-        } else {
+                path -> loading[0] = confirmAndLoad(path, pause));
+        if (!loading[0]) {
             pause.release();
         }
     }
@@ -969,8 +1016,11 @@ public final class MainWindow extends JFrame {
      * on a worker thread — it takes seconds and must never block the EDT. The GUI refreshes
      * itself from the loader's events; menus re-enable when the worker finishes.
      */
-    /** @return S18b (P2): whether a load was started (the world is then replaced) */
-    private boolean confirmAndLoad(java.nio.file.Path source) {
+    /**
+     * @param pause S18b (P2): the Load dialog's, released when the load is over
+     * @return S18b (P2): whether a load was started (the dialog's pause is then the load's)
+     */
+    private boolean confirmAndLoad(java.nio.file.Path source, DialogPause pause) {
         if (loadInProgress) {
             return false;
         }
@@ -1005,6 +1055,7 @@ public final class MainWindow extends JFrame {
                     eventBus.publish(new NotificationEvent(GAME_LOADED_TEXT, NotificationEvent.Severity.INFO,
                             lifecycle.simClock().nowSimMillis()));
                 }
+                pause.release(); // S18b (review): the old game goes on if the load never replaced it
             });
         }, "game-loader");
         worker.setDaemon(true);
@@ -1046,7 +1097,6 @@ public final class MainWindow extends JFrame {
             pause.release();
             return false;
         }
-        pause.forget(); // the new world decides for itself whether it runs
         NewGameChoice chosen = choice.get();
         loadInProgress = true;
         reflectMode();
@@ -1073,6 +1123,7 @@ public final class MainWindow extends JFrame {
                     showTheTutorialsFirstCard();
                     maybeAutoOpenTutorial();
                 }
+                pause.release(); // S18b (review): the old game goes on if the start never replaced it
             });
         }, "game-starter");
         worker.setDaemon(true);
@@ -1170,7 +1221,9 @@ public final class MainWindow extends JFrame {
     }
 
     /**
-     * The single funnel for Esc, Game → Pause and the overlay's Resume button.
+     * The funnel for Esc, the top bar's ⏸/▶ and the overlay's Resume button. S18b (adversarial
+     * review): Game ▸ Pause and Resume, which called the lifecycle directly, now pass the same gate
+     * and are greyed while it is shut ({@link #menuState}).
      *
      * <p><b>Audit C-08 (2026-07-27):</b> gated while a manual save is in flight. The pause
      * {@code GameSession.saveNow} takes around the snapshot IS the quiesce —
@@ -1213,9 +1266,10 @@ public final class MainWindow extends JFrame {
     private void reflectMode() {
         GameMode mode = lifecycle.mode();
         pauseOverlay.setVisible(mode == GameMode.PAUSED);
-        newGameItem.setEnabled(!loadInProgress); // legal from any settled mode (replaces the world)
-        pauseItem.setEnabled(!loadInProgress && mode == GameMode.RUNNING);
-        resumeItem.setEnabled(!loadInProgress && mode == GameMode.PAUSED);
+        MenuState menu = menuState(mode, loadInProgress, saveInProgress);
+        newGameItem.setEnabled(menu.newGame()); // legal from any settled mode (replaces the world)
+        pauseItem.setEnabled(menu.pause());
+        resumeItem.setEnabled(menu.resume());
         quitItem.setEnabled(!loadInProgress && (mode == GameMode.RUNNING || mode == GameMode.PAUSED));
         boolean live = mode == GameMode.RUNNING || mode == GameMode.PAUSED;
         saveItem.setEnabled(!loadInProgress && !saveInProgress && live);
@@ -1225,9 +1279,8 @@ public final class MainWindow extends JFrame {
         // find Load greyed out. GameSession.loadGame handles the empty shell as it does any
         // started container (MENU → LOADING is a legal edge; a failure lands back in MENU). Only
         // LOADING itself refuses.
-        boolean loadable = mode != GameMode.LOADING;
-        loadItem.setEnabled(!loadInProgress && loadable);
-        settingsItem.setEnabled(settingsAvailableIn(mode)); // S15: not in the empty shell
+        loadItem.setEnabled(menu.load());
+        settingsItem.setEnabled(menu.settings()); // S15: not in the empty shell
         reflectCallNextShip();
         // S18b (UI tree U13): the empty shell looks like one — "—" in the top bar, "No game
         // running" in the chat column, the hint pinned in the strip, and a Debug menu that has

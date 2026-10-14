@@ -357,6 +357,7 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         } else {
             DialogueTabView view = views.get(result.dialogueId());
             if (view != null) {
+                view.answerArrived(); // S18b (U8, review): a new round answers the move it waited on
                 view.refresh();
             }
             // S15: a later round re-reads the tab's counter (the vessel's reply may have moved
@@ -373,6 +374,9 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         // player may be typing in it. S15: the first tab of an empty strip selects itself (the
         // pane's change event has already announced it; this is a no-op then).
         if (reading != null && isClosed(reading)) {
+            // S18b (adversarial review): the walk-in moved the selection, not the player - the tab
+            // they were reading keeps a full dwell from now, one click away on the strip (U4).
+            registry.restartDwell(reading.dialogueId(), simClock.nowSimMillis());
             tabbedPane.setSelectedComponent(view);
         }
         announceSelectedVessel();
@@ -483,6 +487,11 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
                 view.refreshStrip();
             }
         });
+        // S18b (U8, review): a refused move is an answer too - the tab's Accept and Reject come back.
+        DialogueTabView answered = views.get(event.dialogueId());
+        if (answered != null) {
+            answered.answerArrived();
+        }
     }
 
     // ==================== S15 (2026-10-12): DialogueDirectory — EDT only ====================

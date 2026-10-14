@@ -74,6 +74,9 @@ final class SettingsForm extends JPanel {
     private final String llmModel;
 
     static final String CLEAR_POLICIES_LABEL = "Clear policies";
+    /** S18b (adversarial review): the two answers to the clear's question; Keep is the default. */
+    static final String FORGET_POLICIES = "Forget";
+    static final String KEEP_POLICIES = "Keep";
 
     /** S16: the line under a locked day-length slider. */
     static final String DAY_LENGTH_LOCK_NOTE =
@@ -102,13 +105,13 @@ final class SettingsForm extends JPanel {
      * registered and, 24 seconds later, cleared - by this button, the only sender of the clear;
      * one press, no question, no word in the form. Replaceable so headless tests can answer it.
      */
-    private transient java.util.function.IntPredicate confirmClear = count ->
-            javax.swing.JOptionPane.showConfirmDialog(this,
-                    "Forget " + (count == 1 ? "the autopilot policy" : "all " + count + " autopilot policies")
-                            + "? The autopilot stops following "
-                            + (count == 1 ? "it" : "them") + " at once.",
-                    CLEAR_POLICIES_LABEL, javax.swing.JOptionPane.YES_NO_OPTION,
-                    javax.swing.JOptionPane.WARNING_MESSAGE) == javax.swing.JOptionPane.YES_OPTION;
+    private transient java.util.function.IntPredicate confirmClear = count -> {
+        javax.swing.JOptionPane question = clearQuestion(count);
+        javax.swing.JDialog dialog = question.createDialog(this, CLEAR_POLICIES_LABEL);
+        dialog.setVisible(true);
+        dialog.dispose();
+        return FORGET_POLICIES.equals(question.getValue());
+    };
     /** S14: the slider's value is a STEP INDEX into {@link DayLengthSteps}, never seconds. */
     private final JSlider dayLengthSlider = new JSlider(0, DayLengthSteps.count() - 1, 0);
     private final JLabel dayLengthReadout = new JLabel();
@@ -499,6 +502,20 @@ final class SettingsForm extends JPanel {
     }
 
     /** S18b (PT19): answers the "forget the policies?" question for a headless test. */
+    /**
+     * S18b (adversarial review): the question asked before every policy is forgotten, with
+     * {@link #KEEP_POLICIES} as its default button - a stray Enter or Space, the keys the Clear
+     * button itself no longer takes, keeps them. Built here, not shown, so a headless test can read it.
+     */
+    static javax.swing.JOptionPane clearQuestion(int count) {
+        Object[] answers = {FORGET_POLICIES, KEEP_POLICIES};
+        return new javax.swing.JOptionPane(
+                "Forget " + (count == 1 ? "the autopilot policy" : "all " + count + " autopilot policies")
+                        + "? The autopilot stops following " + (count == 1 ? "it" : "them") + " at once.",
+                javax.swing.JOptionPane.WARNING_MESSAGE, javax.swing.JOptionPane.YES_NO_OPTION, null, answers,
+                KEEP_POLICIES);
+    }
+
     void confirmClearForTest(java.util.function.IntPredicate answer) {
         confirmClear = answer;
     }

@@ -59,6 +59,9 @@ public final class DialogueTabModel {
     private boolean closed;
     private Deal.Outcome outcome;
     private long closedAtMillis;
+    /** S18b (adversarial review): when the tab's 30-s dwell on the strip began - the close, or
+     * the last time a new walk-in took the selection away from it ({@link #restartDwell}). */
+    private long dwellFromMillis;
     /** S18b (UI tree U3): what a deal was agreed at, from the close itself; 0 until then, and for
      * a negotiation that ended without one. */
     private double agreedPrice;
@@ -304,6 +307,19 @@ public final class DialogueTabModel {
         return closed;
     }
 
+    /** S18b (adversarial review): the instant the closed tab's dwell counts from. */
+    public long dwellFromMillis() {
+        return dwellFromMillis;
+    }
+
+    /** S18b (adversarial review): a closed tab's dwell starts again at {@code atMillis}; an open
+     * tab has none. */
+    public void restartDwell(long atMillis) {
+        if (closed) {
+            dwellFromMillis = atMillis;
+        }
+    }
+
     /** {@code null} until {@link #close} is called. */
     public Deal.Outcome outcome() {
         return outcome;
@@ -319,6 +335,7 @@ public final class DialogueTabModel {
     public void close(Deal.Outcome outcome, long atMillis) {
         if (!closed) {
             closedAtMillis = atMillis;
+            dwellFromMillis = atMillis;
         }
         this.closed = true;
         this.outcome = Objects.requireNonNull(outcome, "outcome");

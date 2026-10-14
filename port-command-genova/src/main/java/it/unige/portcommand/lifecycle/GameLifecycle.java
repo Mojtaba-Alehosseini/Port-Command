@@ -47,6 +47,9 @@ public final class GameLifecycle {
     private final EventBus eventBus;
     private final WallClockAdvancer advancer;
     private volatile GameMode mode = GameMode.MENU;
+    /** S18b (adversarial review): counts the worlds this lifecycle has started - one more each
+     * time LOADING is entered - so a pause taken in one world is never released into the next. */
+    private volatile long worldGeneration;
 
     public GameLifecycle(SimClock simClock, EventBus eventBus) {
         this(simClock, eventBus, new WallClockAdvancer(simClock));
@@ -66,6 +69,7 @@ public final class GameLifecycle {
      */
     public synchronized void startNewGame() {
         transition(GameMode.LOADING);
+        worldGeneration++;
         transition(GameMode.RUNNING);
         simClock.resume();
         advancer.start();
@@ -96,6 +100,7 @@ public final class GameLifecycle {
      */
     public synchronized void beginLoading() {
         transition(GameMode.LOADING);
+        worldGeneration++;
         simClock.pause();
     }
 
@@ -147,6 +152,11 @@ public final class GameLifecycle {
 
     public GameMode mode() {
         return mode;
+    }
+
+    /** S18b (adversarial review): which world is up - it changes each time one is (re)built. */
+    public long worldGeneration() {
+        return worldGeneration;
     }
 
     public boolean isRunning() {

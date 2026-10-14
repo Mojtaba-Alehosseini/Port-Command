@@ -248,16 +248,15 @@ public final class PoissonSpawnBehaviour extends WakerBehaviour {
     }
 
     /** S18b (PT21): "Four walk-ins in port (2 waiting for berth 2) - wait for one to leave." The
-     * bracket groups the berth queue by the berths each waiting ship could take (R8). */
+     * bracket groups the walk-ins in the berth queue by the berths each could take (R8). */
     private static String fullPortRefusal(HarbourMasterAgent hm) {
+        List<String> queue = hm.berthWaitQueue().inArrivalOrder().stream()
+                .map(it.unige.portcommand.harbourmaster.BerthWaitQueue.Waiting::vesselId).toList();
         List<List<String>> waiting = new java.util.ArrayList<>();
-        for (it.unige.portcommand.harbourmaster.BerthWaitQueue.Waiting w : hm.berthWaitQueue().inArrivalOrder()) {
-            it.unige.portcommand.harbourmaster.VesselTracking t = hm.activeVessels().get(w.vesselId());
-            if (t != null) {
-                VesselSpec s = t.spec();
-                waiting.add(it.unige.portcommand.prolog.PrologQueries.findCompatibleBerths(
-                        s.vesselType(), s.draft(), s.length(), s.tonnage()));
-            }
+        for (VesselSpec s : it.unige.portcommand.harbourmaster.WalkInArrivals.waitingWalkIns(queue,
+                hm.activeVessels())) {
+            waiting.add(it.unige.portcommand.prolog.PrologQueries.findCompatibleBerths(
+                    s.vesselType(), s.draft(), s.length(), s.tonnage()));
         }
         return it.unige.portcommand.harbourmaster.WalkInArrivals.fullPortRefusal(waiting);
     }
