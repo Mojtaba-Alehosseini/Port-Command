@@ -166,7 +166,8 @@ public final class AutoFlowDispatcherBehaviour extends CyclicBehaviour {
                     spec.vesselId() + " (contract " + contract.contractId() + ") queued for berth "
                             + contract.berthId().replace("berth_", "") + " — it is "
                             + (pinnedBerthClosed ? "closed" : "occupied") + " [R7,R30]",
-                    NotificationEvent.Severity.INFO, hm.simClock().nowSimMillis()));
+                    NotificationEvent.Severity.INFO, hm.simClock().nowSimMillis(),
+                    NotificationEvent.queueTopic(spec.vesselId())));
             return;
         }
 

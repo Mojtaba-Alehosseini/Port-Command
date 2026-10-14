@@ -385,13 +385,13 @@ class CommLogPanelTest {
         CommLogPanel panel = newPanel(bus);
         CommLogEvent cfp = tugCallForBids();
         publish(bus, cfp);
-        assertEquals("[08:14:03] harbour_master -> tug_1,tug_2: CFP \"Escort needed for C501\"\n", text(panel),
+        assertEquals("[D1 08:14:03] harbour_master -> tug_1,tug_2: CFP \"Escort needed for C501\"\n", text(panel),
                 "precondition: the plain line");
 
         click(panel.rawToggleForTest());
         String raw = text(panel);
         assertEquals(CommLogLineFormat.raw(cfp) + "\n", raw, "Raw shows the model's Raw block for the row");
-        assertTrue(raw.startsWith("[08:14:03] CFP\n"), "time and performative head the block: " + raw);
+        assertTrue(raw.startsWith("[D1 08:14:03] CFP\n"), "time and performative head the block: " + raw);
         for (String field : List.of(
                 "  sender: harbour_master",
                 "  receiver: tug_1, tug_2",
@@ -946,12 +946,12 @@ class CommLogPanelTest {
         assertEquals("Raw", raw.getText());
         assertFalse(raw.isSelected(), "the plain-English line is the default");
 
-        assertEquals("Every message", all.getToolTipText());
+        assertEquals(CommLogPanel.TIP_ALL, all.getToolTipText());
         assertEquals("Messages about the vessel whose chat tab is selected", thisVessel.getToolTipText());
         assertEquals("Messages that cite a Prolog rule, e.g. [R7]", rules.getToolTipText());
         assertEquals("Weather alerts, routine checks, and the holds, resumes and tug cancels they cause",
                 weather.getToolTipText());
-        assertEquals("Show each message's real FIPA fields instead of the plain-English line", raw.getToolTipText());
+        assertEquals(CommLogPanel.TIP_RAW, raw.getToolTipText());
 
         assertFalse(pane.isEditable(), "the log is read-only");
         assertFalse(line.isEditable(), "so is the rule line");
@@ -959,5 +959,49 @@ class CommLogPanelTest {
         JScrollPane scroll = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, pane);
         assertEquals(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER, scroll.getHorizontalScrollBarPolicy(),
                 "the text wraps to the column; there is no horizontal scrollbar");
+    }
+
+    // =============== S18b: All leaves the repeats out (PT9), and the log can be copied (PT11)
+
+    /** Playtest 2, PT9: "Comm log flooded by routine weather check INFORMs (every 15 game min)." */
+    @Test
+    @Timeout(5)
+    void allSaysHowManyUnchangedWeatherChecksItLeavesOut() throws Exception {
+        EventBus bus = new EventBus();
+        CommLogPanel panel = newPanel(bus);
+        publish(bus, routineWeatherCheck(0L), routineWeatherCheck(900_000L), routineWeatherCheck(1_800_000L));
+
+        assertEquals("2 weather checks with no change are not shown — Weather has them.",
+                onEdt(panel::hiddenNoteForTest));
+        assertEquals(1, text(panel).lines().count(), "one row: the first check");
+
+        click(named(panel, CommLogPanel.NAME_PRESET_WEATHER, javax.swing.JToggleButton.class));
+        assertEquals("", onEdt(panel::hiddenNoteForTest), "Weather shows every check: nothing to say");
+        assertEquals("1 weather check with no change is not shown — Weather has it.",
+                CommLogPanel.hiddenChecksText(1));
+    }
+
+    /** UI tree U16: "'All' tooltip says 'Every message' but only HarbourMaster traffic is logged";
+     * "Raw view promises 'real FIPA fields' but lacks priority / reply-with / in-reply-to". */
+    @Test
+    void theTooltipsSayWhatIsReallyThere() {
+        assertTrue(CommLogPanel.TIP_ALL.startsWith("All the HarbourMaster's messages"), CommLogPanel.TIP_ALL);
+        assertTrue(CommLogPanel.TIP_ALL.contains("under Weather"), "and where the hidden checks are");
+        assertTrue(CommLogPanel.TIP_RAW.contains("main FIPA fields"), CommLogPanel.TIP_RAW);
+        assertFalse(CommLogPanel.TIP_RAW.contains("real FIPA fields"));
+    }
+
+    /** Playtest 2, PT11: "The comm log cannot be copied." Copy all copies the log as it is shown. */
+    @Test
+    @Timeout(5)
+    void copyAllIsTheLogAsItIsShown() throws Exception {
+        EventBus bus = new EventBus();
+        CommLogPanel panel = newPanel(bus);
+        publish(bus, event(0L, "first"), event(1_000L, "second"));
+
+        assertEquals(text(panel), onEdt(panel::allText));
+        assertTrue(onEdt(panel::allText).contains("\"second\""), onEdt(panel::allText));
+        assertTrue(onEdt(() -> named(panel, CommLogPanel.NAME_TEXT, javax.swing.JTextPane.class)
+                .getCaret().isSelectionVisible()), "a selection shows although the log never takes the focus");
     }
 }

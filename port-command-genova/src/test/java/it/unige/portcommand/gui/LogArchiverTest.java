@@ -125,6 +125,24 @@ class LogArchiverTest {
         assertFalse(Files.exists(missing), "an empty clear() must not touch the disk at all");
     }
 
+    /** S18b (playtest 2, PT11): Game ▸ Open comm-log file opens the newest archive. */
+    @Test
+    void theNewestArchiveIsTheOneWithTheLatestDate(@TempDir Path tempDir) throws Exception {
+        java.nio.file.Files.writeString(tempDir.resolve("commlog-archive-2026-10-12.jsonl"), "{}\n");
+        java.nio.file.Files.writeString(tempDir.resolve("commlog-archive-2026-10-14.jsonl"), "{}\n");
+        java.nio.file.Files.writeString(tempDir.resolve("port-command.log"), "not an archive\n");
+
+        assertEquals(java.util.Optional.of(tempDir.resolve("commlog-archive-2026-10-14.jsonl")),
+                LogArchiver.newestArchive(tempDir));
+    }
+
+    @Test
+    void beforeAnythingIsArchivedThereIsNoArchive(@TempDir Path tempDir) {
+        assertEquals(java.util.Optional.empty(), LogArchiver.newestArchive(tempDir));
+        assertEquals(java.util.Optional.empty(), LogArchiver.newestArchive(tempDir.resolve("no-such-dir")));
+        assertEquals(Path.of("logs"), LogArchiver.defaultDir());
+    }
+
     @Test
     void archiveAllAppendsRatherThanReplacing(@TempDir Path tempDir) throws Exception {
         LogArchiver archiver = new LogArchiver(tempDir);

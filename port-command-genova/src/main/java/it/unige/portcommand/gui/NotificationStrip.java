@@ -64,6 +64,7 @@ public final class NotificationStrip extends JPanel {
 
     private void onNotification(NotificationEvent event) {
         NotificationModel.AddResult result = model.add(event);
+        result.replacedIds().forEach(this::removeChip); // S18b (PT10): same topic, or a repeat
         result.evictedId().ifPresent(this::removeChip);
         addChip(result.id(), event);
     }
@@ -85,7 +86,9 @@ public final class NotificationStrip extends JPanel {
         label.addMouseListener(retainOnClick);
 
         chipComponents.put(id, chip);
-        add(chip);
+        // S18b (UI tree U12): newest first, right after the pinned hint. The strip shows one row;
+        // a new chip appended at the END was the one cut off when the row was full.
+        add(chip, 1);
 
         Timer timer = new Timer((int) autoDismissMs, e -> dismiss(id));
         timer.setRepeats(false);
@@ -160,6 +163,18 @@ public final class NotificationStrip extends JPanel {
         pinnedHint.setVisible(show);
         revalidate();
         repaint();
+    }
+
+    /** Test-only (S18b, U12): the chips' texts in the order the strip shows them, left to right. */
+    java.util.List<String> chipTextsForTest() {
+        java.util.List<String> texts = new java.util.ArrayList<>();
+        for (java.awt.Component component : getComponents()) {
+            if (component instanceof JPanel chip && chip.getComponentCount() > 0
+                    && chip.getComponent(0) instanceof JLabel label) {
+                texts.add(label.getText());
+            }
+        }
+        return texts;
     }
 
     /** Test-only (S18b, U13): the pinned hint as shown, or empty when there is none. */

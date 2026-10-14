@@ -273,7 +273,8 @@ public final class MovementControl {
         if (hm.movement().firstTugWaitNotice(vesselId)) {
             hm.eventBus().publish(new NotificationEvent(
                     displayName(tracking) + " is waiting for a free tug — every tug is busy [R11]",
-                    NotificationEvent.Severity.INFO, hm.simClock().nowSimMillis()));
+                    NotificationEvent.Severity.INFO, hm.simClock().nowSimMillis(),
+                    NotificationEvent.tugWaitTopic(vesselId)));
         }
         log.info("{}: no tug available after the quick retries — waiting; re-tendered when a tug "
                 + "frees", vesselId);
@@ -457,7 +458,8 @@ public final class MovementControl {
         }
         hm.eventBus().publish(new NotificationEvent(
                 displayName(tracking) + " held outside: " + verdict.reason(),
-                NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis()));
+                NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis(),
+                NotificationEvent.holdTopic(vesselId)));
         // S17b (E1): one blocked movement per ship per hold - this line is reached once, when the
         // hold begins (an already-held ship returned above).
         hm.eventBus().publish(new MovementSafetyEvent(MovementSafetyEvent.Kind.BLOCKED, vesselId,
@@ -622,7 +624,8 @@ public final class MovementControl {
             if (first) {
                 hm.eventBus().publish(new NotificationEvent(
                         displayName(tracking) + " stays at its berth: " + verdict.reason(),
-                        NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis()));
+                        NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis(),
+                        NotificationEvent.holdTopic(vesselId)));
                 log.info("{}: departure HELD at {} ({})", vesselId, tracking.assignedBerth(), verdict.reason());
                 // S17b (E1): a served ship kept at its berth is a blocked movement too, once.
                 hm.eventBus().publish(new MovementSafetyEvent(MovementSafetyEvent.Kind.BLOCKED, vesselId,
@@ -708,7 +711,8 @@ public final class MovementControl {
         hm.movement().closeBerth(berthId, reopenAt);
         hm.eventBus().publish(new NotificationEvent(
                 "Berth " + berthId.replace("berth_", "") + " flooded — closed until " + clockTime(reopenAt),
-                NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis()));
+                NotificationEvent.Severity.WARNING, hm.simClock().nowSimMillis(),
+                NotificationEvent.berthTopic(berthId)));
         hm.requestPortStatus();
         log.warn("berth {} closed (flood) until sim {}", berthId, reopenAt);
     }
@@ -726,7 +730,7 @@ public final class MovementControl {
             reopened = true;
             hm.eventBus().publish(new NotificationEvent(
                     "Berth " + berthId.replace("berth_", "") + " reopened",
-                    NotificationEvent.Severity.INFO, now));
+                    NotificationEvent.Severity.INFO, now, NotificationEvent.berthTopic(berthId)));
             log.info("berth {} reopened", berthId);
             hm.activeVessels().values().stream()
                     .filter(t -> t.stage() == Stage.AWAITING_TUG && berthId.equals(t.assignedBerth()))

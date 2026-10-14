@@ -129,6 +129,43 @@ class CommLogModelPresetTest {
         assertNull(new CommLogModel().focusVesselId());
     }
 
+    private static CommLogEvent periodic(int windKnots) {
+        return row("check " + windKnots, WEATHER, List.of(HM), ACLMessage.INFORM, null, WEATHER_ALERT,
+                "{\"event\":\"weather_periodic\",\"wind_knots\":" + windKnots + ",\"visibility\":\"good\","
+                        + "\"swell\":0.5,\"state\":\"sunny\",\"sim_time\":900000}");
+    }
+
+    /** S18b (playtest 2, PT9): "Comm log flooded by routine weather check INFORMs." */
+    @Test
+    void allLeavesOutTheRoutineChecksThatSayNothingNew() {
+        CommLogModel model = new CommLogModel();
+        model.add(periodic(18));
+        model.add(periodic(18));
+        model.add(periodic(18));
+        model.add(filler("filler"));
+        model.add(periodic(24)); // the weather changed: news
+        model.add(periodic(24));
+
+        assertEquals(List.of("check 18", "filler", "check 24"), labels(model),
+                "the first check, and every one that reads differently from the one before");
+        assertEquals(3, model.hiddenUnchangedChecks(), "and the panel can say how many it left out");
+
+        model.setPreset(CommLogPreset.WEATHER);
+        assertEquals(List.of("check 18", "check 18", "check 18", "check 24", "check 24"), labels(model),
+                "Weather still shows every one");
+        assertEquals(0, model.hiddenUnchangedChecks(), "nothing is left out there");
+    }
+
+    @Test
+    void aLoadStartsTheComparisonAfresh() {
+        CommLogModel model = new CommLogModel();
+        model.add(periodic(18));
+        model.clear();
+        model.add(periodic(18));
+
+        assertEquals(List.of("check 18"), labels(model), "the new world's first check is news");
+    }
+
     @Test
     void allShowsEveryRowTheRoutineWeatherCheckIncluded() {
         CommLogModel model = new CommLogModel();

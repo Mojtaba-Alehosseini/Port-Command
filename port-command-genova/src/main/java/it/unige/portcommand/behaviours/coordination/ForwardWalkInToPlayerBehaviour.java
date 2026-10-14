@@ -370,7 +370,8 @@ public final class ForwardWalkInToPlayerBehaviour extends CyclicBehaviour {
             }
             hm.eventBus().publish(new it.unige.portcommand.gui.events.NotificationEvent(note,
                     it.unige.portcommand.gui.events.NotificationEvent.Severity.INFO,
-                    hm.simClock().nowSimMillis()));
+                    hm.simClock().nowSimMillis(),
+                    it.unige.portcommand.gui.events.NotificationEvent.queueTopic(spec.vesselId())));
             hm.eventBus().publish(new AssistantChatEvent(dialogueId, note));
             log.info("{}: no compatible berth free — queued ({} waiting)",
                     spec.vesselId(), hm.berthWaitQueue().size());

@@ -127,7 +127,13 @@ public final class Paraphraser {
             case ACLMessage.CFP -> "Escort needed for " + vessel(content);
             // reasonSuffix renders the S5 customs rationale ("(inspected [R22,R24])"); empty on
             // every pre-S5 CONFIRM shape, including the walk-in deal_confirmed.
-            case ACLMessage.CONFIRM -> "Cleared " + clearance(content) + reasonSuffix(content);
+            // S18b (UI tree U15): a customs clearance read "Cleared clearance CL-…".
+            case ACLMessage.CONFIRM -> (text(content, "ref") != null
+                    ? "Cleared by customs, ref " + text(content, "ref")
+                    : "Cleared " + clearance(content)) + reasonSuffix(content);
+            // S18b (U15): the player's status question (an ASK sent through the HarbourMaster)
+            // used to fall to the generic "Sent a QUERY-REF message".
+            case ACLMessage.QUERY_REF -> "Asking for the vessel's status";
             case ACLMessage.INFORM -> "Notifying: " + notice(content, msg);
             case ACLMessage.REFUSE -> "Refusing" + reasonSuffix(content);
             case ACLMessage.CANCEL -> "Cancelling" + reasonSuffix(content);
@@ -304,6 +310,11 @@ public final class Paraphraser {
                 case "service_complete" -> "service complete for " + orVessel(content);
                 // S16 (ADR-20): the ship reports its own arrival at the berth.
                 case "docked" -> orVessel(content) + " docked at " + berthText(content);
+                // S18b (U15): the vessel's answer to a status question, with its figures (all
+                // its own and on the wire: its offer, its stay, the rounds run - P-04).
+                case "status_report" -> "status of " + orVessel(content) + ": offer €"
+                        + moneyText(content, "price") + " for " + intText(content, "hours")
+                        + "h after " + intText(content, "rounds_used") + " round(s)";
                 default -> humanize(intent);
             };
         }
@@ -330,6 +341,8 @@ public final class Paraphraser {
                 case "cleared_to_depart" -> "cleared to depart: " + orVessel(content);
                 case "inspection_started" -> "customs inspection started" + reasonSuffix(content);
                 case "turned_away" -> orVessel(content) + " turned away" + reasonSuffix(content);
+                // S18b (U15): the scripted flood used to read "flood", without the berth.
+                case "flood" -> "flood at " + berthText(content);
                 case "weather_threshold" ->
                         "weather alert (wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state") + ")"
                                 + reasonSuffix(content);
@@ -365,6 +378,12 @@ public final class Paraphraser {
             return prefix + "conditions: wind " + moneyText(content, "wind_knots") + "kn, " + text(content, "state");
         }
         return prefix + "an update";
+    }
+
+    /** S18b (U15): a whole number off the content as text, or "?" when absent. */
+    private static String intText(JsonNode content, String field) {
+        Double value = numOrNull(content, field);
+        return value == null ? "?" : String.valueOf(Math.round(value));
     }
 
     /** {@code berth 1} for a {@code berth_id} of {@code berth_1}; "its berth" when absent. */

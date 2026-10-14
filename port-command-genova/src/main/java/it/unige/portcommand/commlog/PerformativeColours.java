@@ -15,19 +15,25 @@ import jade.lang.acl.ACLMessage;
  */
 public final class PerformativeColours {
 
-    private static final Color DEFAULT = new Color(120, 120, 120);
+    /**
+     * S18b (UI tree U14): darker and further apart. PROPOSE was yellow on white and CANCEL light
+     * grey; REJECT and REFUSE were nearly the same red. Every colour now reads on white at
+     * 4.5 : 1 or better (the WCAG contrast for body text, so it holds on a projector too), and
+     * {@code PerformativeColoursTest} pins both that and how far apart any two are.
+     */
+    private static final Color DEFAULT = new Color(100, 100, 100);
 
     private static final Map<Integer, Color> COLOURS = Map.ofEntries(
-            Map.entry(ACLMessage.REQUEST, new Color(66, 133, 244)),
-            Map.entry(ACLMessage.PROPOSE, new Color(251, 188, 5)),
-            Map.entry(ACLMessage.ACCEPT_PROPOSAL, new Color(52, 168, 83)),
-            Map.entry(ACLMessage.REJECT_PROPOSAL, new Color(234, 67, 53)),
-            Map.entry(ACLMessage.CFP, new Color(171, 71, 188)),
-            Map.entry(ACLMessage.CONFIRM, new Color(0, 150, 136)),
-            Map.entry(ACLMessage.INFORM, new Color(96, 125, 139)),
-            Map.entry(ACLMessage.REFUSE, new Color(230, 74, 25)),
-            Map.entry(ACLMessage.CANCEL, new Color(158, 158, 158)),
-            Map.entry(ACLMessage.DISCONFIRM, new Color(216, 27, 96)));
+            Map.entry(ACLMessage.REQUEST, new Color(26, 86, 196)),          // blue
+            Map.entry(ACLMessage.PROPOSE, new Color(130, 110, 0)),          // dark gold
+            Map.entry(ACLMessage.ACCEPT_PROPOSAL, new Color(30, 123, 52)),  // green
+            Map.entry(ACLMessage.REJECT_PROPOSAL, new Color(183, 28, 28)),  // crimson
+            Map.entry(ACLMessage.CFP, new Color(123, 31, 162)),             // purple
+            Map.entry(ACLMessage.CONFIRM, new Color(0, 121, 107)),          // teal
+            Map.entry(ACLMessage.INFORM, new Color(55, 71, 120)),           // slate blue
+            Map.entry(ACLMessage.REFUSE, new Color(191, 87, 0)),            // burnt orange
+            Map.entry(ACLMessage.CANCEL, new Color(93, 64, 55)),            // brown
+            Map.entry(ACLMessage.DISCONFIRM, new Color(173, 20, 87)));      // magenta
 
     private PerformativeColours() {
     }

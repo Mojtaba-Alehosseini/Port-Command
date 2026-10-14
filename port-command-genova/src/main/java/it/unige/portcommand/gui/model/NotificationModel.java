@@ -30,10 +30,27 @@ public final class NotificationModel {
         this.onChange = Objects.requireNonNull(onChange, "onChange");
     }
 
-    public record AddResult(long id, OptionalLong evictedId) {
+    /**
+     * @param replacedIds S18b (PT10): the chips the new one replaces — same topic, or (for a
+     *                    notice with no topic) the very same words; the panel removes them with
+     *                    their timers
+     */
+    public record AddResult(long id, OptionalLong evictedId, List<Long> replacedIds) {
+
+        public AddResult(long id, OptionalLong evictedId) {
+            this(id, evictedId, List.of());
+        }
     }
 
     public AddResult add(NotificationEvent event) {
+        List<Long> replaced = new java.util.ArrayList<>();
+        for (var it = chips.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<Long, NotificationEvent> shown = it.next();
+            if (replaces(event, shown.getValue())) {
+                replaced.add(shown.getKey());
+                it.remove();
+            }
+        }
         long id = nextId++;
         chips.put(id, event);
         OptionalLong evicted = OptionalLong.empty();
@@ -46,7 +63,19 @@ public final class NotificationModel {
             }
         }
         onChange.run();
-        return new AddResult(id, evicted);
+        return new AddResult(id, evicted, List.copyOf(replaced));
+    }
+
+    /**
+     * S18b (PT10): whether {@code incoming} replaces the chip of {@code shown} — a notice on the
+     * same topic does; a notice with no topic replaces only a topic-less chip with its very words.
+     */
+    static boolean replaces(NotificationEvent incoming, NotificationEvent shown) {
+        if (incoming.topic() != null) {
+            return incoming.topic().equals(shown.topic());
+        }
+        return shown.topic() == null && incoming.severity() == shown.severity()
+                && java.util.Objects.equals(incoming.text(), shown.text());
     }
 
     public void dismiss(long id) {

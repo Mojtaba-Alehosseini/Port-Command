@@ -50,24 +50,25 @@ class CommLogLineFormatTest {
         CommLogEvent cfp = new CommLogEvent(3_723_000L, "harbour_master", List.of("tug_1", "tug_2"),
                 ACLMessage.CFP, "Escort needed for C501", "cnp-1");
 
-        assertEquals("[01:02:03] harbour_master -> tug_1,tug_2: CFP \"Escort needed for C501\"",
+        assertEquals("[D1 01:02:03] harbour_master -> tug_1,tug_2: CFP \"Escort needed for C501\"",
                 CommLogLineFormat.plain(cfp));
     }
 
     @Test
     void thePlainLineDoesNotChangeWhenTheRawFieldsAreAttached() {
-        assertEquals("[08:14:03] harbour_master -> vessel_c501: ACCEPT-PROPOSAL "
+        assertEquals("[D1 08:14:03] harbour_master -> vessel_c501: ACCEPT-PROPOSAL "
                         + "\"Granted berth berth_1 (compatible [R7])\"",
                 CommLogLineFormat.plain(grant()));
     }
 
     @Test
-    void theTimestampIsZeroPaddedAndWrapsAtMidnightWithNoDayNumber() {
-        assertEquals("00:00:00", CommLogLineFormat.timestamp(0L));
-        assertEquals("00:00:59", CommLogLineFormat.timestamp(59_999L), "sub-second millis are dropped");
-        assertEquals("23:59:59", CommLogLineFormat.timestamp(86_399_000L));
-        assertEquals("00:00:01", CommLogLineFormat.timestamp(86_401_000L), "day 2 reads like day 1");
-        assertEquals("08:14:03", CommLogLineFormat.timestamp(T_08_14_03));
+    void theTimestampIsZeroPaddedAndNamesTheDay() {
+        assertEquals("D1 00:00:00", CommLogLineFormat.timestamp(0L));
+        assertEquals("D1 00:00:59", CommLogLineFormat.timestamp(59_999L), "sub-second millis are dropped");
+        assertEquals("D1 23:59:59", CommLogLineFormat.timestamp(86_399_000L));
+        // S18b (UI tree U16): "timestamps have no day" — day 2 used to read like day 1.
+        assertEquals("D2 00:00:01", CommLogLineFormat.timestamp(86_401_000L), "day 2 says so");
+        assertEquals("D1 08:14:03", CommLogLineFormat.timestamp(T_08_14_03));
     }
 
     // ------------------------------------------------------------------ the Raw block
@@ -75,7 +76,7 @@ class CommLogLineFormatTest {
     @Test
     void theRawBlockIsTheFourLabelledLines() {
         String expected = String.join("\n",
-                "[08:14:03] ACCEPT-PROPOSAL",
+                "[D1 08:14:03] ACCEPT-PROPOSAL",
                 "  sender: harbour_master  receiver: vessel_c501",
                 "  ontology: port_command_v1  protocol: —  conversation-id: berth-vessel_c501",
                 "  content: {\"berth_id\": \"berth_1\", \"price\": 5200.0, \"hours\": 8, "
@@ -94,7 +95,7 @@ class CommLogLineFormatTest {
                 "content: ")) {
             assertTrue(raw.contains("  " + label), () -> "missing label " + label + " in:\n" + raw);
         }
-        assertTrue(raw.startsWith("[08:14:03] CFP\n"), "the performative heads the block");
+        assertTrue(raw.startsWith("[D1 08:14:03] CFP\n"), "the performative heads the block");
         assertTrue(raw.contains("  protocol: fipa-contract-net  conversation-id: cnp-42"));
         assertFalse(raw.contains("Escort needed"), "the paraphrase is not a field of the message");
     }
@@ -114,7 +115,7 @@ class CommLogLineFormatTest {
                 new CommLogEvent(0L, "harbour_master", List.of(), ACLMessage.INFORM, "p", null));
 
         assertEquals(String.join("\n",
-                "[00:00:00] INFORM",
+                "[D1 00:00:00] INFORM",
                 "  sender: harbour_master  receiver: —",
                 "  ontology: —  protocol: —  conversation-id: —",
                 "  content: —"), raw);
@@ -231,7 +232,7 @@ class CommLogLineFormatTest {
                 ACLMessage.INFORM, "p", "conv\n1", "onto\nlogy", "proto\rcol", "{}"));
 
         assertEquals(String.join("\n",
-                "[00:00:00] INFORM",
+                "[D1 00:00:00] INFORM",
                 "  sender: harbour master  receiver: tug 1",
                 "  ontology: onto logy  protocol: proto col  conversation-id: conv 1",
                 "  content: {}"), raw);

@@ -305,8 +305,9 @@ public final class PeriodicWeatherBroadcastBehaviour extends SimTickerBehaviour 
     private void publishNotification(WeatherSnapshot w, boolean worsened) {
         String text = String.format(Locale.ROOT, "%s: %d kn, %s, swell %.1f m",
                 worsened ? "Weather worsening" : "Weather clearing", w.wind(), w.state(), w.swell());
+        // S18b (PT10): one weather chip at a time — the clearing replaces the worsening.
         eventBus.publish(new NotificationEvent(text,
                 worsened ? NotificationEvent.Severity.WARNING : NotificationEvent.Severity.INFO,
-                w.simTime()));
+                w.simTime(), NotificationEvent.WEATHER_TOPIC));
     }
 }

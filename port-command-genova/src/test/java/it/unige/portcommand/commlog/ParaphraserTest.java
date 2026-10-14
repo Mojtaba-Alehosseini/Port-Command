@@ -113,9 +113,19 @@ class ParaphraserTest {
                 Arguments.of("CONFIRM terminal berth assignment (HandleBerthRequestBehaviour:90)",
                         confirm(Map.of("berth_id", "berth_1", "crane_assigned", 2)),
                         "Cleared berth berth_1 assignment"),
+                // S18b (UI tree U15): it read "Cleared clearance CL-2026-1".
                 Arguments.of("CONFIRM customs clearance ref (HandleClearanceRequestBehaviour:75)",
                         confirm(Map.of("ref", "CL-2026-1")),
-                        "Cleared clearance CL-2026-1"),
+                        "Cleared by customs, ref CL-2026-1"),
+                // S18b (U15): the vessel's answer to a status question, with its own figures.
+                Arguments.of("INFORM vessel status_report (EvaluateCounterOfferBehaviour:122)",
+                        inform(Map.of("intent", "status_report", "vessel_id", "W001", "price", 1500.0,
+                                "hours", 6, "rounds_used", 2), false),
+                        "Notifying: status of W001: offer €1500 for 6h after 2 round(s)"),
+                // S18b (U15): the scripted flood, with its berth.
+                Arguments.of("INFORM HM->terminals flood (BerthFloodEvent:76)",
+                        inform(Map.of("event", "flood", "berth_id", "berth_2"), false),
+                        "Notifying: flood at berth 2"),
 
                 // INFORM
                 Arguments.of("INFORM vessel withdraw (WithdrawalBehaviour:49)",
@@ -219,6 +229,15 @@ class ParaphraserTest {
     @Test
     void nullMessageNeverThrows() {
         assertEquals("(no message)", Paraphraser.paraphrase(null));
+    }
+
+    /** S18b (UI tree U15): the player's status question read "Sent a QUERY-REF message". */
+    @Test
+    void theStatusQuestionSaysWhatItAsks() {
+        ACLMessage queryRef = MessageFactory.create(ACLMessage.QUERY_REF);
+        queryRef.setContent(TerminalJson.write(Map.of()));
+
+        assertEquals("Asking for the vessel's status", Paraphraser.paraphrase(queryRef));
     }
 
     @Test

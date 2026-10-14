@@ -54,8 +54,12 @@ public final class CommLogModel {
             + "Open a walk-in's chat tab to follow its messages here.";
 
     /** S15: one stored row — the event as published, and what the presets need to know of it. */
-    private record Entry(CommLogEvent event, CommLogFacts facts) {
+    /** @param unchangedCheck S18b (PT9): a routine weather check that reads the same as the one before it */
+    private record Entry(CommLogEvent event, CommLogFacts facts, boolean unchangedCheck) {
     }
+
+    /** S18b (PT9): what the last routine weather check read ({@link CommLogClassifier#weatherReading}). */
+    private String lastWeatherReading;
 
     private final Deque<Entry> entries = new ArrayDeque<>();
     private final Set<String> knownSenders = new LinkedHashSet<>();
@@ -113,7 +117,13 @@ public final class CommLogModel {
         Objects.requireNonNull(event, "event");
         CommLogFacts facts = CommLogClassifier.classify(event, knownRuleId);
         learnConversation(event.conversationId(), facts);
-        entries.addLast(new Entry(event, facts));
+        boolean unchangedCheck = false;
+        if (facts.periodicWeather()) {
+            String reading = CommLogClassifier.weatherReading(event);
+            unchangedCheck = reading != null && reading.equals(lastWeatherReading);
+            lastWeatherReading = reading;
+        }
+        entries.addLast(new Entry(event, facts, unchangedCheck));
         knownSenders.add(event.sender());
         knownReceivers.addAll(event.receivers());
         while (entries.size() > MAX_ENTRIES) {
@@ -176,6 +186,7 @@ public final class CommLogModel {
         archiver.archiveAll(entries.stream().map(Entry::event).toList());
         entries.clear();
         vesselsByConversation.clear();
+        lastWeatherReading = null;
         onChange.run();
     }
 
@@ -278,6 +289,17 @@ public final class CommLogModel {
     }
 
     /**
+     * S18b (PT9): how many routine weather checks "All" is leaving out right now — 0 under any
+     * other view. The panel shows the number beside the log.
+     */
+    public int hiddenUnchangedChecks() {
+        if (preset != CommLogPreset.ALL) {
+            return 0;
+        }
+        return (int) entries.stream().filter(Entry::unchangedCheck).count();
+    }
+
+    /**
      * Chronological order (oldest first); all filters applied with AND semantics, then muted
      * senders removed. S15: the preset is one more condition in the same AND chain.
      */
@@ -297,9 +319,11 @@ public final class CommLogModel {
     /** S15: what each preset means, in one place. */
     private boolean matchesPreset(Entry entry) {
         return switch (preset) {
-            // Literally everything — the weather agent's routine checks included. The log has to
-            // keep matching the end-of-day performative tally, which counts them.
-            case ALL -> true;
+            // S18b (playtest 2, PT9): everything but the routine weather checks that say nothing
+            // new — 96 a game day, most of them the reading of the check before. They stay under
+            // Weather, the end-of-day tally still counts them, and the panel says how many "All"
+            // leaves out ({@link #hiddenUnchangedChecks}).
+            case ALL -> !entry.unchangedCheck();
             case WEATHER -> entry.facts().weather();
             case RULES -> entry.facts().citesRule();
             case THIS_VESSEL -> isAboutFocusVessel(entry);

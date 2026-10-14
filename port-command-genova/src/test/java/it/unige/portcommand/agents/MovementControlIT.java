@@ -382,8 +382,9 @@ class MovementControlIT {
         assertEquals(List.of("R15", "R16", "R19"), hm.movement().holdRules("F001"),
                 "38 kn is over a ferry's 35 kn limit");
         assertNotNull(awaitEvent(NotificationEvent.class,
-                e -> e.text().contains("F001") && e.text().contains("stays at its berth"), 5_000),
-                "and the player is told");
+                e -> e.text().contains("F001") && e.text().contains("stays at its berth")
+                        && NotificationEvent.holdTopic("F001").equals(e.topic()), 5_000),
+                "and the player is told, under the ship's hold topic (S18b, PT10)");
         // S17b (E1): a served ship kept at its berth is a blocked movement - once, however long
         // the storm lasts and however many weather messages ask again.
         assertNotNull(awaitEvent(MovementSafetyEvent.class,
@@ -701,7 +702,9 @@ class MovementControlIT {
         assertTrue(pollUntilTrue(() -> hm.movement().berthClosed("berth_4", boot.getSimClock().nowSimMillis()),
                 10_000), "the retraction closes the berth (pre-S16 it changed nothing on this side)");
         assertNotNull(awaitEvent(NotificationEvent.class,
-                e -> e.text().startsWith("Berth 4 flooded — closed until"), 5_000));
+                e -> e.text().startsWith("Berth 4 flooded — closed until")
+                        && NotificationEvent.berthTopic("berth_4").equals(e.topic()), 5_000),
+                "S18b (PT10): the flood and the reopening share the berth's topic");
         PortStatusEvent closed = awaitEvent(PortStatusEvent.class,
                 e -> e.berths().stream().anyMatch(b -> "berth_4".equals(b.berthId()) && b.closed() && b.isFree()),
                 10_000);
@@ -728,7 +731,9 @@ class MovementControlIT {
         assertNotNull(pollUntil(vessel.inbox, m -> m.getPerformative() == ACLMessage.ACCEPT_PROPOSAL, 15_000),
                 "reopened: the queued contract is granted");
         assertFalse(hm.movement().berthClosed("berth_4", boot.getSimClock().nowSimMillis()));
-        assertNotNull(awaitEvent(NotificationEvent.class, e -> "Berth 4 reopened".equals(e.text()), 5_000));
+        assertNotNull(awaitEvent(NotificationEvent.class, e -> "Berth 4 reopened".equals(e.text())
+                && NotificationEvent.berthTopic("berth_4").equals(e.topic()), 5_000),
+                "S18b (PT10): the reopening replaces the flood's chip");
     }
 
     /**

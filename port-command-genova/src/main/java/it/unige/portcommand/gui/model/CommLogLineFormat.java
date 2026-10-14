@@ -29,12 +29,15 @@ public final class CommLogLineFormat {
     }
 
     /** Formatted from the event's own {@code simTimeMillis} — no {@code SimClock} reference
-     * needed, using the same hour/minute/second modular arithmetic {@code SimClock} itself uses. */
+     * needed, using the same hour/minute/second modular arithmetic {@code SimClock} itself uses.
+     * S18b (UI tree U16): with the game day in front — {@code D2 14:20:05}; a free-play log runs
+     * over many days, and two rows a day apart used to read alike. */
     public static String timestamp(long simTimeMillis) {
         long hour = (simTimeMillis / 3_600_000L) % 24;
         long minute = (simTimeMillis / 60_000L) % 60;
         long second = (simTimeMillis / 1_000L) % 60;
-        return String.format("%02d:%02d:%02d", hour, minute, second);
+        return String.format(java.util.Locale.ROOT, "D%d %02d:%02d:%02d",
+                it.unige.portcommand.util.SimClock.gameDayOf(simTimeMillis), hour, minute, second);
     }
 
     /**

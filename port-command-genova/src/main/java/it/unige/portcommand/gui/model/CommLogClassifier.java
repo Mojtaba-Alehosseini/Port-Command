@@ -237,6 +237,28 @@ public final class CommLogClassifier {
         return WEATHER_HOLD_REASON.equals(text(content, "reason"));
     }
 
+    /**
+     * S18b (playtest 2, PT9): what a routine weather check READ — wind, visibility, swell and
+     * state, as one comparable text — or {@code null} for anything that is not a routine check.
+     * Two checks that read the same say nothing new: the weather changes at most once a game hour
+     * (ADR-20, B6) and is checked every 15 game minutes.
+     */
+    public static String weatherReading(CommLogEvent event) {
+        if (event == null) {
+            return null;
+        }
+        try {
+            JsonNode content = parse(event.content());
+            if (!isPeriodicWeather(content)) {
+                return null;
+            }
+            return content.path("wind_knots").asText() + "|" + content.path("visibility").asText()
+                    + "|" + content.path("swell").asText() + "|" + content.path("state").asText();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     private static boolean isPeriodicWeather(JsonNode content) {
         return PERIODIC_WEATHER_EVENT.equals(text(content, "event"));
     }

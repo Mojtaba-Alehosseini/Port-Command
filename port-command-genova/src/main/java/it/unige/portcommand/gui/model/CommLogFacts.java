@@ -17,9 +17,10 @@ import java.util.Set;
  *                        conversation index instead.
  * @param weather         a weather alert or routine check, or a hold, resume or tug cancel caused
  *                        by one
- * @param periodicWeather the weather agent's routine 15-minute check, specifically. Carried as a
- *                        fact, but NO preset hides on it: "All" shows these rows too (the log must
- *                        match the end-of-day performative tally).
+ * @param periodicWeather the weather agent's routine 15-minute check, specifically. S18b (PT9):
+ *                        "All" leaves out the checks that read the same as the one before
+ *                        ({@code CommLogModel}); "Weather" still shows every one, and the
+ *                        end-of-day tally still counts them.
  * @param citesRule       the paraphrase or the content cites at least one catalogued rule id
  */
 public record CommLogFacts(Set<String> vesselKeys, boolean weather, boolean periodicWeather, boolean citesRule) {

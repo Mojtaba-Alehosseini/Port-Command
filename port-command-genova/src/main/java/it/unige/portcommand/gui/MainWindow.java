@@ -557,6 +557,9 @@ public final class MainWindow extends JFrame {
         quitItem.addActionListener(e -> confirmQuit());
         JMenuItem exit = new JMenuItem("Exit");
         exit.addActionListener(e -> requestExit(onClose)); // S18b (P1)
+        // S18b (playtest 2, PT11): the comm log's archive file, or its folder before there is one.
+        JMenuItem openCommLog = new JMenuItem("Open comm-log file");
+        openCommLog.addActionListener(e -> openCommLogFile());
         // S17b (playtest 2, PT8): the same request as the top bar's "Next ship" button.
         callNextShipItem = new JMenuItem("Call Next Ship");
         callNextShipItem.addActionListener(
@@ -568,6 +571,7 @@ public final class MainWindow extends JFrame {
         game.addSeparator();
         game.add(saveItem);
         game.add(loadItem);
+        game.add(openCommLog);
         game.addSeparator();
         game.add(quitItem);
         game.addSeparator();
@@ -1100,6 +1104,32 @@ public final class MainWindow extends JFrame {
             return new java.awt.Rectangle();
         }
         return screen.columnsBoundsIn(pauseOverlay);
+    }
+
+    /**
+     * S18b (playtest 2, PT11): opens the newest comm-log archive — or, before anything has been
+     * archived, the folder it goes to. A file type the desktop has no program for falls back to
+     * the folder; when even that fails, the path is said.
+     */
+    private void openCommLogFile() {
+        java.nio.file.Path dir = it.unige.portcommand.gui.LogArchiver.defaultDir();
+        Optional<java.nio.file.Path> newest = it.unige.portcommand.gui.LogArchiver.newestArchive(dir);
+        try {
+            java.nio.file.Files.createDirectories(dir);
+            java.awt.Desktop.getDesktop().open(newest.orElse(dir).toFile());
+            return;
+        } catch (Exception noProgramForTheFile) {
+            if (newest.isPresent()) {
+                try {
+                    java.awt.Desktop.getDesktop().open(dir.toFile());
+                    return;
+                } catch (Exception noFolderEither) {
+                    // said below
+                }
+            }
+        }
+        JOptionPane.showMessageDialog(this, "The comm-log archive is in " + dir.toAbsolutePath() + ".",
+                "Comm log", JOptionPane.INFORMATION_MESSAGE);
     }
 
     /** S18b (T8): where the PAUSED caption goes — the top bar left of its pause button, or empty. */

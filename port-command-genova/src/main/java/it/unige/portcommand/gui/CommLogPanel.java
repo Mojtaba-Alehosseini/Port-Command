@@ -114,13 +114,26 @@ public final class CommLogPanel extends JPanel {
     static final String NAME_RULE_LINE = "commlog-rule-line";
     static final String NAME_RESUME = "commlog-resume";
 
-    static final String TIP_ALL = "Every message";
+    /** S18b (UI tree U16): only the HarbourMaster's traffic is logged; and (PT9) "All" leaves out
+     * the routine weather checks that report no change. */
+    static final String TIP_ALL = "All the HarbourMaster's messages — weather checks that report no change are under Weather";
     /** While no chat tab is selected; with one, the tooltip names its vessel instead. */
     static final String TIP_THIS_VESSEL = "Messages about the vessel whose chat tab is selected";
     static final String TIP_RULES = "Messages that cite a Prolog rule, e.g. [R7]";
     static final String TIP_WEATHER =
             "Weather alerts, routine checks, and the holds, resumes and tug cancels they cause";
-    static final String TIP_RAW = "Show each message's real FIPA fields instead of the plain-English line";
+    /** S18b (U16): the Raw block shows the main fields, not all of them (no priority, reply-with or in-reply-to). */
+    static final String TIP_RAW = "Show each message's main FIPA fields instead of the plain-English line";
+    /** S18b (PT9): the line under the log while "All" leaves routine weather checks out. */
+    static String hiddenChecksText(int hidden) {
+        return hidden == 1
+                ? "1 weather check with no change is not shown — Weather has it."
+                : hidden + " weather checks with no change are not shown — Weather has them.";
+    }
+    static final String NAME_HIDDEN_NOTE = "commlog-hidden-note";
+    /** S18b (PT11): the log's right-click menu. */
+    static final String COPY_LABEL = "Copy";
+    static final String COPY_ALL_LABEL = "Copy all";
 
     /** What the rule line says until the first rule id is clicked. */
     static final String RULE_LINE_PROMPT = "Click a rule id such as [R7] in the log to read the rule.";
@@ -148,6 +161,16 @@ public final class CommLogPanel extends JPanel {
     private final JCheckBox rawToggle = new JCheckBox("Raw");
     private final JTextArea ruleLine = new RuleLine(RULE_LINE_PROMPT);
     private final JButton resumeButton = new JButton("▼ resume");
+    /** S18b (PT9): how many routine weather checks "All" leaves out; hidden while there are none. */
+    private final javax.swing.JLabel hiddenNote = new javax.swing.JLabel();
+    /**
+     * S18b (playtest 2, PT11): "The comm log cannot be copied." A right-click on the log offers
+     * Copy (the selected text) and Copy all (the whole log as shown). The log still never takes
+     * the keyboard focus — a click there must not pull it out of the chat input — so the copy
+     * is a menu, not Ctrl+C. Heavyweight, so it opens above the PAUSED overlay too (C-04).
+     */
+    private final javax.swing.JPopupMenu copyMenu = new javax.swing.JPopupMenu();
+    private final javax.swing.JMenuItem copyItem = new javax.swing.JMenuItem(COPY_LABEL);
 
     /**
      * One attribute set per performative colour, made on first use (S15). A render used to call
@@ -235,6 +258,10 @@ public final class CommLogPanel extends JPanel {
         // row and the stock caret then scrolls that row fully into view — a click on a rule id in
         // a half-visible top row would shift the log and read as "the user scrolled".
         textPane.setCaret(new StillCaret());
+        // S18b (PT11): a selection shows although the log never has the focus (the stock caret
+        // shows one only while its text has it), and the right-click menu copies it.
+        textPane.getCaret().setSelectionVisible(true);
+        buildCopyMenu();
         RuleMouse ruleMouse = new RuleMouse();
         textPane.addMouseListener(ruleMouse);
         textPane.addMouseMotionListener(ruleMouse);
@@ -253,7 +280,12 @@ public final class CommLogPanel extends JPanel {
         resumeButton.setName(NAME_RESUME);
         resumeButton.setVisible(false);
         resumeButton.addActionListener(e -> resumeToBottom());
+        hiddenNote.setName(NAME_HIDDEN_NOTE);
+        hiddenNote.setForeground(new java.awt.Color(0x66, 0x66, 0x66));
+        hiddenNote.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+        hiddenNote.setVisible(false);
         JPanel south = new JPanel(new BorderLayout());
+        south.add(hiddenNote, BorderLayout.NORTH);
         south.add(ruleLine, BorderLayout.CENTER);
         south.add(resumeButton, BorderLayout.SOUTH);
         add(south, BorderLayout.SOUTH);
@@ -327,6 +359,50 @@ public final class CommLogPanel extends JPanel {
         }
         model.setPreset(preset);
         render(true);
+    }
+
+    /** S18b (PT11): Copy and Copy all, on a right-click (the platform's popup trigger). */
+    private void buildCopyMenu() {
+        copyItem.addActionListener(e -> textPane.copy());
+        javax.swing.JMenuItem copyAll = new javax.swing.JMenuItem(COPY_ALL_LABEL);
+        copyAll.addActionListener(e -> java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
+                .setContents(new java.awt.datatransfer.StringSelection(allText()), null));
+        copyMenu.add(copyItem);
+        copyMenu.add(copyAll);
+        copyMenu.setLightWeightPopupEnabled(false);
+        textPane.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                showCopyMenu(e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                showCopyMenu(e);
+            }
+        });
+    }
+
+    private void showCopyMenu(MouseEvent e) {
+        if (e.isPopupTrigger()) {
+            String selected = textPane.getSelectedText();
+            copyItem.setEnabled(selected != null && !selected.isEmpty());
+            copyMenu.show(textPane, e.getX(), e.getY());
+        }
+    }
+
+    /** S18b (PT11): the whole log as it is shown — the plain lines, or the Raw blocks. */
+    String allText() {
+        try {
+            return textPane.getDocument().getText(0, textPane.getDocument().getLength());
+        } catch (BadLocationException e) {
+            return "";
+        }
+    }
+
+    /** Test-only (S18b, PT9): the hidden-checks line as shown, or empty. */
+    String hiddenNoteForTest() {
+        return hiddenNote.isVisible() ? hiddenNote.getText() : "";
     }
 
     /** S15: see the class comment — nothing in this column may take the keyboard focus. */
@@ -490,6 +566,13 @@ public final class CommLogPanel extends JPanel {
         } catch (BadLocationException e) {
             // remove/insertString with offsets derived from getLength() never throws in practice;
             // degrade to whatever partial content rendered rather than crash the EDT.
+        }
+        // S18b (PT9): say how many routine weather checks "All" leaves out.
+        int hidden = model.hiddenUnchangedChecks();
+        hiddenNote.setText(hidden > 0 ? hiddenChecksText(hidden) : "");
+        if (hiddenNote.isVisible() != hidden > 0) {
+            hiddenNote.setVisible(hidden > 0);
+            revalidate(); // showing a component re-lays the panel out by itself; hiding one does not
         }
         // What was recorded so far matches the text that did get in, also after a partial render.
         ruleSpans = List.copyOf(spans);
