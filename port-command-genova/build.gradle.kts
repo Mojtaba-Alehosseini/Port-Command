@@ -133,6 +133,25 @@ val integrationTest = tasks.register<Test>("integrationTest") {
     shouldRunAfter(tasks.test)
 }
 
+// S19 (playtest 5, PT41): the explanation-faithfulness measurement - recorded decision traces
+// through the Assistant's Hint path, Phi-4-mini and the hallucination validator. Not a test and in no
+// lane: it needs the LLM sidecar up (nlp-python/start_llm.bat, LLM_QUANT=onnx) and takes about 20 s a
+// trace. `./gradlew faithfulnessProbe` writes build/reports/nlp-llm/faithfulness.md.
+tasks.register<JavaExec>("faithfulnessProbe") {
+    description = "Runs the recorded decision traces through the LLM sidecar and the hallucination validator."
+    group = "verification"
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("it.unige.portcommand.nlp.regression.FaithfulnessProbe")
+    // A registered JavaExec runs on the JVM on PATH (JDK 17 here), not on the toolchain - and the
+    // classes are Java 21 (UnsupportedClassVersionError). `run` and the test lanes get it by default.
+    javaLauncher.set(javaToolchains.launcherFor(java.toolchain))
+    jvmArgs("-Djava.library.path=${swiNativeDir()}", "-Djava.awt.headless=true")
+    environment("SWI_HOME_DIR", swiHome())
+    environment("PATH", nativePath)
+    systemProperty("portcommand.logs.dir", layout.buildDirectory.dir("test-logs").get().asFile.absolutePath)
+    args(layout.buildDirectory.file("reports/nlp-llm/faithfulness.md").get().asFile.absolutePath)
+}
+
 // --- Coverage gate (task 25) ------------------------------------------------
 // planning/25: "≥ 60% line coverage on src/main/java, EXCLUDING it.unige.portcommand.gui.**".
 // Swing painting code is manually verified via the --gui visual checkpoints, so it is not
