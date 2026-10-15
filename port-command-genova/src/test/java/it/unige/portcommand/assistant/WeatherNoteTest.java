@@ -141,9 +141,10 @@ class WeatherNoteTest {
     private static final Reading STORM = new Reading(32, "good", 1.0, "stormy");
     private static final Reading CALM = new Reading(18, "good", 0.5, "sunny");
 
+    /** S19 (PT38a): late (ten seconds left), where the calculation still accepts her. */
     private static WalkInDialogueSnapshot tanker() {
         return new WalkInDialogueSnapshot("v1", "tanker", 14.0, 140.0, 20000, "liquid_bulk",
-                "berth_1", 6, 6000.0, 0.0, 1, 60.0, false);
+                "berth_1", 6, 6000.0, 0.0, 1, 60.0, false).withTime(170.0, 180.0);
     }
 
     /** One Hint for {@link #tanker()} with {@code readingOrNull} as the Assistant's last weather
@@ -184,7 +185,7 @@ class WeatherNoteTest {
         String details = template.card().details();
         assertTrue(details.endsWith(" · ship will wait: wind 32 kn, sea state stormy [R15,R19]"),
                 "the gate's reason and its rule ids close the details line: " + details);
-        assertTrue(details.contains("R7 ✓"), "after the numbers and the berth check: " + details);
+        assertTrue(details.contains("fits berth ✓ (R7)"), "after the numbers and the berth check: " + details);
     }
 
     @Test
@@ -193,7 +194,7 @@ class WeatherNoteTest {
         assertEquals(1, calm.size());
         assertTrue(calm.get(0).isHint());
         assertFalse(calm.get(0).card().details().contains("ship will wait"), "safe for a tanker: nothing to warn of");
-        assertTrue(calm.get(0).card().details().endsWith("R7 ✓"), calm.get(0).card().details());
+        assertTrue(calm.get(0).card().details().endsWith("fits berth ✓ (R7)"), calm.get(0).card().details());
 
         List<AssistantChatEvent> unknown = hint(null, noModel());
         assertEquals(1, unknown.size());
@@ -241,6 +242,6 @@ class WeatherNoteTest {
                 .toList();
         assertEquals(1, chats.size(), "the Hint is out; only the note is missing");
         assertTrue(chats.get(0).isHint());
-        assertTrue(chats.get(0).card().details().endsWith("R7 ✓"), chats.get(0).card().details());
+        assertTrue(chats.get(0).card().details().endsWith("fits berth ✓ (R7)"), chats.get(0).card().details());
     }
 }

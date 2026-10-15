@@ -69,10 +69,15 @@ public final class AssistantWording {
      * recommendation, and — when the weather would keep this vessel waiting outside after a
      * deal — that, with its rule ids ({@link WeatherNote#forDetails}).
      *
+     * <p>S19 (playtest 5, PT33 / PT42): in plain words, with the player's own cost - "EV €106 ·
+     * chance 100% · R7 ✓" was jargon. The figures are the ones the algorithm used.
+     *
      * <ul>
-     *   <li>accept / counter: {@code EV €640 · chance 62% · R7 ✓}</li>
-     *   <li>say no because it does not pay: {@code offer €1477 · costs €1650 · R7 ✓}</li>
-     *   <li>say no because the ship does not fit the berth: {@code R7 ✗}</li>
+     *   <li>accept / counter: {@code Their offer €1,500 · your cost ≈ €1,400 · profit ≈ €100 ·
+     *       they accept: 100% · fits berth ✓ (R7)} - "profit" is the move's expected profit (EV)</li>
+     *   <li>say no because it does not pay: {@code Their offer €1,477 · your cost ≈ €1,650 · fits
+     *       berth ✓ (R7)}</li>
+     *   <li>say no because the ship does not fit the berth: {@code does not fit berth 1 ✗ (R7)}</li>
      * </ul>
      *
      * @param weatherWait the weather part, already worded, or empty when the weather is safe for
@@ -80,20 +85,44 @@ public final class AssistantWording {
      */
     public static String details(Recommendation rec, WalkInDialogueSnapshot snapshot, Optional<String> weatherWait) {
         StringBuilder line = new StringBuilder();
-        boolean compatible = isCompatible(rec);
-        if (!compatible) {
-            line.append("R7 ✗");
-        } else if (RecommendationCandidate.REJECT_SILENT.equals(rec.action())) {
-            line.append("offer ").append(euros(snapshot.lastVesselOffer()))
-                    .append(" · costs ").append(euros(costOf(snapshot)))
-                    .append(" · R7 ✓");
+        if (!isCompatible(rec)) {
+            line.append("does not fit ").append(berthLabel(rec.berthId())).append(" ✗ (R7)");
         } else {
-            line.append("EV ").append(euros(rec.ev()))
-                    .append(" · chance ").append(String.format(Locale.ROOT, "%.0f", rec.pAccept() * 100.0)).append('%')
-                    .append(" · R7 ✓");
+            line.append("Their offer ").append(grouped(snapshot.lastVesselOffer()))
+                    .append(" · your cost ≈ ").append(grouped(costOf(snapshot)));
+            if (!RecommendationCandidate.REJECT_SILENT.equals(rec.action())) {
+                line.append(" · profit ≈ ").append(grouped(rec.ev()))
+                        .append(" · they accept: ").append(String.format(Locale.ROOT, "%.0f", rec.pAccept() * 100.0))
+                        .append('%');
+            }
+            line.append(" · fits berth ✓ (R7)");
         }
         weatherWait.filter(text -> !text.isBlank()).ifPresent(text -> line.append(" · ").append(text));
         return line.toString();
+    }
+
+    /** S19 (playtest 5, PT25 / PT33 / PT42): the details line's tooltip. */
+    public static String detailsTip(Recommendation rec, WalkInDialogueSnapshot snapshot) {
+        if (!isCompatible(rec)) {
+            return "Fits berth (R7): the Prolog berth rule - this ship does not fit " + berthLabel(rec.berthId()) + ".";
+        }
+        ExpenseRules.CostParts parts = ExpenseRules.marginalCostParts(snapshot.vesselType(), snapshot.durationHours());
+        StringBuilder tip = new StringBuilder("Your cost ≈ ").append(grouped(parts.total())).append(" = ")
+                .append(parts.tugs() == 0 ? "no tugs"
+                        : parts.tugs() + (parts.tugs() == 1 ? " tug" : " tugs") + " × " + grouped(parts.perTug()))
+                .append(" + customs ").append(grouped(parts.customs()))
+                .append(" + ").append(parts.hours()).append("h at the berth × ").append(grouped(parts.perHour()))
+                .append('.');
+        if (!RecommendationCandidate.REJECT_SILENT.equals(rec.action())) {
+            tip.append("\nProfit ≈ the expected profit (EV) of this move.")
+                    .append("\nThey accept: the chance they say yes.");
+        }
+        return tip.append("\nFits berth (R7): the Prolog berth rule says the ship fits.").toString();
+    }
+
+    /** S19 (PT33): whole euros with a thousands comma, as the chat writes amounts - {@code €1,529}. */
+    static String grouped(double amount) {
+        return "€" + String.format(Locale.ROOT, "%,d", Math.round(amount));
     }
 
     // ---- the autopilot's narration --------------------------------------------------------------

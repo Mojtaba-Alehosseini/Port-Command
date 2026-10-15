@@ -115,17 +115,31 @@ public final class ExpenseRules {
         return FIXED_SOURCES.contains(source);
     }
 
+    /** S19 (playtest 5, PT42): the parts {@link #marginalCost} adds up - for the Hint's tooltip,
+     * display only, the same figures. */
+    public record CostParts(int tugs, double perTug, double customs, int hours, double perHour) {
+        public double total() {
+            return tugs * perTug + customs + hours * perHour;
+        }
+    }
+
+    /** S19 (PT42): {@link #marginalCost}'s parts for {@code vesselType} at {@code hours}. */
+    public static CostParts marginalCostParts(String vesselType, int hours) {
+        Integer tugs = TYPICAL_TUGS.get(vesselType);
+        if (tugs == null) {
+            throw new IllegalArgumentException("unknown vessel type: " + vesselType);
+        }
+        return new CostParts(tugs, AVG_TUG_FEE, CUSTOMS_SHARE, hours, BERTH_OCCUPANCY_PER_HOUR);
+    }
+
     /**
      * Marginal cost of servicing one more vessel (tug escort + berth-occupancy share + customs-
      * handling share) — the Assistant's EV computation input (planning/10 §10.2 step 5).
      * {@code cargoClass} is accepted for a future hazmat surcharge but unused.
      */
     public static double marginalCost(String vesselType, String cargoClass, int hours, int tonnage) {
-        Integer tugs = TYPICAL_TUGS.get(vesselType);
-        if (tugs == null) {
-            throw new IllegalArgumentException("unknown vessel type: " + vesselType);
-        }
-        return tugs * AVG_TUG_FEE + CUSTOMS_SHARE + hours * BERTH_OCCUPANCY_PER_HOUR;
+        // S19 (PT42): one source for the figure and for the parts the Hint's tooltip shows.
+        return marginalCostParts(vesselType, hours).total();
     }
 
     /**

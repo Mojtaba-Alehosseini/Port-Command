@@ -16,7 +16,8 @@ import it.unige.portcommand.util.Event;
  * @param dialogueId the negotiation (or explain-request) this message pertains to
  * @param text       the shown text — the plain template, or LLM prose that passed the validator
  * @param hintId     {@link #NO_HINT} for an ordinary message; otherwise the id of one Hint press
- * @param revision   true iff {@code text} replaces the template already shown for {@code hintId}
+ * @param revision   true iff {@code text} is the model's wording for the template already shown
+ *                   for {@code hintId} - shown under it as its Why (S19, PT25; it used to replace it)
  * @param card       S17a (ADR-21): the recommendation behind a Hint's first line, as data - what
  *                   the tab's "Use this" sends and its details line shows; {@code null} on every
  *                   other message, a revision included (the card already shown stays)

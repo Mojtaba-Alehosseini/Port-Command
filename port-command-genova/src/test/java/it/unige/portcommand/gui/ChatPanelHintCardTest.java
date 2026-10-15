@@ -211,12 +211,13 @@ class ChatPanelHintCardTest {
         flush();
 
         List<DialogueTabModel.ChatEntry> transcript = transcript();
-        assertEquals(entries, transcript.size(), "replaced, not appended");
+        assertEquals(entries, transcript.size(), "added under the hint, not appended");
         assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.ASSISTANT,
-                "Hold out for a little more (model)", DETAILS), transcript.get(transcript.size() - 1),
-                "the sentence was reworded; the details line under it stayed");
+                TEMPLATE, DETAILS, "Hold out for a little more (model)", ""), transcript.get(transcript.size() - 1),
+                "S19 (PT25): the sentence and its details stay; the model's words are the Why");
         String shown = view.transcriptTextForTest();
-        assertTrue(shown.contains("(model)") && !shown.contains("Counter at"), shown);
+        assertTrue(shown.contains("Counter at") && shown.indexOf("Counter at") < shown.indexOf("Why: Hold out"),
+                "the short line first, the Why under it: " + shown);
         assertTrue(shown.indexOf("(model)") < shown.indexOf("chance 62%"),
                 "the details are still drawn, under the new sentence: " + shown);
         assertTrue(view.hintRowVisibleForTest(), "and the row still offers the same card");

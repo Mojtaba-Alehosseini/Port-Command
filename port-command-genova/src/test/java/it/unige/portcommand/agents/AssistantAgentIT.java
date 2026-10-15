@@ -437,8 +437,9 @@ class AssistantAgentIT {
 
         AutopilotExecuteBehaviour behaviour = new AutopilotExecuteBehaviour(harnessAgent(), algorithm,
                 policyRegistry, eventBus, new RecommendationCache(), autopilotEnabled);
-        // Offer already at the fair-price band centre -> the EV algorithm picks "accept".
-        WalkInDialogueSnapshot snapshot = tankerSnapshot(6000.0, 0, 0.0);
+        // Offer already at the fair-price band centre -> the EV algorithm picks "accept" - late in
+        // the talk (S19, PT38a: ten seconds left); early it would counter.
+        WalkInDialogueSnapshot snapshot = tankerSnapshot(6000.0, 0, 0.0).withTime(170.0, 180.0);
         behaviour.onNegotiationOpened(new NegotiationOpenedEvent("dlg-5", snapshot));
 
         List<Event> published = EventBusProbe.published(eventBus);

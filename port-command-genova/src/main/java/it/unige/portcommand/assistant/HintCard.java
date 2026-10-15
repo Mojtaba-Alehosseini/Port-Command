@@ -25,21 +25,31 @@ import java.util.Objects;
  * @param round       the dialogue's round when the Hint was asked for
  * @param vesselOffer the vessel's standing offer the recommendation answered
  * @param suggestion  the recommendation in a few words, e.g. {@code counter at €1580 for 6h}
- * @param details     the details line, e.g. {@code EV €640 · chance 62% · R7 ✓}
+ * @param details     the details line, e.g. {@code Their offer €1,500 · your cost ≈ €1,400 · ...}
+ * @param detailsTip  S19 (playtest 5, PT25 / PT33 / PT42): the details line's tooltip - what its
+ *                    parts mean, and what the cost is made of; empty for none
  */
 public record HintCard(String action, double price, int hours, int round, double vesselOffer,
-                       String suggestion, String details) {
+                       String suggestion, String details, String detailsTip) {
 
     public HintCard {
         Objects.requireNonNull(action, "action");
         suggestion = suggestion == null ? "" : suggestion;
         details = details == null ? "" : details;
+        detailsTip = detailsTip == null ? "" : detailsTip;
+    }
+
+    /** The card without a tooltip on its details line (the pre-S19 shape). */
+    public HintCard(String action, double price, int hours, int round, double vesselOffer,
+                    String suggestion, String details) {
+        this(action, price, hours, round, vesselOffer, suggestion, details, "");
     }
 
     /** The card for {@code rec}, which was computed from {@code snapshot}. */
     public static HintCard of(Recommendation rec, WalkInDialogueSnapshot snapshot, String details) {
         return new HintCard(rec.action(), rec.price(), snapshot.durationHours(), snapshot.roundsUsed(),
-                snapshot.lastVesselOffer(), AssistantWording.suggestion(rec, snapshot), details);
+                snapshot.lastVesselOffer(), AssistantWording.suggestion(rec, snapshot), details,
+                AssistantWording.detailsTip(rec, snapshot));
     }
 
     /** The price as every text shows it: whole euros. */

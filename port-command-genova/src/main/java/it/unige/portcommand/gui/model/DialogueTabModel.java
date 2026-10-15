@@ -32,17 +32,30 @@ public final class DialogueTabModel {
      *            drawn under the hint's text in the same small grey — the one other entry that
      *            carries a note. Empty for every other entry. Never {@code null}.
      */
-    public record ChatEntry(Speaker speaker, String text, String tag) {
+    /**
+     * @param why S19 (playtest 5, PT25): under a Hint, the model's explanation - added below the
+     *            short line, which never changes; empty for every other entry
+     * @param tip S19 (PT25 / PT33 / PT42): the tooltip of a Hint's details line ({@code tag}) - what
+     *            its parts mean and what the cost is made of; empty for every other entry
+     */
+    public record ChatEntry(Speaker speaker, String text, String tag, String why, String tip) {
         public ChatEntry {
             Objects.requireNonNull(speaker, "speaker");
             Objects.requireNonNull(text, "text");
             tag = tag == null ? "" : tag;
+            why = why == null ? "" : why;
+            tip = tip == null ? "" : tip;
         }
 
         /** An untagged line — every entry is born this way. Kept as its own constructor so the
          * pre-S15 two-argument form (and record equality against it) means exactly what it did. */
         public ChatEntry(Speaker speaker, String text) {
             this(speaker, text, "");
+        }
+
+        /** A tagged line (S15: a player's parse note; S17a: a Hint's details). */
+        public ChatEntry(Speaker speaker, String text, String tag) {
+            this(speaker, text, tag, "", "");
         }
     }
 
@@ -261,7 +274,8 @@ public final class DialogueTabModel {
         if (closed) {
             return false;
         }
-        transcript.add(new ChatEntry(Speaker.ASSISTANT, text, card == null ? "" : card.details()));
+        transcript.add(new ChatEntry(Speaker.ASSISTANT, text, card == null ? "" : card.details(), "",
+                card == null ? "" : card.detailsTip()));
         latestHintId = hintId;
         latestHintIndex = transcript.size() - 1;
         hintCard = card;
@@ -270,21 +284,24 @@ public final class DialogueTabModel {
     }
 
     /**
-     * S12: replaces Hint {@code hintId}'s template with the model's validated wording, in place.
+     * S12: Hint {@code hintId}'s template gets the model's validated wording, in place - since S19
+     * (playtest 5, PT25) as the entry's Why, under the unchanged line; until S19 it replaced the line.
      * Refused (false, nothing changed) when the tab is closed, or when {@code hintId} is not the
      * newest Hint this tab showed: a late answer never overwrites a newer hint, and an id from
      * another world (a reload recreates the same dialogue id) matches nothing.
      *
-     * <p>S17a (ADR-21): only the TEXT is replaced. The details line under it and the card behind
-     * the hint row are the recommendation itself — the model rewords the sentence, it does not
-     * recompute anything — so both stay exactly as the template brought them.
+     * <p>S17a (ADR-21): the details line and the card behind the hint row are the recommendation
+     * itself — the model explains the sentence, it does not recompute anything — so both stay
+     * exactly as the template brought them.
      */
     public boolean reviseHint(long hintId, String text) {
         if (closed || hintId == AssistantChatEvent.NO_HINT || hintId != latestHintId) {
             return false;
         }
-        transcript.set(latestHintIndex,
-                new ChatEntry(Speaker.ASSISTANT, text, transcript.get(latestHintIndex).tag()));
+        // S19 (playtest 5, PT25): the short line never changes - it used to be replaced a few seconds
+        // after it appeared. The model's wording is added under it, as the Why.
+        ChatEntry hint = transcript.get(latestHintIndex);
+        transcript.set(latestHintIndex, new ChatEntry(Speaker.ASSISTANT, hint.text(), hint.tag(), text, hint.tip()));
         return true;
     }
 

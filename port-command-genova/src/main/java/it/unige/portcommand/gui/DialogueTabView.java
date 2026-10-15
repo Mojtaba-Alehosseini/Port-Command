@@ -163,7 +163,15 @@ final class DialogueTabView extends JPanel {
      * addressed to another vessel by name ("Stella Maris: deal"), and the lock that matters then
      * is the one on HER tab, not on this one. */
     private final java.util.function.Predicate<String> assistantOwnsDialogue;
-    private final JTextPane transcriptPane = new JTextPane();
+    /** S19 (playtest 5, PT25 / PT33 / PT42): a Hint's details line explains itself on hover. */
+    private final JTextPane transcriptPane = new JTextPane() {
+        @Override
+        public String getToolTipText(java.awt.event.MouseEvent event) {
+            String tip = getDocument() instanceof javax.swing.text.html.HTMLDocument html
+                    ? TranscriptTips.titleAt(html, viewToModel2D(event.getPoint())) : null;
+            return tip == null ? null : TranscriptTips.asTooltip(tip);
+        }
+    };
     /** S18b (UI tree U7): the transcript's scroll pane, kept so the view can follow its bottom. */
     private final JScrollPane transcriptScroll = new JScrollPane(transcriptPane);
     /**
@@ -265,6 +273,7 @@ final class DialogueTabView extends JPanel {
         transcriptPane.setEditable(false);
         // S18b (U7): only this view decides where the transcript is scrolled to, not the caret.
         transcriptPane.setCaret(new StillCaret());
+        javax.swing.ToolTipManager.sharedInstance().registerComponent(transcriptPane); // S19 (PT25)
         transcriptScroll.getVerticalScrollBar().addAdjustmentListener(e -> onTranscriptBarAdjusted());
 
         sendButton.addActionListener(e -> onSend());

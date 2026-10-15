@@ -1116,7 +1116,7 @@ class ChatPanelTest {
 
     @Test
     @Timeout(5)
-    void aHintRevisionReRendersTheTemplatesBubbleInPlace() throws Exception {
+    void aHintRevisionReRendersTheTemplatesBubbleInPlaceWithItsWhy() throws Exception {
         EventBus bus = new EventBus();
         ChatPanel panel = new ChatPanel(bus, (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")));
         openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
@@ -1130,9 +1130,11 @@ class ChatPanelTest {
         bus.publish(AssistantChatEvent.hintRevision("nego-A", 11L, "Taking 1436 now is the better bet (model)"));
         SwingUtilities.invokeAndWait(() -> { });
 
-        assertEquals(entries, panel.registry().tab("nego-A").transcript().size(), "replaced, not appended");
+        assertEquals(entries, panel.registry().tab("nego-A").transcript().size(), "in place, not appended");
         String shown = view.transcriptTextForTest();
-        assertTrue(shown.contains("(model)") && !shown.contains("(template)"), shown);
+        // S19 (playtest 5, PT25): the template stays; the model's text is drawn under it as "Why: ...".
+        assertTrue(shown.contains("(template)") && shown.contains("Why: Taking 1436 now")
+                && shown.indexOf("(template)") < shown.indexOf("Why:"), shown);
         assertEquals(view.transcriptLengthForTest(), view.caretPositionForTest(), "C-28 still holds after a revision");
     }
 

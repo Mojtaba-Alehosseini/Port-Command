@@ -205,7 +205,8 @@ public final class NegotiationTabRegistry {
      * ({@link AssistantChatEvent#card()}) — the recommendation as data. It is stored on the tab
      * with that Hint's id: its details line shows under the hint's text, and the tab's hint row
      * offers it as "Use this" ({@link HintRow}). A revision carries no card and needs none — it
-     * replaces the text of the hint entry only, so the card and its details stay. The next Hint
+     * adds the model's wording to the hint entry as its Why (S19, PT25: it used to replace the
+     * entry's text), so the line, the card and its details stay. The next Hint
      * replaces the card, whether or not it brings one of its own.
      * @return the routed tab's dialogue id, or empty if nothing was shown or changed. */
     public Optional<String> onAssistantChat(AssistantChatEvent event) {

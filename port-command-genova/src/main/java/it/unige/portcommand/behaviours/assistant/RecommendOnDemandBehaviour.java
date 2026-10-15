@@ -43,15 +43,16 @@ import org.slf4j.LoggerFactory;
  *
  * <p>S16 (2026-10-13, decision B10): when the weather is unsafe for the vessel the Hint is about,
  * the Hint says so — {@link WeatherNote}. It is not part of the Hint text: not sent to the model,
- * not validated, and not replaced when the model's wording replaces the template.
+ * not validated, and untouched when the model's wording arrives.
  *
  * <p><b>S17a (ADR-21): a Hint is a card.</b> What appears at once is a plain sentence
  * ({@link AssistantWording#hintText}) with a {@link HintCard}: the recommendation as data — so
  * the tab can offer "Use this" and can tell when the vessel has countered and the advice is out
  * of date — and a details line with the numbers, the R7 check and, when the weather would keep
  * the ship outside, the S16 note (it used to be a separate message). The paragraph sent to the
- * model and the validator that judges the answer are unchanged; the model's validated wording
- * still replaces the sentence in place, and the card stays.
+ * model and the validator that judges the answer are unchanged; the card stays. S19 (playtest
+ * 5, PT25): the model's validated wording no longer replaces the sentence - the tab shows it
+ * under the sentence, as "Why: ...".
  *
  * <p><b>S17a (UI-tree decision U1): one Hint at a time per offer.</b> A second press while the
  * model is still answering the first one for the SAME offer is ignored. Every press used to add
@@ -162,8 +163,8 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
     }
 
     /**
-     * Run the algorithm, show its plain template AT ONCE, then ask the LLM to polish it and — only
-     * if the polish passes the hallucination check — replace that template in place.
+     * Run the algorithm, show its plain template AT ONCE, then ask the LLM to explain it and — only
+     * if the explanation passes the hallucination check — add it under that template (S19, PT25).
      *
      * <p>S12 (live-playtest F-8): the template used to appear only from the failure branch, so the
      * player saw nothing until the LLM timed out, and a valid answer that arrived after the timeout
@@ -226,7 +227,7 @@ public final class RecommendOnDemandBehaviour extends OneShotBehaviour {
                 .thenAccept(response -> {
                     long ms = (System.nanoTime() - askedAt) / 1_000_000L;
                     if (HallucinationValidator.validate(response.text(), rec)) {
-                        log.info("hint {} ({}): validated model text replaces the template after {} ms",
+                        log.info("hint {} ({}): validated model text goes under the template after {} ms",
                                 hintId, event.dialogueId(), ms);
                         eventBus.publish(AssistantChatEvent.hintRevision(event.dialogueId(), hintId, response.text()));
                     } else {

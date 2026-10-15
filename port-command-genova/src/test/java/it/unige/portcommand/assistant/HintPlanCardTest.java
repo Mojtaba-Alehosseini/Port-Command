@@ -66,9 +66,11 @@ class HintPlanCardTest {
                 new ConversationClock(), () -> reading);
     }
 
+    /** S19 (PT38a): ten seconds left on her clock, where the calculation keeps its caution and
+     * accepts a tanker at her band's centre - these tests are about the card, not the choice. */
     private static WalkInDialogueSnapshot tanker(double offer, int round) {
         return new WalkInDialogueSnapshot("v1", "tanker", 14.0, 140.0, 20000, "liquid_bulk",
-                "berth_1", 6, offer, 0.0, round, 60.0, false);
+                "berth_1", 6, offer, 0.0, round, 60.0, false).withTime(170.0, 180.0);
     }
 
     private static WalkInDialogueSnapshot longCheapCargo() {
@@ -108,7 +110,10 @@ class HintPlanCardTest {
         assertEquals(6000.0, card.vesselOffer(), 0.0);
         assertEquals("accept €6000 for 6h", card.suggestion());
         // 2 tugs x 350 + 100 customs + 6 h x 50 = 1100; accepting her own offer is certain.
-        assertEquals("EV €4900 · chance 100% · R7 ✓", card.details());
+        assertEquals("Their offer €6,000 · your cost ≈ €1,100 · profit ≈ €4,900 · they accept: 100% · fits berth ✓ (R7)",
+                card.details());
+        assertTrue(card.detailsTip().startsWith("Your cost ≈ €1,100 = 2 tugs × €350 + customs €100 + 6h"),
+                "S19 (PT42): the cost's parts, in the tooltip: " + card.detailsTip());
         assertTrue(card.describes(snapshot));
     }
 
@@ -124,7 +129,7 @@ class HintPlanCardTest {
         assertEquals("Say no — costs (berth time, tugs, customs) are higher than this offer.", hint.text());
         assertTrue(hint.card().isSayNo());
         assertEquals("say no", hint.card().suggestion());
-        assertEquals("offer €1477 · costs €1650 · R7 ✓", hint.card().details());
+        assertEquals("Their offer €1,477 · your cost ≈ €1,650 · fits berth ✓ (R7)", hint.card().details());
     }
 
     @Test

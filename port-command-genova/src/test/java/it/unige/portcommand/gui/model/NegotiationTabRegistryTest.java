@@ -264,8 +264,9 @@ class NegotiationTabRegistryTest {
         return transcript.get(transcript.size() - 1).text();
     }
 
+    /** S19 (playtest 5, PT25): the revision used to REPLACE the template; it now goes under it. */
     @Test
-    void aHintRevisionReplacesItsTemplateInPlace() {
+    void aHintRevisionGoesUnderItsTemplateInPlace() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
         registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 7L, "template"));
@@ -279,9 +280,9 @@ class NegotiationTabRegistryTest {
 
         List<DialogueTabModel.ChatEntry> transcript = registry.tab("nego-W001").transcript();
         assertEquals(Optional.of("nego-W001"), routed);
-        assertEquals(sizeBefore, transcript.size(), "a revision replaces, it never appends");
-        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.ASSISTANT, "model"),
-                transcript.get(templateIndex));
+        assertEquals(sizeBefore, transcript.size(), "a revision never appends");
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.ASSISTANT, "template", "", "model", ""),
+                transcript.get(templateIndex), "the short line stays; the model's words are its Why");
         assertEquals(DialogueTabModel.Speaker.VESSEL, transcript.get(transcript.size() - 1).speaker(),
                 "the later vessel line stays where it was");
     }
@@ -301,10 +302,15 @@ class NegotiationTabRegistryTest {
         assertTrue(texts.contains("first template") && texts.contains("second template"),
                 "a superseded hint's answer changes nothing: " + texts);
         assertFalse(texts.contains("stale model text"));
+        assertTrue(registry.tab("nego-W001").transcript().stream().noneMatch(e -> e.why().contains("stale")),
+                "nor under any line");
         assertEquals(0, changes[0], "a refused revision must not trigger a re-render");
 
         registry.onAssistantChat(AssistantChatEvent.hintRevision("nego-W001", 2L, "fresh model text"));
-        assertEquals("fresh model text", lastText(registry.tab("nego-W001")));
+        List<DialogueTabModel.ChatEntry> transcript = registry.tab("nego-W001").transcript();
+        DialogueTabModel.ChatEntry latest = transcript.get(transcript.size() - 1);
+        assertEquals("second template", latest.text(), "S19 (PT25): the short line stays");
+        assertEquals("fresh model text", latest.why());
         assertEquals(1, changes[0]);
     }
 
@@ -366,6 +372,27 @@ class NegotiationTabRegistryTest {
 
     private static final String DETAILS = "EV €640 · chance 62% · R7 ✓";
 
+    /** S19 (playtest 5, PT25): the Hint's line changed a few seconds after it appeared - the
+     * model's paragraph replaced it. The line stays; the model's wording is added under it as the
+     * Why, and the details stay too. */
+    @Test
+    void theModelsWordingIsAddedUnderTheHintNotInPlaceOfIt() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onAssistantChat(AssistantChatEvent.hintTemplate("nego-W001", 7L, "Counter at €1580 for 6h.",
+                new it.unige.portcommand.assistant.HintCard("counter", 1579.6, 6, 1, 1500.0, "counter at €1580 for 6h",
+                        DETAILS, "the tip")));
+
+        registry.onAssistantChat(AssistantChatEvent.hintRevision("nego-W001", 7L, "Asking a bit more is safe."));
+
+        List<DialogueTabModel.ChatEntry> transcript = registry.tab("nego-W001").transcript();
+        DialogueTabModel.ChatEntry hint = transcript.get(transcript.size() - 1);
+        assertEquals("Counter at €1580 for 6h.", hint.text(), "the short line never changes");
+        assertEquals("Asking a bit more is safe.", hint.why());
+        assertEquals(DETAILS, hint.tag());
+        assertEquals("the tip", hint.tip());
+    }
+
     /** A card recommending a counter at €1580, made for round {@code round} of a vessel asking
      * {@code vesselOffer} for 6h — the terms {@link #opened} builds a tab with. */
     private static HintCard counterCard(int round, double vesselOffer) {
@@ -395,7 +422,7 @@ class NegotiationTabRegistryTest {
     }
 
     @Test
-    void aRevisionReplacesTheHintsTextOnlyTheDetailsAndTheCardStay() {
+    void aRevisionAddsTheWhyTheLineTheDetailsAndTheCardStay() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
         DialogueTabModel tab = registry.tab("nego-W001");
@@ -408,8 +435,9 @@ class NegotiationTabRegistryTest {
         assertEquals(null, revision.card(), "setup: a revision brings no card of its own");
         assertEquals(Optional.of("nego-W001"), registry.onAssistantChat(revision));
 
-        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.ASSISTANT, "model wording", DETAILS),
-                tab.transcript().get(hintIndex), "the sentence changed; the details under it did not");
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.ASSISTANT, "template", DETAILS,
+                "model wording", ""), tab.transcript().get(hintIndex),
+                "S19 (PT25): the sentence and the details stay; the model's wording is the Why");
         assertEquals(Optional.of(card), tab.hintCard(), "and the row still offers the same card");
     }
 

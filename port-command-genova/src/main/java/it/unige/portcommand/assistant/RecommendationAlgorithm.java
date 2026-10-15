@@ -21,11 +21,20 @@ import it.unige.portcommand.prolog.PrologQueries;
 public final class RecommendationAlgorithm {
 
     /** EV penalty applied to a rejected counter-offer (the vessel walks away). Configurable
-     * in spirit of "defaults.json" (task 15); a plain constant until that file exists. */
+     * in spirit of "defaults.json" (task 15); a plain constant until that file exists. S19
+     * (PT38a): LATE in the talk only - the last round, or {@link #EARLY_MIN_SECONDS_LEFT} or less on
+     * the clock; early a refused counter leaves the ship's offer on the table. */
     public static final double WITHDRAWAL_PENALTY = -500.0;
 
     private static final double COUNTER_10_PCT = 0.10;
     private static final double COUNTER_20_PCT = 0.20;
+
+    /**
+     * S19 (playtest 5, PT38/PT38a): with more than this many seconds left on the tab's clock - and
+     * not on the last round - the negotiation is EARLY: a ship that refuses a counter answers with
+     * a counter of its own, and its offer stays there to take.
+     */
+    static final double EARLY_MIN_SECONDS_LEFT = 30.0;
 
     private final MarketHistoryArtifact marketHistory;
     private final int roundLimit;
@@ -52,7 +61,23 @@ public final class RecommendationAlgorithm {
 
     public Recommendation run(WalkInDialogueSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot");
+        Scoring scoring = score(snapshot);
+        ScoredCandidate chosen = argmax(scoring.candidates());
+        // compatible/2 (R7) is the only rule PrologQueries.isCompatible actually queries; the fee
+        // range / marginal cost are Java-computed figures, never cited as Rn (planning/10 §10.2.7).
+        List<String> trace = List.of("R7");
+        return new Recommendation(chosen.candidate.action(), chosen.candidate.price(), chosen.pAccept, chosen.ev,
+                trace, scoring.stats(), snapshot.vesselType(), snapshot.berthId(), snapshot.durationHours(),
+                scoring.compatible() ? "compatible" : "incompatible", scoring.band().fallback());
+    }
 
+    /** Test seam (S19, PT38a): every candidate {@link #run} chooses among, in its order. */
+    List<RecommendationCandidate> candidates(WalkInDialogueSnapshot snapshot) {
+        return score(Objects.requireNonNull(snapshot, "snapshot")).candidates().stream()
+                .map(ScoredCandidate::candidate).toList();
+    }
+
+    private Scoring score(WalkInDialogueSnapshot snapshot) {
         boolean compatible = PrologQueries.isCompatible(snapshot.berthId(), snapshot.vesselType(),
                 snapshot.draft(), snapshot.length(), snapshot.tonnage());
         MarketStats stats = marketHistory.queryStats(snapshot.vesselType(), snapshot.durationHours());
@@ -71,24 +96,39 @@ public final class RecommendationAlgorithm {
                 snapshot.threatenedWithdrawal());
         double marginalCost = ExpenseRules.marginalCost(snapshot.vesselType(), snapshot.cargoClass(),
                 snapshot.durationHours(), snapshot.tonnage());
+        // S19 (playtest 5, PT38 / PT38a): "the Assistant only ever says accept". A ship that
+        // refuses a counter answers with a counter of its own; it leaves for price only on the LAST
+        // round (RealNegotiationEngine rule 2) or when its clock runs out. So early - not the last
+        // round, more than EARLY_MIN_SECONDS_LEFT on the tab's clock - a refused counter leaves its
+        // offer on the table; late, today's caution stands. The Assistant sees only what the player
+        // sees (P-04): the rounds and the clock on the tab, never the ship's budget.
+        boolean lastRound = snapshot.threatenedWithdrawal() || snapshot.roundsUsed() >= roundLimit;
+        boolean clockShort = hasCounter
+                && snapshot.timeLimitSec() - snapshot.timeUsedSec() <= EARLY_MIN_SECONDS_LEFT;
+        boolean early = !lastRound && !clockShort;
 
         // Incompatible berth: no candidate that "involves" it (accept/counter both price a deal
         // at this berth) may be recommended — planning/10 §10.2 step 2. Only reject_silent stays.
         List<ScoredCandidate> candidates = new ArrayList<>();
         if (compatible) {
             candidates.add(scoreAccept(snapshot, marginalCost));
-            candidates.add(scoreCounter(snapshot, marginalCost, band, urgency, COUNTER_10_PCT));
-            candidates.add(scoreCounter(snapshot, marginalCost, band, urgency, COUNTER_20_PCT));
+            // PT38a (4): an offer below cost late in the talk is answered "no" - the counter it
+            // would take is a long shot, and over budget on the last round the ship leaves. Early
+            // it is countered when that pays (the argmax against "no"'s EV of 0 decides).
+            boolean belowCost = snapshot.lastVesselOffer() < marginalCost;
+            if (early || !belowCost) {
+                for (double pct : new double[] {COUNTER_10_PCT, COUNTER_20_PCT}) {
+                    ScoredCandidate counter = scoreCounter(snapshot, marginalCost, band, urgency, pct, early);
+                    // PT38a (3): the band clamp can pull a counter down to the band top; at or
+                    // below the ship's own offer it asks for less than accepting gets.
+                    if (counter.candidate().price() > snapshot.lastVesselOffer()) {
+                        candidates.add(counter);
+                    }
+                }
+            }
         }
         candidates.add(scoreRejectSilent());
-
-        ScoredCandidate chosen = argmax(candidates);
-        // compatible/2 (R7) is the only rule PrologQueries.isCompatible actually queries; the fee
-        // range / marginal cost are Java-computed figures, never cited as Rn (planning/10 §10.2.7).
-        List<String> trace = List.of("R7");
-        return new Recommendation(chosen.candidate.action(), chosen.candidate.price(), chosen.pAccept, chosen.ev,
-                trace, stats, snapshot.vesselType(), snapshot.berthId(), snapshot.durationHours(),
-                compatible ? "compatible" : "incompatible", band.fallback());
+        return new Scoring(compatible, stats, band, candidates);
     }
 
     private static ScoredCandidate scoreAccept(WalkInDialogueSnapshot snapshot, double marginalCost) {
@@ -102,11 +142,14 @@ public final class RecommendationAlgorithm {
     }
 
     private static ScoredCandidate scoreCounter(WalkInDialogueSnapshot snapshot, double marginalCost,
-                                                ScoringBand band, double urgency, double pct) {
+                                                ScoringBand band, double urgency, double pct, boolean early) {
         double raw = snapshot.lastVesselOffer() * (1.0 + pct);
         double price = clamp(raw, band.clampLo(), band.clampHi());
         double pAccept = clamp01(sigmoid((band.sigmoidMean() - price) / band.sigmoidStddev()) * urgency);
-        double ev = pAccept * (price - marginalCost) + (1.0 - pAccept) * WITHDRAWAL_PENALTY;
+        // PT38a (1, 2): what a refusal leaves. Early the ship counters back, and its offer is still
+        // there to take - that offer's own margin. Late it leaves: WITHDRAWAL_PENALTY.
+        double ifRefused = early ? snapshot.lastVesselOffer() - marginalCost : WITHDRAWAL_PENALTY;
+        double ev = pAccept * (price - marginalCost) + (1.0 - pAccept) * ifRefused;
         return new ScoredCandidate(new RecommendationCandidate(RecommendationCandidate.COUNTER, price, marginalCost),
                 pAccept, ev);
     }
@@ -170,5 +213,9 @@ public final class RecommendationAlgorithm {
     }
 
     private record ScoredCandidate(RecommendationCandidate candidate, double pAccept, double ev) {
+    }
+
+    /** One scoring of a snapshot: what {@link #run} reports besides the chosen candidate. */
+    private record Scoring(boolean compatible, MarketStats stats, ScoringBand band, List<ScoredCandidate> candidates) {
     }
 }

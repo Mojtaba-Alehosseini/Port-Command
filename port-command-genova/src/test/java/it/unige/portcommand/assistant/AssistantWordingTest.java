@@ -74,36 +74,57 @@ class AssistantWordingTest {
 
     // ---- the details line (A4) -----------------------------------------------------------------
 
+    /** S19 (playtest 5, PT33 / PT42): "EV €106 · chance 100% · R7 ✓" was jargon. The details
+     * line says it in plain words, with the player's own cost: 2 tugs x 350 + 100 customs + 6 h x
+     * 50 = 1100, the algorithm's own marginal cost. */
     @Test
-    void theDetailsLineHoldsTheNumbersAndTheBerthCheck() {
-        assertEquals("EV €429 · chance 100% · R7 ✓",
+    void theDetailsLineSaysTheOfferTheCostAndTheProfitInPlainWords() {
+        assertEquals("Their offer €1,529 · your cost ≈ €1,100 · profit ≈ €429 · they accept: 100% · fits berth ✓ (R7)",
                 AssistantWording.details(ACCEPT, cargo(6, 1529.0, 1), Optional.empty()));
-        assertEquals("EV €640 · chance 62% · R7 ✓",
+        assertEquals("Their offer €1,436 · your cost ≈ €1,100 · profit ≈ €640 · they accept: 62% · fits berth ✓ (R7)",
                 AssistantWording.details(COUNTER, cargo(6, 1436.0, 1), Optional.empty()));
     }
 
     @Test
     void aNoThatDoesNotPayShowsTheOfferAgainstTheCosts() {
         // 2 tugs x 350 + 100 customs + 17 h x 50 = 1650: the algorithm's own marginal cost.
-        assertEquals("offer €1477 · costs €1650 · R7 ✓",
+        assertEquals("Their offer €1,477 · your cost ≈ €1,650 · fits berth ✓ (R7)",
                 AssistantWording.details(NO_PAY, cargo(17, 1477.0, 1), Optional.empty()));
     }
 
     @Test
     void aNoBecauseOfTheBerthShowsOnlyTheFailedCheck() {
-        assertEquals("R7 ✗", AssistantWording.details(NO_FIT, cargo(6, 1529.0, 1), Optional.empty()));
+        assertEquals("does not fit berth 1 ✗ (R7)",
+                AssistantWording.details(NO_FIT, cargo(6, 1529.0, 1), Optional.empty()));
     }
 
     @Test
     void theWeatherWaitClosesTheDetailsLineWhenThereIsOne() {
-        assertEquals("EV €429 · chance 100% · R7 ✓ · ship will wait: wind 32 kn [R15]",
+        assertEquals("Their offer €1,529 · your cost ≈ €1,100 · profit ≈ €429 · they accept: 100% · fits berth ✓ (R7)"
+                        + " · ship will wait: wind 32 kn [R15]",
                 AssistantWording.details(ACCEPT, cargo(6, 1529.0, 1),
                         Optional.of("ship will wait: wind 32 kn [R15]")));
-        assertEquals("R7 ✗ · ship will wait: sea state stormy [R19]",
+        assertEquals("does not fit berth 1 ✗ (R7) · ship will wait: sea state stormy [R19]",
                 AssistantWording.details(NO_FIT, cargo(6, 1529.0, 1),
                         Optional.of("ship will wait: sea state stormy [R19]")));
-        assertEquals("EV €429 · chance 100% · R7 ✓",
+        assertEquals("Their offer €1,529 · your cost ≈ €1,100 · profit ≈ €429 · they accept: 100% · fits berth ✓ (R7)",
                 AssistantWording.details(ACCEPT, cargo(6, 1529.0, 1), Optional.of("  ")), "a blank part adds nothing");
+    }
+
+    /** S19 (PT25 / PT42): the details line explains itself - each part, and the cost's parts,
+     * which are ExpenseRules' own figures. */
+    @Test
+    void theDetailsTooltipExplainsEachPartAndTheCostsParts() {
+        assertEquals("Your cost ≈ €1,100 = 2 tugs × €350 + customs €100 + 6h at the berth × €50.\n"
+                        + "Profit ≈ the expected profit (EV) of this move.\n"
+                        + "They accept: the chance they say yes.\n"
+                        + "Fits berth (R7): the Prolog berth rule says the ship fits.",
+                AssistantWording.detailsTip(ACCEPT, cargo(6, 1529.0, 1)));
+        assertEquals("Your cost ≈ €1,650 = 2 tugs × €350 + customs €100 + 17h at the berth × €50.\n"
+                        + "Fits berth (R7): the Prolog berth rule says the ship fits.",
+                AssistantWording.detailsTip(NO_PAY, cargo(17, 1477.0, 1)));
+        assertEquals("Fits berth (R7): the Prolog berth rule - this ship does not fit berth 1.",
+                AssistantWording.detailsTip(NO_FIT, cargo(6, 1529.0, 1)));
     }
 
     // ---- the card (A3) -------------------------------------------------------------------------

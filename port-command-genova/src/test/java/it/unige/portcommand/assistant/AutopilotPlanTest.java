@@ -109,15 +109,19 @@ class AutopilotPlanTest {
         return "nego-" + vesselId;
     }
 
-    /** A tanker at the centre of her fee band: the calculation ACCEPTS (EV 6000 - 1100). */
+    /** A tanker at the centre of her fee band with ten seconds left on her clock: the calculation
+     * keeps its caution there and ACCEPTS (EV 6000 - 1100). S19 (PT38a): with rounds and time left
+     * it counters instead - RecommendationAlgorithmTest - and these tests are about the plan. */
     private static WalkInDialogueSnapshot tanker(String vesselId, double offer, int round) {
         return new WalkInDialogueSnapshot(vesselId, "tanker", 14.0, 140.0, 20000, "liquid_bulk",
-                "berth_1", 6, offer, 0.0, round, 0.0, false);
+                "berth_1", 6, offer, 0.0, round, 0.0, false).withTime(170.0, 180.0);
     }
 
-    /** A tanker offering far below her fee band (4000-8000): the calculation COUNTERS at the band floor, EUR 4000. */
+    /** A tanker offering far below her fee band (4000-8000), early in the talk: the calculation
+     * COUNTERS at the band floor, EUR 4000. */
     private static WalkInDialogueSnapshot lowTanker(String vesselId) {
-        return tanker(vesselId, 1000.0, 1);
+        return new WalkInDialogueSnapshot(vesselId, "tanker", 14.0, 140.0, 20000, "liquid_bulk",
+                "berth_1", 6, 1000.0, 0.0, 1, 0.0, false);
     }
 
     /** The playtest's own case (PT13): 17 hours for EUR 1477 costs more than it pays - the calculation says NO. */

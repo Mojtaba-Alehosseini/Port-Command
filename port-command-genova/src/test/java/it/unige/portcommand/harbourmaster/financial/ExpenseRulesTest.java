@@ -16,6 +16,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExpenseRulesTest {
 
+    /** S19 (playtest 5, PT42): the Hint's tooltip shows the cost's parts - and they are the
+     * marginal cost's own, for every type: the display cannot drift from the figure. */
+    @Test
+    void theCostPartsAreTheMarginalCostsOwn() {
+        for (String type : java.util.List.of("tanker", "container_vessel", "cargo_vessel", "ferry", "cruise_ship")) {
+            for (int hours : new int[] {1, 6, 17}) {
+                assertEquals(ExpenseRules.marginalCost(type, "general_cargo", hours, 30000),
+                        ExpenseRules.marginalCostParts(type, hours).total(), 1e-9, type + " " + hours + "h");
+            }
+        }
+        ExpenseRules.CostParts tanker = ExpenseRules.marginalCostParts("tanker", 6);
+        assertEquals(2, tanker.tugs());
+        assertEquals(350.0, tanker.perTug(), 0.0);
+        assertEquals(100.0, tanker.customs(), 0.0);
+        assertEquals(6, tanker.hours());
+        assertEquals(50.0, tanker.perHour(), 0.0);
+        assertEquals(0, ExpenseRules.marginalCostParts("ferry", 4).tugs(), "a ferry takes no tug");
+    }
+
     private static final long DAY_MILLIS = 86_400_000L;
     private static final double EPS = 1e-9;
 

@@ -12,6 +12,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChatMessageRendererTest {
 
+    /** S19 (playtest 5, PT25): the Hint's short line never changes - the model's explanation is
+     * added under it as "Why: ...". And its details line carries its tooltip (PT33 / PT42). */
+    @Test
+    void aHintsWhyGoesUnderItsLineAndItsDetailsCarryTheirTooltip() {
+        String html = ChatMessageRenderer.renderEntry(new ChatEntry(Speaker.ASSISTANT,
+                "Counter at €7200 for 6h.", "Their offer €6,000 · fits berth ✓ (R7)",
+                "Asking a bit more is safe: she can still counter.", "Your cost ≈ €1,100 = ..."));
+
+        assertTrue(html.contains("Counter at €7200 for 6h.<br><i>Why: Asking a bit more is safe: she can still counter.</i>"),
+                html);
+        assertTrue(html.contains("title=\"Your cost ≈ €1,100 = ...\""), html);
+        assertTrue(html.indexOf("Why:") < html.indexOf("Their offer"), "the details line stays at the bottom: " + html);
+
+        String plain = ChatMessageRenderer.renderEntry(new ChatEntry(Speaker.ASSISTANT, "Counter at €7200 for 6h.",
+                "Their offer €6,000 · fits berth ✓ (R7)"));
+        assertFalse(plain.contains("Why:"), "no explanation yet, no Why line");
+        assertFalse(plain.contains("title="), "no tooltip, no title");
+    }
+
     @Test
     void playerEntryIsRightAligned() {
         String html = ChatMessageRenderer.renderEntry(new ChatEntry(Speaker.PLAYER, "2000 for 5 hours"));

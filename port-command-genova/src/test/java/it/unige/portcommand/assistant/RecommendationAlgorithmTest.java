@@ -68,13 +68,15 @@ class RecommendationAlgorithmTest {
         // 15 elapsed real seconds is half of a 30 s counter but a twelfth of a 180 s one, so the
         // same dialogue is materially more urgent on the shorter counter. Urgency scales p_accept,
         // which scales a counter candidate's EV.
+        // S19 (PT38a): 45 s and 165 s left - both EARLY. With 30 s or less left the late, cautious
+        // formula applies, which would compare two formulas rather than two urgencies.
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
         WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 1, 0.0);
-        double tightEv = algorithm.run(snapshot.withTime(15.0, 30.0)).ev();
+        double tightEv = algorithm.run(snapshot.withTime(15.0, 60.0)).ev();
         double looseEv = algorithm.run(snapshot.withTime(15.0, 180.0)).ev();
 
         assertTrue(tightEv > looseEv,
-                "15 s into a 30 s counter must price this counter above 15 s into a 180 s one ("
+                "15 s into a 60 s counter must price this counter above 15 s into a 180 s one ("
                         + tightEv + " vs " + looseEv + ") - if these are equal the time term is dead again");
     }
 
@@ -96,11 +98,12 @@ class RecommendationAlgorithmTest {
      */
     @Test
     void theConfiguredRoundLimitChangesTheRecommendationsUrgency() {
-        // Round 2 of a 2-round budget is the last round; round 2 of an 8-round budget has six
-        // left. The tighter budget must price the same counter higher, exactly as the tighter
-        // deadline does above — if these are equal, the injected limit is not being read.
+        // Round 2 of a 3-round budget has one left; round 2 of an 8-round budget has six. The
+        // tighter budget must price the same counter higher, exactly as the tighter deadline does
+        // above — if these are equal, the injected limit is not being read. S19 (PT38a): it was
+        // round 2 of 2, which is the LAST round now scored by the late, cautious formula.
         WalkInDialogueSnapshot snapshot = tankerAtBerth1(1000.0, 2, 0.0);
-        double tightEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 2).run(snapshot).ev();
+        double tightEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 3).run(snapshot).ev();
         double looseEv = new RecommendationAlgorithm(new MarketHistoryArtifact(), 8).run(snapshot).ev();
 
         assertTrue(tightEv > looseEv,
@@ -214,6 +217,78 @@ class RecommendationAlgorithmTest {
         assertEquals(RecommendationCandidate.COUNTER, rec.action());
         assertEquals(1100.0, rec.price(), 1e-9);
         assertTrue(rec.ev() > 50.0, "counter's EV must beat accept's EV (50.0); got " + rec.ev());
+    }
+
+    // --- S19 (playtest 5, PT38 / PT38a): "the Assistant only ever says accept" ----------------
+
+    /** Early (rounds and time left) a ship that refuses a counter counters back - it leaves for
+     * price only on the last round - so a refused counter leaves its offer on the table. A
+     * tanker at her band's centre is countered above her offer, not accepted. */
+    @Test
+    void earlyACounterAboveTheOfferBeatsAcceptingIt() {
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
+        Recommendation rec = algorithm.run(tankerAtBerth1(6000.0, 1, 0.0));
+
+        assertEquals(RecommendationCandidate.COUNTER, rec.action(), "round 1 of 4, no clock running");
+        assertTrue(rec.price() > 6000.0, "above her offer: " + rec.price());
+        assertTrue(rec.ev() > 6000.0 - 1100.0, "and worth more than accepting (EV 4900): " + rec.ev());
+    }
+
+    /** On the last round the old caution stands: over budget there, the ship leaves. */
+    @Test
+    void onTheLastRoundTheOldCautionAccepts() {
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
+        Recommendation rec = algorithm.run(tankerAtBerth1(6000.0, ROUNDS, 0.0));
+
+        assertEquals(RecommendationCandidate.ACCEPT, rec.action());
+        assertEquals(6000.0, rec.price(), 1e-9);
+        assertEquals(4900.0, rec.ev(), 1e-6);
+    }
+
+    /** With 30 s or less on the tab's clock the old caution stands too; with more, it is early. */
+    @Test
+    void thirtySecondsLeftIsLateAndThirtyOneIsEarly() {
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
+        WalkInDialogueSnapshot tanker = tankerAtBerth1(6000.0, 1, 0.0);
+
+        assertEquals(RecommendationCandidate.ACCEPT, algorithm.run(tanker.withTime(150.0, 180.0)).action(),
+                "30 s left: late");
+        assertEquals(RecommendationCandidate.COUNTER, algorithm.run(tanker.withTime(149.0, 180.0)).action(),
+                "31 s left: early");
+    }
+
+    /** An offer below cost late in the talk is a "no": the counter it would take is a long shot,
+     * and over budget on the last round the ship leaves. (Early it is countered if that pays.) */
+    @Test
+    void belowCostOnTheLastRoundIsANo() {
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
+
+        assertEquals(RecommendationCandidate.REJECT_SILENT,
+                algorithm.run(tankerAtBerth1(1000.0, ROUNDS, 0.0)).action(), "EUR 1000 against a EUR 1100 cost");
+        assertEquals(RecommendationCandidate.COUNTER, algorithm.run(tankerAtBerth1(1000.0, 1, 0.0)).action(),
+                "early the same offer is countered at the band floor");
+    }
+
+    /** The band clamp can pull +10% / +20% down to the band top - at or below the ship's own
+     * offer, a counter asks for less than accepting gets. Such a counter is never a candidate. */
+    @Test
+    void aCounterAtOrBelowTheShipsOfferIsNeverACandidate() {
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);
+        WalkInDialogueSnapshot aboveTheBand = new WalkInDialogueSnapshot("cargo_1", "cargo_vessel", 8.0, 150.0,
+                30000, "general_cargo", "berth_3", 5, 2300.0, 0.0, 1, 0.0, false); // band top: 2200
+
+        assertTrue(algorithm.candidates(aboveTheBand).stream()
+                        .noneMatch(c -> c.action().equals(RecommendationCandidate.COUNTER)),
+                "both counters clamp to 2200, under her 2300: " + algorithm.candidates(aboveTheBand));
+        for (double offer = 500.0; offer <= 9000.0; offer += 250.0) {
+            for (int round = 1; round <= ROUNDS; round++) {
+                for (RecommendationCandidate c : algorithm.candidates(tankerAtBerth1(offer, round, 0.0))) {
+                    if (c.action().equals(RecommendationCandidate.COUNTER)) {
+                        assertTrue(c.price() > offer, "a counter of " + c.price() + " to an offer of " + offer);
+                    }
+                }
+            }
+        }
     }
 
     @Test
