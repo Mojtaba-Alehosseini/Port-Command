@@ -25,6 +25,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class PolicyParserTest {
 
+    /** S19 (playtest 5, PT28): "accept price > 2000" failed - no "if". The condition always opens
+     * with its field, so "if" (or "when") is optional; without an operator it still is not one. */
+    @Test
+    void ifAndWhenAreOptional() {
+        PolicyParser parser = new PolicyParser();
+        for (String policy : List.of("accept price > 2000", "accept when price > 2000",
+                "auto reject when price < 1000 for tankers", "counter +10% rounds_used < 3",
+                "accept if price>2000")) {
+            assertTrue(parser.parseQuietly(policy).isPresent(), policy);
+        }
+        for (String notOne : List.of("accept price 2000", "accept if", "accept when", "hello price > 2000",
+                "accept iff price > 2000")) {
+            assertFalse(parser.parseQuietly(notOne).isPresent(), notOne);
+        }
+    }
+
     private static WalkInDialogueSnapshot tanker(double lastVesselOffer) {
         return new WalkInDialogueSnapshot("v1", "tanker", 14.0, 140.0, 20000, "liquid_bulk",
                 "berth_1", 6, lastVesselOffer, 0.0, 1, 0.0, false);

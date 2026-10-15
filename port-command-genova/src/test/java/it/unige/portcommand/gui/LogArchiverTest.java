@@ -140,7 +140,26 @@ class LogArchiverTest {
     void beforeAnythingIsArchivedThereIsNoArchive(@TempDir Path tempDir) {
         assertEquals(java.util.Optional.empty(), LogArchiver.newestArchive(tempDir));
         assertEquals(java.util.Optional.empty(), LogArchiver.newestArchive(tempDir.resolve("no-such-dir")));
-        assertEquals(Path.of("logs"), LogArchiver.defaultDir());
+        assertEquals(Path.of("logs"), LogArchiver.dirFrom(null), "the game's own folder");
+        assertEquals(Path.of("logs"), LogArchiver.dirFrom("  "));
+        assertEquals(Path.of("elsewhere", "logs"), LogArchiver.dirFrom("elsewhere/logs"));
+    }
+
+    /** S19 (playtest 5, PT36): test runs wrote "check 18" lines into the player's comm-log
+     * archive - the default archiver writes to logs/ under the working directory, and a test run
+     * starts in the game's own. Every test lane points both writers into the build directory. */
+    @Test
+    void aTestRunNeverWritesIntoThePlayersLogs() {
+        Path build = Path.of("build").toAbsolutePath().normalize();
+        Path archive = LogArchiver.defaultDir().toAbsolutePath().normalize();
+        assertTrue(archive.startsWith(build), "the comm-log archive of a test run: " + archive);
+
+        ch.qos.logback.classic.LoggerContext logging =
+                (ch.qos.logback.classic.LoggerContext) org.slf4j.LoggerFactory.getILoggerFactory();
+        ch.qos.logback.core.FileAppender<?> gameLog = (ch.qos.logback.core.FileAppender<?>)
+                logging.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME).getAppender("FILE");
+        Path logFile = Path.of(gameLog.getFile()).toAbsolutePath().normalize();
+        assertTrue(logFile.startsWith(build), "the game log of a test run: " + logFile);
     }
 
     @Test

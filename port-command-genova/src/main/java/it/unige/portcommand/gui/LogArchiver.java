@@ -40,9 +40,10 @@ public final class LogArchiver {
 
     private final Path targetDir;
 
-    /** Production: archives under {@code logs/} (git-ignored, alongside the logback output). */
+    /** Production: archives under {@code logs/} (git-ignored, alongside the logback output).
+     * S19 (PT36): under the folder {@link #LOGS_DIR_PROPERTY} names, when it names one. */
     public LogArchiver() {
-        this(DEFAULT_DIR);
+        this(defaultDir());
     }
 
     /**
@@ -54,9 +55,24 @@ public final class LogArchiver {
      * test ({@code CommLogModelTest}) must be able to construct a temp-dir archiver to inject. A
      * package-private overload would be unreachable from {@code gui.model}.
      */
-    /** S18b (PT11): where the production log archives go, relative to the working directory. */
+    /**
+     * S19 (playtest 5, PT36): the system property naming the folder the game's logs go to - the
+     * comm-log archive here and logback's {@code port-command.log}. The game sets nothing and gets
+     * {@code logs/}; every Gradle test task points it into the build directory, because a test run
+     * starts in the same working directory as the game and wrote its "check 18" lines into the
+     * player's archive.
+     */
+    public static final String LOGS_DIR_PROPERTY = "portcommand.logs.dir";
+
+    /** S18b (PT11): where the production log archives go, relative to the working directory.
+     * S19 (PT36): the folder {@link #LOGS_DIR_PROPERTY} names, when it names one. */
     public static Path defaultDir() {
-        return DEFAULT_DIR;
+        return dirFrom(System.getProperty(LOGS_DIR_PROPERTY));
+    }
+
+    /** S19 (PT36): {@code logs/}, or the configured folder. Pure, for {@code LogArchiverTest}. */
+    static Path dirFrom(String configured) {
+        return configured == null || configured.isBlank() ? DEFAULT_DIR : Path.of(configured.trim());
     }
 
     /**

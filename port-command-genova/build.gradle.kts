@@ -110,6 +110,10 @@ tasks.withType<Test>().configureEach {
     // not affect the EventBusTest / GUI panel lifecycle tests. Does NOT apply to the
     // `run` task, so `gradlew run --args="--gui"` still shows a real window normally.
     jvmArgs("-Djava.awt.headless=true")
+    // S19 (playtest 5, PT36): a test starts in the same working directory as the game, and wrote
+    // into the player's logs/ - comm-log archive lines ("check 18") and the game log. Both writers
+    // read this property (LogArchiver.LOGS_DIR_PROPERTY, logback.xml); `run` does not set it.
+    systemProperty("portcommand.logs.dir", layout.buildDirectory.dir("test-logs").get().asFile.absolutePath)
 }
 
 // Fast lane: unit tests only.

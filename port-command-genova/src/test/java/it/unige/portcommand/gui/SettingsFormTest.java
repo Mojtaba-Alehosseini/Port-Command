@@ -344,6 +344,20 @@ class SettingsFormTest {
         assertEquals("google/gemma-3-4b-it", e.llmModel());
     }
 
+    /** S19 (playtest 5, PT28): no help next to the policy box until a policy failed. The examples
+     * line is always there, and every example on it parses. */
+    @Test
+    void thePolicyBoxAlwaysShowsExamplesThatParse() {
+        SettingsForm form = new SettingsForm(new EventBus(), "NORMAL", 3_600L, false,
+                "microsoft/Phi-4-mini-instruct", () -> { });
+        assertEquals(SettingsForm.POLICY_EXAMPLES_TEXT, form.policyExamplesForTest());
+        assertEquals(3, SettingsForm.POLICY_EXAMPLES.size());
+        for (String example : SettingsForm.POLICY_EXAMPLES) {
+            assertTrue(form.policyExamplesForTest().contains(example), example);
+            assertTrue(new PolicyParser().parseQuietly(example).isPresent(), "parses: " + example);
+        }
+    }
+
     /** S18b (adversarial review): the clear's question defaults to keeping the policies - Enter
      * or Space, the keys the Clear button itself no longer takes, press "Keep", not "Forget". */
     @Test

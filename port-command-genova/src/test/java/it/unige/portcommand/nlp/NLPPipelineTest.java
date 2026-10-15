@@ -486,7 +486,7 @@ class NLPPipelineTest {
         NLPPipeline pipeline = pipeline(rasa);
         Map<String, Double> turns = new LinkedHashMap<>();
         turns.put("accept_deal", 0.9997);    // the measured "so?" — above the 0.95 accept floor
-        turns.put("reject_deal", 0.86);      // just above the 0.85 wire floor
+        turns.put("reject_deal", 0.97);      // S19 (PT27): a refusal binds from 0.95, like an acceptance
         turns.put("query_status", 0.9);
         turns.put("set_constraint", 0.93);
         turns.put("request_help", 0.88);
@@ -552,6 +552,46 @@ class NLPPipelineTest {
         assertInstanceOf(PipelineResult.NeedsClarification.class,
                 await(pipeline.processChatInput("2000 for 5 hours", DialogueCtx.NONE)),
                 "Rasa never routes an offer, however sure it is");
+    }
+
+    // --- S19 (playtest 5, PT27): typing "hint" sent a vessel away ---
+
+    /** Rasa read "hint" as reject_deal at 0.86 - above the 0.85 wire floor - and San Giorgio
+     * left with a EUR 4,702 offer on the table. A line asking for the Assistant's suggestion is
+     * read before the grammar and Rasa, and is the Hint. */
+    @Test
+    void aTypedHintIsTheHintAndNeverReachesRasa() throws IOException {
+        AtomicInteger rasaCalls = new AtomicInteger();
+        RasaBridge rasa = rasaAgainst(ex -> {
+            rasaCalls.incrementAndGet();
+            respond(ex, 200, rasaReply("reject_deal", 0.86));
+        });
+        NLPPipeline pipeline = pipeline(rasa);
+
+        for (String line : List.of("hint", "Hint?", "suggest", "advice please", "What should I do?")) {
+            PipelineResult.Routed routed = assertInstanceOf(PipelineResult.Routed.class,
+                    await(pipeline.processChatInput(line, TABLE)), line);
+            assertEquals(ACLMessage.REQUEST, routed.msg().getPerformative(), line);
+            assertTrue(routed.msg().getContent().contains(NLPPipeline.HINT_REQUEST_KEY), line);
+        }
+        assertEquals(0, rasaCalls.get(), "none of them was put to Rasa");
+    }
+
+    /** A Rasa refusal binds - the vessel leaves - so below 0.95 it is asked about, as an
+     * acceptance is; at the floor it is sent. */
+    @Test
+    void aRasaRefusalBelowTheBindingFloorIsAskedAbout() throws IOException {
+        AtomicReference<String> reply = new AtomicReference<>(rasaReply("reject_deal", 0.86));
+        RasaBridge rasa = rasaAgainst(ex -> respond(ex, 200, reply.get()));
+        NLPPipeline pipeline = pipeline(rasa);
+
+        PipelineResult.NeedsClarification asked = assertInstanceOf(PipelineResult.NeedsClarification.class,
+                await(pipeline.processChatInput("tip?", TABLE)));
+        assertEquals(InputSafety.REJECT_NEEDS_THE_BUTTON, asked.message());
+
+        reply.set(rasaReply("reject_deal", 0.95));
+        assertEquals(ACLMessage.REJECT_PROPOSAL, assertInstanceOf(PipelineResult.Routed.class,
+                await(pipeline.processChatInput("tip?", TABLE))).msg().getPerformative(), "at the floor it binds");
     }
 
     // --- S18a (ADR-23): input safety - what the chat refuses to send, and what it says instead ---

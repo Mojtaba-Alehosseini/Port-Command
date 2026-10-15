@@ -288,6 +288,15 @@ public final class TugAgent extends PortCommandAgent implements it.unige.portcom
         this.fuelState = Math.max(0.0, fuelState - km * FUEL_DECAY_PER_KM);
     }
 
+    /**
+     * S19 (playtest 5, PT37): whether the tank is low enough that the tug refuels when it is idle at
+     * its base - {@code RefuelIfLowBehaviour}'s trigger, and why {@code ReturnToBaseBehaviour} does
+     * not announce a tug that is about to refuel. Agent-thread only, like the other fuel methods.
+     */
+    public boolean needsRefuel() {
+        return fuelState < LOW_FUEL_THRESHOLD;
+    }
+
     /** Restores a full tank (refuel-cycle completion). */
     public void refuelFull() {
         this.fuelState = 1.0;

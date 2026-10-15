@@ -103,6 +103,12 @@ public final class NLPPipeline {
             if (policyParser.parseQuietly(text).isPresent()) {
                 return asked(InputSafety.POLICY_IN_CHAT);
             }
+            // S19 (playtest 5, PT27): a line asking for the Assistant's suggestion runs the Hint.
+            // Read before the grammar and Rasa - Rasa took "hint" for a refusal (0.86) and the
+            // vessel was sent away with its offer. UNKNOWN: neither stage read it.
+            if (InputSafety.isHintRequest(text)) {
+                return routed(ACLMessage.REQUEST, hintContent(), ctx, ParseProvenance.UNKNOWN);
+            }
             // S6 (audit P2-3): the pre-pass is a PRE-ANNOTATION LAYER, no longer computed and
             // discarded. Its hits ride to the Rasa path, where they FILL entities the classifier
             // missed (entitiesContent) — never overriding a parsed value. The DCG path takes
@@ -424,6 +430,15 @@ public final class NLPPipeline {
      */
     private static final double BINDING_ACCEPT_MIN_CONFIDENCE = 0.95;
 
+    /**
+     * S19 (playtest 5, PT27): a Rasa-classified {@code reject_deal} binds too - the vessel leaves
+     * and does not come back - so it demands what an acceptance does. At the 0.85 wire floor a
+     * typed "hint" ({@code reject_deal} 0.86) sent San Giorgio away with a EUR 4,702 offer on the
+     * table. Below this the line is asked about; the Reject button, one click, is the way to a
+     * refusal, and the DCG's refusals ({@code no}, {@code no deal}) never reach Rasa.
+     */
+    private static final double BINDING_REJECT_MIN_CONFIDENCE = 0.95;
+
     /** Branch A (&ge;0.60) hands intents here, but since S6 the WIRE demands more: everything
      * below {@link #ROUTE_MIN_CONFIDENCE} clarifies before the switch. A structural intent
      * ({@code propose_offer}/{@code counter_offer}) that the DCG already failed to parse still
@@ -472,8 +487,9 @@ public final class NLPPipeline {
             case "accept_deal" -> r.confidence() >= BINDING_ACCEPT_MIN_CONFIDENCE
                     ? routed(ACLMessage.ACCEPT_PROPOSAL, entitiesContent(text, r, extracted), ctx, source)
                     : clarification();
-            case "reject_deal" ->
-                    routed(ACLMessage.REJECT_PROPOSAL, entitiesContent(text, r, extracted), ctx, source);
+            case "reject_deal" -> r.confidence() >= BINDING_REJECT_MIN_CONFIDENCE
+                    ? routed(ACLMessage.REJECT_PROPOSAL, entitiesContent(text, r, extracted), ctx, source)
+                    : asked(InputSafety.REJECT_NEEDS_THE_BUTTON);
             // An 11th performative beyond the committed 10 (report note, per session brief).
             case "query_status" -> routed(ACLMessage.QUERY_REF, entitiesContent(text, r, extracted), ctx, source);
             case "set_constraint" -> routed(ACLMessage.REQUEST, entitiesContent(text, r, extracted), ctx, source);
@@ -634,6 +650,15 @@ public final class NLPPipeline {
     /** Content key marking a REQUEST as the player asking for help rather than issuing a
      * fleet-wide instruction (audit D-06). Read by {@code DialogueTabView.dispatchRouted}. */
     public static final String HELP_REQUEST_KEY = "help_request";
+
+    /** S19 (PT27): the marker of a typed request for the Assistant's suggestion. */
+    private static String hintContent() {
+        return TerminalJson.write(Map.of(HINT_REQUEST_KEY, true));
+    }
+
+    /** S19 (PT27): content key marking a REQUEST as the player asking for the Hint - the tab then
+     * does what the Hint button does ({@code DialogueTabView.handleUnroutableRequest}). */
+    public static final String HINT_REQUEST_KEY = "hint_request";
 
     private static PipelineResult clarification() {
         return new PipelineResult.NeedsClarification(ClarificationButtons.defaultOptions());

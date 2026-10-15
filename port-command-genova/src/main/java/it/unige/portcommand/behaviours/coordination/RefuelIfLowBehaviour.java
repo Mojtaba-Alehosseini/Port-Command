@@ -35,7 +35,7 @@ public final class RefuelIfLowBehaviour extends TickerBehaviour {
 
     @Override
     protected void onTick() {
-        if (tug.status() != TugStatus.IDLE || !tug.atBase() || tug.fuelState() >= TugAgent.LOW_FUEL_THRESHOLD) {
+        if (tug.status() != TugStatus.IDLE || !tug.atBase() || !tug.needsRefuel()) {
             return;
         }
         log.info("{} low fuel ({}) at base -> refuelling for {} sim-s",

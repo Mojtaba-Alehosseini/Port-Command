@@ -554,6 +554,29 @@ class ChatPanelTest {
         assertTrue(playerEntries(panel, "nego-A").isEmpty(), "and it leaves no player bubble");
     }
 
+    /** S19 (playtest 5, PT27): typing "hint" sent San Giorgio away - Rasa read it as a refusal.
+     * The pipeline reads the line as a request for the Hint, and the tab does what the Hint button
+     * does; nothing goes to the vessel. */
+    @Test
+    @Timeout(5)
+    void aTypedHintRunsTheHint() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+
+        processor.returning(new PipelineResult.Routed(
+                acl(ACLMessage.REQUEST, Map.of(it.unige.portcommand.nlp.NLPPipeline.HINT_REQUEST_KEY, true))));
+        panel.viewForTest("nego-A").sendText("hint");
+        SwingUtilities.invokeAndWait(() -> { });
+
+        List<HintButtonEvent> hints = published(bus, HintButtonEvent.class);
+        assertEquals(1, hints.size(), "the Hint ran");
+        assertEquals("nego-A", hints.get(0).dialogueId());
+        assertTrue(published(bus, PlayerCommandEvent.class).isEmpty(), "nothing went to the vessel");
+        assertEquals(DialogueTabView.HINT_ECHO, lastEntry(panel, "nego-A").text());
+    }
+
     // ==================== Audit fixes (2026-07-27) ====================
 
     /**

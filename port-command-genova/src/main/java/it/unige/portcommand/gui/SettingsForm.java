@@ -88,6 +88,12 @@ final class SettingsForm extends JPanel {
     private final JTextField policyField = new JTextField(28);
     private final JButton policyButton = new JButton("Set policy");
     private final JLabel policyFeedback = new JLabel(" ");
+    /** S19 (playtest 5, PT28): what a policy looks like, on the form all the time - not only after
+     * a failed attempt. Every example parses ({@code SettingsFormTest}). */
+    static final List<String> POLICY_EXAMPLES = List.of("accept if price > 2000",
+            "reject if price < 1000 for tankers", "counter +10% if rounds_used < 3");
+    static final String POLICY_EXAMPLES_TEXT = "Examples: " + String.join("  \u00b7  ", POLICY_EXAMPLES);
+    private final JLabel policyExamples = new JLabel(POLICY_EXAMPLES_TEXT);
     /** S18a (decision N11): the policies in force, as the Assistant last reported them. */
     private final transient PolicyListModel policies;
     private final JLabel policyList = new JLabel(PolicyListModel.NONE);
@@ -210,6 +216,9 @@ final class SettingsForm extends JPanel {
         }
         addRow(row++, "Autopilot:", autopilotCheck);
         addRow(row++, "Autopilot policy:", policyRow);
+        policyExamples.setFont(policyExamples.getFont().deriveFont(java.awt.Font.PLAIN));
+        policyExamples.setForeground(new java.awt.Color(90, 90, 90));
+        addRow(row++, "", policyExamples); // S19 (PT28): always there, under the box
         addRow(row++, "", policyFeedback);
         // S18a (decision N11): what is in force, and the one way to take it back.
         policyList.setFont(policyList.getFont().deriveFont(java.awt.Font.PLAIN));
@@ -488,6 +497,11 @@ final class SettingsForm extends JPanel {
     }
 
     /** The inline feedback line's current HTML (audit C-01/D-02: it must never be silent). */
+    /** Test-only (S19, PT28): the examples line under the policy box. */
+    String policyExamplesForTest() {
+        return policyExamples.getText();
+    }
+
     String policyFeedbackForTest() {
         return policyFeedback.getText();
     }

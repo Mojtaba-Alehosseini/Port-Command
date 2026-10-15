@@ -22,6 +22,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class InputSafetyTest {
 
+    /** S19 (playtest 5, PT27): typing "hint" sent a vessel away - Rasa read it as a refusal. The
+     * request for the Hint is read whole, before Rasa, and never when the line says more. */
+    @Test
+    void aRequestForTheHintIsReadWhole() {
+        for (String line : List.of("hint", "Hint!", "a hint please", "give me a hint", "suggest",
+                "any suggestions?", "what do you suggest", "advice", "Any advice?", "what should I do",
+                "What should I do now?")) {
+            assertTrue(InputSafety.isHintRequest(line), line);
+        }
+        for (String line : List.of("help", "no", "I suggest 2000 for 6h", "hint 2000", "my advice is no deal",
+                "what should I do with berth 2", "status", "")) {
+            assertFalse(InputSafety.isHintRequest(line), line);
+        }
+        assertFalse(InputSafety.isHintRequest(null));
+    }
+
     private static Frame frame(String move, Object money) {
         Map<String, Object> elements = new LinkedHashMap<>();
         elements.put(Frame.MOVE, move);

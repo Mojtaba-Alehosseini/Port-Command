@@ -896,6 +896,9 @@ final class DialogueTabView extends JPanel {
      * tab understands (it used to press the Hint button), a policy is pointed at Settings, and a
      * limit or command says it was understood, is not carried out, and what to type instead.
      */
+    /** S19 (playtest 5, PT27): what a typed request for the Hint is echoed as. */
+    static final String HINT_ECHO = "→ Asking the Assistant for a hint.";
+
     private void handleUnroutableRequest(PipelineResult.Routed routed) {
         if (routed.msg().getPerformative() == ACLMessage.INFORM) {
             appendSystem("Noted.");
@@ -905,6 +908,13 @@ final class DialogueTabView extends JPanel {
         Map<String, Object> content =
                 (Map<String, Object>) TerminalJson.readOrNull(routed.msg().getContent(), Map.class);
         DialogueTabModel tab = registry.tab(dialogueId);
+        if (content != null && Boolean.TRUE.equals(content.get(NLPPipeline.HINT_REQUEST_KEY))) {
+            // S19 (playtest 5, PT27): a typed request for the Assistant's suggestion does what the
+            // Hint button does. Rasa used to read "hint" as a refusal, and the vessel left.
+            appendSystem(HINT_ECHO);
+            onHint();
+            return;
+        }
         if (content != null && Boolean.TRUE.equals(content.get(NLPPipeline.HELP_REQUEST_KEY))) {
             // S18a (ADR-23, decision N8): "help" asks what can be typed here, and the tab answers
             // that itself, in its own numbers. Until S18a it pressed the Hint button for the

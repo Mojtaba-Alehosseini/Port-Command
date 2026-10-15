@@ -1,6 +1,8 @@
 package it.unige.portcommand.agents;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -602,6 +604,65 @@ class TugAgentIT {
                 decline.getProtocol());
         assertNull(awaitTug("tug_1", d -> d.status() == TugStatus.EN_ROUTE_TO_VESSEL, 3),
                 "the declining tug must NOT take the job");
+    }
+
+    /**
+     * S19 (playtest 5, PT37): "tug available" twice within a game minute or two, with nothing in
+     * between (Moji's archive: tug_3 at 13:03 and 13:04, and eight more such pairs). A tug that
+     * came home with a low tank said it was free on arrival, refuelled for a game minute, and said
+     * so again - and the first notice re-tendered a waiting ship to a tug about to refuel. One
+     * notice per job: a tug that refuels says it once, when it is full.
+     */
+    @Test
+    void aTugThatComesHomeLowOnFuelSaysItIsFreeOnceItIsFull() throws Exception {
+        BlockingQueue<ACLMessage> hmInbox = new LinkedBlockingQueue<>();
+        boot.getSpawner().spawn("fake_hm", SubscriberProbe.class, new Object[] {"harbour-master", hmInbox});
+        spawnTug("tug_1", BASES[0], 0.21); // just above LOW_FUEL_THRESHOLD (0.20): it bids and serves
+
+        send(cfp("cnp-pt37", "tug_1"));
+        ACLMessage bid = pollReply(5000);
+        assertEnvelope(bid, ACLMessage.PROPOSE);
+        sendAccept(bid, "V1", BERTH);
+        assertNotNull(awaitTug("tug_1", d -> d.status() == TugStatus.EN_ROUTE_TO_VESSEL, 40), "it takes the job");
+
+        // A kilometre out (0.03 of the tank per km) it is called home; the leg back burns as much.
+        PortStateUpdate.TugDelta out = null;
+        long outDeadline = System.currentTimeMillis() + 10_000;
+        while (out == null && System.currentTimeMillis() < outDeadline) {
+            boot.getSimClock().advance(20_000);
+            PortStateUpdate.TugDelta d;
+            while ((d = tugUpdates.poll(50, TimeUnit.MILLISECONDS)) != null) {
+                if (d.tugId().equals("tug_1") && distancePx(d.position(), BASES[0]) > TugMath.PIXELS_PER_KM) {
+                    out = d;
+                }
+            }
+        }
+        assertNotNull(out, "staging: the tug is a kilometre out");
+        sendCancel("cnp-pt37", "tug_1");
+
+        TugStatus status = null;
+        long homeDeadline = System.currentTimeMillis() + 20_000;
+        while (status != TugStatus.REFUELING && System.currentTimeMillis() < homeDeadline) {
+            boot.getSimClock().advance(20_000);
+            PortStateUpdate.TugDelta d;
+            while ((d = tugUpdates.poll(50, TimeUnit.MILLISECONDS)) != null) {
+                if (d.tugId().equals("tug_1")) {
+                    status = d.status();
+                }
+            }
+        }
+        assertEquals(TugStatus.REFUELING, status, "home with a low tank, it refuels");
+        assertNotNull(awaitTug("tug_1", d -> d.status() == TugStatus.IDLE, 60), "and is full again");
+
+        List<ACLMessage> free = new ArrayList<>();
+        long deadline = System.currentTimeMillis() + 1_500;
+        while (System.currentTimeMillis() < deadline) {
+            ACLMessage m = hmInbox.poll(50, TimeUnit.MILLISECONDS);
+            if (m != null && "tug_available".equals(node(m).path("event").asText())) {
+                free.add(m);
+            }
+        }
+        assertEquals(1, free.size(), "one 'tug available' for the job - when the tank is full, not before");
     }
 
     // --- helpers -------------------------------------------------------------

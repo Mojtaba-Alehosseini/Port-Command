@@ -57,7 +57,13 @@ public final class ReturnToBaseBehaviour extends SimTickerBehaviour {
             tug.setStatus(TugStatus.IDLE);
             tug.clearJob();
             tug.setActiveMovement(null);
-            tug.announceAvailable(); // S16: a ship may be waiting for exactly this tug
+            // S19 (playtest 5, PT37): one "tug available" per job. A tug home with a low tank
+            // refuels first (RefuelIfLowBehaviour, a game minute) and says so when it is full;
+            // announcing here as well re-tendered a waiting ship to a tug about to refuel, and the
+            // comm log showed "tug available" twice, a minute or two apart.
+            if (!tug.needsRefuel()) {
+                tug.announceAvailable(); // S16: a ship may be waiting for exactly this tug
+            }
             tug.removeBehaviour(this); // LAST: nulls myAgent
         }
     }

@@ -24,7 +24,7 @@ import it.unige.portcommand.util.EventBus;
  *
  * <p>Grammar (informal):
  * <pre>
- * POLICY      := "auto" ACTION "if" CONDITION ["for" VESSEL_TYPE]
+ * POLICY      := ["auto"] ACTION ["if" | "when"] CONDITION ["for" VESSEL_TYPE]
  * ACTION      := "accept" | "reject" | "counter" "+"? INT "%"
  * CONDITION   := FIELD OP NUMBER ("and" CONDITION)?
  * FIELD       := "price" | "duration" | "rounds_used"
@@ -46,7 +46,7 @@ public final class PolicyParser {
      * a re-gate of the F1, which a demo freeze does not get.
      */
     public static final String GRAMMAR_HINT =
-            "[auto] (accept | reject | counter +N%) if (price | duration | rounds_used) "
+            "[auto] (accept | reject | counter +N%) [if | when] (price | duration | rounds_used) "
                     + "(> | < | >= | <= | =) NUMBER [and ...] "
                     + "[for (tankers | container_vessels | cargo_vessels | ferries | cruise_ships)]";
 
@@ -59,9 +59,12 @@ public final class PolicyParser {
     public static final String GRAMMAR_EXAMPLE = "auto accept if price > 6000 for tankers";
 
     /** S18b (playtest 4, PT20): the leading "auto" is optional - "accept if price>1500" is what a
-     * player types. The condition clause already allowed an operator without spaces. */
+     * player types. The condition clause already allowed an operator without spaces. S19
+     * (playtest 5, PT28): "if" is optional too, and "when" reads the same - "accept price > 2000"
+     * failed. The condition always opens with its field, which is where the action ends. */
     private static final Pattern TOP_LEVEL = Pattern.compile(
-            "^(?:auto\\s+)?(.+?)\\s+if\\s+(.+?)(?:\\s+for\\s+(\\S+))?$", Pattern.CASE_INSENSITIVE);
+            "^(?:auto\\s+)?(.+?)\\s+(?:(?:if|when)\\s+)?((?:price|duration|rounds_used)\\b.*?)"
+                    + "(?:\\s+for\\s+(\\S+))?$", Pattern.CASE_INSENSITIVE);
     private static final Pattern COUNTER_ACTION = Pattern.compile(
             "^counter\\s*\\+?\\s*(\\d+)\\s*%$", Pattern.CASE_INSENSITIVE);
     private static final Pattern CONDITION_CLAUSE = Pattern.compile(

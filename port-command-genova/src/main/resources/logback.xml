@@ -12,9 +12,11 @@
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/port-command.log</file>
+        <!-- S19 (playtest 5, PT36): every Gradle test task sets portcommand.logs.dir to a folder in
+             build/, so a test run never writes into the player's logs/ (the game sets nothing). -->
+        <file>${portcommand.logs.dir:-logs}/port-command.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/port-command.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <fileNamePattern>${portcommand.logs.dir:-logs}/port-command.%d{yyyy-MM-dd}.log</fileNamePattern>
             <maxHistory>7</maxHistory>
         </rollingPolicy>
         <encoder>

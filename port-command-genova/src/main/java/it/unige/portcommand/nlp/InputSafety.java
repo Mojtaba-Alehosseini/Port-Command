@@ -57,6 +57,13 @@ public final class InputSafety {
     public static final String CANCEL_IN_A_NEGOTIATION =
             "That would end the negotiation — press Reject to confirm.";
 
+    /**
+     * S19 (playtest 5, PT27): a Rasa refusal below the binding floor. Rasa read a typed "hint" as
+     * {@code reject_deal} at 0.86 and the vessel left with its offer; a departure cannot be undone,
+     * so the Reject button - one click - is the way to it.
+     */
+    public static final String REJECT_NEEDS_THE_BUTTON = "Did you mean to turn them away? Press Reject.";
+
     /** Decision N10: Rasa saw an offer, the grammar could not read its terms. */
     public static final String UNREADABLE_OFFER =
             "I see an offer but couldn't read the terms — write it like '" + EXAMPLE_SLOT + "'.";
@@ -250,6 +257,36 @@ public final class InputSafety {
         }
         return run.isEmpty() ? Optional.empty() : Optional.of("\"" + String.join(" ", run) + "\"");
     }
+
+    /**
+     * S19 (playtest 5, PT27): whether the line asks for the Assistant's suggestion - "hint",
+     * "suggest", "advice", "what should I do" and their plain variants - read WHOLE, so a line that
+     * also says something else ("I suggest 2000 for 6h", "hint 2000") is never one. Read before the
+     * grammar and Rasa: Rasa took "hint" for a refusal (0.86) and the vessel was sent away.
+     */
+    static boolean isHintRequest(String text) {
+        if (text == null || DIGITS.matcher(text).find()) {
+            return false;
+        }
+        String words = NOT_A_LETTER.matcher(text.toLowerCase(Locale.ROOT)).replaceAll(" ").trim();
+        if (words.startsWith("please ")) {
+            words = words.substring("please ".length());
+        }
+        if (words.endsWith(" please")) {
+            words = words.substring(0, words.length() - " please".length());
+        }
+        return HINT_REQUESTS.contains(words);
+    }
+
+    /** S19 (PT27): the four decided requests and their plain variants, as {@link #isHintRequest}
+     * normalises a line (lower case, letters only, one space between words, no "please"). */
+    private static final Set<String> HINT_REQUESTS = Set.of(
+            "hint", "hints", "a hint", "give me a hint", "any hint", "any hints",
+            "suggest", "suggestion", "suggestions", "any suggestion", "any suggestions", "suggest something",
+            "what do you suggest", "what would you suggest",
+            "advice", "advise", "advise me", "any advice", "some advice", "give me advice", "your advice",
+            "what should i do", "what should i do now", "what should i do here", "what do i do",
+            "what do i do now");
 
     /**
      * Decision N8: the chat's help line tells the player to type "status". The one word is read
