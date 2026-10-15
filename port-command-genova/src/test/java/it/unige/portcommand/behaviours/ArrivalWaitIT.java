@@ -110,8 +110,14 @@ class ArrivalWaitIT {
         // seconds is three of the waker's one-second chunks.
         assertNull(awaitMessage(arrivalOf(spec), 3_000L), "two game hours out, the vessel is still approaching");
 
+        // Game time first, the speed-up second. The waker re-derives its wait only when the pace
+        // changes (SimDeadlineWait's epoch), and a hand jump is not a pace change: a waker boundary
+        // landing between a speed-up and a LATER jump re-derives from the game time before the jump
+        // and then sleeps the jump out (74 s). The second S19 gate failed on exactly that, and the old
+        // order, run alone, failed 2 runs in 10: the 3-s wait above puts these lines on the waker's
+        // third boundary. A real game never jumps.
+        clock.advance(300_000L); // two game hours at x1, by hand
         clock.setSpeedMultiplier(4);
-        clock.advance(75_000L); // two game hours at x4
 
         assertTrue(clock.nowSimMillis() >= etaSimMillis, "fixture: game time is at the ETA");
         assertNotNull(awaitMessage(arrivalOf(spec), MESSAGE_TIMEOUT_MS),
