@@ -10,12 +10,15 @@ import it.unige.portcommand.ontology.Deal;
  * vessel's opening offer, each of its replies, and the one line that ends it. Plain sentences
  * with the price and the hours in them:
  * <ul>
- *   <li>{@code They offer €1,460 for 5h at berth 2.}</li>
- *   <li>{@code They counter: €1,460 for 5h.}</li>
- *   <li>{@code They accept €1,600 but need at least 6h.}</li>
- *   <li>{@code ✔ They accepted €1,700 for 6h — deal done.}</li>
- *   <li>{@code ✖ They left (price too high).}</li>
+ *   <li>{@code Faro Vecchio offers €1,460 for 5h at berth 2.}</li>
+ *   <li>{@code Faro Vecchio counters: €1,460 for 5h.}</li>
+ *   <li>{@code Faro Vecchio accepts €1,600 but needs at least 6h.}</li>
+ *   <li>{@code ✔ Faro Vecchio accepted €1,700 for 6h — deal done.}</li>
+ *   <li>{@code ✖ Faro Vecchio left (price too high).}</li>
  * </ul>
+ * S19 (playtest 5, PT32): every line names the ship - "They counter…" left the player asking who
+ * "they" were, and whether there was a middleman. Without a name (none is ever missing in play) the
+ * lines say "They", as before.
  * They replace "Opens at…", "Counters at…" and the figure-less "Deal closed." the playtest found
  * hard to read. No Swing/AWT import.
  *
@@ -34,28 +37,34 @@ public final class OutcomeLines {
     private OutcomeLines() {
     }
 
-    /** The vessel's first offer: {@code They offer €1,460 for 5h at berth 2.} */
+    /** The vessel's first offer: {@code Faro Vecchio offers €1,460 for 5h at berth 2.} */
     public static String opening(WalkInDialogueSnapshot s) {
         String berth = s.berthId() == null || s.berthId().isBlank() ? ""
                 : " at " + PortTableModel.berthLabel(s.berthId()).toLowerCase(Locale.ROOT);
-        return "They offer " + Euros.of(s.lastVesselOffer()) + " for " + s.durationHours() + "h" + berth + ".";
+        String name = nameOf(s.vesselName());
+        return (name == null ? "They offer " : name + " offers ") + Euros.of(s.lastVesselOffer()) + " for "
+                + s.durationHours() + "h" + berth + ".";
     }
 
     /**
      * A later reply of the vessel's.
      *
      * @param playerHours the hours the player's last offer carried; {@code null} before they named any
-     * @return {@code They accept €1,600 but need at least 6h.} when the vessel took the player's
-     *         price and pushed only the hours back; {@code They counter: €1,460 for 6h — they need
-     *         at least 6h.} when it pushed both; {@code They counter: €1,460 for 5h.} otherwise
+     * @return {@code Faro Vecchio accepts €1,600 but needs at least 6h.} when the vessel took the
+     *         player's price and pushed only the hours back; {@code Faro Vecchio counters: €1,460 for
+     *         6h — they need at least 6h.} when it pushed both; {@code Faro Vecchio counters: €1,460
+     *         for 5h.} otherwise
      */
     public static String counter(WalkInDialogueSnapshot s, Integer playerHours) {
         boolean moreHours = playerHours != null && s.durationHours() > playerHours;
+        String name = nameOf(s.vesselName());
         if (moreHours && s.lastPlayerOffer() > 0
                 && Math.round(s.lastVesselOffer()) == Math.round(s.lastPlayerOffer())) {
-            return "They accept " + Euros.of(s.lastVesselOffer()) + " but need at least " + s.durationHours() + "h.";
+            return (name == null ? "They accept " : name + " accepts ") + Euros.of(s.lastVesselOffer())
+                    + (name == null ? " but need at least " : " but needs at least ") + s.durationHours() + "h.";
         }
-        String line = "They counter: " + Euros.of(s.lastVesselOffer()) + " for " + s.durationHours() + "h";
+        String line = (name == null ? "They counter: " : name + " counters: ") + Euros.of(s.lastVesselOffer())
+                + " for " + s.durationHours() + "h";
         return moreHours ? line + " — they need at least " + s.durationHours() + "h." : line + ".";
     }
 
@@ -68,7 +77,10 @@ public final class OutcomeLines {
      *                       is the vessel's offer, accepted on the player's side — by the player or
      *                       by the Assistant for them, so the line names nobody)
      */
-    public static String closing(Deal.Outcome outcome, double price, int hours, boolean vesselAccepted) {
+    public static String closing(String vesselName, Deal.Outcome outcome, double price, int hours,
+                                 boolean vesselAccepted) {
+        String name = nameOf(vesselName);
+        String who = name == null ? "They" : name;
         return switch (outcome) {
             case DEAL -> {
                 if (!(price > 0)) {
@@ -76,13 +88,23 @@ public final class OutcomeLines {
                 }
                 String terms = Euros.of(price) + " for " + hours + "h";
                 yield vesselAccepted
-                        ? DEAL_MARK + "They accepted " + terms + " — deal done."
+                        ? DEAL_MARK + who + " accepted " + terms + " — deal done."
                         : DEAL_MARK + "Deal done: " + terms + ".";
             }
-            case WITHDRAW_PRICE -> NO_DEAL_MARK + "They left (price too high).";
-            case WITHDRAW_DURATION -> NO_DEAL_MARK + "They left (you never granted the hours they need).";
-            case TIMEOUT -> NO_DEAL_MARK + "They left (negotiation timed out).";
-            case PLAYER_REFUSED -> NO_DEAL_MARK + "You turned them away.";
+            case WITHDRAW_PRICE -> NO_DEAL_MARK + who + " left (price too high).";
+            case WITHDRAW_DURATION -> NO_DEAL_MARK + who + " left (you never granted the hours they need).";
+            case TIMEOUT -> NO_DEAL_MARK + who + " left (negotiation timed out).";
+            case PLAYER_REFUSED -> NO_DEAL_MARK + "You turned " + (name == null ? "them" : name) + " away.";
         };
+    }
+
+    /** As {@link #closing(String, Deal.Outcome, double, int, boolean)} with no name known. */
+    public static String closing(Deal.Outcome outcome, double price, int hours, boolean vesselAccepted) {
+        return closing(null, outcome, price, hours, vesselAccepted);
+    }
+
+    /** S19 (PT32): the ship's name, or {@code null} when it has none to say. */
+    private static String nameOf(String vesselName) {
+        return vesselName == null || vesselName.isBlank() ? null : vesselName.trim();
     }
 }

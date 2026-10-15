@@ -12,7 +12,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Audit C-04, second half — found by the adversarial review of the first half (2026-07-27).
  *
- * <p>Passing the menu-bar strip through {@code PauseOverlay.contains} makes the menus OPEN while
+ * <p>S19 (playtest 5, PT24): the PAUSED glass pane is gone; the heavyweight popups stay (harmless),
+ * and so does this test of them.
+ *
+ * <p>Passing the menu-bar strip through {@code PauseOverlay.contains} made the menus OPEN while
  * paused, and that is all it does. Swing's default popup is <b>lightweight</b>:
  * {@code LightWeightPopup} adds the {@code JPopupMenu} into the frame's own {@code JLayeredPane},
  * and {@code JRootPane.addImpl} forces the glass pane to child index 0 — above the entire layered

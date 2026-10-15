@@ -78,16 +78,16 @@ class ChatPanelSeamsTest {
         flush();
     }
 
-    /** The game's per-sim-minute tick — what sweeps closed tabs off the strip. */
+    /** The game's per-sim-minute tick. S19 (PT26): it used to sweep closed tabs off the strip. */
     private void minuteTick() throws Exception {
         bus.publish(new SimClockTickEvent(clock.nowSimMillis(), clock.gameDay(), clock.simHour(), clock.simMinute()));
         flush();
     }
 
-    /** Runs a closed tab's 30-real-second dwell out and lets the next tick remove it. */
-    private void dwellRunsOut() throws Exception {
-        clock.advance(30_000);
-        minuteTick();
+    /** S19 (playtest 5, PT26): the player presses the x on that closed tab. */
+    private void playerCloses(String vesselId) throws Exception {
+        onEdt(() -> panel.closeTabForTest("nego-" + vesselId));
+        flush();
     }
 
     /** What the one-second Swing timer does, on the EDT. */
@@ -156,9 +156,9 @@ class ChatPanelSeamsTest {
         close("B");
         assertEquals(List.of(all.get(0), all.get(2)), ask(panel::openDialogues),
                 "a finished negotiation is not waiting for anyone");
-        assertEquals(3, panel.stripTabCountForTest(), "although its tab stays on the strip for its dwell");
+        assertEquals(3, panel.stripTabCountForTest(), "although its tab stays on the strip until its x");
 
-        dwellRunsOut();
+        playerCloses("B");
         assertEquals(List.of(all.get(0), all.get(2)), ask(panel::openDialogues));
         assertEquals(2, panel.stripTabCountForTest());
     }
@@ -190,13 +190,14 @@ class ChatPanelSeamsTest {
         close("B");
         assertTrue(select("nego-B"));
         assertEquals("nego-B", ask(panel::selectedDialogueId));
-        // ...S18b (UI tree U4): and while it is selected it stays, however long it has been closed.
-        dwellRunsOut();
-        assertEquals("nego-B", ask(panel::selectedDialogueId), "the tab being read never leaves");
-        assertEquals(3, panel.stripTabCountForTest());
-        // Once the player has moved on, it leaves at the next sweep...
-        assertTrue(select("nego-C"));
+        // ...S19 (PT26): no clock takes it, however long it has been closed...
+        clock.advance(600_000);
         minuteTick();
+        assertEquals("nego-B", ask(panel::selectedDialogueId));
+        assertEquals(3, panel.stripTabCountForTest());
+        // ...its x does.
+        assertTrue(select("nego-C"));
+        playerCloses("B");
         assertNull(panel.viewForTest("nego-B"), "it left the strip");
         assertEquals(2, panel.stripTabCountForTest());
         // ...and S18b (PT5): a finished negotiation is one click away all the same — it comes back.
@@ -226,15 +227,12 @@ class ChatPanelSeamsTest {
         assertEquals(List.of("A", "B"), heard, "closing the selected tab does not deselect it");
         assertEquals("B", ask(panel::selectedVesselId), "a closed tab that is still selected still names its vessel");
 
-        dwellRunsOut(); // S18b (U4): B is being read, so it stays
-        assertEquals(List.of("A", "B"), heard, "the tab being read never leaves");
-
         assertTrue(select("nego-A")); // the player moves on
         assertEquals(List.of("A", "B", "A"), heard);
-        minuteTick(); // now B leaves the strip, behind the selection
+        playerCloses("B"); // S19 (PT26): B leaves the strip, behind the selection
         assertEquals(List.of("A", "B", "A"), heard, "a tab leaving behind the selection is no change");
 
-        // A selected tab never leaves, so only a new world empties the strip.
+        // A is open, so it has no x: only a new world empties the strip.
         bus.publish(new GameLoadedEvent(1, 0.0, 50));
         flush();
         assertEquals(Arrays.asList("A", "B", "A", null), heard, "null once no tab is left");
@@ -285,7 +283,7 @@ class ChatPanelSeamsTest {
         List<String> heard = listenForSelectedVessel();
 
         close("A");
-        dwellRunsOut();
+        playerCloses("A");
 
         assertEquals(1, panel.stripTabCountForTest(), "setup: the earlier tab is gone");
         assertEquals("nego-B", ask(panel::selectedDialogueId));
@@ -340,16 +338,13 @@ class ChatPanelSeamsTest {
         close("A");
         assertEquals(5, fired[0], "a negotiation closed");
 
+        clock.advance(600_000);
         minuteTick();
-        assertEquals(5, fired[0], "a tick that removes nothing changes nothing");
-        dwellRunsOut();
-        assertEquals(5, fired[0], "S18b (U4): the closed tab is the one being read, so it stays");
+        assertEquals(5, fired[0], "S19 (PT26): a tick removes nothing and changes nothing");
 
         open("B", "Carthago"); // S18b (U5): it takes the selection over from the closed tab
         assertEquals(6, fired[0]);
-        minuteTick();
-        assertEquals(6, fired[0], "S18b (review): the closed tab keeps a dwell from the walk-in's arrival");
-        dwellRunsOut();
+        playerCloses("A");
         assertEquals(7, fired[0], "the closed tab left the strip");
         bus.publish(new GameLoadedEvent(1, 0.0, 50));
         flush();
@@ -378,9 +373,9 @@ class ChatPanelSeamsTest {
 
         open("A", "Genoa Star");
         open("B", "Carthago");
-        assertTrue(select("nego-B")); // A is not the tab being read, so it can leave (S18b, U4)
+        assertTrue(select("nego-B"));
         close("A");
-        dwellRunsOut();
+        playerCloses("A");
 
         OpenDialogue a = new OpenDialogue("nego-A", "A", "Genoa Star");
         OpenDialogue b = new OpenDialogue("nego-B", "B", "Carthago");
@@ -409,7 +404,7 @@ class ChatPanelSeamsTest {
 
         close("A"); // the first tab, not the selected one
         assertTrue(selections.isEmpty(), "setup: A is closed but still on the strip");
-        dwellRunsOut();
+        playerCloses("A");
 
         assertEquals(List.of(true), selections, "the selection made during the removal's callback succeeded");
         assertEquals("nego-C", ask(panel::selectedDialogueId));

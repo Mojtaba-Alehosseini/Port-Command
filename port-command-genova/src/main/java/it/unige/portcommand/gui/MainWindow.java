@@ -72,9 +72,10 @@ import it.unige.portcommand.util.EventBus;
  *
  * <p>Task 24 additions: the Game menu drives {@link GameLifecycle}
  * (Pause/Resume/Quit — Quit is confirmed, then routed through
- * {@code GameOverGuard} via {@code lifecycle.quit()}), Esc toggles pause, a
- * translucent {@link PauseOverlay} glass pane mirrors the PAUSED state, and
- * {@link GameOverDialog} opens on the run's {@code GameOverEvent}.
+ * {@code GameOverGuard} via {@code lifecycle.quit()}), Esc toggles pause, the top bar's own
+ * ⏸ / "▶ Resume" button and its PAUSED label mirror the PAUSED state (S19, playtest 5, PT24: the
+ * translucent PAUSED glass pane that used to, with a second Resume and a caption drawn over the
+ * top bar's figures, is gone), and {@link GameOverDialog} opens on the run's {@code GameOverEvent}.
  *
  * <p><b>Single EDT rule.</b> This class and every panel it holds must only be
  * constructed and mutated on the EDT — {@code Main} constructs and shows it
@@ -118,6 +119,8 @@ public final class MainWindow extends JFrame {
      */
     private static final String PREF_LEFT_DIVIDER = "leftColumnDividerProportion";
     private static final String PREF_CHAT_DIVIDER = "chatCommLogDividerProportion";
+    /** S19 (playtest 5, PT31): the Port table | Finished divider - the Port table's share. */
+    private static final String PREF_PORT_DIVIDER = "portFinishedDividerProportion";
 
     /** S15: shown when the player closes the opening New Game dialog without choosing — the window
      * is then an empty shell, and this says how to get out of it. */
@@ -164,7 +167,6 @@ public final class MainWindow extends JFrame {
     private final GameSession session;
     private final EndOfDaySummaryDialog endOfDayDialog;
     private final GameOverDialog gameOverDialog;
-    private final PauseOverlay pauseOverlay;
     private final TutorialOverlay tutorialOverlay;
     /** S14: the one applier behind both speed controls (HUD toggles, Game ▸ Speed). S16: it also
      * holds the scenario-script lock ({@link GameSpeedControl#scriptPending()}) — the window's
@@ -257,26 +259,20 @@ public final class MainWindow extends JFrame {
                 () -> lifecycle.mode() == GameMode.LOADING || lifecycle.mode() == GameMode.MENU);
         this.screen = new GameScreen(eventBus, portStateArtifact, chatInputProcessor,
                 lifecycle.simClock(), speedControl);
-        // Audit C-04: the glass pane covers the menu-bar strip too, so it is handed the menu bar's
-        // live bounds (in glass-pane coordinates) to pass mouse events through and to skip when
-        // painting the scrim. Computed lazily on every hit-test/paint — the menu bar does not exist
-        // yet at this point in construction, and its height can change with the look-and-feel.
-        // S15: the second region it passes through is the whole three-column area (was the chat
-        // alone in S14) — the waiting list and the comm log are read-only views, and a paused
-        // game is exactly when the player wants to read them.
-        // S18b: the caption sits on the top bar (T8), and the bar's pause button clicks through (PT4).
-        this.pauseOverlay = new PauseOverlay(this::toggleMenuResume, this::menuBarBoundsInGlassPane,
-                this::columnsBoundsInGlassPane, this::pauseCaptionAreaInGlassPane, this::pauseButtonInGlassPane);
+        // S19 (playtest 5, PT24): ONE pause control - the top bar's ⏸ / "▶ Resume" (and Esc, and
+        // Game ▸ Pause / Resume). The PAUSED glass pane is gone: its own Resume was a second
+        // control, and its caption was drawn over the top bar's figures. Nothing is dimmed or
+        // blocked while paused any more - everything it blocked (the bar's speed toggles and Next
+        // ship) was reachable through the menu bar it let through anyway.
         screen.onPauseToggle(this::toggleMenuResume); // S18b (PT4): the top bar's ⏸/▶
-        setGlassPane(pauseOverlay);
         setJMenuBar(buildMenuBar(eventBus, onClose));
         setLayout(new BorderLayout());
         add(screen, BorderLayout.CENTER);
         installEscBinding();
 
-        // Task 21: the tutorial scrim lives in the layered pane (the glass pane is already the
-        // PauseOverlay) above the content; it searches the content pane's tree for the named
-        // highlight targets and paints nothing until the window is up (GuiReadyEvent).
+        // Task 21: the tutorial scrim lives in the layered pane above the content; it searches the
+        // content pane's tree for the named highlight targets and paints nothing until the window
+        // is up (GuiReadyEvent).
         this.tutorialOverlay = new TutorialOverlay(eventBus, getContentPane());
         tutorialOverlay.onClosedForGood(() -> prefs.putBoolean(PREF_TUTORIAL_CLOSED, true));
         getLayeredPane().add(tutorialOverlay, JLayeredPane.MODAL_LAYER);
@@ -442,7 +438,7 @@ public final class MainWindow extends JFrame {
         } else {
             // A game was started on the command line (--scenario / --load) and is already
             // running: for the first-launch tutorial, "the first game has started" is now.
-            showTheTutorialsFirstCard(); // S18b (PT2): a --scenario tutorial launch starts paused
+            showTheTutorialsTour(); // S18b (PT2): a --scenario tutorial launch starts paused
             maybeAutoOpenTutorial();
         }
     }
@@ -477,10 +473,12 @@ public final class MainWindow extends JFrame {
      * (audit C-13): cards opened with the window would be wiped by the first game the player
      * picks. So they open after that game has started — the completion callback of
      * {@link #chooseAndStartGame} is queued behind the boot's own EDT deliveries, hence after that
-     * dismiss. And not at all when that game IS the tutorial scenario: its script drives the same
-     * overlay through the same {@code showStep}, so a scripted step would replace the card the
-     * player is paging, and its final step arms the auto-dismiss even over manual paging. The
-     * scenario counts as the tutorial having been offered.
+     * dismiss. And not at all when that game IS the tutorial scenario: it has its own tour, with
+     * its own five texts ({@link #showTheTutorialsTour}). The scenario counts as the tutorial
+     * having been offered.
+     *
+     * <p>S19 (playtest 5, PT23): a scenario starts paused, so this is a tour at the paused start
+     * too - its last card's "Start playing" resumes the game ({@link #startPlayingIfPaused}).
      */
     private void maybeAutoOpenTutorial() {
         if (tutorialAutoOpenConsidered) {
@@ -490,24 +488,38 @@ public final class MainWindow extends JFrame {
         if (session.saveLoadManager().isFirstLaunch()
                 && !prefs.getBoolean(PREF_TUTORIAL_CLOSED, false) // S18b (P10)
                 && !TUTORIAL_SCENARIO_KEY.equals(session.activeScenarioKey())) {
-            tutorialOverlay.startFromBeginning();
+            tutorialOverlay.startTour(java.util.List.of(), startPlayingIfPaused());
         }
     }
 
     /**
-     * S18b (PT2): the Tutorial starts paused, so its first card has to be on screen without the
-     * clock - the script's own step 1 fires on the first tick, which a paused world never takes.
-     * The overlay shows each step once, so the script's step 1 is dropped when it does come.
+     * S19 (playtest 5, PT23): the Tutorial is a tour at its paused start - its five scripted cards,
+     * one after another on Next, the last one's "Start playing" resuming the game. S18b (PT2) put
+     * only the FIRST card up at the paused start and left the rest to the script's own clock,
+     * which showed them later, by themselves; playtest 5 found that hard to follow. Only at the
+     * tutorial's opening minute ({@link #firstCardStillToCome}): a load of a tutorial save that is
+     * past it gets no tour.
      */
-    private void showTheTutorialsFirstCard() {
+    private void showTheTutorialsTour() {
         if (!TUTORIAL_SCENARIO_KEY.equals(session.activeScenarioKey())) {
             return;
         }
         session.scenarioRegistry().findByKey(TUTORIAL_SCENARIO_KEY)
                 .filter(tutorial -> firstCardStillToCome(tutorial, lifecycle.simClock().nowSimMillis()))
-                .flatMap(MainWindow::firstScriptedTutorialStep)
-                .ifPresent(text -> eventBus.publish(
-                        new it.unige.portcommand.scenario.events.TutorialStepAdvancedEvent(1, text)));
+                .ifPresent(tutorial -> tutorialOverlay.startTour(scriptedTutorialSteps(tutorial),
+                        startPlayingIfPaused()));
+    }
+
+    /** S19 (PT23): what a tour's last card starts - the paused game, or nothing when it runs. */
+    private Runnable startPlayingIfPaused() {
+        return lifecycle.mode() == GameMode.PAUSED ? this::resumeFromTheTour : null;
+    }
+
+    /** S19 (PT23): "Start playing" - the window's own resume, refused while a save or a load runs. */
+    private void resumeFromTheTour() {
+        if (!saveInProgress && !loadInProgress && lifecycle.mode() == GameMode.PAUSED) {
+            lifecycle.resume();
+        }
     }
 
     /**
@@ -526,14 +538,17 @@ public final class MainWindow extends JFrame {
                 .anyMatch(e -> nowSimMillis <= opening + e.simTimeSeconds() * 1000L + 60_000L);
     }
 
-    /** S18b (PT2): the text of a scenario's scripted tutorial step 1, if it has one. Static and
-     * pure so a headless test can read it from the real scenario file. */
-    static Optional<String> firstScriptedTutorialStep(it.unige.portcommand.scenario.Scenario scenario) {
+    /** S19 (PT23): the texts of a scenario's scripted tutorial steps, in step order - its tour;
+     * empty for a scenario with none. Static and pure so a headless test can read them from the
+     * real scenario file. */
+    static java.util.List<String> scriptedTutorialSteps(it.unige.portcommand.scenario.Scenario scenario) {
         return scenario.events().stream()
-                .filter(e -> e instanceof it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent t
-                        && t.step() == 1)
-                .map(e -> ((it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent) e).text())
-                .findFirst();
+                .filter(e -> e instanceof it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent)
+                .map(e -> (it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent) e)
+                .sorted(java.util.Comparator.comparingInt(
+                        it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent::step))
+                .map(it.unige.portcommand.scenario.events.TutorialStepAdvanceEvent::text)
+                .toList();
     }
 
     /** Keeps the tutorial overlay exactly over the content area as the window resizes. */
@@ -561,6 +576,9 @@ public final class MainWindow extends JFrame {
         screen.trackDividerDrags(
                 proportion -> prefs.putDouble(PREF_LEFT_DIVIDER, proportion),
                 proportion -> prefs.putDouble(PREF_CHAT_DIVIDER, proportion));
+        // S19 (playtest 5, PT31): and the left column's own divider, once that column has its size.
+        screen.applyPortDivider(prefs.getDouble(PREF_PORT_DIVIDER, GameScreen.DEFAULT_PORT_PROPORTION));
+        screen.trackPortDividerDrags(proportion -> prefs.putDouble(PREF_PORT_DIVIDER, proportion));
     }
 
     private JMenuBar buildMenuBar(EventBus eventBus, Runnable onClose) {
@@ -631,7 +649,10 @@ public final class MainWindow extends JFrame {
      * Forces every menu's dropdown to be a HEAVYWEIGHT popup — the second half of the C-04 fix
      * (found by the adversarial review of the first half, 2026-07-27).
      *
-     * <p>Passing the menu-bar strip through {@code PauseOverlay.contains} makes the menus OPEN while
+     * <p>S19 (playtest 5, PT24): the PAUSED glass pane this was written against is gone; the
+     * heavyweight popups stay - harmless, and nothing depends on the lightweight default.
+     *
+     * <p>Passing the menu-bar strip through {@code PauseOverlay.contains} made the menus OPEN while
      * paused, and stops there. Swing's default popup is <b>lightweight</b>: {@code LightWeightPopup}
      * adds the {@code JPopupMenu} to the frame's own {@code JLayeredPane} — and {@code JRootPane.addImpl}
      * forces the glass pane to child index 0, above the entire layered pane. So the dropdown would
@@ -1120,7 +1141,7 @@ public final class MainWindow extends JFrame {
                             "New Game", JOptionPane.ERROR_MESSAGE);
                 } else {
                     // S15: a game is running now — the moment the first-launch tutorial waits for.
-                    showTheTutorialsFirstCard();
+                    showTheTutorialsTour();
                     maybeAutoOpenTutorial();
                 }
                 pause.release(); // S18b (review): the old game goes on if the start never replaced it
@@ -1147,31 +1168,6 @@ public final class MainWindow extends JFrame {
         }
     }
 
-    /** The menu bar's rectangle expressed in the glass pane's coordinate space, or an empty
-     * rectangle when there is no menu bar / it is not showing (audit C-04). */
-    private java.awt.Rectangle menuBarBoundsInGlassPane() {
-        javax.swing.JMenuBar bar = getJMenuBar();
-        if (bar == null || !bar.isVisible() || bar.getParent() == null) {
-            return new java.awt.Rectangle();
-        }
-        return javax.swing.SwingUtilities.convertRectangle(bar.getParent(), bar.getBounds(), pauseOverlay);
-    }
-
-    /**
-     * The three-column area's rectangle in the glass pane's coordinate space, or an empty one
-     * while the screen is not showing. The pause overlay lets input through there and leaves it
-     * undimmed. S14 opened the chat this way — patience is frozen while the game is paused
-     * (ADR-18), and the player may read, think and type; S15 (2026-10-12) widened it to all three
-     * columns, because the waiting list and the comm log are read-only views and a pause is when
-     * they get read.
-     */
-    private java.awt.Rectangle columnsBoundsInGlassPane() {
-        if (!screen.isShowing()) {
-            return new java.awt.Rectangle();
-        }
-        return screen.columnsBoundsIn(pauseOverlay);
-    }
-
     /**
      * S18b (playtest 2, PT11): opens the newest comm-log archive — or, before anything has been
      * archived, the folder it goes to. A file type the desktop has no program for falls back to
@@ -1196,16 +1192,6 @@ public final class MainWindow extends JFrame {
         }
         JOptionPane.showMessageDialog(this, "The comm-log archive is in " + dir.toAbsolutePath() + ".",
                 "Comm log", JOptionPane.INFORMATION_MESSAGE);
-    }
-
-    /** S18b (T8): where the PAUSED caption goes — the top bar left of its pause button, or empty. */
-    private java.awt.Rectangle pauseCaptionAreaInGlassPane() {
-        return screen.isShowing() ? screen.pauseCaptionAreaIn(pauseOverlay) : new java.awt.Rectangle();
-    }
-
-    /** S18b (PT4): the top bar's pause button, which clicks through the PAUSED overlay. */
-    private java.awt.Rectangle pauseButtonInGlassPane() {
-        return screen.isShowing() ? screen.pauseButtonBoundsIn(pauseOverlay) : new java.awt.Rectangle();
     }
 
     /** Esc toggles pause/resume — bound WHEN_IN_FOCUSED_WINDOW so it works from any panel. */
@@ -1262,10 +1248,9 @@ public final class MainWindow extends JFrame {
                 summary.score(), null);
     }
 
-    /** One place maps {@link GameMode} → overlay visibility + menu enablement. */
+    /** One place maps {@link GameMode} → menu enablement and what the screen shows of it. */
     private void reflectMode() {
         GameMode mode = lifecycle.mode();
-        pauseOverlay.setVisible(mode == GameMode.PAUSED);
         MenuState menu = menuState(mode, loadInProgress, saveInProgress);
         newGameItem.setEnabled(menu.newGame()); // legal from any settled mode (replaces the world)
         pauseItem.setEnabled(menu.pause());

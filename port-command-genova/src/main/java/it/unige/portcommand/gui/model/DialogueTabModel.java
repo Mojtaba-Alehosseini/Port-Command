@@ -1,7 +1,9 @@
 package it.unige.portcommand.gui.model;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -72,9 +74,9 @@ public final class DialogueTabModel {
     private boolean closed;
     private Deal.Outcome outcome;
     private long closedAtMillis;
-    /** S18b (adversarial review): when the tab's 30-s dwell on the strip began - the close, or
-     * the last time a new walk-in took the selection away from it ({@link #restartDwell}). */
-    private long dwellFromMillis;
+    /** S19 (playtest 5, PT30): the "→ ..." lines of sent moves the HarbourMaster has not answered
+     * for yet, by the move's command id - see {@link #holdEcho}. */
+    private final Map<Long, String> heldEchoes = new LinkedHashMap<>();
     /** S18b (UI tree U3): what a deal was agreed at, from the close itself; 0 until then, and for
      * a negotiation that ended without one. */
     private double agreedPrice;
@@ -324,17 +326,18 @@ public final class DialogueTabModel {
         return closed;
     }
 
-    /** S18b (adversarial review): the instant the closed tab's dwell counts from. */
-    public long dwellFromMillis() {
-        return dwellFromMillis;
+    /**
+     * S19 (playtest 5, PT30): keeps a move's "→ You ask ..." line until the HarbourMaster has sent
+     * the move. A move the Prolog gate refuses is never echoed - "→ Demanding €2,000 for 5h" used to
+     * show for a move the gate refused. {@link NegotiationTabRegistry} writes the line, or drops it.
+     */
+    public void holdEcho(long commandId, String line) {
+        heldEchoes.put(commandId, Objects.requireNonNull(line, "line"));
     }
 
-    /** S18b (adversarial review): a closed tab's dwell starts again at {@code atMillis}; an open
-     * tab has none. */
-    public void restartDwell(long atMillis) {
-        if (closed) {
-            dwellFromMillis = atMillis;
-        }
+    /** S19 (PT30): the line held for {@code commandId}, and no longer held - empty when there is none. */
+    public Optional<String> takeHeldEcho(long commandId) {
+        return Optional.ofNullable(heldEchoes.remove(commandId));
     }
 
     /** {@code null} until {@link #close} is called. */
@@ -347,12 +350,10 @@ public final class DialogueTabModel {
         return closedAtMillis;
     }
 
-    /** The first close fixes {@link #closedAtMillis}: a repeated close (audit C-11) must not
-     * restart the dwell before the tab leaves the strip. */
+    /** The first close fixes {@link #closedAtMillis}: a repeated close (audit C-11) does not move it. */
     public void close(Deal.Outcome outcome, long atMillis) {
         if (!closed) {
             closedAtMillis = atMillis;
-            dwellFromMillis = atMillis;
         }
         this.closed = true;
         this.outcome = Objects.requireNonNull(outcome, "outcome");

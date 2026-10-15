@@ -2,6 +2,10 @@ package it.unige.portcommand.gui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
+import java.awt.FlowLayout;
+import java.awt.Insets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,6 +15,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.function.Consumer;
 
+import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
@@ -23,8 +28,8 @@ import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.AutopilotOwnershipEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
-import it.unige.portcommand.gui.events.SimClockTickEvent;
 import it.unige.portcommand.gui.model.DialogueTabModel;
 import it.unige.portcommand.gui.model.FinishedDialogue;
 import it.unige.portcommand.gui.model.NegotiationTabRegistry;
@@ -44,8 +49,8 @@ import it.unige.portcommand.util.Subscription;
  * other server-originated event to the registry and refresh whichever tab it names.
  *
  * <p>The panel subscribes to {@link NegotiationOpenedEvent}, {@link NegotiationClosedEvent},
- * {@code AssistantChatEvent}, {@code PlayerCommandRefusedEvent}, {@code SimClockTickEvent},
- * {@code AutopilotOwnershipEvent} and {@code GameLoadedEvent} — the fields below, and nothing
+ * {@code AssistantChatEvent}, {@code PlayerCommandRefusedEvent}, {@code PlayerCommandDispatchedEvent}
+ * (S19, PT30), {@code AutopilotOwnershipEvent} and {@code GameLoadedEvent} — the fields below, and nothing
  * else. NOT to {@code DealClosedEvent} or {@code WithdrawalEvent}: the same information arrives
  * paired with a {@link NegotiationClosedEvent} (see that event's javadoc) — since S18b with a
  * deal's terms — and that is the one a tab closes on; the other two are the HUD's (task 20) more
@@ -72,21 +77,15 @@ import it.unige.portcommand.util.Subscription;
 public final class ChatPanel extends JPanel implements DialogueDirectory {
 
     /**
-     * S18b (playtest 2, PT5; UI tree U4): the strip still lets a closed tab go after this dwell —
-     * F-9's pile-up of closed tabs is still real — but nothing is lost any more and nothing
-     * vanishes under the player: the tab the player has selected never leaves, and every ended
-     * negotiation stays in the left column's "Finished" list, which puts its tab back on a click.
-     *
-     * <p>Audit C-07: how long a closed negotiation's tab stays readable before it leaves the strip —
-     * real seconds of RUNNING game time, measured on the shared SimClock like the tab's own
-     * countdown, so a paused game (Esc, the end-of-day summary) keeps closed tabs visible. Closed
-     * tabs used to accumulate until a load, scrolling the live vessel's tab out of view (F-9).
-     * Nothing durable is lost: the chat transcript was never persisted (a load already discards
-     * it), and the ACL exchange behind it stays in the comm log and its archive. Like the
-     * countdown, the dwell is converted at the day length in force at each tick, so changing the
-     * day length while a closed tab waits rescales its wait (it can leave early or late).
+     * S19 (playtest 5, PT26): a closed tab stays on the strip until the player presses its ×. Audit
+     * C-07 let it leave by itself 30 seconds after it closed (F-9: closed tabs piled up and scrolled
+     * the live vessel's tab out of view), and playtest 5 found tabs vanishing that the player still
+     * wanted. Nothing is lost when one goes: every ended negotiation stays in the left column's
+     * "Finished" list, which puts its tab back on a click. More than
+     * {@link NegotiationTabRegistry#MAX_CLOSED_TABS} closed tabs send the oldest one the player is not
+     * reading there by themselves, so the pile-up stays bounded.
      */
-    static final double CLOSED_TAB_DWELL_REAL_SECONDS = 30.0;
+    static final String CLOSE_TAB_TOOLTIP = "Close this tab — it stays in the Finished list";
 
     /** S14 (ADR-18): how often every tab's live counter is re-read. Conversation time is REAL
      * time, so it cannot ride the sim-minute tick (2.5 s apart at the default day length). */
@@ -125,7 +124,7 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
                 + "<b>Accept</b> (their offer) or <b>Reject</b> (send them away).</li>"
                 + "<li><b>Hint</b> asks the Assistant what it would do.</li>"
                 + "<li><b>Next ship</b> in the top bar calls the next walk-in now.</li>"
-                + "<li><b>⏸</b> in the top bar (or <b>Esc</b>) pauses; <b>▶</b> goes on.</li>"
+                + "<li><b>⏸</b> in the top bar (or <b>Esc</b>) pauses; <b>▶ Resume</b> goes on.</li>"
                 + "</ul>"
                 + "<p style='text-align:center'><i>" + lastLine + "</i></p></body></html>";
     }
@@ -147,7 +146,7 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
     private final Subscription<NegotiationClosedEvent> closedSubscription;
     private final Subscription<AssistantChatEvent> assistantSubscription;
     private final Subscription<PlayerCommandRefusedEvent> refusedSubscription;
-    private final Subscription<SimClockTickEvent> clockSubscription;
+    private final Subscription<PlayerCommandDispatchedEvent> dispatchedSubscription;
     private final Subscription<AutopilotOwnershipEvent> ownershipSubscription;
     private final Subscription<it.unige.portcommand.persistence.events.GameLoadedEvent> loadedSubscription;
 
@@ -170,10 +169,10 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
      */
     private AutopilotOwnershipEvent ownership = AutopilotOwnershipEvent.initial(Settings.load().autopilotEnabled());
 
-    /** Set while expired tabs are being removed: removing a tab at or before the selected one
+    /** Set while tabs are being taken off the strip: removing a tab at or before the selected one
      * re-fires the pane's change event, and the focus hop it triggers must not steal focus from
      * wherever the player is (e.g. the comm-log filters). */
-    private boolean removingExpiredTabs;
+    private boolean removingTabs;
 
     /** S15: the {@link DialogueDirectory} listeners. EDT-confined like everything else here; the
      * interface has no way to remove one (its two users live and die with this panel). */
@@ -207,10 +206,11 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         // its terms come back off the offer strip (the refusal TEXT arrives as an AssistantChatEvent).
         this.refusedSubscription = eventBus.subscribe(PlayerCommandRefusedEvent.class,
                 this::onPlayerCommandRefused, DeliveryMode.EDT);
-        // The per-sim-minute tick sweeps closed tabs off the strip (C-07). S14: it no longer
-        // re-renders the offer strips — the "~Ns remaining" it used to count down is gone, and
-        // the live counter that replaced it runs on its own one-second Swing timer.
-        this.clockSubscription = eventBus.subscribe(SimClockTickEvent.class, this::onClockTick, DeliveryMode.EDT);
+        // S19 (playtest 5, PT30): a move the HarbourMaster has sent - the tab writes the "→ ..."
+        // line it held for it. (The per-sim-minute tick used to sweep closed tabs off the strip,
+        // audit C-07; since S19 the player closes them, PT26, and the panel no longer hears it.)
+        this.dispatchedSubscription = eventBus.subscribe(PlayerCommandDispatchedEvent.class,
+                this::onPlayerCommandDispatched, DeliveryMode.EDT);
         // Task 22: a loaded game never carries an open negotiation (saves drop/refuse them),
         // so the pre-load world's tabs are stale — clean slate on the loaded-marker event. Stored +
         // cancelled like every other subscription (adversarial finding 5 — it was the odd one out).
@@ -228,9 +228,9 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         // S15: the same event is where the selected vessel can change under the player's own
         // click, so it is announced from here too — and skipped under the same guard, because
         // mid-removal the pane's selection passes through states nobody should be told about;
-        // removeExpiredTabs announces the settled result itself.
+        // removeFromStrip announces the settled result itself.
         tabbedPane.addChangeListener(e -> {
-            if (!removingExpiredTabs) {
+            if (!removingTabs) {
                 focusSelectedTabInput();
                 announceSelectedVessel();
             }
@@ -289,10 +289,6 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         fireDialoguesChanged();
     }
 
-    private void onClockTick(SimClockTickEvent event) {
-        removeExpiredTabs();
-    }
-
     /** S14: every open tab re-reads its conversation clock. Package-private so a headless test
      * can stand in for the timer. S15: then the dialogues listeners run — this is the tick the
      * "Waiting for you" list moves on, AFTER the tabs have taken their new values, so the list
@@ -308,21 +304,18 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         counterTimer.start();
     }
 
-    /** C-07: rides the existing per-sim-minute tick (already EDT-delivered and cancelled in
-     * {@link #removeNotify()}), so there is no extra timer and no wall-clock read; ticks stop
-     * while paused, which is what keeps a closed tab on screen during a pause. */
-    private void removeExpiredTabs() {
-        // S18b (UI tree U4): never the tab the player is reading — it goes at the first sweep
-        // after they have moved on (and stays one click away in the Finished list).
-        List<String> expired = registry.sweepClosed(simClock.nowSimMillis(),
-                simClock.simMillisForRealSeconds(CLOSED_TAB_DWELL_REAL_SECONDS), selectedDialogueId());
-        if (expired.isEmpty()) {
+    /**
+     * Takes tabs the registry has taken off its strip off the pane too - the player's × or the limit
+     * on closed tabs (S19, PT26). Until S19 this was audit C-07's sweep, on the per-sim-minute tick.
+     */
+    private void removeFromStrip(List<String> gone) {
+        if (gone.isEmpty()) {
             return;
         }
         boolean focusWasInside = false;
-        removingExpiredTabs = true;
+        removingTabs = true;
         try {
-            for (String id : expired) {
+            for (String id : gone) {
                 DialogueTabView view = views.remove(id);
                 if (view != null) {
                     focusWasInside |= SwingUtilities.findFocusOwner(view) != null;
@@ -330,7 +323,7 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
                 }
             }
         } finally {
-            removingExpiredTabs = false;
+            removingTabs = false;
         }
         if (views.isEmpty()) {
             showWaitingPlaceholder();
@@ -374,10 +367,7 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         // player may be typing in it. S15: the first tab of an empty strip selects itself (the
         // pane's change event has already announced it; this is a no-op then).
         if (reading != null && isClosed(reading)) {
-            // S18b (adversarial review): the walk-in moved the selection, not the player - the tab
-            // they were reading keeps a full dwell from now, one click away on the strip (U4).
-            registry.restartDwell(reading.dialogueId(), simClock.nowSimMillis());
-            tabbedPane.setSelectedComponent(view);
+            tabbedPane.setSelectedComponent(view); // the closed tab stays on the strip, one click away
         }
         announceSelectedVessel();
         // The new tab read the clock as it was built; the others re-read now, for the same reason.
@@ -424,12 +414,43 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         return tab == null || tab.isClosed();
     }
 
-    /** Greys a closed tab's title and says it is closed. */
+    /** Greys a closed tab's title, says it is closed, and gives it its × (S19, PT26). */
     private void markClosed(DialogueTabView view) {
         int index = tabbedPane.indexOfComponent(view);
         if (index >= 0) {
+            String title = tabbedPane.getTitleAt(index) + " (closed)";
             tabbedPane.setForegroundAt(index, Color.GRAY);
-            tabbedPane.setTitleAt(index, tabbedPane.getTitleAt(index) + " (closed)");
+            tabbedPane.setTitleAt(index, title);
+            tabbedPane.setTabComponentAt(index, closedTabHeader(view.dialogueId(), title));
+        }
+    }
+
+    /**
+     * S19 (playtest 5, PT26): a closed tab's header - its title in grey and a × that takes the tab
+     * off the strip. A click on the title still selects the tab (a label takes no mouse events of
+     * its own); the × is not focusable, like every button around the chat input.
+     */
+    private JPanel closedTabHeader(String dialogueId, String title) {
+        JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        header.setOpaque(false);
+        JLabel label = new JLabel(title);
+        label.setForeground(Color.GRAY);
+        JButton close = new JButton("×");
+        close.setFocusable(false);
+        close.setBorderPainted(false);
+        close.setContentAreaFilled(false);
+        close.setMargin(new Insets(0, 2, 0, 2));
+        close.setToolTipText(CLOSE_TAB_TOOLTIP);
+        close.addActionListener(e -> closeTabByPlayer(dialogueId));
+        header.add(label);
+        header.add(close);
+        return header;
+    }
+
+    /** S19 (PT26): the player's × - the tab leaves the strip and stays in the Finished list. */
+    private void closeTabByPlayer(String dialogueId) {
+        if (registry.closeTab(dialogueId)) {
+            removeFromStrip(List.of(dialogueId));
         }
     }
 
@@ -437,7 +458,8 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
      * S18b (playtest 2, PT5): a line of the Finished list was clicked and its tab had left the
      * strip. The model is still in the registry ({@link NegotiationTabRegistry#reopenFinished}); a
      * new view of it goes at the end of the strip, closed like any closed tab — read-only, every
-     * button greyed. It leaves again at the first sweep after the player has moved on.
+     * button greyed, with its × (S19, PT26). As the tab about to be read, it never counts as the
+     * oldest closed tab the limit sends back.
      *
      * @return the view, or {@code null} when this world never finished that dialogue
      */
@@ -451,6 +473,7 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         }
         DialogueTabView view = putOnStrip(dialogueId, tabTitle(tab.snapshot()));
         markClosed(view);
+        removeFromStrip(registry.trimClosedTabs(dialogueId));
         return view;
     }
 
@@ -465,9 +488,21 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
             markClosed(view);
         }
         // S15: a closed negotiation is no longer waiting for the player, although its tab stays
-        // on the strip for its dwell (and, if it is the selected one, still names its vessel).
+        // on the strip (and, if it is the selected one, still names its vessel).
         // S18b (PT5): and it is a line of the Finished list from now on.
         fireDialoguesChanged();
+        // S19 (playtest 5, PT26): a sixth closed tab sends the oldest one not being read there.
+        removeFromStrip(registry.trimClosedTabs(selectedDialogueId()));
+    }
+
+    /** S19 (playtest 5, PT30): the HarbourMaster sent a move - its tab writes the line it held. */
+    private void onPlayerCommandDispatched(PlayerCommandDispatchedEvent event) {
+        registry.onPlayerCommandDispatched(event).ifPresent(id -> {
+            DialogueTabView view = views.get(id);
+            if (view != null) {
+                view.refresh();
+            }
+        });
     }
 
     private void onAssistantChat(AssistantChatEvent event) {
@@ -497,7 +532,7 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
     // ==================== S15 (2026-10-12): DialogueDirectory — EDT only ====================
 
     /** The negotiations still open, in tab order. A closed tab is left out from the moment it
-     * closes, although it stays on the strip for its dwell. */
+     * closes, although it stays on the strip until its ×. */
     @Override
     public List<OpenDialogue> openDialogues() {
         return registry.openDialogues();
@@ -516,7 +551,7 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
      *
      * <p>The focus is requested here, not left to the pane's change listener: re-selecting the
      * tab that is already selected fires no change event at all, and the listener stands down
-     * while expired tabs are being removed.
+     * while tabs are being taken off the strip.
      *
      * @return {@code false} if no tab has that id — the caller's list is stale and should re-read
      */
@@ -617,7 +652,7 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
         closedSubscription.cancel();
         assistantSubscription.cancel();
         refusedSubscription.cancel();
-        clockSubscription.cancel();
+        dispatchedSubscription.cancel();
         ownershipSubscription.cancel();
         loadedSubscription.cancel();
     }
@@ -645,6 +680,33 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
     /** Test-only: how many pages the JTabbedPane itself holds (C-07: must shrink with {@link #views}). */
     int stripTabCountForTest() {
         return tabbedPane.getTabCount();
+    }
+
+    /** Test-only (S19, PT26): presses the × on that closed tab's header, as a click would. */
+    void closeTabForTest(String dialogueId) {
+        JButton close = closeButtonOf(dialogueId);
+        if (close != null) {
+            close.doClick(0);
+        }
+    }
+
+    /** Test-only (S19, PT26): whether that tab's header carries the ×. */
+    boolean hasCloseButtonForTest(String dialogueId) {
+        return closeButtonOf(dialogueId) != null;
+    }
+
+    private JButton closeButtonOf(String dialogueId) {
+        DialogueTabView view = dialogueId == null ? null : views.get(dialogueId);
+        int index = view == null ? -1 : tabbedPane.indexOfComponent(view);
+        if (index < 0 || !(tabbedPane.getTabComponentAt(index) instanceof Container header)) {
+            return null;
+        }
+        for (Component part : header.getComponents()) {
+            if (part instanceof JButton button) {
+                return button;
+            }
+        }
+        return null;
     }
 
     /** Test-only: the JTabbedPane title for a dialogue id, or {@code null} if it has no tab. */

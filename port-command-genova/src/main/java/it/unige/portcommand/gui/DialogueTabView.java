@@ -825,18 +825,36 @@ final class DialogueTabView extends JPanel {
             commandId = sendId;
             registry.dialogueIdForVessel(targetVesselId)
                     .ifPresent(id -> registry.recordPlayerOffer(id, price.doubleValue(), proposedHours, sendId));
+        } else if (kind == PlayerCommandKind.PROPOSE || kind == PlayerCommandKind.ACCEPT) {
+            // S19 (playtest 5, PT30): the Prolog gate judges every binding move, so each carries an
+            // id its refusal - or its dispatch - names. (Only a priced PROPOSE changes the strip.)
+            commandId = PlayerCommandEvent.nextCommandId();
         }
-        // S18b (UI tree U8, adversarial review): a move Accept or Reject sent waits for its answer.
-        quickMoveAwaitingAnswer |= fromButton;
-        eventBus.publish(new PlayerCommandEvent(kind, targetVesselId, content, commandId));
         // Echo how the NL was INTERPRETED (task 19 play-test: Rasa read a bare "so?" as an
         // acceptance and the deal closed with no visible cause — every routed action must be
         // legible). S15: the Accept and Reject buttons come through here too — they send
         // "deal" / "no" as text — so a click is echoed exactly like the typed word. (The old
         // quick-action buttons skipped this; their label bubble was the only trace they left.)
-        appendSystem(interpretationEcho(kind, content, displayNameFor(targetVesselId),
+        // S19 (playtest 5, PT30): a move the gate judges is echoed once the HarbourMaster has SENT
+        // it - "→ Demanding €2,000 for 5h" used to show for a move the gate refused. The tab holds
+        // the line until then; a refusal drops it, and the refusal's own plain line says what
+        // happened instead.
+        String echo = interpretationEcho(kind, content, displayNameFor(targetVesselId),
                 targetVesselId.equals(typingVesselId),
-                targetDialogueId == null ? null : registry.tab(targetDialogueId)));
+                targetDialogueId == null ? null : registry.tab(targetDialogueId));
+        DialogueTabModel typing = registry.tab(dialogueId);
+        boolean held = commandId != PlayerCommandEvent.NO_COMMAND_ID && typing != null;
+        if (held) {
+            typing.holdEcho(commandId, echo);
+        }
+        // S18b (UI tree U8, adversarial review): a move Accept or Reject sent waits for its answer.
+        quickMoveAwaitingAnswer |= fromButton;
+        eventBus.publish(new PlayerCommandEvent(kind, targetVesselId, content, commandId));
+        if (held) {
+            refresh(); // the strip shows the send at once, and the bubble its note; the echo follows the dispatch
+        } else {
+            appendSystem(echo);
+        }
     }
 
     /**
@@ -1027,23 +1045,24 @@ final class DialogueTabView extends JPanel {
      * {@code targetDisplay} is the addressee's display name (S8: human name where known).
      * S18b (UI tree U6): an accept names what it accepts — the addressee's standing offer,
      * {@code addressee} being its tab ({@code null} when it has none) — and amounts are written
-     * as everywhere in the chat ({@link Euros}). */
+     * as everywhere in the chat ({@link Euros}). S19 (playtest 5, PT32): it says who moves -
+     * "→ You ask €2,200 for 6h." ("→ Demanding …" read like someone else's demand). */
     static String interpretationEcho(PlayerCommandKind kind, Map<String, Object> content,
                                      String targetDisplay, boolean sameTab, DialogueTabModel addressee) {
         String target = sameTab ? "" : " (to " + targetDisplay + ")";
         return switch (kind) {
             case PROPOSE -> content.get("price") instanceof Number price
                     ? (content.get("hours") instanceof Number hours
-                            ? "→ Demanding " + Euros.of(price.doubleValue()) + " for " + hours.intValue() + "h" + target + "."
-                            : "→ Demanding " + Euros.of(price.doubleValue()) + target + ".")
-                    : "→ Making an offer" + target + ".";
+                            ? "→ You ask " + Euros.of(price.doubleValue()) + " for " + hours.intValue() + "h" + target + "."
+                            : "→ You ask " + Euros.of(price.doubleValue()) + target + ".")
+                    : "→ You make an offer" + target + ".";
             case ACCEPT -> addressee != null && addressee.snapshot().lastVesselOffer() > 0
-                    ? "→ Accepting " + Euros.of(addressee.snapshot().lastVesselOffer()) + " for "
+                    ? "→ You accept " + Euros.of(addressee.snapshot().lastVesselOffer()) + " for "
                             + addressee.snapshot().durationHours() + "h" + target + "."
-                    : "→ Accepting their offer" + target + ".";
-            case REJECT -> "→ Turning them away" + target + ".";
-            case WITHDRAW -> "→ Withdrawing from this negotiation" + target + ".";
-            case ASK -> "→ Checking status" + target + "."; // unreachable (ASK answered locally)
+                    : "→ You accept their offer" + target + ".";
+            case REJECT -> "→ You turn " + targetDisplay + " away.";
+            case WITHDRAW -> "→ You withdraw from this negotiation" + target + ".";
+            case ASK -> "→ You ask for the status" + target + "."; // unreachable (ASK answered locally)
         };
     }
 

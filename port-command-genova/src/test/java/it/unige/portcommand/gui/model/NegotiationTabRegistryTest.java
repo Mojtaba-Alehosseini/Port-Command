@@ -12,6 +12,7 @@ import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
 import it.unige.portcommand.nlp.DialogueCtx;
@@ -525,65 +526,104 @@ class NegotiationTabRegistryTest {
         assertEquals(Optional.of(card), tab.hintCard());
     }
 
-    // ==================== audit C-07: closed tabs leave the strip after a dwell ====================
+    // ==================== S19 (playtest 5, PT26): the player closes a closed tab ====================
+    // Audit C-07 let a closed tab leave the strip by itself, 30 seconds after it closed (F-9's pile-up
+    // of closed tabs). Playtest 5: they vanished while the player still wanted them. A closed tab
+    // now stays until the player presses its x; more than five closed tabs send the one that closed
+    // first - never the one being read - to the Finished list.
 
-    private static final long DWELL = 1_000L;
+    private static NegotiationTabRegistry withTabs(String... vesselIds) {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        for (String id : vesselIds) {
+            registry.onNegotiationOpened(opened("nego-" + id, id, "cargo_vessel", "berth_1", 1, 1500.0));
+        }
+        return registry;
+    }
+
+    /** What the chat panel does when a negotiation closes: the close, then the limit. */
+    private static List<String> close(NegotiationTabRegistry registry, String vesselId, String reading) {
+        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-" + vesselId, vesselId, Deal.Outcome.DEAL), 0L);
+        return registry.trimClosedTabs(reading);
+    }
 
     @Test
-    void aClosedTabExpiresExactlyWhenItsDwellRunsOut() {
-        NegotiationTabRegistry registry = new NegotiationTabRegistry();
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 5_000L);
+    void aClosedTabStaysUntilThePlayerClosesIt() {
+        NegotiationTabRegistry registry = withTabs("W001");
+        assertEquals(List.of(), close(registry, "W001", null), "one closed tab is within the limit");
+        assertEquals(List.of("nego-W001"), registry.dialogueIds(), "and no clock takes it away");
+        int[] changes = {0};
+        registry.setOnChange(() -> changes[0]++);
 
-        assertEquals(List.of(), registry.sweepClosed(5_000L + DWELL - 1, DWELL), "still inside its dwell");
-        assertTrue(registry.dialogueIds().contains("nego-W001"));
+        assertTrue(registry.closeTab("nego-W001"), "the player's x");
 
-        assertEquals(List.of("nego-W001"), registry.sweepClosed(5_000L + DWELL, DWELL));
         assertEquals(List.of(), registry.dialogueIds());
+        assertNull(registry.tab("nego-W001"));
         assertEquals(Optional.empty(), registry.dialogueIdForVessel("W001"));
-        assertEquals(List.of(), registry.sweepClosed(Long.MAX_VALUE / 2, DWELL), "a swept tab is gone for good");
+        assertEquals(List.of("nego-W001"), registry.finishedDialogues().stream().map(FinishedDialogue::dialogueId)
+                .toList(), "nothing is lost: it is in the Finished list");
+        assertEquals(1, changes[0]);
+        assertFalse(registry.closeTab("nego-W001"), "a tab that has left cannot leave twice");
+        assertEquals(1, changes[0]);
     }
 
     @Test
-    void openTabsNeverExpire() {
-        NegotiationTabRegistry registry = new NegotiationTabRegistry();
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+    void anOpenNegotiationsTabHasNoClose() {
+        NegotiationTabRegistry registry = withTabs("W001");
 
-        assertEquals(List.of(), registry.sweepClosed(Long.MAX_VALUE / 2, 0L));
+        assertFalse(registry.closeTab("nego-W001"), "the vessel is still waiting for an answer");
         assertEquals(List.of("nego-W001"), registry.dialogueIds());
+        assertFalse(registry.closeTab("nego-ghost"));
+        assertFalse(registry.closeTab(null));
     }
 
     @Test
-    void eachClosedTabRunsItsOwnDwell() {
-        NegotiationTabRegistry registry = new NegotiationTabRegistry();
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
-        registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
-        registry.onNegotiationOpened(opened("nego-W003", "W003", "ferry", "berth_3", 1, 900.0));
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W002", "W002", Deal.Outcome.TIMEOUT), 500L);
+    void aSixthClosedTabSendsTheFirstToCloseToFinished() {
+        NegotiationTabRegistry registry = withTabs("W001", "W002", "W003", "W004", "W005", "W006", "W007");
+        for (String id : List.of("W001", "W002", "W003", "W004", "W005")) {
+            assertEquals(List.of(), close(registry, id, null), "five closed tabs stay: " + id);
+        }
+        int[] changes = {0};
+        registry.setOnChange(() -> changes[0]++);
 
-        assertEquals(List.of("nego-W001"), registry.sweepClosed(DWELL, DWELL));
-        assertEquals(List.of("nego-W002", "nego-W003"), registry.dialogueIds());
-        assertEquals(List.of("nego-W002"), registry.sweepClosed(500L + DWELL, DWELL));
-        assertEquals(List.of("nego-W003"), registry.dialogueIds(), "the open dialogue stays");
+        assertEquals(List.of("nego-W001"), close(registry, "W006", null));
+
+        assertEquals(List.of("nego-W002", "nego-W003", "nego-W004", "nego-W005", "nego-W006", "nego-W007"),
+                registry.dialogueIds(), "five closed tabs and the open one");
+        assertEquals(6, registry.finishedDialogues().size(), "the one that left is in the Finished list too");
+        assertEquals(Optional.empty(), registry.dialogueIdForVessel("W001"));
+        assertEquals(2, changes[0], "the close, and the tab that left");
+        assertEquals(List.of(), registry.trimClosedTabs(null), "within the limit again: nothing more leaves");
     }
 
     @Test
-    void aRepeatedCloseDoesNotRestartTheDwell() {
-        NegotiationTabRegistry registry = new NegotiationTabRegistry();
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 900L);
+    void theOldestIsTheFirstToCloseNotTheFirstToOpen() {
+        NegotiationTabRegistry registry = withTabs("W001", "W002", "W003", "W004", "W005", "W006");
+        for (String id : List.of("W006", "W005", "W004", "W003", "W002")) {
+            close(registry, id, null);
+        }
 
-        assertEquals(List.of("nego-W001"), registry.sweepClosed(DWELL, DWELL));
+        assertEquals(List.of("nego-W006"), close(registry, "W001", null));
     }
 
     @Test
-    void aSweptDialogueIdReopensAsAFreshTab() {
+    void theTabBeingReadIsNeverTheOneThatLeaves() {
+        NegotiationTabRegistry registry = withTabs("W001", "W002", "W003", "W004", "W005", "W006");
+        for (String id : List.of("W001", "W002", "W003", "W004", "W005")) {
+            close(registry, id, "nego-W001");
+        }
+
+        assertEquals(List.of("nego-W002"), close(registry, "W006", "nego-W001"),
+                "the oldest is being read: the next oldest goes");
+        assertTrue(registry.dialogueIds().contains("nego-W001"));
+        assertEquals(List.of(), registry.trimClosedTabs(null), "five again: the player moving on changes nothing");
+    }
+
+    @Test
+    void aClosedDialogueIdReopensAsAFreshTab() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
         registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
-        registry.sweepClosed(DWELL, DWELL);
+        assertTrue(registry.closeTab("nego-W001"));
 
         NegotiationTabRegistry.OpenResult reopened = registry.onNegotiationOpened(
                 opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
@@ -595,40 +635,14 @@ class NegotiationTabRegistryTest {
     }
 
     @Test
-    void sweepingNeverDropsANewerDialoguesVesselMapping() {
+    void closingATabNeverDropsANewerDialoguesVesselMapping() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-A", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
         registry.onNegotiationClosed(new NegotiationClosedEvent("nego-A", "W001", Deal.Outcome.DEAL), 0L);
         registry.onNegotiationOpened(opened("nego-B", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
 
-        assertEquals(List.of("nego-A"), registry.sweepClosed(DWELL, DWELL));
+        assertTrue(registry.closeTab("nego-A"));
         assertEquals(Optional.of("nego-B"), registry.dialogueIdForVessel("W001"));
-    }
-
-    @Test
-    void aResetDiscardsPendingExpiriesSoASameIdTabInTheNextWorldStays() {
-        NegotiationTabRegistry registry = new NegotiationTabRegistry();
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
-        registry.reset();
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
-
-        assertEquals(List.of(), registry.sweepClosed(Long.MAX_VALUE / 2, DWELL));
-        assertEquals(List.of("nego-W001"), registry.dialogueIds());
-    }
-
-    @Test
-    void onChangeFiresOnlyWhenASweepRemovesSomething() {
-        NegotiationTabRegistry registry = new NegotiationTabRegistry();
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
-        int[] changes = {0};
-        registry.setOnChange(() -> changes[0]++);
-
-        registry.sweepClosed(DWELL - 1, DWELL);
-        assertEquals(0, changes[0]);
-        registry.sweepClosed(DWELL, DWELL);
-        assertEquals(1, changes[0]);
     }
 
     // ==================== S18b (2026-10-14): plain lines, the Finished list, the tab being read ====================
@@ -638,39 +652,40 @@ class NegotiationTabRegistryTest {
         return transcript.get(transcript.size() - 1).text();
     }
 
-    /** Playtest 2, PT3: "Opens at…" / "Counters at…" were hard to read. */
+    /** Playtest 2, PT3: "Opens at…" / "Counters at…" were hard to read. S19 (playtest 5, PT32):
+     * "who is 'they'? is there a middleman?" - the line names the ship. */
     @Test
     void theVesselsOfferAndRepliesArePlainLines() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
-        assertEquals("They offer €1,500 for 6h at berth 1.", lastLine(registry, "nego-W001"));
+        registry.onNegotiationOpened(openedNamed("nego-W001", "W001", "cargo_vessel", "Faro Vecchio", 1, 1500.0));
+        assertEquals("Faro Vecchio offers €1,500 for 6h at berth 2.", lastLine(registry, "nego-W001"));
 
         registry.recordPlayerOffer("nego-W001", 2000.0, 6);
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 2, 1640.0));
-        assertEquals("They counter: €1,640 for 6h.", lastLine(registry, "nego-W001"));
+        registry.onNegotiationOpened(openedNamed("nego-W001", "W001", "cargo_vessel", "Faro Vecchio", 2, 1640.0));
+        assertEquals("Faro Vecchio counters: €1,640 for 6h.", lastLine(registry, "nego-W001"));
     }
 
     @Test
     void aCounterAtThePlayersOwnPriceSaysTheyAcceptItButNeedMoreHours() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationOpened(openedNamed("nego-W001", "W001", "cargo_vessel", "Faro Vecchio", 1, 1500.0));
         registry.recordPlayerOffer("nego-W001", 1600.0, 4);
 
         // The vessel takes the 1600 and pushes only the hours back to its 6h floor. The HM stamps
         // no player price on this snapshot (0.0), so the tab's own record carries it forward.
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 2, 1600.0));
+        registry.onNegotiationOpened(openedNamed("nego-W001", "W001", "cargo_vessel", "Faro Vecchio", 2, 1600.0));
 
-        assertEquals("They accept €1,600 but need at least 6h.", lastLine(registry, "nego-W001"));
+        assertEquals("Faro Vecchio accepts €1,600 but needs at least 6h.", lastLine(registry, "nego-W001"));
     }
 
     @Test
     void theClosingLineSaysHowItEndedWithTheAgreedTerms() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationOpened(openedNamed("nego-W001", "W001", "cargo_vessel", "Faro Vecchio", 1, 1500.0));
         registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL,
                 1700.0, 6, true), 0L);
 
-        assertEquals("✔ They accepted €1,700 for 6h — deal done.", lastLine(registry, "nego-W001"));
+        assertEquals("✔ Faro Vecchio accepted €1,700 for 6h — deal done.", lastLine(registry, "nego-W001"));
         assertEquals(1700.0, registry.tab("nego-W001").agreedPrice(), 0.001);
         assertEquals(6, registry.tab("nego-W001").agreedHours());
     }
@@ -696,11 +711,11 @@ class NegotiationTabRegistryTest {
     }
 
     @Test
-    void aFinishedNegotiationOutlivesTheSweepAndAResetEmptiesTheList() {
+    void aFinishedNegotiationOutlivesItsTabAndAResetEmptiesTheList() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
         registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.WITHDRAW_PRICE), 0L);
-        registry.sweepClosed(DWELL, DWELL);
+        assertTrue(registry.closeTab("nego-W001"));
         assertNull(registry.tab("nego-W001"), "setup: the tab left the strip");
 
         assertEquals(1, registry.finishedDialogues().size(), "the Finished list keeps it");
@@ -708,22 +723,6 @@ class NegotiationTabRegistryTest {
         registry.reset();
         assertEquals(List.of(), registry.finishedDialogues(), "a new world starts with an empty list");
         assertFalse(registry.reopenFinished("nego-W001"), "and the old world's dialogue cannot come back");
-    }
-
-    /** UI tree U4: the tab the player is reading never leaves the strip. */
-    @Test
-    void theTabBeingReadIsNeverSwept() {
-        NegotiationTabRegistry registry = new NegotiationTabRegistry();
-        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
-        registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
-        registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W002", "W002", Deal.Outcome.DEAL), 0L);
-
-        assertEquals(List.of("nego-W002"), registry.sweepClosed(Long.MAX_VALUE / 2, DWELL, "nego-W001"),
-                "however long it has been closed");
-        assertEquals(List.of("nego-W001"), registry.dialogueIds());
-        assertEquals(List.of("nego-W001"), registry.sweepClosed(Long.MAX_VALUE / 2, DWELL, null),
-                "once the player has moved on, it goes at the next sweep");
     }
 
     /** Playtest 2, PT5: a click on a Finished line brings its transcript back, read-only. */
@@ -735,7 +734,7 @@ class NegotiationTabRegistryTest {
         registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
         DialogueTabModel model = registry.tab("nego-W001");
         List<DialogueTabModel.ChatEntry> transcript = model.transcript();
-        registry.sweepClosed(DWELL, DWELL);
+        assertTrue(registry.closeTab("nego-W001"));
         int[] changes = {0};
         registry.setOnChange(() -> changes[0]++);
 
@@ -754,8 +753,7 @@ class NegotiationTabRegistryTest {
         assertTrue(registry.reopenFinished("nego-W002"), "an open negotiation's tab is on the strip: nothing to do");
         assertEquals(List.of("nego-W002", "nego-W001"), registry.dialogueIds(), "and nothing was added twice");
         assertFalse(registry.reopenFinished("nego-ghost"));
-        assertEquals(List.of("nego-W001"), registry.sweepClosed(DWELL, DWELL),
-                "it keeps its first close time: it goes at the first sweep after the player moves on");
+        assertTrue(registry.closeTab("nego-W001"), "S19 (PT26): its x takes it off the strip again");
     }
 
     @Test
@@ -763,7 +761,7 @@ class NegotiationTabRegistryTest {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
         registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
-        registry.sweepClosed(DWELL, DWELL);
+        assertTrue(registry.closeTab("nego-W001"));
 
         assertEquals(Optional.of("nego-W001"),
                 registry.onAssistantChat(new AssistantChatEvent("nego-W001", "Accepted at once — you might have asked for more.")));
@@ -778,6 +776,35 @@ class NegotiationTabRegistryTest {
     private static PlayerCommandRefusedEvent refused(String dialogueId, long commandId, double standingPrice) {
         return new PlayerCommandRefusedEvent(dialogueId, PlayerCommandEvent.PlayerCommandKind.PROPOSE, commandId,
                 standingPrice, "berth_3 is incompatible with a ferry [R7]");
+    }
+
+    /** S19 (playtest 5, PT30): "-> Demanding EUR 2,000 for 5h" showed for a move the gate refused. */
+    @Test
+    void aHeldEchoIsShownWhenTheMoveWentOutAndDroppedWhenItWasRefused() {
+        NegotiationTabRegistry registry = new NegotiationTabRegistry();
+        registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
+        registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
+        registry.tab("nego-W001").holdEcho(41L, "-> You ask EUR 2,000 for 5h.");
+        registry.tab("nego-W001").holdEcho(42L, "-> You ask EUR 1,900 for 5h.");
+        int before = registry.tab("nego-W001").transcript().size();
+        int[] changes = {0};
+        registry.setOnChange(() -> changes[0]++);
+
+        registry.onPlayerCommandRefused(refused("nego-W001", 41L, 0.0));
+        assertEquals(Optional.of("nego-W001"), registry.onPlayerCommandDispatched(new PlayerCommandDispatchedEvent(
+                "nego-W001", PlayerCommandEvent.PlayerCommandKind.PROPOSE, 42L)));
+
+        List<DialogueTabModel.ChatEntry> transcript = registry.tab("nego-W001").transcript();
+        assertEquals(before + 1, transcript.size(), "only the move that went out is echoed: " + transcript);
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.SYSTEM, "-> You ask EUR 1,900 for 5h."),
+                transcript.get(transcript.size() - 1));
+        assertEquals(Optional.empty(), registry.onPlayerCommandDispatched(new PlayerCommandDispatchedEvent(
+                "nego-W001", PlayerCommandEvent.PlayerCommandKind.PROPOSE, 41L)), "the refused one's echo is gone");
+        assertEquals(Optional.empty(), registry.onPlayerCommandDispatched(new PlayerCommandDispatchedEvent(
+                "nego-W001", PlayerCommandEvent.PlayerCommandKind.PROPOSE, 42L)), "and an echo is shown once");
+        assertEquals(Optional.empty(), registry.onPlayerCommandDispatched(new PlayerCommandDispatchedEvent(
+                "nego-W002", PlayerCommandEvent.PlayerCommandKind.ACCEPT, 7L)), "an autopilot move holds no echo");
+        assertTrue(changes[0] >= 1);
     }
 
     @Test
@@ -968,7 +995,7 @@ class NegotiationTabRegistryTest {
     }
 
     @Test
-    void aClosedTabLeavesTheListAtOnceAlthoughItsTabStaysForItsDwell() {
+    void aClosedTabLeavesTheListAtOnceAlthoughItsTabStaysOnTheStrip() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
         registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
@@ -984,12 +1011,12 @@ class NegotiationTabRegistryTest {
     }
 
     @Test
-    void aSweptDialogueThatReopensGoesToTheEndOfTheListLikeItsNewTab() {
+    void aClosedDialogueThatReopensGoesToTheEndOfTheListLikeItsNewTab() {
         NegotiationTabRegistry registry = new NegotiationTabRegistry();
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
         registry.onNegotiationOpened(opened("nego-W002", "W002", "tanker", "berth_2", 1, 6000.0));
         registry.onNegotiationClosed(new NegotiationClosedEvent("nego-W001", "W001", Deal.Outcome.DEAL), 0L);
-        registry.sweepClosed(DWELL, DWELL);
+        assertTrue(registry.closeTab("nego-W001"));
 
         registry.onNegotiationOpened(opened("nego-W001", "W001", "cargo_vessel", "berth_1", 1, 1500.0));
 

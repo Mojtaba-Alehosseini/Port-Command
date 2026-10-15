@@ -280,6 +280,8 @@ class GameScreenCompositionTest {
         HeadlessSwing.flushEdt();
 
         HeadlessSwing.onEdt(() -> {
+            // S19 (playtest 5, PT24): paused - "▶ Resume" and the PAUSED label make the bar its widest.
+            screen.showGameState(false, true, true);
             int content = MainWindow.MIN_WIDTH - FRAME_SLACK; // what the frame's borders leave at the minimum
             showAtDefaults(content, HEIGHT);
             Rectangle hud = onScreen(GameScreen.NAME_HUD);
@@ -480,22 +482,34 @@ class GameScreenCompositionTest {
         });
     }
 
-    /** S18b (T8, PT4): the PAUSED caption goes on the top bar, left of its pause button. */
+    /** S19 (playtest 5, PT24): two Resume controls and a caption drawn over the top bar's figures
+     * became one control - the bar's own button, "▶ Resume" while paused - and a PAUSED label that
+     * is a cell of the bar, covering nothing. */
     @Test
     @Timeout(20)
-    void thePausedCaptionGoesOnTheTopBarLeftOfThePauseButton() throws Exception {
+    void whilePausedTheTopBarSaysPausedBesideItsResumeButtonAndCoversNothing() throws Exception {
         HeadlessSwing.onEdt(() -> {
+            screen.showGameState(false, false, true);
+            showAtDefaults(WIDTH, HEIGHT);
+            Component paused = named(HUDPanel.NAME_PAUSED);
+            assertFalse(paused.isVisible(), "hidden while the game runs");
+
+            screen.showGameState(false, true, true);
             showAtDefaults(WIDTH, HEIGHT);
             Rectangle hud = onScreen(GameScreen.NAME_HUD);
-            Rectangle button = screen.pauseButtonBoundsIn(screen);
-            Rectangle area = screen.pauseCaptionAreaIn(screen);
-
-            assertFalse(button.isEmpty(), "the top bar has its pause button");
-            assertTrue(hud.contains(button), "on the top bar: " + button + " in " + hud);
-            assertEquals(hud.y, area.y);
-            assertEquals(hud.height, area.height);
-            assertEquals(button.x - HUDPanel.HGAP, area.x + area.width, "it ends a gap before the button");
-            assertTrue(area.width > 300, "room for the one-row caption: " + area);
+            Rectangle label = HeadlessSwing.boundsIn(paused, screen);
+            assertTrue(paused.isVisible() && label.width > 0, "shown while paused: " + label);
+            assertEquals(HUDPanel.RESUME_LABEL, screen.hudForTest().pauseButtonForTest().getText());
+            assertTrue(hud.contains(label), "on the top bar: " + label + " in " + hud);
+            List<Component> cells = new ArrayList<>();
+            collect(screen.hudForTest(), cells);
+            for (Component cell : cells) {
+                if (cell == paused || !cell.isVisible() || cell instanceof javax.swing.JPanel) {
+                    continue;
+                }
+                Rectangle at = HeadlessSwing.boundsIn(cell, screen);
+                assertFalse(at.intersects(label), "PAUSED covers " + cell.getName() + " " + at);
+            }
         });
     }
 
@@ -517,31 +531,61 @@ class GameScreenCompositionTest {
             assertTrue(((javax.swing.JLabel) screen.chatPanelForTest().getComponent(0)).getText()
                     .contains(ChatPanel.WAITING_TEXT), "a game: waiting for a walk-in again");
             assertEquals("", screen.notificationStripForTest().pinnedHintForTest(), "the hint is gone");
-            assertEquals(HUDPanel.RESUME_GLYPH, screen.hudForTest().pauseButtonForTest().getText());
+            assertEquals(HUDPanel.RESUME_LABEL, screen.hudForTest().pauseButtonForTest().getText());
             assertTrue(screen.hudForTest().pauseButtonForTest().isEnabled());
+        });
+    }
+
+    // --- S19 (playtest 5, PT31): the Port table | Finished divider ---------------------------------------
+
+    @Test
+    @Timeout(20)
+    void thePortTableAndTheFinishedListShareTheColumnAcrossADivider() throws Exception {
+        HeadlessSwing.onEdt(() -> {
+            showAtDefaults(WIDTH, HEIGHT);
+            JSplitPane split = screen.portSplitForTest();
+            assertEquals(JSplitPane.VERTICAL_SPLIT, split.getOrientation());
+            assertTrue(javax.swing.SwingUtilities.isDescendingFrom(named(GameScreen.NAME_PORT), split),
+                    "the Port table is on one side");
+            assertTrue(javax.swing.SwingUtilities.isDescendingFrom(named(FinishedListPanel.NAME), split),
+                    "the Finished list on the other");
+
+            screen.applyPortDivider(0.5);
+            HeadlessSwing.layOut(screen, WIDTH, HEIGHT);
+            int span = split.getHeight() - split.getDividerSize();
+            assertEquals(span / 2.0, onScreen(GameScreen.NAME_PORT).height, 2.0, "a stored proportion places it");
+            assertTrue(onScreen(GameScreen.NAME_PORT).y + onScreen(GameScreen.NAME_PORT).height
+                    <= onScreen(FinishedListPanel.NAME).y, "the Port table above, Finished below");
+
+            screen.applyPortDivider(0.99);
+            HeadlessSwing.layOut(screen, WIDTH, HEIGHT);
+            assertTrue(onScreen(FinishedListPanel.NAME).height >= GameScreen.FINISHED_MIN_HEIGHT - 1,
+                    "clamped: the Finished list keeps its minimum - " + onScreen(FinishedListPanel.NAME));
+            screen.applyPortDivider(0.01);
+            HeadlessSwing.layOut(screen, WIDTH, HEIGHT);
+            assertTrue(onScreen(GameScreen.NAME_PORT).height >= GameScreen.PORT_MIN_HEIGHT,
+                    "and the Port table its own - " + onScreen(GameScreen.NAME_PORT));
         });
     }
 
     @Test
     @Timeout(20)
-    void theColumnsAreaIsTheThreeColumnsAndNothingElse() throws Exception {
-        // What the pause overlay leaves usable: from the left edge to the right edge, from under
-        // the top bar to above the notification strip.
+    void aDragOfThePortDividerIsReportedAndApplyingOneIsNot() throws Exception {
         HeadlessSwing.onEdt(() -> {
             showAtDefaults(WIDTH, HEIGHT);
-            Rectangle hud = onScreen(GameScreen.NAME_HUD);
-            Rectangle chat = onScreen(GameScreen.NAME_CHAT);
-            Rectangle commLog = onScreen(GameScreen.NAME_COMMLOG);
-            Rectangle port = onScreen(GameScreen.NAME_PORT);
+            screen.applyPortDivider(GameScreen.DEFAULT_PORT_PROPORTION);
+            HeadlessSwing.layOut(screen, WIDTH, HEIGHT);
+            List<Double> reports = new ArrayList<>();
+            screen.trackPortDividerDrags(reports::add);
+            JSplitPane split = screen.portSplitForTest();
+            int span = split.getHeight() - split.getDividerSize();
 
-            Rectangle columns = screen.columnsBoundsIn(screen);
+            split.setDividerLocation(300);
 
-            assertEquals(new Rectangle(0, hud.height, WIDTH, chat.height), columns);
-            assertTrue(columns.contains(port) && columns.contains(chat) && columns.contains(commLog),
-                    "all three columns are inside it");
-            assertFalse(columns.intersects(hud), "the top bar is not");
-            assertTrue(columns.y + columns.height < HEIGHT, "nor is the notification strip under the columns");
-            assertEquals(chat, screen.chatBoundsIn(screen), "the chat's own rectangle is the chat panel's");
+            assertEquals(1, reports.size(), "the drag is reported, to be remembered");
+            assertEquals(ColumnDividers.proportion(300, span), reports.get(0), 1e-9);
+            screen.applyPortDivider(0.6);
+            assertEquals(1, reports.size(), "applying a stored proportion is the program, not the player");
         });
     }
 

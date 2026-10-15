@@ -12,6 +12,7 @@ import it.unige.portcommand.assistant.WalkInDialogueSnapshot;
 import it.unige.portcommand.gui.events.AssistantChatEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
 import it.unige.portcommand.nlp.DialogueCtx;
@@ -56,13 +57,14 @@ public final class NegotiationTabRegistry {
     /** S15 (2026-10-12): the dialogue ids in the order their tabs were FIRST opened — the order
      * the tab strip shows them in. {@link #tabs} cannot answer that: a later round removes and
      * re-puts its entry on purpose (the recency {@link #rosterSnapshots} needs), so its order
-     * changes every time a vessel counters. Kept in step with {@code tabs} at the three places a
-     * tab is created or dropped (open, sweep, reset). */
+     * changes every time a vessel counters. Kept in step with {@code tabs} at the places a tab is
+     * created or dropped (open, a tab leaving the strip, reset). */
     private final List<String> tabOrder = new ArrayList<>();
     /**
      * S18b (playtest 2, PT5): every dialogue that has ended in this world, in the order they
      * ended — the "Finished" list, and the transcripts it brings back. A model stays here after
-     * its tab has left the strip ({@link #sweepClosed}); {@link #reopenFinished} puts it back on.
+     * its tab has left the strip ({@link #closeTab}, {@link #trimClosedTabs}); {@link #reopenFinished}
+     * puts it back on. Its order is the order of the closes - the order {@link #trimClosedTabs} uses.
      * Session-only: nothing here is saved, and {@link #reset()} (a load, a new game) empties it.
      * Bounded by the game: one entry per walk-in that ever hailed.
      */
@@ -158,6 +160,11 @@ public final class NegotiationTabRegistry {
      *         command, an unknown or superseded send, another world's id)
      */
     public Optional<String> onPlayerCommandRefused(PlayerCommandRefusedEvent event) {
+        // S19 (playtest 5, PT30): the move was never sent, so it is never echoed - whichever tab
+        // held its line (a move typed in one tab may be addressed to another vessel by name).
+        for (DialogueTabModel held : tabs.values()) {
+            held.takeHeldEcho(event.commandId());
+        }
         DialogueTabModel tab = tabs.get(event.dialogueId());
         if (tab == null || event.commandId() == PlayerCommandEvent.NO_COMMAND_ID) {
             return Optional.empty();
@@ -178,7 +185,7 @@ public final class NegotiationTabRegistry {
         return s.withLastPlayerOffer(playerOffer); // S14: every other field rides along, the counter too
     }
 
-    /** @param nowMillis the close instant, in the same clock {@link #sweepClosed} is driven by
+    /** @param nowMillis the close instant ({@code ChatPanel}: sim millis)
      *  @return the closed tab's dialogue id, or empty if the event named an unknown dialogue. */
     public Optional<String> onNegotiationClosed(NegotiationClosedEvent event, long nowMillis) {
         DialogueTabModel tab = tabs.get(event.dialogueId());
@@ -186,9 +193,10 @@ public final class NegotiationTabRegistry {
             return Optional.empty();
         }
         tab.close(event.outcome(), nowMillis, event.price(), event.hours());
-        // S18b (PT3/U3): the line says how it ended, with the agreed terms of a deal.
-        tab.appendSystemMessage(OutcomeLines.closing(event.outcome(), event.price(), event.hours(),
-                event.vesselAccepted()));
+        // S18b (PT3/U3): the line says how it ended, with the agreed terms of a deal. S19 (playtest
+        // 5, PT32): and who - the ship by its name.
+        tab.appendSystemMessage(OutcomeLines.closing(tab.snapshot().vesselName(), event.outcome(), event.price(),
+                event.hours(), event.vesselAccepted()));
         finished.putIfAbsent(event.dialogueId(), tab); // a repeated close (C-11) keeps its place
         onChange.run();
         return Optional.of(event.dialogueId());
@@ -235,52 +243,87 @@ public final class NegotiationTabRegistry {
         return Optional.of(event.dialogueId());
     }
 
+    /** S19 (playtest 5, PT26): at most this many CLOSED tabs stay on the strip ({@link #trimClosedTabs}). */
+    public static final int MAX_CLOSED_TABS = 5;
+
     /**
-     * Audit C-07: removes every CLOSED tab whose dwell has run out — its model and its vessel
-     * mapping — and returns the removed ids in tab order. Open tabs never expire. Pure: the
-     * caller supplies both instants in the clock {@link #onNegotiationClosed} was stamped with.
-     * The stamp lives on the model, so {@link #reset()} discards it along with the model and a
-     * same-id tab in the next world can never inherit an old expiry.
+     * S19 (playtest 5, PT26): the player's x on a closed tab. The tab leaves the strip - its model
+     * and its vessel mapping go, as they did when audit C-07's 30-second sweep took a tab - and it
+     * stays in the Finished list, which brings it back on a click. An open negotiation has no x:
+     * with its tab gone, a vessel still waiting for an answer would be out of sight.
+     *
+     * @return {@code true} when the tab left the strip; {@code false} for an open tab or one not on it
      */
-    public List<String> sweepClosed(long nowMillis, long dwellMillis) {
-        return sweepClosed(nowMillis, dwellMillis, null);
+    public boolean closeTab(String dialogueId) {
+        DialogueTabModel tab = dialogueId == null ? null : tabs.get(dialogueId);
+        if (tab == null || !tab.isClosed()) {
+            return false;
+        }
+        leaveStrip(dialogueId);
+        onChange.run();
+        return true;
     }
 
     /**
-     * S18b (UI tree U4, playtest 2 PT5): as {@link #sweepClosed(long, long)}, except that the tab
-     * {@code reading} — the one the player has selected — never leaves, however long it has been
-     * closed: a tab used to vanish under the player while they read its last lines. It goes at the
-     * first sweep after the player has moved on. Nothing is lost when a tab does leave: its model
-     * stays in the Finished list, and {@link #reopenFinished} brings it back.
+     * S19 (playtest 5, PT26): while more than {@link #MAX_CLOSED_TABS} closed tabs are on the strip,
+     * the one that closed first leaves it for the Finished list - never {@code reading}, the tab the
+     * player has selected. Until S19 every closed tab left by itself 30 seconds after it closed
+     * (audit C-07, F-9's pile-up of closed tabs); playtest 5 found tabs leaving that the player still
+     * wanted. The player closes them now; this only keeps the pile-up bounded.
      *
      * @param reading the selected dialogue's id, or {@code null} when none is selected
+     * @return the ids that left, in the order they closed
      */
-    public List<String> sweepClosed(long nowMillis, long dwellMillis, String reading) {
-        List<String> expired = new ArrayList<>();
-        for (DialogueTabModel tab : tabs.values()) {
-            if (tab.isClosed() && nowMillis - tab.dwellFromMillis() >= dwellMillis
-                    && !tab.dialogueId().equals(reading)) {
-                expired.add(tab.dialogueId());
+    public List<String> trimClosedTabs(String reading) {
+        List<String> closedOnStrip = new ArrayList<>();
+        for (String id : finished.keySet()) { // the order they closed in
+            DialogueTabModel tab = tabs.get(id);
+            if (tab != null && tab.isClosed()) {
+                closedOnStrip.add(id);
             }
         }
-        for (String id : expired) {
-            DialogueTabModel gone = tabs.remove(id);
-            dialogueIdByVesselId.remove(gone.vesselId(), id); // two-arg: never drop a newer mapping
-            tabOrder.remove(id); // S15: the id leaves the strip order with its tab
+        int excess = closedOnStrip.size() - MAX_CLOSED_TABS;
+        List<String> left = new ArrayList<>();
+        for (String id : closedOnStrip) {
+            if (left.size() >= excess) {
+                break;
+            }
+            if (!id.equals(reading)) {
+                leaveStrip(id);
+                left.add(id);
+            }
         }
-        if (!expired.isEmpty()) {
+        if (!left.isEmpty()) {
             onChange.run();
         }
-        return List.copyOf(expired);
+        return List.copyOf(left);
     }
 
-    /** S18b (adversarial review): the closed tab's dwell starts again - a new walk-in, not the
-     * player, took the selection away from it (U5), and it was being read (U4). */
-    public void restartDwell(String dialogueId, long nowMillis) {
-        DialogueTabModel tab = tabs.get(dialogueId);
-        if (tab != null) {
-            tab.restartDwell(nowMillis);
+    /** A tab leaves the strip: its model, its vessel mapping and its place in the tab order go; the
+     * model stays in {@link #finished}. */
+    private void leaveStrip(String dialogueId) {
+        DialogueTabModel gone = tabs.remove(dialogueId);
+        dialogueIdByVesselId.remove(gone.vesselId(), dialogueId); // two-arg: never drop a newer mapping
+        tabOrder.remove(dialogueId); // S15: the id leaves the strip order with its tab
+    }
+
+    /**
+     * S19 (playtest 5, PT30): a move the HarbourMaster has sent. The tab it was typed in held its
+     * "→ ..." line until now ({@link DialogueTabModel#holdEcho}); it is written here, once. A move
+     * the Prolog gate refused is never written - {@link #onPlayerCommandRefused} drops its line.
+     *
+     * @return the tab the line was written in, or empty (an autopilot move, a line already written)
+     */
+    public Optional<String> onPlayerCommandDispatched(PlayerCommandDispatchedEvent event) {
+        for (DialogueTabModel tab : tabs.values()) {
+            Optional<String> echo = tab.takeHeldEcho(event.commandId());
+            if (echo.isPresent()) {
+                tab.appendSystemMessage(echo.get());
+                onChange.run();
+                return Optional.of(tab.dialogueId());
+            }
         }
+        return Optional.empty();
     }
 
     /** Task 22: a loaded game has no open dialogues — drop every tab and mapping. S18b (PT5): and
@@ -309,8 +352,8 @@ public final class NegotiationTabRegistry {
 
     /**
      * S18b (playtest 2, PT5): puts a finished dialogue's tab back on the strip, read-only as every
-     * closed tab is, at the end of the tab order. It keeps its original close time, so it leaves
-     * again at the first sweep after the player has moved on from it.
+     * closed tab is, at the end of the tab order. S19 (PT26): it leaves again by its x, or as the
+     * oldest closed tab once more than {@link #MAX_CLOSED_TABS} are on the strip.
      *
      * @return {@code true} when the dialogue's tab is on the strip now (put back, or still there);
      *         {@code false} for an id this world never finished
@@ -333,7 +376,7 @@ public final class NegotiationTabRegistry {
         return tabs.get(dialogueId);
     }
 
-    /** Every tab's id, closed tabs included until they are swept, least-recently-updated first.
+    /** Every tab's id, closed tabs included while they are on the strip, least-recently-updated first.
      * That is the order the dialogues opened in only until one of them goes a second round — a
      * round update re-inserts its entry in {@link #tabs}. S15 (2026-10-12): this comment used to
      * call it the tab display order; {@link #openDialogues} is the view that keeps that order. */
@@ -348,7 +391,7 @@ public final class NegotiationTabRegistry {
     /**
      * S15 (2026-10-12): the negotiations still open, in the order their tabs sit on the strip —
      * what the rest of the window lists ("Waiting for you"), selects and follows. A closed tab is
-     * left out from the moment it closes, although its tab stays on the strip for its dwell: no
+     * left out from the moment it closes, although its tab stays on the strip until its x: no
      * one is waiting on a finished negotiation. A vessel countering does not move its entry
      * (see {@link #tabOrder}), so the list cannot reshuffle under the player's cursor.
      *

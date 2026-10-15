@@ -58,9 +58,17 @@ class HUDPanelPauseButtonTest {
             assertEquals(HUDPanel.PAUSE_TOOLTIP, pause.getToolTipText());
             assertTrue(pause.isEnabled());
 
+            javax.swing.JLabel paused = (javax.swing.JLabel) HeadlessSwing.byName(bar, HUDPanel.NAME_PAUSED);
+            assertFalse(paused.isVisible(), "running: no PAUSED label");
+
             bar.showPauseState(true, true);
-            assertEquals(HUDPanel.RESUME_GLYPH, pause.getText(), "paused: ▶");
+            // S19 (playtest 5, PT24): the one pause control says what it does, and a label says PAUSED.
+            assertEquals(HUDPanel.RESUME_LABEL, pause.getText(), "paused: ▶ Resume");
+            assertEquals("▶ Resume", HUDPanel.RESUME_LABEL);
             assertEquals(HUDPanel.RESUME_TOOLTIP, pause.getToolTipText());
+            assertTrue(paused.isVisible(), "paused: the PAUSED label shows");
+            assertEquals("PAUSED", paused.getText());
+            assertTrue(paused.getParent() == pause.getParent(), "beside the button, in the bar's own layout");
 
             bar.showPauseState(false, false);
             assertFalse(pause.isEnabled(), "nothing to toggle: no game, or a load in flight");

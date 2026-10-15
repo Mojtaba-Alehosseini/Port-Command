@@ -7,6 +7,7 @@ import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
+import it.unige.portcommand.harbourmaster.GateRefusalLine;
 import it.unige.portcommand.harbourmaster.PlayerCommand;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.ontology.VesselSpec;
@@ -122,9 +123,9 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
             return;
         }
         if (tracking.stage() == VesselTracking.Stage.NEGOTIATING) {
-            String refusal = gateRefusal(cmd, tracking);
+            Refusal refusal = gateRefusal(cmd, tracking);
             if (refusal != null) {
-                refuse(cmd, refusal);
+                refuse(cmd, tracking, refusal);
                 return;
             }
         }
@@ -138,7 +139,12 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
      * autopilot the same as a human typing "accept"). S16 (B0a): the weather is NOT part of this
      * gate - a deal is talk, and the weather rules gate movements (see the end of the method).
      */
-    private String gateRefusal(PlayerCommand cmd, VesselTracking tracking) {
+    /** S19 (playtest 5, PT30): a refusal - the technical reason the typed event and the log carry,
+     * and the plain line the player reads ({@link GateRefusalLine}). */
+    private record Refusal(String reason, String line) {
+    }
+
+    private Refusal gateRefusal(PlayerCommand cmd, VesselTracking tracking) {
         VesselSpec spec = tracking.spec();
         String conversationId = "nego-" + cmd.targetVesselId();
         // String.valueOf, not instanceof-String (S5 adversarial finding 6): a numeric berth_id
@@ -150,11 +156,14 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
         if (berthId != null) {
             if (!PrologQueries.isCompatible(berthId, spec.vesselType(),
                     spec.draft(), spec.length(), spec.tonnage())) {
-                return berthId + " is incompatible with a " + spec.vesselType() + " [R7]";
+                return new Refusal(berthId + " is incompatible with a " + spec.vesselType() + " [R7]",
+                        GateRefusalLine.incompatibleBerth(berthId, spec.vesselType(), PrologQueries.findCompatibleBerths(
+                                spec.vesselType(), spec.draft(), spec.length(), spec.tonnage())));
             }
         } else if (PrologQueries.findCompatibleBerths(spec.vesselType(),
                 spec.draft(), spec.length(), spec.tonnage()).isEmpty()) {
-            return "no compatible berth exists for a " + spec.vesselType() + " [R8]";
+            return new Refusal("no compatible berth exists for a " + spec.vesselType() + " [R8]",
+                    GateRefusalLine.noBerthFits(spec.vesselType()));
         }
         // S16 (B0a, ADR-20): no weather leg here any more. Bad weather blocks MOVING, not
         // TALKING: the player (and the autopilot) may negotiate and close a deal in a storm, and
@@ -170,9 +179,12 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
      * HM's send/receive instrumentation and nothing was sent — the rule id lands where the player
      * actually reads, the dialogue tab and the HUD, exactly like the queue notice. S13 (F-7): the
      * typed {@link it.unige.portcommand.gui.events.PlayerCommandRefusedEvent} carries the refused
-     * command's id so the tab takes back the offer it already put on its strip.
+     * command's id so the tab takes back the offer it already put on its strip. S19 (playtest 5,
+     * PT30): the chat and the notification strip say it in plain words ("Berth 4 can't take a
+     * cargo ship [R7] — not sent. Berths that fit: 3."); the event and the log keep the reason.
      */
-    private void refuse(PlayerCommand cmd, String reason) {
+    private void refuse(PlayerCommand cmd, VesselTracking tracking, Refusal refusal) {
+        String reason = refusal.reason();
         String note = "Command " + cmd.kind() + " for " + cmd.targetVesselId()
                 + " refused: " + reason;
         // The standing price is read HERE, on the HM thread after every earlier dispatch for this
@@ -181,11 +193,13 @@ public final class DispatchPlayerCommandBehaviour extends OneShotBehaviour {
         hm.eventBus().publish(new it.unige.portcommand.gui.events.PlayerCommandRefusedEvent(
                 dialogueId, cmd.kind(), cmd.commandId(),
                 hm.negotiationPlayerOffers().getOrDefault(dialogueId, 0.0), reason));
-        hm.eventBus().publish(new it.unige.portcommand.gui.events.NotificationEvent(note,
+        String name = tracking.spec() == null || tracking.spec().vesselName() == null
+                || tracking.spec().vesselName().isBlank() ? cmd.targetVesselId() : tracking.spec().vesselName();
+        hm.eventBus().publish(new it.unige.portcommand.gui.events.NotificationEvent(name + ": " + refusal.line(),
                 it.unige.portcommand.gui.events.NotificationEvent.Severity.WARNING,
                 hm.simClock().nowSimMillis()));
         hm.eventBus().publish(new it.unige.portcommand.gui.events.AssistantChatEvent(
-                "nego-" + cmd.targetVesselId(), note));
+                "nego-" + cmd.targetVesselId(), refusal.line()));
         log.warn("binding PlayerCommand refused by the Prolog gate — {}", note);
     }
 

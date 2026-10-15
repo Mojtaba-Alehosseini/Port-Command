@@ -236,13 +236,17 @@ class ChatPanelHintCardTest {
         int before = transcript().size();
 
         click(view, "Use this");
+        PlayerCommandEvent sent = published(PlayerCommandEvent.class).get(0);
+        bus.publish(new it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent("nego-" + sent.targetVesselId(),
+                sent.kind(), sent.commandId())); // S19 (PT30): the move went out
+        flush();
 
         assertEquals(List.of("1580 for 6h"), processor.texts(), "exactly what the row says, as a player would type it");
         // Everything a typed move gets: the bubble with its parse note, the command, the echo.
         List<DialogueTabModel.ChatEntry> transcript = transcript();
         assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.PLAYER, "1580 for 6h", "(DCG)"),
                 transcript.get(before));
-        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.SYSTEM, "→ Demanding €1,580 for 6h."),
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.SYSTEM, "→ You ask €1,580 for 6h."),
                 transcript.get(before + 1));
         List<PlayerCommandEvent> commands = published(PlayerCommandEvent.class);
         assertEquals(1, commands.size());

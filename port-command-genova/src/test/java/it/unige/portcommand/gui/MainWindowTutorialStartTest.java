@@ -17,13 +17,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class MainWindowTutorialStartTest {
 
+    /** S19 (playtest 5, PT23): the tour shows the tutorial's five cards at its paused start. */
     @Test
-    void theTutorialsFirstCardIsReadFromItsScript() {
+    void theTutorialsTourIsItsFiveScriptedCardsInOrder() {
         ScenarioRegistry registry = new ScenarioRegistry();
 
-        Optional<String> first = MainWindow.firstScriptedTutorialStep(registry.findByKey("tutorial").orElseThrow());
+        java.util.List<String> cards = MainWindow.scriptedTutorialSteps(registry.findByKey("tutorial").orElseThrow());
 
-        assertTrue(first.orElseThrow().startsWith("Welcome, Harbour Master!"), first.orElse("(none)"));
+        assertEquals(5, cards.size(), cards.toString());
+        assertTrue(cards.get(0).startsWith("Welcome, Harbour Master!"), cards.get(0));
+        assertTrue(cards.stream().noneMatch(String::isBlank), cards.toString());
     }
 
     /** S18b (adversarial review): {@code --load} of a tutorial save past its first step showed
@@ -47,7 +50,7 @@ class MainWindowTutorialStartTest {
     void aScenarioWithoutATutorialHasNoFirstCard() {
         ScenarioRegistry registry = new ScenarioRegistry();
 
-        assertEquals(Optional.empty(), MainWindow.firstScriptedTutorialStep(registry.findByKey("busy_day").orElseThrow()));
-        assertEquals(Optional.empty(), MainWindow.firstScriptedTutorialStep(registry.findByKey("storm").orElseThrow()));
+        assertEquals(java.util.List.of(), MainWindow.scriptedTutorialSteps(registry.findByKey("busy_day").orElseThrow()));
+        assertEquals(java.util.List.of(), MainWindow.scriptedTutorialSteps(registry.findByKey("storm").orElseThrow()));
     }
 }

@@ -2,16 +2,13 @@ package it.unige.portcommand.gui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Insets;
-import java.awt.Rectangle;
 import java.util.function.DoubleConsumer;
 
 import javax.swing.BorderFactory;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
-import javax.swing.SwingUtilities;
 
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.gui.model.ColumnDividers;
@@ -101,6 +98,10 @@ final class GameScreen extends JPanel {
     private final NotificationStrip notificationStrip;
     private final JSplitPane outerSplit;
     private final JSplitPane innerSplit;
+    /** S19 (playtest 5, PT31): the left column under the waiting list - the Port table above the
+     * Finished list, across a divider the player can drag (it was a fixed height). */
+    private JSplitPane portSplit;
+    private JPanel leftColumn;
     /** True while {@link #applyDividerProportions} is moving the dividers itself, so that is never
      * mistaken for the player dragging one. */
     private boolean applyingProportions;
@@ -109,7 +110,7 @@ final class GameScreen extends JPanel {
      * @param eventBus           the shared bus every panel subscribes through
      * @param portStateArtifact  the shared tug state the Port table seeds from and follows
      * @param chatInputProcessor the NLP pipeline seam the chat column calls on Send
-     * @param simClock           the shared clock — the chat's counters and closed-tab dwell read it
+     * @param simClock           the shared clock — the chat's counters read it
      * @param speedControl       the one applier behind the top bar's speed toggles — and (S16) the
      *                           holder of the scenario-script lock they show — or {@code null}
      *                           for a top bar without them
@@ -153,8 +154,9 @@ final class GameScreen extends JPanel {
     /**
      * The left column: "Waiting for you" at its natural height on top — it is as tall as the
      * vessels waiting, and one line when nobody is — and the Port table in everything below.
-     * S18b (PT5): "Finished" at the bottom, at its natural height too (never more than five lines;
-     * more scroll), so the Port table above it keeps its rows where they were.
+     * S18b (PT5): "Finished" at the bottom. S19 (playtest 5, PT31): the Port table and Finished
+     * share what lies under the waiting list across a divider ({@link #applyPortDivider}), where
+     * Finished had a fixed height of five lines.
      * {@code PortPanel} sets no name of its own; the shell names it here, in the one place the
      * tutorial's targets are defined.
      */
@@ -173,11 +175,19 @@ final class GameScreen extends JPanel {
         finishedHolder.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, RULE));
         finishedHolder.add(finished, BorderLayout.CENTER);
 
+        port.setMinimumSize(new Dimension(0, PORT_MIN_HEIGHT));
+        finishedHolder.setMinimumSize(new Dimension(0, FINISHED_MIN_HEIGHT));
+        portSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, port, finishedHolder);
+        portSplit.setResizeWeight(DEFAULT_PORT_PROPORTION); // a taller window mostly feeds the Port table
+        portSplit.setContinuousLayout(true);
+        portSplit.setBorder(null);
+        portSplit.setFocusable(false);
+
         JPanel column = new JPanel(new BorderLayout());
         column.add(waitingHolder, BorderLayout.NORTH);
-        column.add(port, BorderLayout.CENTER);
-        column.add(finishedHolder, BorderLayout.SOUTH);
+        column.add(portSplit, BorderLayout.CENTER);
         column.setMinimumSize(new Dimension(LEFT_MIN_WIDTH, 0));
+        leftColumn = column;
         // Like the panels it holds: a click in this column must never take the keyboard focus
         // out of the chat input.
         for (JPanel part : new JPanel[] {column, waitingHolder, finishedHolder}) {
@@ -224,22 +234,58 @@ final class GameScreen extends JPanel {
     }
 
     /** Settles {@code split} at its current size, sets its divider, and lays it out again so both
-     * sides have their new bounds. Does nothing while the split pane has no width. */
+     * sides have their new bounds. Does nothing while the split pane has no size. */
     private static void placeDivider(JSplitPane split, double proportion, int minLeft, int minRight) {
         int span = span(split);
         if (span <= 0) {
             return; // not sized yet: a location of 0 would be remembered and collapse the left side
         }
         split.doLayout(); // see applyDividerProportions: makes the next layout "same size", not "a resize"
-        split.setDividerLocation(split.getInsets().left
-                + ColumnDividers.location(span, proportion, minLeft, minRight));
+        split.setDividerLocation(leading(split) + ColumnDividers.location(span, proportion, minLeft, minRight));
         split.doLayout();
     }
 
-    /** The width the two sides of {@code split} share: its inner width minus the divider. */
+    /**
+     * S19 (playtest 5, PT31): puts the Port table | Finished divider where a stored proportion - the
+     * Port table's share - says, clamped so both keep their minimum heights. Call it after
+     * {@link #applyDividerProportions}: the left column has its size then. Does nothing while the
+     * column has none.
+     */
+    void applyPortDivider(double proportion) {
+        applyingProportions = true;
+        try {
+            leftColumn.doLayout(); // gives the split its bounds under the waiting list
+            placeDivider(portSplit, proportion, PORT_MIN_HEIGHT, FINISHED_MIN_HEIGHT);
+        } finally {
+            applyingProportions = false;
+        }
+    }
+
+    /** S19 (PT31): reports each drag of the Port table | Finished divider, as the proportion to
+     * store - exactly as {@link #trackDividerDrags} does for the two column dividers. */
+    void trackPortDividerDrags(DoubleConsumer onDragged) {
+        trackDrags(portSplit, onDragged);
+    }
+
+    private static boolean vertical(JSplitPane split) {
+        return split.getOrientation() == JSplitPane.VERTICAL_SPLIT;
+    }
+
+    /** The split pane's own size along its orientation. */
+    private static int size(JSplitPane split) {
+        return vertical(split) ? split.getHeight() : split.getWidth();
+    }
+
+    /** The inset before the first side, along the orientation. */
+    private static int leading(JSplitPane split) {
+        return vertical(split) ? split.getInsets().top : split.getInsets().left;
+    }
+
+    /** The size the two sides of {@code split} share: its inner size minus the divider. */
     private static int span(JSplitPane split) {
         Insets insets = split.getInsets();
-        return split.getWidth() - insets.left - insets.right - split.getDividerSize();
+        return vertical(split) ? split.getHeight() - insets.top - insets.bottom - split.getDividerSize()
+                : split.getWidth() - insets.left - insets.right - split.getDividerSize();
     }
 
     /**
@@ -266,25 +312,15 @@ final class GameScreen extends JPanel {
     }
 
     private void trackDrags(JSplitPane split, DoubleConsumer onDragged) {
-        int[] lastWidth = { split.getWidth() };
+        int[] lastSize = { size(split) };
         split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
-            int width = split.getWidth();
+            int size = size(split);
             int span = span(split);
-            if (!applyingProportions && width == lastWidth[0] && span > 0) {
-                onDragged.accept(ColumnDividers.proportion(
-                        split.getDividerLocation() - split.getInsets().left, span));
+            if (!applyingProportions && size == lastSize[0] && span > 0) {
+                onDragged.accept(ColumnDividers.proportion(split.getDividerLocation() - leading(split), span));
             }
-            lastWidth[0] = width;
+            lastSize[0] = size;
         });
-    }
-
-    /**
-     * The whole three-column area — left column, chat, comm log and the two dividers between
-     * them — as a rectangle in {@code target}'s coordinate space. The pause overlay leaves exactly
-     * this area usable and undimmed while the game is paused.
-     */
-    Rectangle columnsBoundsIn(Component target) {
-        return boundsIn(outerSplit, target);
     }
 
     /** S18b (PT4): what the top bar's pause button does — the window's one pause funnel. */
@@ -308,27 +344,15 @@ final class GameScreen extends JPanel {
         notificationStrip.showPinnedHint(noGame ? MainWindow.NO_GAME_RUNNING_TEXT : null);
     }
 
-    /** S18b (PT4): the top bar's pause button in {@code target}'s coordinates, or empty. */
-    Rectangle pauseButtonBoundsIn(Component target) {
-        return hud.pauseButtonBoundsIn(target);
-    }
+    /** S19 (playtest 5, PT31): the Port table's default share of the column under the waiting list
+     * - about the five lines Finished had before - and the two sides' minimum heights. */
+    static final double DEFAULT_PORT_PROPORTION = 0.80;
+    static final int PORT_MIN_HEIGHT = 140;
+    static final int FINISHED_MIN_HEIGHT = 48;
 
-    /**
-     * S18b (TREE_ANALYSIS_DECISIONS T8): where the PAUSED caption goes — over the top bar, left
-     * of the pause button, in {@code target}'s coordinates. The caption used to sit in the middle
-     * of the window, over the chat column the player may be typing in. Empty while the bar is not
-     * laid out; with no pause button, the whole bar.
-     */
-    Rectangle pauseCaptionAreaIn(Component target) {
-        Rectangle bar = boundsIn(hud, target);
-        if (bar.isEmpty()) {
-            return bar;
-        }
-        Rectangle button = hud.pauseButtonBoundsIn(target);
-        if (!button.isEmpty()) {
-            bar.width = Math.max(0, button.x - HUDPanel.HGAP - bar.x);
-        }
-        return bar.width > 0 ? bar : new Rectangle();
+    /** Test-only (S19, PT31): the Port table | Finished split. */
+    JSplitPane portSplitForTest() {
+        return portSplit;
     }
 
     /** Test-only (S18b): the parts the window drives. */
@@ -342,21 +366,6 @@ final class GameScreen extends JPanel {
 
     ChatPanel chatPanelForTest() {
         return chatPanel;
-    }
-
-    /** The chat column alone, as a rectangle in {@code target}'s coordinate space. */
-    Rectangle chatBoundsIn(Component target) {
-        return boundsIn(chatPanel, target);
-    }
-
-    /** Works on a tree with no window too (the conversion only walks parents and adds offsets),
-     * provided {@code target} is this panel or shares an ancestor with it. Whether the screen is
-     * actually SHOWING is the caller's question, not this method's. */
-    private static Rectangle boundsIn(Component source, Component target) {
-        if (source.getParent() == null || target == null) {
-            return new Rectangle();
-        }
-        return SwingUtilities.convertRectangle(source.getParent(), source.getBounds(), target);
     }
 
     /**

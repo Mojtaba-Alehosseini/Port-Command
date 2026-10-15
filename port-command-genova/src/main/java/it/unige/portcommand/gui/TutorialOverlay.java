@@ -12,6 +12,8 @@ import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -19,11 +21,9 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
-import javax.swing.Timer;
 
 import it.unige.portcommand.gui.events.GuiReadyEvent;
 import it.unige.portcommand.persistence.events.GameLoadedEvent;
-import it.unige.portcommand.scenario.events.TutorialStepAdvancedEvent;
 import it.unige.portcommand.util.DeliveryMode;
 import it.unige.portcommand.util.EventBus;
 import it.unige.portcommand.util.Subscription;
@@ -31,8 +31,8 @@ import it.unige.portcommand.util.Subscription;
 /**
  * The five-step tutorial overlay (task 21, planning/21 §21.3; reconciled 2026-07-18). A
  * translucent scrim over the content area that cuts a bright hole around one UI element and shows
- * a caption card explaining it. Mounted in {@code MainWindow}'s {@code JLayeredPane} (the glass
- * pane is already the {@code PauseOverlay}), sized to the content pane and kept in sync on resize.
+ * a caption card explaining it. Mounted in {@code MainWindow}'s {@code JLayeredPane}, sized to the
+ * content pane and kept in sync on resize.
  *
  * <p><b>Highlight by component NAME, not pixels</b> (planning risk note): each step names a target
  * ({@code tutorial-port}/{@code -chat}/{@code -commlog}/{@code -hud}); the cutout is recomputed
@@ -42,14 +42,16 @@ import it.unige.portcommand.util.Subscription;
  * that carry them, are {@link GameScreen}'s since S15 (2026-10-12), when the Port table became the
  * first step's target.
  *
- * <p><b>Two drivers, one view — and two different endings.</b> The tutorial scenario fires
- * {@link TutorialStepAdvancedEvent} on the bus at scripted sim-times (this replaces the task-23
- * placeholder notification banner, keeping that event contract); the overlay shows that step with
- * the scenario's own text, and dismisses itself {@link #SCRIPTED_AUTO_DISMISS_MILLIS} after the
- * FINAL scripted step, because a script has no Done button to click (audit C-03). Independently,
- * Help → "Show tutorial" (and first launch) calls {@link #startFromBeginning()} and the player
- * pages through the five canonical steps with Next, ending on Done. X dismisses at any time, and
- * so does a world swap ({@code GameLoadedEvent}).
+ * <p><b>S19 (playtest 5, PT23): a tour at the paused start.</b> The window starts a game paused and
+ * opens the tour on it ({@link #startTour}): "Next" shows the next card at once, the last card's
+ * "Start playing" resumes the game, and "Skip tutorial" ends the tour (the game stays paused; the
+ * top bar's "▶ Resume" starts it). Help → "Show tutorial" pages the same five cards mid-game and
+ * ends on "Done", starting nothing. Until S19 the Tutorial scenario's script drove the cards on its
+ * own clock (a {@code TutorialStepAdvancedEvent} at 0/200/600/1100/1500 sim-seconds): playtest 5
+ * found a card hidden by "Got it", the next one popping up later by itself, and a "×" beside
+ * "Skip tutorial". No game event drives a card any more, and the card has no "×". Ending the tour -
+ * Skip, Done or Start playing - is reported ({@link #onClosedForGood}) so the window can remember
+ * it (S18b, P10). A world swap ({@code GameLoadedEvent}) clears the overlay at once (audit C-13).
  *
  * <p><b>Non-blocking</b> (planning "common mistake"): {@link #contains(int, int)} is solid only over
  * the caption card, so every click OUTSIDE it — including on the highlighted element — passes
@@ -59,8 +61,8 @@ import it.unige.portcommand.util.Subscription;
  */
 public final class TutorialOverlay extends JComponent {
 
-    /** §3.13 canonical step texts — used for Help/first-launch paging (the scenario supplies its
-     * own per-step text when it drives).
+    /** §3.13 canonical step texts — what Help → "Show tutorial" and the first-launch tour say
+     * (the Tutorial scenario's tour shows its own five texts, {@code tutorial.json}).
      *
      * <p><b>Step 1 describes the Port table (S15, 2026-10-12)</b>, which replaced the picture of
      * the harbour the step used to point at: what a berth line says (who holds it, until when)
@@ -88,56 +90,36 @@ public final class TutorialOverlay extends JComponent {
 
     static final int TOTAL_STEPS = 5;
 
-    /**
-     * How long the FINAL scripted step stays up before the overlay dismisses itself (audit C-03,
-     * 2026-07-27). Long enough to read the last card; short enough to be gone before the demo's
-     * second beat. In {@code tutorial.json} the five steps fire at 0/200/600/1100/1500 sim-seconds
-     * and the scenario runs at 1800 real-seconds/day, so step 5 lands ~31 real seconds in and the
-     * scrim clears ~43 s in — inside Beat 1's two-minute budget.
-     */
-    static final int SCRIPTED_AUTO_DISMISS_MILLIS = 12_000;
+    /** S19 (PT23): the paging button's three labels. */
+    static final String NEXT = "Next";
+    static final String DONE = "Done";
+    static final String START_PLAYING = "Start playing";
 
     private final transient Container searchRoot;
     private final Subscription<GuiReadyEvent> readySubscription;
-    private final Subscription<TutorialStepAdvancedEvent> stepSubscription;
     private final Subscription<GameLoadedEvent> loadedSubscription;
-    /** One-shot, armed only by the SCRIPTED driver's final step; see {@link #showStep}. */
-    private final transient Timer autoDismissTimer;
 
     private final JPanel card = new JPanel(new BorderLayout(8, 8));
     private final JLabel caption = new JLabel();
     private final JLabel stepIndicator = new JLabel();
-    private final JButton nextButton = new JButton("Next");
-    private final JButton closeButton = new JButton("×");
-    /** S18b (PT18): the second way out, in words. */
+    private final JButton nextButton = new JButton(NEXT);
+    /** S18b (PT18): the way out, in words - since S19 (PT23) the only one; the "×" is gone. */
     private final JButton skipButton = new JButton("Skip tutorial");
 
     private boolean ready;
     private int currentStep; // 1..TOTAL_STEPS while shown; 0 when never shown
-    /** S18b (playtest 3-4, PT1/PT18): the player closed the tutorial - ×, Skip, or Done on the last
-     * step. Nothing more of it shows in this game; a new world starts it afresh. */
-    private boolean closedForGame;
-    /** S18b (PT1): the highest scripted step shown in this game - each step is shown once. */
-    private int shownUpTo;
-    /** S18b (PT18): whether the card on screen came from the scenario script. */
-    private boolean scriptedCard;
-    /** S18b (PT18): scripted steps that arrived while a card was being read - shown in turn, one
-     * per "Got it", instead of pulling the card from under the reader. */
-    private final java.util.TreeMap<Integer, String> waitingSteps = new java.util.TreeMap<>();
+    /** S19 (PT23): the texts of the tour on screen, one per step. */
+    private final String[] tourText = STEP_TEXT.clone();
+    /** S19 (PT23): what the last card's "Start playing" runs; {@code null} = the last card says Done. */
+    private transient Runnable onStartPlaying;
     /** S18b (P10): told when the player ends the tutorial, so the window can remember it. */
     private transient Runnable onClosedForGood = () -> { };
 
     /**
-     * @param eventBus   the shared bus (GuiReady + scripted tutorial steps)
+     * @param eventBus   the shared bus (GuiReady, and the world-loaded marker)
      * @param searchRoot the content pane whose subtree is searched for the named highlight targets
      */
     public TutorialOverlay(EventBus eventBus, Container searchRoot) {
-        this(eventBus, searchRoot, SCRIPTED_AUTO_DISMISS_MILLIS);
-    }
-
-    /** Test seam: {@code autoDismissMillis} lets a headless test assert the scripted auto-dismiss
-     * without waiting the production dwell. Production uses the two-arg constructor. */
-    TutorialOverlay(EventBus eventBus, Container searchRoot, int autoDismissMillis) {
         this.searchRoot = searchRoot;
         setOpaque(false);
         setVisible(false);
@@ -146,9 +128,7 @@ public final class TutorialOverlay extends JComponent {
         caption.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
         stepIndicator.setForeground(new Color(90, 90, 90));
         nextButton.addActionListener(e -> advance());
-        closeButton.addActionListener(e -> closeForGood());
-        closeButton.setToolTipText("End the tutorial (reopen it from Help → Show tutorial)");
-        skipButton.addActionListener(e -> closeForGood());
+        skipButton.addActionListener(e -> endTour());
         skipButton.setToolTipText("End the tutorial (reopen it from Help → Show tutorial)");
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
@@ -156,7 +136,6 @@ public final class TutorialOverlay extends JComponent {
         controls.add(stepIndicator);
         controls.add(skipButton);
         controls.add(nextButton);
-        controls.add(closeButton);
         card.setBackground(new Color(250, 250, 250));
         card.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(255, 214, 10), 2),
@@ -166,19 +145,14 @@ public final class TutorialOverlay extends JComponent {
         card.setVisible(false);
         add(card);
 
-        this.autoDismissTimer = new Timer(autoDismissMillis, e -> closeForGood()); // the last card: over
-        this.autoDismissTimer.setRepeats(false);
-
         this.readySubscription = eventBus.subscribe(GuiReadyEvent.class, e -> {
             ready = true;
             repaint();
         }, DeliveryMode.EDT);
-        this.stepSubscription = eventBus.subscribe(TutorialStepAdvancedEvent.class,
-                e -> onScriptedStep(e.step(), e.text()), DeliveryMode.EDT);
         // Audit C-13 (2026-07-27): the scrim must not outlive the world it explains. Switching
-        // Tutorial -> Storm mid-demo (DEMO_SCRIPT Beat 5) otherwise left the tutorial's step-5
-        // card and its 60% scrim sitting over the storm. ChatPanel/CommLogPanel already reset on
-        // this event; the overlay was one of the three surfaces that did not.
+        // Tutorial -> Storm mid-demo (DEMO_SCRIPT Beat 5) otherwise left the tutorial's card and
+        // its 60% scrim sitting over the storm. ChatPanel/CommLogPanel already reset on this
+        // event; the overlay was one of the three surfaces that did not.
         this.loadedSubscription = eventBus.subscribe(GameLoadedEvent.class, e -> resetForANewGame(),
                 DeliveryMode.EDT);
     }
@@ -188,26 +162,26 @@ public final class TutorialOverlay extends JComponent {
         this.onClosedForGood = action == null ? () -> { } : action;
     }
 
-    /**
-     * S18b (playtest 3-4, PT1/PT18): a step the scenario script fires. It is dropped once the
-     * player has closed the tutorial in this game, and when it was already shown; while another
-     * card is being read it waits for that card's "Got it" - the cards used to change under the
-     * reader on the script's clock, and come back after Close.
-     */
-    private void onScriptedStep(int step, String text) {
-        if (closedForGame || step < 1 || step > TOTAL_STEPS || step <= shownUpTo) {
-            return;
-        }
-        if (isShowingAStep()) {
-            waitingSteps.put(step, text);
-            return;
-        }
-        showStep(step, text);
+    /** Help → "Show tutorial": the five canonical cards, ending on Done - nothing is started. */
+    public void startFromBeginning() {
+        startTour(List.of(), null);
     }
 
-    /** Help → "Show tutorial" / first launch: page from step 1 with the canonical text. */
-    public void startFromBeginning() {
-        showStep(1, null);
+    /**
+     * S19 (playtest 5, PT23): the tour, from its first card.
+     *
+     * @param texts          the cards' texts in step order; a missing or blank one is the canonical
+     *                       text of its step
+     * @param onStartPlaying what the last card's "Start playing" runs (the window resumes the
+     *                       paused game); {@code null} and the last card says "Done" and runs nothing
+     */
+    public void startTour(List<String> texts, Runnable onStartPlaying) {
+        for (int i = 0; i < TOTAL_STEPS; i++) {
+            String text = texts != null && i < texts.size() ? texts.get(i) : null;
+            tourText[i] = text == null || text.isBlank() ? STEP_TEXT[i] : text;
+        }
+        this.onStartPlaying = onStartPlaying;
+        showStep(1);
     }
 
     /** True once the window is on screen ({@link GuiReadyEvent}) OR the overlay is displayable — so
@@ -216,111 +190,68 @@ public final class TutorialOverlay extends JComponent {
         return ready || isDisplayable();
     }
 
-    private void showStep(int step, String scenarioText) {
-        if (step < 1 || step > TOTAL_STEPS) {
-            return;
-        }
-        boolean scripted = scenarioText != null && !scenarioText.isBlank();
+    private void showStep(int step) {
         currentStep = step;
-        scriptedCard = scripted;
-        if (scripted) {
-            shownUpTo = Math.max(shownUpTo, step);
-        }
-        caption.setText("<html><div style='width:320px'>" + escape(
-                scripted ? scenarioText : STEP_TEXT[step - 1]) + "</div></html>");
+        caption.setText("<html><div style='width:320px'>" + escape(tourText[step - 1]) + "</div></html>");
         stepIndicator.setText("Step " + step + " of " + TOTAL_STEPS);
-        // S18b (PT18): a scripted card is read, not paged - "Got it" puts it away until the
-        // script's next step (or shows a step that arrived meanwhile).
-        nextButton.setText(step == TOTAL_STEPS ? "Done" : scripted ? "Got it" : "Next");
+        nextButton.setText(step < TOTAL_STEPS ? NEXT : onStartPlaying != null ? START_PLAYING : DONE);
         card.setVisible(true);
         setVisible(true);
         layoutCard();
         repaint();
-
-        // Audit C-03 (2026-07-27) — the scripted driver had no ENDING. `tutorial.json` fires
-        // exactly five TutorialStepAdvance events, the last at simTimeSeconds 1500, and there is
-        // no sixth; `advance()` (the only other route to dismiss()) fires solely on the Next/Done
-        // BUTTON, which is the MANUAL driver's ending. So a scenario-driven tutorial parked itself
-        // on step 5 forever: at 1800 real-seconds/day all five steps land inside the first ~31 real
-        // seconds, and the 60% black scrim then covered every panel under it for the whole
-        // rest of the session — including the storm beat and the EOD report. Clicks still passed
-        // through (contains() is solid only over the card), so it was purely, and severely, visual.
-        // Only the SCRIPTED path auto-dismisses: Help -> "Show tutorial" is the player paging at
-        // their own speed and must still wait for Done.
-        autoDismissTimer.stop();
-        if (scripted && step == TOTAL_STEPS) {
-            autoDismissTimer.restart();
-        }
     }
 
+    /** Next shows the next card at once; on the last card, Done or Start playing ends the tour. */
     private void advance() {
-        if (currentStep >= TOTAL_STEPS) {
-            closeForGood(); // Done
+        if (currentStep == 0) {
             return;
         }
-        if (scriptedCard) {
-            java.util.Map.Entry<Integer, String> next = waitingSteps.pollFirstEntry();
-            while (next != null && next.getKey() <= shownUpTo) {
-                next = waitingSteps.pollFirstEntry();
-            }
-            if (next == null) {
-                hideCard();
-            } else {
-                showStep(next.getKey(), next.getValue());
-            }
+        if (currentStep < TOTAL_STEPS) {
+            showStep(currentStep + 1);
             return;
         }
-        showStep(currentStep + 1, null);
+        Runnable start = onStartPlaying;
+        endTour();
+        if (start != null) {
+            start.run();
+        }
     }
 
-    /** Puts the card away; the tutorial goes on (a later scripted step may show). */
     private void hideCard() {
-        autoDismissTimer.stop();
         card.setVisible(false);
         setVisible(false);
         currentStep = 0;
     }
 
-    /** S18b (PT1/PT18/P10): ×, Skip, Done on the last step, or the last card's own timer - no
-     * more tutorial in this game, and the window is told so it can remember it. */
-    private void closeForGood() {
+    /** Skip, Done, or Start playing: the tour is over, and the window is told so it can remember it. */
+    private void endTour() {
         hideCard();
-        closedForGame = true;
-        waitingSteps.clear();
+        onStartPlaying = null;
         onClosedForGood.run();
     }
 
-    /** A new world (a new game or a load) gets its own tutorial; nothing of the last one stays. */
+    /** A new world (a new game or a load): nothing of the last one's tour stays on screen. */
     private void resetForANewGame() {
         hideCard();
-        closedForGame = false;
-        shownUpTo = 0;
-        waitingSteps.clear();
+        onStartPlaying = null;
     }
 
     /**
-     * Package-private probe for the headless C-03 test: the overlay is "up" when a step is showing.
+     * Package-private probe for the headless tests: the overlay is "up" when a step is showing.
      *
-     * <p><b>This is the dismiss STATE MACHINE, not the scrim.</b> {@link #paintComponent}
-     * additionally gates on {@link #isReady()} and a non-zero size, and headlessly {@code isReady()}
-     * is false and the size is 0×0, so nothing paints in the tests at all. Neither condition implies
-     * the other, and an earlier version of this javadoc claimed they could not drift — they can.
-     * What the tests genuinely pin is the timer/dismiss logic, which IS the C-03 defect; whether the
-     * scrim is visible on a real window belongs to the GUI walk. (Adversarial review, 2026-07-27.)
+     * <p><b>This is the card's state, not the scrim.</b> {@link #paintComponent} additionally gates
+     * on {@link #isReady()} and a non-zero size, and headlessly {@code isReady()} is false and the
+     * size is 0×0, so nothing paints in the tests at all. Whether the scrim is visible on a real
+     * window belongs to the GUI walk. (Adversarial review, 2026-07-27.)
      */
     boolean isShowingAStep() {
         return currentStep != 0 && isVisible();
     }
 
-    /** Package-private test seam for the Next/Done button, so a headless test can page the MANUAL
-     * driver without synthesising an {@code ActionEvent} on a button that is never realized. */
+    /** Package-private test seam for the paging button, so a headless test can page the tour
+     * without synthesising an {@code ActionEvent} on a button that is never realized. */
     void advanceForTest() {
         advance();
-    }
-
-    /** S18b: the × button, as a click would press it. */
-    void closeForTest() {
-        closeButton.doClick();
     }
 
     /** S18b: the "Skip tutorial" button, as a click would press it. */
@@ -333,9 +264,26 @@ public final class TutorialOverlay extends JComponent {
         return caption.getText();
     }
 
-    /** S18b: the label of the paging button now (Next / Got it / Done). */
+    /** S18b: the label of the paging button now (Next / Done / Start playing). */
     String nextLabelForTest() {
         return nextButton.getText();
+    }
+
+    /** Test-only (S19): the card's buttons, left to right. */
+    List<String> buttonLabelsForTest() {
+        List<String> labels = new ArrayList<>();
+        collectButtons(card, labels);
+        return labels;
+    }
+
+    private static void collectButtons(Container root, List<String> into) {
+        for (Component child : root.getComponents()) {
+            if (child instanceof JButton button) {
+                into.add(button.getText());
+            } else if (child instanceof Container nested) {
+                collectButtons(nested, into);
+            }
+        }
     }
 
     /** Test-only (S15): the canonical text of step {@code step} (1..{@link #TOTAL_STEPS}) — what
@@ -351,9 +299,9 @@ public final class TutorialOverlay extends JComponent {
     }
 
     /**
-     * Click-through: solid ONLY over the caption card (so its Next/× buttons work); every other
-     * point — including inside the highlight, so the player can actually click the element being
-     * pointed at — reports false and the event falls through to the app beneath.
+     * Click-through: solid ONLY over the caption card (so its buttons work); every other point —
+     * including inside the highlight, so the player can actually click the element being pointed
+     * at — reports false and the event falls through to the app beneath.
      */
     @Override
     public boolean contains(int x, int y) {
@@ -452,9 +400,7 @@ public final class TutorialOverlay extends JComponent {
     @Override
     public void removeNotify() {
         super.removeNotify();
-        autoDismissTimer.stop();
         readySubscription.cancel();
-        stepSubscription.cancel();
         loadedSubscription.cancel();
     }
 

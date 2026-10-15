@@ -1371,6 +1371,9 @@ class HarbourMasterAgentIT {
         AssistantChatEvent refusal = awaitEvent(AssistantChatEvent.class,
                 e -> "nego-W050".equals(e.dialogueId()) && e.text().contains("[R7]"), 10_000);
         assertNotNull(refusal, "the gate must refuse with the failing rule id in the dialogue tab");
+        // S19 (playtest 5, PT30): in plain words, with the berths that would have fitted.
+        assertTrue(refusal.text().startsWith("Berth 2 can't take a tanker [R7] — not sent. Berths that fit: "),
+                refusal.text());
         // S13 (live-playtest F-7): the typed twin names the refused send, so the chat tab can take
         // the offer it already showed back off its strip.
         PlayerCommandRefusedEvent typed = awaitEvent(PlayerCommandRefusedEvent.class,

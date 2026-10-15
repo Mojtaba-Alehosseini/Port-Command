@@ -53,9 +53,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 2:24 and 0:24 left on their counters; a port with one vessel docked, one held by the weather,
  * one waiting for its tugs and one queued; a mixed tug fleet; the weather on the top bar; wallet,
  * reputation and clock; a few comm-log lines, one citing a Prolog rule; a notification), laid out
- * by {@link HeadlessSwing} and painted into an image. The paused picture paints the real
- * {@link PauseOverlay} over the first one, with its pass-through region bound to this screen's
- * three columns, as {@code MainWindow} binds it.
+ * by {@link HeadlessSwing} and painted into an image. The paused picture is the same screen told
+ * the game is paused, as {@code MainWindow} tells it: S19 (playtest 5, PT24) retired the PAUSED
+ * overlay - the top bar's own "▶ Resume" and its PAUSED label are the whole of it.
  *
  * <p>S16 (2026-10-13): the Port table's rows are chosen to show every KIND of line the table now
  * has — a time, a weather hold with its rule ids, a wait for tugs — and are not one consistent
@@ -63,9 +63,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p><b>What is asserted is structure, never looks.</b> The pictures differ with the platform's
  * fonts, so nothing here compares them to a stored image: the files exist and are not empty, the
- * three columns are where they should be at both sizes, and in the paused picture the top bar,
- * the notification strip and the PAUSED box are darker than before while the three columns are
- * pixel-for-pixel untouched. Whether it looks RIGHT is for the person opening the files — which
+ * three columns are where they should be at both sizes, and in the paused picture the top bar
+ * shows its PAUSED label and nothing else is drawn over anything: the three columns and the
+ * notification strip are pixel-for-pixel untouched. Whether it looks RIGHT is for the person opening the files — which
  * is why all three are written before the first of those assertions runs.
  *
  * <p>One known difference from the real window: a split pane's divider is an AWT container, which
@@ -94,13 +94,12 @@ class GameScreenRenderTest {
     private final PortStateArtifact portState = new PortStateArtifact();
 
     /** Where the named panels are, in the screen's coordinates, at one window size. */
-    private record Layout(Rectangle hud, Rectangle waiting, Rectangle port, Rectangle chat, Rectangle commLog,
-                          Rectangle columns) {
+    private record Layout(Rectangle hud, Rectangle waiting, Rectangle port, Rectangle chat, Rectangle commLog) {
 
         static Layout of(GameScreen screen) {
             return new Layout(onScreen(screen, GameScreen.NAME_HUD), onScreen(screen, WaitingListPanel.NAME),
                     onScreen(screen, GameScreen.NAME_PORT), onScreen(screen, GameScreen.NAME_CHAT),
-                    onScreen(screen, GameScreen.NAME_COMMLOG), screen.columnsBoundsIn(screen));
+                    onScreen(screen, GameScreen.NAME_COMMLOG));
         }
     }
 
@@ -125,28 +124,22 @@ class GameScreenRenderTest {
             HeadlessSwing.onEdt(() -> {
                 Files.createDirectories(OUTPUT_DIR);
 
-                // 1280x800, the default window.
+                // 1280x800, the default window - running.
+                screen.showGameState(false, false, true);
                 show(screen, 1280, 800);
                 Layout at1280 = Layout.of(screen);
                 BufferedImage normal = HeadlessSwing.paint(screen);
                 write(normal, "main-1280x800.png");
 
-                // The same picture, paused: the real overlay, bound to this screen's columns.
-                PauseOverlay overlay = new PauseOverlay(() -> { }, Rectangle::new,
-                        () -> screen.columnsBoundsIn(screen));
-                overlay.setBounds(0, 0, 1280, 800);
-                overlay.doLayout();
-                BufferedImage paused = copyOf(normal);
-                Graphics2D g = paused.createGraphics();
-                try {
-                    overlay.paint(g);
-                } finally {
-                    g.dispose();
-                }
+                // The same screen, paused, as the window tells it (S19, PT24: no overlay any more).
+                screen.showGameState(false, true, true);
+                show(screen, 1280, 800);
+                BufferedImage paused = HeadlessSwing.paint(screen);
                 write(paused, "main-1280x800-paused.png");
-                // Read now: the overlay's own answers depend on the screen's CURRENT layout.
-                Rectangle pausedBox = overlay.captionBox();
-                boolean[] clicks = clicksWhilePaused(overlay, at1280);
+                Component pausedLabel = HeadlessSwing.byName(screen, HUDPanel.NAME_PAUSED);
+                Rectangle pausedAt = pausedLabel == null ? new Rectangle() : HeadlessSwing.boundsIn(pausedLabel, screen);
+                boolean pausedShown = pausedLabel != null && pausedLabel.isVisible();
+                screen.showGameState(false, false, true);
 
                 // 1536x864, a 1080p desktop at 125% scaling.
                 show(screen, 1536, 864);
@@ -157,14 +150,7 @@ class GameScreenRenderTest {
                 assertColumnsInOrderAtTheirMinimumsOrWider(at1280, 1280);
                 assertColumnsInOrderAtTheirMinimumsOrWider(at1536, 1536);
                 assertTheWeatherAndTheReasonLinesAreOnTheScreen(screen, at1536);
-                assertThePauseDimsEverythingButTheColumns(at1280, pausedBox, normal, paused);
-                assertTrue(clicks[0], "a click on Resume reaches the overlay");
-                assertFalse(clicks[1], "a click on the waiting list falls through to it");
-                assertFalse(clicks[2], "a click on the Port table falls through");
-                assertFalse(clicks[3], "a click on the chat input falls through");
-                assertFalse(clicks[4], "a click on the comm log falls through");
-                assertTrue(clicks[5], "a click on the top bar does not fall through");
-                assertTrue(clicks[6], "a click on the notification strip does not fall through");
+                assertThePauseIsOnTheTopBarAndNowhereElse(at1280, pausedShown, pausedAt, normal, paused);
             });
         } finally {
             // Cascades to every panel: bus subscriptions cancelled, the chat's and the
@@ -339,42 +325,6 @@ class GameScreenRenderTest {
         assertTrue(Files.size(file) > 1_000, file.toAbsolutePath() + " is " + Files.size(file) + " bytes");
     }
 
-    private static BufferedImage copyOf(BufferedImage source) {
-        BufferedImage copy = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = copy.createGraphics();
-        try {
-            g.drawImage(source, 0, 0, null);
-        } finally {
-            g.dispose();
-        }
-        return copy;
-    }
-
-    /**
-     * Whether the overlay keeps a click at each of seven places — Resume, waiting list, Port
-     * table, chat input, comm log, top bar, notification strip, in that order. Asked while the
-     * screen still has the layout the overlay was painted over.
-     */
-    private static boolean[] clicksWhilePaused(PauseOverlay overlay, Layout at) {
-        JButton resume = null;
-        for (Component child : overlay.getComponents()) {
-            if (child instanceof JButton button) {
-                resume = button;
-            }
-        }
-        assertNotNull(resume, "fixture: the overlay has its Resume button");
-        Rectangle resumeBounds = resume.getBounds();
-        return new boolean[] {
-                overlay.contains(resumeBounds.x + resumeBounds.width / 2, resumeBounds.y + resumeBounds.height / 2),
-                overlay.contains(at.waiting().x + at.waiting().width / 2, at.waiting().y + at.waiting().height / 2),
-                overlay.contains(at.port().x + at.port().width / 2, at.port().y + 20),
-                overlay.contains(at.chat().x + at.chat().width / 2, at.chat().y + at.chat().height - 15),
-                overlay.contains(at.commLog().x + at.commLog().width - 20, at.commLog().y + at.commLog().height / 2),
-                overlay.contains(at.hud().x + at.hud().width / 2, at.hud().y + at.hud().height / 2),
-                overlay.contains(overlay.getWidth() / 2, overlay.getHeight() - 3),
-        };
-    }
-
     private static void assertSamePixels(BufferedImage expected, BufferedImage actual, Rectangle area, String what) {
         assertFalse(area.isEmpty(), "fixture: no area to compare for " + what);
         for (int y = area.y; y < area.y + area.height; y++) {
@@ -435,50 +385,21 @@ class GameScreenRenderTest {
     }
 
     /**
-     * The paused picture against the unpaused one it was painted over (so everything the overlay
-     * left alone is identical by construction, and any difference is the overlay's doing).
-     *
-     * @param box the overlay's PAUSED group, in the picture's coordinates
+     * S19 (playtest 5, PT24): the paused picture against the running one. The PAUSED label is a cell
+     * of the top bar; nothing is drawn over the three columns or the notification strip any more.
      */
-    private static void assertThePauseDimsEverythingButTheColumns(Layout at, Rectangle box, BufferedImage normal,
-            BufferedImage paused) {
-        Rectangle hud = at.hud();
+    private static void assertThePauseIsOnTheTopBarAndNowhereElse(Layout at, boolean pausedShown, Rectangle label,
+            BufferedImage normal, BufferedImage paused) {
+        assertTrue(pausedShown, "the top bar shows PAUSED while paused");
+        assertTrue(at.hud().contains(label), "on the top bar: " + label + " in " + at.hud());
+
         Rectangle chat = at.chat();
         Rectangle commLog = at.commLog();
-        Rectangle columns = at.columns();
-        assertFalse(box.isEmpty(), "fixture: the PAUSED group was laid out");
-        assertTrue(columns.contains(box), "fixture: the PAUSED group sits over the columns: " + box);
-
-        // Dimmed: the top bar (sampled at its empty right end), the notification strip, and the
-        // margin of the PAUSED group (inside the group, above its caption).
-        int belowColumns = columns.y + columns.height;
-        Rectangle topBarPatch = new Rectangle(hud.x + hud.width - 60, hud.y + 2, 50, hud.height - 4);
-        Rectangle stripPatch = new Rectangle(normal.getWidth() - 60, belowColumns + 1, 50,
-                normal.getHeight() - belowColumns - 2);
-        Rectangle boxMarginPatch = new Rectangle(box.x + 1, box.y + 1, box.width - 2, 8);
-        assertFalse(topBarPatch.isEmpty() || stripPatch.isEmpty() || boxMarginPatch.isEmpty(),
-                "fixture: the three sampled patches have an area");
-        assertTrue(HeadlessSwing.brightness(paused, topBarPatch) < HeadlessSwing.brightness(normal, topBarPatch),
-                "the top bar is dimmed while paused");
-        assertTrue(HeadlessSwing.brightness(paused, stripPatch) < HeadlessSwing.brightness(normal, stripPatch),
-                "the notification strip is dimmed while paused");
-        assertTrue(HeadlessSwing.brightness(paused, boxMarginPatch) < HeadlessSwing.brightness(normal, boxMarginPatch),
-                "the scrim stays behind the PAUSED group, even though it sits over the chat");
-
-        // Untouched: the three columns, everywhere the PAUSED group is not. Each sampled area is
-        // far from the window's centre, where the group is.
-        Rectangle leftColumn = new Rectangle(at.port().x, at.waiting().y, at.port().width,
-                at.port().y + at.port().height - at.waiting().y);
-        Rectangle chatBottom = new Rectangle(chat.x, chat.y + chat.height - 40, chat.width, 40);
-        Rectangle chatTop = new Rectangle(chat.x, chat.y, chat.width, 30);
-        Rectangle commLogRightHalf = new Rectangle(commLog.x + commLog.width / 2, commLog.y,
-                commLog.width - commLog.width / 2, commLog.height);
-        for (Rectangle area : List.of(leftColumn, chatBottom, chatTop, commLogRightHalf)) {
-            assertFalse(area.intersects(box), "fixture: " + area + " is clear of the PAUSED group " + box);
-        }
-        assertSamePixels(normal, paused, leftColumn, "the left column (waiting list and Port table)");
-        assertSamePixels(normal, paused, chatBottom, "the chat's input rows");
-        assertSamePixels(normal, paused, chatTop, "the chat's tab strip");
-        assertSamePixels(normal, paused, commLogRightHalf, "the comm log");
+        Rectangle columns = new Rectangle(0, chat.y, normal.getWidth(), chat.height);
+        Rectangle strip = new Rectangle(0, chat.y + chat.height, normal.getWidth(),
+                normal.getHeight() - chat.y - chat.height);
+        assertSamePixels(normal, paused, columns, "the three columns");
+        assertSamePixels(normal, paused, strip, "the notification strip");
+        assertTrue(commLog.x > chat.x, "fixture: the columns are laid out");
     }
 }

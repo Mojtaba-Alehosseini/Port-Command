@@ -24,6 +24,7 @@ import it.unige.portcommand.gui.events.DealClosedEvent;
 import it.unige.portcommand.gui.events.HintButtonEvent;
 import it.unige.portcommand.gui.events.NegotiationClosedEvent;
 import it.unige.portcommand.gui.events.NegotiationOpenedEvent;
+import it.unige.portcommand.gui.events.PlayerCommandDispatchedEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent;
 import it.unige.portcommand.gui.events.PlayerCommandEvent.PlayerCommandKind;
 import it.unige.portcommand.gui.events.PlayerCommandRefusedEvent;
@@ -174,6 +175,13 @@ class ChatPanelTest {
     private static void refused(EventBus bus, String dialogueId, PlayerCommandKind kind) throws Exception {
         bus.publish(new it.unige.portcommand.gui.events.PlayerCommandRefusedEvent(dialogueId, kind,
                 PlayerCommandEvent.NO_COMMAND_ID, 0.0, "refused"));
+        flush();
+    }
+
+    /** S19 (playtest 5, PT30): the HarbourMaster sent {@code command} - what its dispatch says. */
+    private static void dispatched(EventBus bus, PlayerCommandEvent command) throws Exception {
+        bus.publish(new PlayerCommandDispatchedEvent("nego-" + command.targetVesselId(), command.kind(),
+                command.commandId()));
         flush();
     }
 
@@ -371,17 +379,88 @@ class ChatPanelTest {
         processor.returning(new PipelineResult.Routed(acl(ACLMessage.ACCEPT_PROPOSAL, Map.of())));
         view.sendText("so?");
         SwingUtilities.invokeAndWait(() -> { });
+        dispatched(bus, published(bus, PlayerCommandEvent.class).get(0)); // S19 (PT30): it went out
         List<DialogueTabModel.ChatEntry> transcript = panel.registry().tab("nego-A").transcript();
-        assertTrue(transcript.get(transcript.size() - 1).text().contains("Accepting €1,500 for 6h"),
+        assertTrue(transcript.get(transcript.size() - 1).text().contains("You accept €1,500 for 6h"),
                 "an acceptance must be echoed, with what it accepts (S18b, U6): " + transcript);
 
         processor.returning(new PipelineResult.Routed(acl(ACLMessage.PROPOSE,
                 Map.of("money", Map.of("amount", 6500.0, "currency", "EUR")))));
         view.sendText("how about 6500");
         SwingUtilities.invokeAndWait(() -> { });
+        dispatched(bus, published(bus, PlayerCommandEvent.class).get(1));
         transcript = panel.registry().tab("nego-A").transcript();
-        assertTrue(transcript.get(transcript.size() - 1).text().contains("Demanding €6,500"),
+        assertTrue(transcript.get(transcript.size() - 1).text().contains("You ask €6,500"),
                 "a demand must be echoed with its price: " + transcript);
+    }
+
+    /** S19 (playtest 5, PT30): "-> Demanding €2,000 for 5h" was shown although nothing was sent. */
+    @Test
+    @Timeout(5)
+    void aMoveTheGateRefusedIsNeverEchoed() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        processor.returning(new PipelineResult.Routed(acl(ACLMessage.PROPOSE,
+                Map.of("money", Map.of("amount", 2000.0, "currency", "EUR"), "duration", 5))));
+
+        panel.viewForTest("nego-A").sendText("2000 for 5h");
+        flush();
+        PlayerCommandEvent sent = published(bus, PlayerCommandEvent.class).get(0);
+        assertTrue(transcriptOf(panel, "nego-A").stream().noneMatch(e -> e.text().startsWith("→")),
+                "nothing is echoed before the HarbourMaster has judged the move: " + transcriptOf(panel, "nego-A"));
+
+        bus.publish(new PlayerCommandRefusedEvent("nego-A", PlayerCommandKind.PROPOSE, sent.commandId(), 0.0,
+                "berth_4 is incompatible with a cargo_vessel [R7]"));
+        flush();
+        dispatched(bus, sent); // cannot follow a refusal; were it to, the echo went with the refusal
+        assertTrue(transcriptOf(panel, "nego-A").stream().noneMatch(e -> e.text().startsWith("→")),
+                "a refused move is never echoed: " + transcriptOf(panel, "nego-A"));
+    }
+
+    @Test
+    @Timeout(5)
+    void aMoveIsEchoedOnceTheHarbourMasterHasSentItAndOnlyOnce() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        processor.returning(new PipelineResult.Routed(acl(ACLMessage.PROPOSE,
+                Map.of("money", Map.of("amount", 2200.0, "currency", "EUR"), "duration", 6))));
+        panel.viewForTest("nego-A").sendText("2200 for 6h");
+        flush();
+        PlayerCommandEvent sent = published(bus, PlayerCommandEvent.class).get(0);
+        int before = transcriptOf(panel, "nego-A").size();
+
+        dispatched(bus, sent);
+        dispatched(bus, sent);
+
+        List<DialogueTabModel.ChatEntry> transcript = transcriptOf(panel, "nego-A");
+        assertEquals(before + 1, transcript.size(), "one echo: " + transcript);
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.SYSTEM, "→ You ask €2,200 for 6h."),
+                transcript.get(before), "S19 (playtest 5, PT32): the player's own move says who made it");
+    }
+
+    /** S19 (PT30): the gate judges an acceptance too, so it carries an id the refusal can name. */
+    @Test
+    @Timeout(5)
+    void anAcceptanceTheGateRefusedIsNeverEchoedEither() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        processor.returning(new PipelineResult.Routed(acl(ACLMessage.ACCEPT_PROPOSAL, Map.of())));
+
+        click(panel.viewForTest("nego-A"), "Accept");
+        PlayerCommandEvent sent = published(bus, PlayerCommandEvent.class).get(0);
+        assertTrue(sent.commandId() != PlayerCommandEvent.NO_COMMAND_ID, "the acceptance carries an id");
+        bus.publish(new PlayerCommandRefusedEvent("nego-A", PlayerCommandKind.ACCEPT, sent.commandId(), 0.0,
+                "berth_4 is incompatible with a cargo_vessel [R7]"));
+        flush();
+
+        assertTrue(transcriptOf(panel, "nego-A").stream().noneMatch(e -> e.text().startsWith("→")),
+                transcriptOf(panel, "nego-A").toString());
     }
 
     @Test
@@ -845,13 +924,14 @@ class ChatPanelTest {
 
         processor.returning(new PipelineResult.Routed(acl(ACLMessage.ACCEPT_PROPOSAL, Map.of())));
         click(panel.viewForTest("nego-A"), "Accept");
+        dispatched(bus, published(bus, PlayerCommandEvent.class).get(0)); // S19 (PT30): it went out
 
         List<DialogueTabModel.ChatEntry> transcript = transcriptOf(panel, "nego-A");
         assertEquals(before + 2, transcript.size(), "the player's bubble, then the echo: " + transcript);
         assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.PLAYER, "deal"),
                 transcript.get(before));
-        // S18b (UI tree U6): the echo says what was accepted.
-        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.SYSTEM, "→ Accepting €1,500 for 6h."),
+        // S18b (UI tree U6): the echo says what was accepted. S19 (PT32): and who accepted it.
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.SYSTEM, "→ You accept €1,500 for 6h."),
                 transcript.get(before + 1));
         assertEquals(1, published(bus, PlayerCommandEvent.class).size(), "and the command still dispatches");
         assertEquals(PlayerCommandKind.ACCEPT, published(bus, PlayerCommandEvent.class).get(0).kind());
@@ -873,6 +953,7 @@ class ChatPanelTest {
                 "money", Map.of("amount", 2000.0, "currency", "EUR"), "duration", 10))));
         panel.viewForTest("nego-A").sendText("how about 2000 for 10 hours");
         SwingUtilities.invokeAndWait(() -> { });
+        dispatched(bus, published(bus, PlayerCommandEvent.class).get(0)); // S19 (PT30): it went out
 
         List<DialogueTabModel.ChatEntry> transcript = panel.registry().tab("nego-A").transcript();
         assertFalse(transcript.stream().anyMatch(e -> e.text().contains("only the fee is negotiable")),
@@ -1229,7 +1310,8 @@ class ChatPanelTest {
         flush();
         assertEquals(List.of("Deal: €1,900 · 6h", ""), view.offerRowsForTest());
         assertEquals("Deal: €1,900 · 6h", view.offerStripTextForTest());
-        assertEquals("✔ They accepted €1,900 for 6h — deal done.", lastEntry(panel, "nego-A").text());
+        assertEquals("✔ A accepted €1,900 for 6h — deal done.", lastEntry(panel, "nego-A").text(),
+                "S19 (playtest 5, PT32): the ship is named");
     }
 
     // ==================== S15 (2026-10-12): the input's worked example ====================
@@ -1652,7 +1734,9 @@ class ChatPanelTest {
                 "the round must not be cut off: the row got " + roundRow[0] + " px and needs " + roundRow[1]);
     }
 
-    // ==================== audit C-07: closed tabs leave the strip ====================
+    // ==================== S19 (playtest 5, PT26): a closed tab stays until the player closes it ====================
+    // Audit C-07 swept a closed tab off the strip 30 s after it closed (F-9's pile-up). Playtest 5:
+    // they disappeared by themselves while the player still wanted them.
 
     private static SimClockTickEvent tick(SimClock clock) {
         return new SimClockTickEvent(clock.nowSimMillis(), clock.gameDay(), clock.simHour(), clock.simMinute());
@@ -1660,7 +1744,7 @@ class ChatPanelTest {
 
     @Test
     @Timeout(5)
-    void aClosedTabLeavesTheStripOnceItsDwellHasRunOnTheSharedClock() throws Exception {
+    void aClosedTabWaitsForItsCloseButtonNotForAClock() throws Exception {
         EventBus bus = new EventBus();
         SimClock clock = new SimClock(300);
         ChatPanel panel = new ChatPanel(bus,
@@ -1668,51 +1752,32 @@ class ChatPanelTest {
         openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
         openTab(bus, panel, "nego-B", "B", "tanker", "Genoa Star");
         bus.publish(new NegotiationClosedEvent("nego-A", "A", Deal.Outcome.DEAL));
-        SwingUtilities.invokeAndWait(() -> { });
-        // S18b (U4): the player moves on to B — a tab being read would never leave.
+        flush();
         SwingUtilities.invokeAndWait(() -> assertTrue(panel.selectDialogue("nego-B")));
+        assertTrue(panel.hasCloseButtonForTest("nego-A"), "a closed tab carries its x");
+        assertFalse(panel.hasCloseButtonForTest("nego-B"), "an open negotiation does not");
 
-        clock.advance(29_000); // just short of the 30 real-second dwell
+        clock.advance(600_000); // ten real minutes of running game
         bus.publish(tick(clock));
-        SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(2, panel.stripTabCountForTest(), "the closed tab stays readable during its dwell");
+        flush();
+        assertEquals(2, panel.stripTabCountForTest(), "no timer takes a closed tab away any more");
         assertTrue(panel.tabTitleForTest("nego-A").endsWith("(closed)"));
 
-        clock.advance(1_000);
-        bus.publish(tick(clock));
-        SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(1, panel.stripTabCountForTest(), "C-07: the closed tab must leave the strip");
+        SwingUtilities.invokeAndWait(() -> panel.closeTabForTest("nego-A"));
+        flush();
+        assertEquals(1, panel.stripTabCountForTest(), "the x takes it off the strip");
         assertEquals(1, panel.tabCountForTest());
         assertNull(panel.viewForTest("nego-A"));
         assertNull(panel.registry().tab("nego-A"));
         assertEquals("Genoa Star (tanker)", panel.tabTitleForTest("nego-B"), "the open tab is untouched");
         assertEquals(List.of("nego-A"), panel.finishedDialogues().stream()
                 .map(it.unige.portcommand.gui.model.FinishedDialogue::dialogueId).toList(),
-                "S18b (PT5): nothing is lost — it is in the Finished list");
+                "nothing is lost — it is in the Finished list");
     }
 
     @Test
     @Timeout(5)
-    void aPausedGameKeepsAClosedTabOnScreen() throws Exception {
-        EventBus bus = new EventBus();
-        SimClock clock = new SimClock(300);
-        ChatPanel panel = new ChatPanel(bus,
-                (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")), clock);
-        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
-        bus.publish(new NegotiationClosedEvent("nego-A", "A", Deal.Outcome.TIMEOUT));
-        SwingUtilities.invokeAndWait(() -> { });
-
-        clock.pause();
-        clock.advance(600_000); // ten real minutes of Esc-pause
-        bus.publish(tick(clock));
-        SwingUtilities.invokeAndWait(() -> { });
-
-        assertEquals(1, panel.stripTabCountForTest(), "the dwell counts running game time only");
-    }
-
-    @Test
-    @Timeout(5)
-    void theLastClosedTabStaysWhileItIsReadAndTheNextWalkInTakesItsPlace() throws Exception {
+    void theLastClosedTabStaysWhileTheNextWalkInTakesItsPlaceAndItsCloseBringsTheCardBack() throws Exception {
         EventBus bus = new EventBus();
         SimClock clock = new SimClock(300);
         ChatPanel panel = new ChatPanel(bus,
@@ -1722,38 +1787,54 @@ class ChatPanelTest {
                 && label.getText().contains("How to play") && label.getText().contains(ChatPanel.WAITING_TEXT),
                 "the empty column shows the How to play card");
         assertTrue(panel.getComponent(0).isFocusable(),
-                "the card can take a swept tab's focus, so keys never fall through to the comm log (#9)");
+                "the card can take a closed tab's focus, so keys never fall through to the comm log (#9)");
 
         openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
         bus.publish(new NegotiationClosedEvent("nego-A", "A", Deal.Outcome.DEAL));
-        SwingUtilities.invokeAndWait(() -> { });
-
-        clock.advance(30_000);
-        bus.publish(tick(clock));
-        SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(1, panel.stripTabCountForTest(), "S18b (U4): the only tab is the one being read: it stays");
-
+        flush();
         openTab(bus, panel, "nego-C", "C", "ferry", "Lanterna Rossa");
         assertEquals("nego-C", panel.selectedDialogueId(), "S18b (U5): the new walk-in takes the closed tab's place");
-        bus.publish(tick(clock));
-        SwingUtilities.invokeAndWait(() -> { });
-        // S18b (adversarial review): the walk-in moved the selection, not the player - the tab they
-        // were reading keeps a full dwell from that moment, one click away on the strip.
-        assertEquals(2, panel.stripTabCountForTest(), "the closed tab is not swept from under the reader");
-        clock.advance(29_000);
-        bus.publish(tick(clock));
-        SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(2, panel.stripTabCountForTest(), "its dwell counts from the walk-in's arrival");
-        clock.advance(1_000);
-        bus.publish(tick(clock));
-        SwingUtilities.invokeAndWait(() -> { });
-        assertEquals(1, panel.stripTabCountForTest(), "then it leaves, for the Finished list");
-        assertEquals("Lanterna Rossa (ferry)", panel.tabTitleForTest("nego-C"));
+        assertEquals(2, panel.stripTabCountForTest(), "the closed tab stays, one click away on the strip");
 
+        bus.publish(new NegotiationClosedEvent("nego-C", "C", Deal.Outcome.TIMEOUT));
+        flush();
+        SwingUtilities.invokeAndWait(() -> panel.closeTabForTest("nego-C")); // the tab being read: its x works too
+        SwingUtilities.invokeAndWait(() -> panel.closeTabForTest("nego-A"));
+        flush();
+        assertEquals(0, panel.stripTabCountForTest());
+        assertTrue(panel.getComponent(0) instanceof javax.swing.JLabel label
+                && label.getText().contains("How to play"), "an empty strip shows the card again");
+
+        openTab(bus, panel, "nego-D", "D", "ferry", "Faro Vecchio");
         bus.publish(new it.unige.portcommand.persistence.events.GameLoadedEvent(1, 15_000.0, 50));
-        SwingUtilities.invokeAndWait(() -> { });
+        flush();
         assertTrue(panel.getComponent(0) instanceof javax.swing.JLabel label
                 && label.getText().contains("How to play"), "a new world starts with the card again");
+    }
+
+    @Test
+    @Timeout(5)
+    void aSixthClosedTabSendsTheOldestOneNotBeingReadToFinished() throws Exception {
+        EventBus bus = new EventBus();
+        ChatPanel panel = new ChatPanel(bus, (text, ctx) -> CompletableFuture.completedFuture(new PipelineResult.Error("unused")));
+        for (String id : List.of("A", "B", "C", "D", "E", "F", "G")) {
+            openTab(bus, panel, "nego-" + id, id, "cargo_vessel", id);
+        }
+        assertEquals("nego-A", panel.selectedDialogueId(), "setup: the first tab is the one being read");
+        for (String id : List.of("A", "B", "C", "D", "E")) {
+            bus.publish(new NegotiationClosedEvent("nego-" + id, id, Deal.Outcome.DEAL));
+            flush();
+        }
+        assertEquals(7, panel.stripTabCountForTest(), "five closed tabs stay");
+
+        bus.publish(new NegotiationClosedEvent("nego-F", "F", Deal.Outcome.DEAL));
+        flush();
+
+        assertEquals(6, panel.stripTabCountForTest());
+        assertTrue(panel.viewForTest("nego-A") != null, "the oldest is being read, so it stays");
+        assertNull(panel.viewForTest("nego-B"), "the next oldest went to the Finished list");
+        assertEquals("nego-A", panel.selectedDialogueId(), "and the selection did not move");
+        assertEquals(6, panel.finishedDialogues().size());
     }
 
     @Test
@@ -1964,8 +2045,7 @@ class ChatPanelTest {
         assertEquals("✔ Deal done: €1,500 for 6h.", before.get(before.size() - 1).text(),
                 "their own offer, accepted on the player's side: the line names nobody");
         SwingUtilities.invokeAndWait(() -> assertTrue(panel.selectDialogue("nego-B")));
-        clock.advance(30_000);
-        bus.publish(tick(clock));
+        SwingUtilities.invokeAndWait(() -> panel.closeTabForTest("nego-A")); // S19 (PT26): the player's x
         flush();
         assertNull(panel.viewForTest("nego-A"), "setup: A has left the strip");
 
@@ -1981,9 +2061,10 @@ class ChatPanelTest {
                 "a finished negotiation is not waiting for anyone");
 
         SwingUtilities.invokeAndWait(() -> assertTrue(panel.selectDialogue("nego-B"))); // the player moves on
-        bus.publish(tick(clock));
+        assertTrue(panel.hasCloseButtonForTest("nego-A"), "S19 (PT26): a tab brought back is closed like any other");
+        SwingUtilities.invokeAndWait(() -> panel.closeTabForTest("nego-A"));
         flush();
-        assertNull(panel.viewForTest("nego-A"), "it leaves again at the first sweep after");
+        assertNull(panel.viewForTest("nego-A"), "and its x takes it off the strip again");
         SwingUtilities.invokeAndWait(() -> assertFalse(panel.selectDialogue("nego-ghost"),
                 "an id this world never finished is refused"));
     }

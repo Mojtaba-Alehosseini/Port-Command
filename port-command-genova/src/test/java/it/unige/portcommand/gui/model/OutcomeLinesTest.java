@@ -21,55 +21,68 @@ class OutcomeLinesTest {
                 hours, vesselOffer, playerOffer, 2, 0.0, false, "Santa Lucia");
     }
 
+    /** S19 (playtest 5, PT32): "who is 'they'? is there a middleman?" - every line names the ship. */
     @Test
-    void theOpeningOfferNamesItsPriceHoursAndBerth() {
-        assertEquals("They offer €1,460 for 5h at berth 2.", OutcomeLines.opening(reply(1460.0, 5, 0.0, "berth_2")));
-        assertEquals("They offer €1,460 for 5h.", OutcomeLines.opening(reply(1460.0, 5, 0.0, " ")),
+    void theOpeningOfferNamesTheShipItsPriceHoursAndBerth() {
+        assertEquals("Santa Lucia offers €1,460 for 5h at berth 2.",
+                OutcomeLines.opening(reply(1460.0, 5, 0.0, "berth_2")));
+        assertEquals("Santa Lucia offers €1,460 for 5h.", OutcomeLines.opening(reply(1460.0, 5, 0.0, " ")),
                 "no berth known: the line says nothing about one");
     }
 
     @Test
-    void aCounterIsTheirPriceAndHours() {
-        assertEquals("They counter: €1,460 for 5h.", OutcomeLines.counter(reply(1460.0, 5, 2000.0, "berth_2"), 5));
-        assertEquals("They counter: €1,460 for 5h.", OutcomeLines.counter(reply(1460.0, 5, 0.0, "berth_2"), null),
+    void aCounterIsTheShipsPriceAndHours() {
+        assertEquals("Santa Lucia counters: €1,460 for 5h.",
+                OutcomeLines.counter(reply(1460.0, 5, 2000.0, "berth_2"), 5));
+        assertEquals("Santa Lucia counters: €1,460 for 5h.",
+                OutcomeLines.counter(reply(1460.0, 5, 0.0, "berth_2"), null),
                 "before the player named any hours there is nothing to push back on");
     }
 
     /** Task 19b's floor pushback, kept: the vessel's hours came back above the player's. */
     @Test
     void aCounterAboveThePlayersHoursSaysTheyNeedMore() {
-        assertEquals("They counter: €1,460 for 6h — they need at least 6h.",
+        assertEquals("Santa Lucia counters: €1,460 for 6h — they need at least 6h.",
                 OutcomeLines.counter(reply(1460.0, 6, 2000.0, "berth_2"), 4));
     }
 
     /** PT3's "They accept €1,600 but need at least 6h.": the player's price, only the hours pushed back. */
     @Test
     void aCounterAtThePlayersOwnPriceSaysTheyAcceptItButNeedMoreHours() {
-        assertEquals("They accept €1,600 but need at least 6h.",
+        assertEquals("Santa Lucia accepts €1,600 but needs at least 6h.",
                 OutcomeLines.counter(reply(1600.0, 6, 1600.0, "berth_2"), 4));
-        assertEquals("They accept €1,600 but need at least 6h.",
+        assertEquals("Santa Lucia accepts €1,600 but needs at least 6h.",
                 OutcomeLines.counter(reply(1600.4, 6, 1599.6, "berth_2"), 4), "the same whole euro");
-        assertEquals("They counter: €1,600 for 6h.", OutcomeLines.counter(reply(1600.0, 6, 1600.0, "berth_2"), 6),
+        assertEquals("Santa Lucia counters: €1,600 for 6h.",
+                OutcomeLines.counter(reply(1600.0, 6, 1600.0, "berth_2"), 6),
                 "the same hours too: not an acceptance with a condition");
     }
 
     @Test
     void aDealSaysWhoAcceptedWhatAndThatItIsDone() {
-        assertEquals("✔ They accepted €1,700 for 6h — deal done.",
-                OutcomeLines.closing(Deal.Outcome.DEAL, 1700.0, 6, true));
-        assertEquals("✔ Deal done: €1,460 for 5h.", OutcomeLines.closing(Deal.Outcome.DEAL, 1460.0, 5, false),
+        assertEquals("✔ Faro Vecchio accepted €2,150 for 8h — deal done.",
+                OutcomeLines.closing("Faro Vecchio", Deal.Outcome.DEAL, 2150.0, 8, true));
+        assertEquals("✔ Deal done: €1,460 for 5h.",
+                OutcomeLines.closing("Faro Vecchio", Deal.Outcome.DEAL, 1460.0, 5, false),
                 "their own offer, accepted on the player's side (by the player or the Assistant): nobody named");
-        assertEquals("✔ Deal done.", OutcomeLines.closing(Deal.Outcome.DEAL, 0.0, 0, false),
+        assertEquals("✔ Deal done.", OutcomeLines.closing("Faro Vecchio", Deal.Outcome.DEAL, 0.0, 0, false),
                 "a close that named no terms claims none");
+        assertEquals("✔ They accepted €1,700 for 6h — deal done.",
+                OutcomeLines.closing(" ", Deal.Outcome.DEAL, 1700.0, 6, true), "no name known: they");
     }
 
     @Test
     void everyOtherEndingSaysTheyLeftAndWhy() {
-        assertEquals("✖ They left (price too high).", OutcomeLines.closing(Deal.Outcome.WITHDRAW_PRICE, 0, 0, false));
-        assertEquals("✖ They left (you never granted the hours they need).",
-                OutcomeLines.closing(Deal.Outcome.WITHDRAW_DURATION, 0, 0, false));
-        assertEquals("✖ They left (negotiation timed out).", OutcomeLines.closing(Deal.Outcome.TIMEOUT, 0, 0, false));
-        assertEquals("✖ You turned them away.", OutcomeLines.closing(Deal.Outcome.PLAYER_REFUSED, 0, 0, false));
+        assertEquals("✖ Faro Vecchio left (price too high).",
+                OutcomeLines.closing("Faro Vecchio", Deal.Outcome.WITHDRAW_PRICE, 0, 0, false));
+        assertEquals("✖ Faro Vecchio left (you never granted the hours they need).",
+                OutcomeLines.closing("Faro Vecchio", Deal.Outcome.WITHDRAW_DURATION, 0, 0, false));
+        assertEquals("✖ Faro Vecchio left (negotiation timed out).",
+                OutcomeLines.closing("Faro Vecchio", Deal.Outcome.TIMEOUT, 0, 0, false));
+        assertEquals("✖ You turned Faro Vecchio away.",
+                OutcomeLines.closing("Faro Vecchio", Deal.Outcome.PLAYER_REFUSED, 0, 0, false));
+        assertEquals("✖ You turned them away.", OutcomeLines.closing(null, Deal.Outcome.PLAYER_REFUSED, 0, 0, false),
+                "no name known: them");
     }
 
     @Test

@@ -126,6 +126,13 @@ public final class HUDPanel extends JPanel {
     static final String PAUSE_GLYPH = "\u23F8";
     static final String RESUME_GLYPH = "\u25B6";
     static final String PAUSE_TOOLTIP = "Pause the game (Esc)";
+    /** S19 (playtest 5, PT24): the button's words while paused - the one control says what it does. */
+    static final String RESUME_LABEL = RESUME_GLYPH + " Resume";
+    /** S19 (PT24): the PAUSED label - a cell of the bar's own layout beside the button, so it covers
+     * nothing (the old caption was drawn over the bar's figures). */
+    static final String NAME_PAUSED = "hud-paused";
+    static final String PAUSED_TEXT = "PAUSED";
+    private final JLabel pausedLabel = new JLabel(PAUSED_TEXT);
     static final String RESUME_TOOLTIP = "Resume the game (Esc)";
     /** S18b (PT4): ⏸ while the game runs, ▶ while it is paused; {@code null} on a bar without the game controls. */
     private javax.swing.JButton pauseButton;
@@ -193,9 +200,10 @@ public final class HUDPanel extends JPanel {
     /**
      * S18b (playtest 2, PT4): "No pause button." ⏸ / ▶ beside the speed toggles. It only
      * calls the window's pause funnel, which knows when a toggle is refused (a save or a load in
-     * flight); the window then shows the new state here ({@link #showPauseState}). While the game
-     * is paused this one button stays clickable through the PAUSED overlay — it is how a
+     * flight); the window then shows the new state here ({@link #showPauseState}). It is how a
      * scenario that starts paused (PT2) is started. Not focusable, like everything on the bar.
+     * S19 (playtest 5, PT24): it is the ONE pause control - "▶ Resume" while paused, with a PAUSED
+     * label beside it; the PAUSED overlay and its own Resume button are gone.
      */
     private void addPauseButton(JPanel box) {
         pauseButton = new javax.swing.JButton();
@@ -204,6 +212,12 @@ public final class HUDPanel extends JPanel {
         pauseButton.setMargin(new java.awt.Insets(1, 6, 1, 6));
         pauseButton.addActionListener(e -> onPauseToggle.run());
         box.add(pauseButton);
+        pausedLabel.setName(NAME_PAUSED);
+        pausedLabel.setFont(pausedLabel.getFont().deriveFont(Font.BOLD));
+        pausedLabel.setForeground(new java.awt.Color(176, 32, 32));
+        pausedLabel.setFocusable(false);
+        pausedLabel.setVisible(false);
+        box.add(pausedLabel);
         box.add(javax.swing.Box.createHorizontalStrut(6));
         showPauseState(false, false);
     }
@@ -215,15 +229,18 @@ public final class HUDPanel extends JPanel {
 
     /**
      * S18b (PT4): ▶ while the game is paused, ⏸ otherwise; disabled when there is nothing to
-     * toggle (no game, a load in flight).
+     * toggle (no game, a load in flight). S19 (playtest 5, PT24): "▶ Resume" while paused, and the
+     * PAUSED label beside it.
      */
     public void showPauseState(boolean paused, boolean enabled) {
         if (pauseButton == null) {
             return;
         }
-        pauseButton.setText(paused ? glyphOr(RESUME_GLYPH, "Resume") : glyphOr(PAUSE_GLYPH, "Pause"));
+        String resume = glyphOr(RESUME_GLYPH, "").isEmpty() ? "Resume" : RESUME_LABEL;
+        pauseButton.setText(paused ? resume : glyphOr(PAUSE_GLYPH, "Pause"));
         pauseButton.setToolTipText(paused ? RESUME_TOOLTIP : PAUSE_TOOLTIP);
         pauseButton.setEnabled(enabled);
+        pausedLabel.setVisible(paused);
     }
 
     /** The glyph, or the words where the button's font cannot draw it. */
@@ -239,16 +256,6 @@ public final class HUDPanel extends JPanel {
     public void showNoGame(boolean noGame) {
         model.setNoGame(noGame);
         refreshLabels();
-    }
-
-    /** S18b (PT4): the pause button's rectangle in {@code target}'s coordinates, or an empty one
-     * when the bar has none. The PAUSED overlay lets clicks through there; whether the bar is
-     * showing at all is the window's question. */
-    java.awt.Rectangle pauseButtonBoundsIn(java.awt.Component target) {
-        if (pauseButton == null || pauseButton.getParent() == null || target == null) {
-            return new java.awt.Rectangle();
-        }
-        return javax.swing.SwingUtilities.convertRectangle(pauseButton.getParent(), pauseButton.getBounds(), target);
     }
 
     /** Test-only: the pause button, or {@code null} on a bar without the game controls. */
@@ -519,7 +526,11 @@ public final class HUDPanel extends JPanel {
                 }
                 Dimension preferred = cell.getPreferredSize();
                 int width = cell == elastic ? Math.max(0, Math.min(preferred.width, right - x)) : preferred.width;
-                cell.setBounds(x, top + (rowHeight - preferred.height) / 2, width, preferred.height);
+                // S19 (PT24): with no room left at all (the window's minimum width, paused - "▶ Resume"
+                // and PAUSED make the bar its widest) the elastic cell is empty and sits at the bar's
+                // end, not past it.
+                int cellX = cell == elastic ? Math.min(x, parent.getWidth() - insets.right) : x;
+                cell.setBounds(cellX, top + (rowHeight - preferred.height) / 2, width, preferred.height);
                 x += width + hgap;
             }
         }
