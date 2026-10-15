@@ -8,6 +8,8 @@ import java.util.function.Predicate;
 import it.unige.portcommand.agents.BaseVesselAgent;
 import it.unige.portcommand.agents.HarbourMasterAgent;
 import it.unige.portcommand.agents.HmProbeAgent;
+import it.unige.portcommand.agents.TugMath;
+import it.unige.portcommand.behaviours.coordination.AutoFlowDispatcherBehaviour;
 import it.unige.portcommand.behaviours.coordination.HandleWeatherAlertBehaviour;
 import it.unige.portcommand.bootstrap.AgentRoster;
 import it.unige.portcommand.bootstrap.BootstrapConfig;
@@ -16,6 +18,8 @@ import it.unige.portcommand.core.MessageFactory;
 import it.unige.portcommand.core.TerminalJson;
 import it.unige.portcommand.gui.events.DebugWeatherEvent;
 import it.unige.portcommand.gui.events.TugJobAwardedEvent;
+import it.unige.portcommand.harbourmaster.TugBasePositions;
+import it.unige.portcommand.harbourmaster.TugProfiles;
 import it.unige.portcommand.harbourmaster.VesselTracking;
 import it.unige.portcommand.harbourmaster.VesselTracking.Stage;
 import it.unige.portcommand.harbourmaster.financial.Leaderboard;
@@ -54,7 +58,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and the clock is paused except inside {@link #jump}, which resumes, advances by an exact
  * amount of game time and pauses again. Movement is sim-time integration (tugs) or a sim-time
  * deadline (the ship), so a jump is enough for both; nothing here sleeps to let time pass.
- * The jumps go well past the first game hour (the first case covers 100 game minutes). The
+ * The jumps go well past the first game hour (the first case covers almost two game hours). The
  * weather in force is still the one the test set, because both weather behaviours do nothing
  * while the clock is paused, and it is paused whenever a jump is not in progress: no hourly step
  * is taken and nothing is broadcast behind the test's back.
@@ -77,8 +81,17 @@ class WeatherHoldTransitIT {
     private static final DebugWeatherEvent STORM = new DebugWeatherEvent(32, "poor", 4.0, "stormy");
     private static final DebugWeatherEvent CLEAR = new DebugWeatherEvent(20, "good", 1.0, "sunny");
 
-    /** A tug reaches the channel entry in about 29 game minutes (S16 scale); 32 is past that. */
-    private static final long TUGS_REACH_SHIP_SIM_SECONDS = 32 * 60L;
+    /** How long a customs inspection takes ({@code FlagForInspectionBehaviour}; CustomsAgentIT pins it). */
+    private static final long INSPECTION_SIM_SECONDS = 2_700L;
+    /** How far past the slowest tug's arrival a tug leg's jump goes. */
+    private static final long TUG_MARGIN_SIM_SECONDS = 3 * 60L;
+    /**
+     * The run from the tug base to the channel entry for the SLOWEST tug in the profile table, plus
+     * the margin. Since S19 (PT39) each tug has its own speed, and R12 ranks the cheap, slow ones
+     * first: tug_1 at 10 kn needs about 35.5 game minutes (the old 12-kn fleet needed 29.6, and a
+     * fixed 32 left tug_1 under way - the first S19 gate was red on exactly that).
+     */
+    private static final long TUGS_REACH_SHIP_SIM_SECONDS = slowestTugRunSimSeconds() + TUG_MARGIN_SIM_SECONDS;
     /** The channel leg to berth 1 is about 14 game minutes; 18 is past that. */
     private static final long CHANNEL_LEG_SIM_SECONDS = 18 * 60L;
 
@@ -239,11 +252,16 @@ class WeatherHoldTransitIT {
      * two tugs — nobody is hired or charged a second time.
      *
      * <p>The cargo is hazmat on purpose: it is always inspected (R22, R24), for 45 game minutes,
-     * and a tug needs about 29 — so there is a quarter of an hour in which the whole escort is
-     * on station and the ship still may not move. That is the state saved here.
+     * and even the slowest tug is there sooner (about 35.5 since S19) — so there are minutes in
+     * which the whole escort is on station and the ship still may not move. That is the state
+     * saved here; the test first checks that the tug leg's jump still ends inside the inspection.
      */
     @Test
     void tugsOnStationSurviveSaveLoad_andTheShipGoesInWithThemOnceCustomsClears() throws Exception {
+        assertTrue(TUGS_REACH_SHIP_SIM_SECONDS < INSPECTION_SIM_SECONDS,
+                "staging: the slowest tug's run with the margin (" + TUGS_REACH_SHIP_SIM_SECONDS
+                        + " s) must end inside the inspection (" + INSPECTION_SIM_SECONDS
+                        + " s), or no escort ever waits on station for customs");
         startPausedSession();
         HarbourMasterAgent hm = awaitHarbourMaster();
         VesselSpec hazmat = new VesselSpec("C001", "cargo_vessel", 9.5, 180.0, 40_000, "hazmat_class_1", 0L);
@@ -259,7 +277,7 @@ class WeatherHoldTransitIT {
                 + hm.activeVessels().get("C001"));
 
         awaitEscortUnderWay(hm, "C001");
-        jump(TUGS_REACH_SHIP_SIM_SECONDS); // 32 of the inspection's 45 game minutes
+        jump(TUGS_REACH_SHIP_SIM_SECONDS); // ends inside the inspection's 45 game minutes
         assertTrue(waitUntil(() -> hm.movement().onStation("C001").size() == 2, 15_000),
                 "staging: both tugs have reached the ship — on station: " + hm.movement().onStation("C001"));
         assertEquals(Stage.AWAITING_TUG, hm.activeVessels().get("C001").stage(),
@@ -397,6 +415,17 @@ class WeatherHoldTransitIT {
      * advance, pause. The production advancer may slip one 100 ms tick in (29 game seconds at
      * this pace), which every budget here allows for.
      */
+    /** The slowest tug's run from its base to the channel entry, from the production tables. */
+    private static long slowestTugRunSimSeconds() {
+        double slowestMinutes = TugProfiles.all().entrySet().stream()
+                .mapToDouble(tug -> TugMath.etaMinutes(
+                        TugMath.distanceKm(TugBasePositions.position(tug.getKey()),
+                                AutoFlowDispatcherBehaviour.CHANNEL_ENTRY),
+                        tug.getValue().topSpeedKnots()))
+                .max().orElseThrow();
+        return (long) Math.ceil(slowestMinutes * 60.0);
+    }
+
     private void jump(long simSeconds) {
         SimClock clock = boot.getSimClock();
         clock.resume();

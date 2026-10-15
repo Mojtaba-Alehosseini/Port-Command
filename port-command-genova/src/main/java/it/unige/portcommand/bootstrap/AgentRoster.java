@@ -27,6 +27,7 @@ import it.unige.portcommand.artifacts.PolicyRegistryArtifact;
 import it.unige.portcommand.assistant.AutopilotPacing;
 import it.unige.portcommand.artifacts.PortStateArtifact;
 import it.unige.portcommand.harbourmaster.TugBasePositions;
+import it.unige.portcommand.harbourmaster.TugProfiles;
 import it.unige.portcommand.negotiation.NegotiationEngine;
 import it.unige.portcommand.nlp.LLMBridge;
 import it.unige.portcommand.ontology.ServiceContract;
@@ -152,9 +153,7 @@ public final class AgentRoster {
             // Base position from the canonical TugBasePositions table (one source of truth for
             // the four bases — no duplicated coordinates).
             spawner.spawn(id, TugAgent.class, new Object[] {
-                    new TugInitArgs(id, TugBasePositions.position(id), TUG_BASE_FARE,
-                            TUG_FUEL_COST_PER_KM, TUG_TOP_SPEED_KNOTS, 1.0),
-                    portState, simClock, directory});
+                    tugInitArgs(id), portState, simClock, directory});
         }
 
         log.info("Roster spawned: 10 fixed agents (1 HM, 2 terminals, 4 tugs, customs, weather, assistant)");
@@ -211,9 +210,7 @@ public final class AgentRoster {
         for (int i = 1; i <= 4; i++) {
             String id = "tug_" + i;
             spawner.spawn(id, TugAgent.class, new Object[] {
-                    new TugInitArgs(id, TugBasePositions.position(id), TUG_BASE_FARE,
-                            TUG_FUEL_COST_PER_KM, TUG_TOP_SPEED_KNOTS, 1.0),
-                    portState, simClock, directory, tugDtos.get(id)});
+                    tugInitArgs(id), portState, simClock, directory, tugDtos.get(id)});
         }
 
         for (VesselStateDTO dto : state.agents().activeVessels()) {
@@ -309,19 +306,34 @@ public final class AgentRoster {
         return "vessel_" + spec.vesselId().toLowerCase().replaceAll("[^a-z0-9_]", "_");
     }
 
-    /** What a tug charges before distance: the floor of every Contract Net bid. */
+    /**
+     * S19 (playtest 5, PT39): a tug's spawn args - its base ({@link TugBasePositions}) and its own
+     * fare, fuel cost and speed ({@link TugProfiles}), with a full tank. One place for the fresh
+     * fleet and the fleet a save brings back.
+     */
+    static TugInitArgs tugInitArgs(String tugId) {
+        TugProfiles.Profile profile = TugProfiles.of(tugId);
+        return new TugInitArgs(tugId, TugBasePositions.position(tugId), profile.baseFare(),
+                profile.fuelCostPerKm(), profile.topSpeedKnots(), 1.0);
+    }
+
+    /** What a tug charges before distance, on the fleet's average: the floor of a Contract Net
+     * bid. S19 (PT39): each tug has its own ({@link TugProfiles}); this is their average. */
     public static final double TUG_BASE_FARE = 350.0;
 
     /**
      * Euro per km a tug adds to its bid for the run to the ship. S16 (ADR-20): 2.0 x 6 = 12.0,
      * scaled with {@code TugMath.PIXELS_PER_KM} (10 -> 60) so a bid from base to the channel
      * entry is still about EUR 480 - the map got six times smaller in km, the money did not move.
+     * S19 (PT39): the fleet's average; each tug has its own ({@link TugProfiles}).
      */
     public static final double TUG_FUEL_COST_PER_KM = 12.0;
 
     /**
-     * Every tug's top speed. Also the speed of the channel leg a ship makes under escort
-     * ({@code MovementControl.channelLegSimMillis}): ship and tugs travel together.
+     * The fleet's average top speed - since S19 (PT39) each tug has its own ({@link TugProfiles}).
+     * It is the speed of the channel leg a ship makes under escort
+     * ({@code MovementControl.channelLegSimMillis}), as before: the leg's length does not depend
+     * on which tug won the auction.
      */
     public static final double TUG_TOP_SPEED_KNOTS = 12.0;
 
