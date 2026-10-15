@@ -125,21 +125,10 @@ class LogArchiverTest {
         assertFalse(Files.exists(missing), "an empty clear() must not touch the disk at all");
     }
 
-    /** S18b (playtest 2, PT11): Game ▸ Open comm-log file opens the newest archive. */
+    /** S19 (PT36): the archive's folder - logs/, unless the property names another. (S19, PT35:
+     * Game ▸ Open comm-log file, and the newest-archive lookup it used, are gone.) */
     @Test
-    void theNewestArchiveIsTheOneWithTheLatestDate(@TempDir Path tempDir) throws Exception {
-        java.nio.file.Files.writeString(tempDir.resolve("commlog-archive-2026-10-12.jsonl"), "{}\n");
-        java.nio.file.Files.writeString(tempDir.resolve("commlog-archive-2026-10-14.jsonl"), "{}\n");
-        java.nio.file.Files.writeString(tempDir.resolve("port-command.log"), "not an archive\n");
-
-        assertEquals(java.util.Optional.of(tempDir.resolve("commlog-archive-2026-10-14.jsonl")),
-                LogArchiver.newestArchive(tempDir));
-    }
-
-    @Test
-    void beforeAnythingIsArchivedThereIsNoArchive(@TempDir Path tempDir) {
-        assertEquals(java.util.Optional.empty(), LogArchiver.newestArchive(tempDir));
-        assertEquals(java.util.Optional.empty(), LogArchiver.newestArchive(tempDir.resolve("no-such-dir")));
+    void theArchiveFolderIsLogsUnlessConfigured() {
         assertEquals(Path.of("logs"), LogArchiver.dirFrom(null), "the game's own folder");
         assertEquals(Path.of("logs"), LogArchiver.dirFrom("  "));
         assertEquals(Path.of("elsewhere", "logs"), LogArchiver.dirFrom("elsewhere/logs"));

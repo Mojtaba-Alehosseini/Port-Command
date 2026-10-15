@@ -75,26 +75,6 @@ public final class LogArchiver {
         return configured == null || configured.isBlank() ? DEFAULT_DIR : Path.of(configured.trim());
     }
 
-    /**
-     * S18b (PT11): the newest {@code commlog-archive-<date>.jsonl} in {@code dir}, for
-     * Game ▸ Open comm-log file — empty when there is none yet (nothing has been archived until
-     * the log passed its 500 rows, or a game was replaced). The date in the name orders them.
-     */
-    public static java.util.Optional<Path> newestArchive(Path dir) {
-        if (dir == null || !java.nio.file.Files.isDirectory(dir)) {
-            return java.util.Optional.empty();
-        }
-        try (java.util.stream.Stream<Path> files = java.nio.file.Files.list(dir)) {
-            return files.filter(p -> {
-                String name = p.getFileName().toString();
-                return name.startsWith("commlog-archive-") && name.endsWith(".jsonl");
-            }).max(java.util.Comparator.comparing(p -> p.getFileName().toString()));
-        } catch (java.io.IOException e) {
-            log.warn("cannot list {} for the comm-log archive", dir, e);
-            return java.util.Optional.empty();
-        }
-    }
-
     public LogArchiver(Path targetDir) {
         this.targetDir = targetDir;
     }

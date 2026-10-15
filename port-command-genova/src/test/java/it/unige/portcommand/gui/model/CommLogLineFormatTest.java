@@ -21,6 +21,36 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CommLogLineFormatTest {
 
+    // ==================== S19 (playtest 5, PT40): Raw shows 2 decimals and a short auction id ====================
+
+    private static final String AUCTION = "cnp-3508e53a-1b2c-4d5e-8f90-1234567af624";
+
+    private static it.unige.portcommand.gui.events.CommLogEvent bid(String content) {
+        return new it.unige.portcommand.gui.events.CommLogEvent(9L * 3_600_000L, "tug_2", java.util.List.of("harbour_master"),
+                jade.lang.acl.ACLMessage.PROPOSE, "tug_2 bids", AUCTION, "port_command_v1", "fipa-contract-net", content);
+    }
+
+    @Test
+    void rawRoundsLongDecimalsToTwoPlacesOutsideStrings() {
+        String block = CommLogLineFormat.raw(bid("{\"eta\":29.247660187185026,\"fuel\":0.9928527616,"
+                + "\"price\":480.0,\"tug\":5,\"note\":\"eta 29.247660187185026\"}"));
+
+        assertTrue(block.contains("\"eta\": 29.25, \"fuel\": 0.99, \"price\": 480.0, \"tug\": 5"), block);
+        assertTrue(block.contains("\"note\": \"eta 29.247660187185026\""), "a string is never touched: " + block);
+    }
+
+    @Test
+    void rawShowsAnAuctionIdShortAndLeavesOtherIdsAlone() {
+        assertEquals("cnp-…f624", CommLogLineFormat.shortId(AUCTION));
+        assertEquals("nego-WALKIN-1", CommLogLineFormat.shortId("nego-WALKIN-1"));
+        assertEquals("berth-vessel_c501", CommLogLineFormat.shortId("berth-vessel_c501"));
+        assertEquals(null, CommLogLineFormat.shortId(null));
+
+        String block = CommLogLineFormat.raw(bid("{}"));
+        assertTrue(block.contains("conversation-id: cnp-…f624"), block);
+        assertTrue(!block.contains(AUCTION), "the full id is the tooltip's, not the line's");
+    }
+
     /** 08:14:03 on the sim clock. */
     private static final long T_08_14_03 = 8 * 3_600_000L + 14 * 60_000L + 3_000L;
 

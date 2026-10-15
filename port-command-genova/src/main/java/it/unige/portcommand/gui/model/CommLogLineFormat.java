@@ -75,7 +75,7 @@ public final class CommLogLineFormat {
                 .append("  receiver: ").append(receivers(event)).append('\n');
         block.append("  ontology: ").append(field(event.ontology()))
                 .append("  protocol: ").append(field(event.protocol()))
-                .append("  conversation-id: ").append(field(event.conversationId())).append('\n');
+                .append("  conversation-id: ").append(field(shortId(event.conversationId()))).append('\n');
         block.append("  content: ").append(content(event.content()));
         return block.toString();
     }
@@ -121,6 +121,87 @@ public final class CommLogLineFormat {
         return out.toString();
     }
 
+    /** S19 (PT40): an id that ends in a UUID - the tug auction's {@code cnp-<UUID>}. */
+    private static final java.util.regex.Pattern LONG_ID = java.util.regex.Pattern.compile(
+            "^([A-Za-z]+-)?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+
+    /**
+     * S19 (playtest 5, PT40): how the Raw block shows a conversation id - a {@code cnp-<UUID>}
+     * auction id as its prefix, an ellipsis and its last four characters ({@code cnp-…f624}); the
+     * panel puts the full id in the tooltip over it. Every other id, and {@code null}, as it is.
+     * Display only: the archive keeps the full id.
+     */
+    public static String shortId(String id) {
+        if (id == null) {
+            return null;
+        }
+        java.util.regex.Matcher matcher = LONG_ID.matcher(id);
+        if (!matcher.matches()) {
+            return id;
+        }
+        String prefix = matcher.group(1) == null ? "" : matcher.group(1);
+        return prefix + "…" + id.substring(id.length() - 4);
+    }
+
+    /**
+     * S19 (playtest 5, PT40): every number outside a JSON string with more than two decimals,
+     * rounded to two ({@code 29.247660187185026} → {@code 29.25}). Display only: the archive keeps
+     * the wire text. A number with an exponent, and everything inside a string, is left as it is;
+     * so is content that does not start like JSON.
+     */
+    static String twoDecimals(String content) {
+        if (content == null || !startsLikeJson(content)) {
+            return content;
+        }
+        StringBuilder out = new StringBuilder(content.length());
+        boolean inString = false;
+        boolean escaped = false;
+        int i = 0;
+        while (i < content.length()) {
+            char c = content.charAt(i);
+            if (inString) {
+                out.append(c);
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+                i++;
+            } else if (c == '"') {
+                inString = true;
+                out.append(c);
+                i++;
+            } else if (Character.isDigit(c) || (c == '-' && i + 1 < content.length()
+                    && Character.isDigit(content.charAt(i + 1)))) {
+                int end = i + 1;
+                while (end < content.length() && (Character.isDigit(content.charAt(end))
+                        || ".eE+-".indexOf(content.charAt(end)) >= 0)) {
+                    end++;
+                }
+                out.append(rounded(content.substring(i, end)));
+                i = end;
+            } else {
+                out.append(c);
+                i++;
+            }
+        }
+        return out.toString();
+    }
+
+    private static String rounded(String number) {
+        int dot = number.indexOf('.');
+        if (dot < 0 || number.indexOf('e') >= 0 || number.indexOf('E') >= 0 || number.length() - dot - 1 <= 2) {
+            return number;
+        }
+        try {
+            return new java.math.BigDecimal(number).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+        } catch (NumberFormatException notANumber) {
+            return number;
+        }
+    }
+
     private static boolean startsLikeJson(String content) {
         for (int i = 0; i < content.length(); i++) {
             char c = content.charAt(i);
@@ -146,7 +227,7 @@ public final class CommLogLineFormat {
         if (content == null || content.isBlank()) {
             return ABSENT;
         }
-        String shown = oneLine(spacedContent(content));
+        String shown = oneLine(spacedContent(twoDecimals(content))); // S19 (PT40): 2 decimals
         if (shown.length() <= RAW_CONTENT_MAX_CHARS) {
             return shown;
         }

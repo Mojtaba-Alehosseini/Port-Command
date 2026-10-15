@@ -48,6 +48,7 @@ import javax.swing.text.StyledDocument;
 import it.unige.portcommand.commlog.PerformativeColours;
 import it.unige.portcommand.core.RuleCatalogue;
 import it.unige.portcommand.gui.events.CommLogEvent;
+import it.unige.portcommand.gui.model.CommLogExport;
 import it.unige.portcommand.gui.model.CommLogLineFormat;
 import it.unige.portcommand.gui.model.CommLogModel;
 import it.unige.portcommand.gui.model.CommLogPreset;
@@ -88,7 +89,8 @@ import it.unige.portcommand.util.Subscription;
  * the log up and down under the reader.
  *
  * <p><b>Scrolling.</b> New rows are followed only while the view is at the tail; once the user
- * scrolls up the view stays put and a "&#9660; resume" button offers the way back. A change of
+ * scrolls up the view stays put and a "&#9660; Jump to latest" button offers the way back (S19,
+ * playtest 5, PT29: it said "resume", which read like the game's own Resume). A change of
  * VIEW (another preset, Raw, another vessel under This vessel) always goes to the tail instead:
  * a row is one line in one view and four in another, so the old offset would point at nothing in
  * particular.
@@ -113,6 +115,12 @@ public final class CommLogPanel extends JPanel {
     static final String NAME_TEXT = "commlog-text";
     static final String NAME_RULE_LINE = "commlog-rule-line";
     static final String NAME_RESUME = "commlog-resume";
+    /** S19 (playtest 5, PT29): "▼ resume" read like the game's own Resume. */
+    static final String JUMP_TO_LATEST = "▼ Jump to latest";
+    static final String EXPORT_LABEL = "Export…";
+    static final String EXPORT_TIP = "Save the log as you see it to a text file - it ends with the rules this game cited";
+    /** S19 (PT40): the attribute that carries an auction id's full text under its short form. */
+    private static final String FULL_ID = "commlog.full-id";
 
     /** S18b (UI tree U16): only the HarbourMaster's traffic is logged; and (PT9) "All" leaves out
      * the routine weather checks that report no change. */
@@ -155,19 +163,28 @@ public final class CommLogPanel extends JPanel {
     private final Predicate<String> knownRuleId = catalogue::contains;
     private final Subscription<CommLogEvent> subscription;
     private final Subscription<GameLoadedEvent> loadedSubscription;
-    private final JTextPane textPane = new JTextPane();
+    /** S19 (playtest 5, PT40): Raw shows an auction id short; the tooltip over it is the full id. */
+    private final JTextPane textPane = new JTextPane() {
+        @Override
+        public String getToolTipText(MouseEvent event) {
+            return fullIdAt(viewToModel2D(event.getPoint()));
+        }
+    };
     private final JScrollPane scrollPane;
     private final Map<CommLogPreset, JToggleButton> presetToggles = new EnumMap<>(CommLogPreset.class);
     private final JCheckBox rawToggle = new JCheckBox("Raw");
     private final JTextArea ruleLine = new RuleLine(RULE_LINE_PROMPT);
-    private final JButton resumeButton = new JButton("▼ resume");
+    private final JButton resumeButton = new JButton(JUMP_TO_LATEST);
+    /** S19 (playtest 5, PT29): the log as a text file - the window runs the save dialog. */
+    private final JButton exportButton = new JButton(EXPORT_LABEL);
+    private java.util.function.Consumer<Runnable> exportWrapper = Runnable::run;
     /** S18b (PT9): how many routine weather checks "All" leaves out; hidden while there are none. */
     private final javax.swing.JLabel hiddenNote = new javax.swing.JLabel();
     /**
      * S18b (playtest 2, PT11): "The comm log cannot be copied." A right-click on the log offers
      * Copy (the selected text) and Copy all (the whole log as shown). The log still never takes
      * the keyboard focus — a click there must not pull it out of the chat input — so the copy
-     * is a menu, not Ctrl+C. Heavyweight, so it opens above the PAUSED overlay too (C-04).
+     * is a menu, not Ctrl+C. Heavyweight, like the menu bar's dropdowns (C-04).
      */
     private final javax.swing.JPopupMenu copyMenu = new javax.swing.JPopupMenu();
     private final javax.swing.JMenuItem copyItem = new javax.swing.JMenuItem(COPY_LABEL);
@@ -280,6 +297,10 @@ public final class CommLogPanel extends JPanel {
         resumeButton.setName(NAME_RESUME);
         resumeButton.setVisible(false);
         resumeButton.addActionListener(e -> resumeToBottom());
+        exportButton.setName(NAME_EXPORT);
+        exportButton.setToolTipText(EXPORT_TIP);
+        exportButton.setMargin(new Insets(2, 8, 2, 8));
+        exportButton.addActionListener(e -> export());
         hiddenNote.setName(NAME_HIDDEN_NOTE);
         hiddenNote.setForeground(new java.awt.Color(0x66, 0x66, 0x66));
         hiddenNote.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
@@ -287,8 +308,12 @@ public final class CommLogPanel extends JPanel {
         JPanel south = new JPanel(new BorderLayout());
         south.add(hiddenNote, BorderLayout.NORTH);
         south.add(ruleLine, BorderLayout.CENTER);
-        south.add(resumeButton, BorderLayout.SOUTH);
+        JPanel bottom = new JPanel(new BorderLayout());
+        bottom.add(resumeButton, BorderLayout.CENTER);
+        bottom.add(exportButton, BorderLayout.EAST);
+        south.add(bottom, BorderLayout.SOUTH);
         add(south, BorderLayout.SOUTH);
+        javax.swing.ToolTipManager.sharedInstance().registerComponent(textPane); // S19 (PT40)
 
         scrollPane.getVerticalScrollBar().addAdjustmentListener(e -> onScrollBarAdjusted());
 
@@ -389,6 +414,71 @@ public final class CommLogPanel extends JPanel {
             copyItem.setEnabled(selected != null && !selected.isEmpty());
             copyMenu.show(textPane, e.getX(), e.getY());
         }
+    }
+
+    static final String NAME_EXPORT = "commlog-export";
+
+    /** S19 (playtest 5, PT29 / PT43): what Export… saves - the log as shown, then the rules cited. */
+    String exportText() {
+        return CommLogExport.text(allText(), model.ruleCitations());
+    }
+
+    /** S19 (PT43): how often this game's comm log cited each rule - Help ▸ Rules (30) reads it. */
+    Map<String, Integer> ruleCitations() {
+        return model.ruleCitations();
+    }
+
+    /** S19 (PT29 / PT35): who runs the save dialog - the window, with the game paused behind it. */
+    void setExportWrapper(java.util.function.Consumer<Runnable> wrapper) {
+        this.exportWrapper = wrapper == null ? Runnable::run : wrapper;
+    }
+
+    /** S19 (PT29 / PT35): the log's Export… and Game ▸ Export comm log… - the save dialog, run by the window. */
+    void export() {
+        exportWrapper.accept(this::exportWithChooser);
+    }
+
+    private void exportWithChooser() {
+        java.awt.Window owner = SwingUtilities.getWindowAncestor(this);
+        javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
+        chooser.setDialogTitle("Export comm log");
+        chooser.setSelectedFile(new java.io.File(CommLogExport.DEFAULT_FILE_NAME));
+        if (chooser.showSaveDialog(owner) != javax.swing.JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.nio.file.Path target = withTxt(chooser.getSelectedFile().toPath());
+        if (java.nio.file.Files.exists(target) && javax.swing.JOptionPane.showConfirmDialog(owner,
+                target.getFileName() + " already exists. Replace it?", "Export comm log",
+                javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE)
+                != javax.swing.JOptionPane.OK_OPTION) {
+            return;
+        }
+        try {
+            CommLogExport.write(target, exportText());
+        } catch (java.io.IOException e) {
+            javax.swing.JOptionPane.showMessageDialog(owner, "Could not save " + target + ": " + e.getMessage(),
+                    "Export comm log", javax.swing.JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    /** A file name the player gave without an extension gets {@code .txt}. */
+    static java.nio.file.Path withTxt(java.nio.file.Path path) {
+        String name = path.getFileName().toString();
+        return name.contains(".") ? path : path.resolveSibling(name + ".txt");
+    }
+
+    /** S19 (PT40): the full auction id under {@code offset}, or {@code null}. */
+    private String fullIdAt(int offset) {
+        StyledDocument doc = textPane.getStyledDocument();
+        if (offset < 0 || offset >= doc.getLength()) {
+            return null;
+        }
+        Object full = doc.getCharacterElement(offset).getAttributes().getAttribute(FULL_ID);
+        return full == null ? null : full.toString();
+    }
+
+    String fullIdAtForTest(int offset) {
+        return fullIdAt(offset);
     }
 
     /** S18b (PT11): the whole log as it is shown — the plain lines, or the Raw blocks. */
@@ -559,7 +649,7 @@ public final class CommLogPanel extends JPanel {
                 for (CommLogEvent event : rows) {
                     int rowStart = doc.getLength();
                     appendRow(doc, raw ? CommLogLineFormat.raw(event) : CommLogLineFormat.plain(event),
-                            event.performative(), spans);
+                            event, raw, spans);
                     starts[rendered++] = rowStart;
                 }
             }
@@ -586,10 +676,21 @@ public final class CommLogPanel extends JPanel {
      * in the document — in the plain line and in the four-line Raw block alike (where an id sits
      * inside the content).
      */
-    private void appendRow(StyledDocument doc, String rowText, int performative, List<RuleRefs.Ref> spans)
-            throws BadLocationException {
+    private void appendRow(StyledDocument doc, String rowText, CommLogEvent event, boolean raw,
+                           List<RuleRefs.Ref> spans) throws BadLocationException {
         int rowStart = doc.getLength();
-        doc.insertString(rowStart, rowText + "\n", rowStyle(performative));
+        doc.insertString(rowStart, rowText + "\n", rowStyle(event.performative()));
+        // S19 (playtest 5, PT40): a Raw auction id is shown short; the full one rides on its characters.
+        String shortId = raw ? CommLogLineFormat.shortId(event.conversationId()) : null;
+        if (shortId != null && !shortId.equals(event.conversationId())) {
+            String label = "conversation-id: ";
+            int at = rowText.indexOf(label + shortId);
+            if (at >= 0) {
+                SimpleAttributeSet full = new SimpleAttributeSet();
+                full.addAttribute(FULL_ID, event.conversationId());
+                doc.setCharacterAttributes(rowStart + at + label.length(), shortId.length(), full, false);
+            }
+        }
         for (RuleRefs.Ref ref : RuleRefs.find(rowText, knownRuleId)) {
             // replace=false MERGES: the id keeps its row's colour and gains the underline.
             doc.setCharacterAttributes(rowStart + ref.start(), ref.end() - ref.start(), RULE_ID_UNDERLINE, false);

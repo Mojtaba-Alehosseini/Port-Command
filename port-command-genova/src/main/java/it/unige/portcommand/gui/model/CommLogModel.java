@@ -66,6 +66,9 @@ public final class CommLogModel {
     private final Set<String> knownReceivers = new LinkedHashSet<>();
     private final Set<String> mutedSenders = new LinkedHashSet<>();
     private final LogArchiver archiver;
+    /** S19 (playtest 5, PT43): every rule this game's messages cited, counted as they arrive - so a
+     * row evicted at the 500-row cap still counts. A new world starts at zero ({@link #clear}). */
+    private final RuleCitations citations = new RuleCitations();
     /** S15: which rule ids exist — decides whether a bracketed {@code [R7]} makes a row a rule row. */
     private final Predicate<String> knownRuleId;
     /**
@@ -107,6 +110,11 @@ public final class CommLogModel {
         this.knownRuleId = RuleCatalogue.get()::contains;
     }
 
+    /** S19 (playtest 5, PT43): how often this game's messages cited each rule (in rule order). */
+    public java.util.Map<String, Integer> ruleCitations() {
+        return citations.all();
+    }
+
     public void setOnChange(Runnable onChange) {
         this.onChange = Objects.requireNonNull(onChange, "onChange");
     }
@@ -124,6 +132,7 @@ public final class CommLogModel {
             lastWeatherReading = reading;
         }
         entries.addLast(new Entry(event, facts, unchangedCheck));
+        citations.count(event, knownRuleId);
         knownSenders.add(event.sender());
         knownReceivers.addAll(event.receivers());
         while (entries.size() > MAX_ENTRIES) {
@@ -187,6 +196,7 @@ public final class CommLogModel {
         entries.clear();
         vesselsByConversation.clear();
         lastWeatherReading = null;
+        citations.reset(); // S19 (PT43): "used this game" belongs to the world that is gone
         onChange.run();
     }
 

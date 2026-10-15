@@ -63,7 +63,8 @@ public final class HelpText {
                 new Section("The window", null, false, List.of(
                         Row.of("Top bar", "day and time, wallet, reputation, today's profit against the target, "
                                 + "and the score (point at it for its four parts)"),
-                        Row.of("⏸ / ▶   ×1 ×2 ×4", "pause or resume, and the game speed"),
+                        Row.of("⏸ / ▶ Resume   ×1 ×2 ×4", "pause or resume (PAUSED shows beside it), and the "
+                                + "game speed"),
                         Row.of("Next ship", "calls the next walk-in now"),
                         Row.of("Weather", "the last reading — click it for the forecast"),
                         Row.of("Waiting for you", "the ships waiting for your answer — click one to open its tab"),
@@ -71,7 +72,28 @@ public final class HelpText {
                         Row.of("Finished", "every negotiation that ended in this game — click one to read it again"),
                         Row.of("Comm log", "the HarbourMaster's messages: All, This vessel, Rules, Weather. Raw shows "
                                 + "the FIPA fields; click a rule id such as [R7] to read the rule; right-click to "
-                                + "copy."))),
+                                + "copy; Export… saves it as a text file; ▼ Jump to latest goes back to the newest "
+                                + "message."))),
+                // S19 (playtest 5, PT34): "the comm log is hard to read (berth/tug part)".
+                new Section("How to read the comm log",
+                        "The life of one ship, in six steps - the messages it takes, in the order they come:",
+                        false, List.of(
+                        Row.of("1  Deal", "the ship hails and offers (PROPOSE); you agree a price in its chat tab "
+                                + "(ACCEPT-PROPOSAL)"),
+                        Row.of("2  Berth", "the HarbourMaster gives it a berth that fits (ACCEPT-PROPOSAL, [R7]) - "
+                                + "or queues it until one is free"),
+                        Row.of("3  Customs", "the ship is cleared, or inspected first ([R21]-[R24])"),
+                        Row.of("4  Tug auction", "the HarbourMaster calls for tugs (CFP); each free tug bids "
+                                + "(PROPOSE); the best bid wins (ACCEPT-PROPOSAL, [R12]) and the others are turned "
+                                + "down (REJECT-PROPOSAL)"),
+                        Row.of("5  Escort and dock", "the tugs bring the ship to its berth; bad weather holds it "
+                                + "outside until it clears ([R15]-[R20])"),
+                        Row.of("6  Departure", "its hours over, the ship leaves; the tugs that served it report "
+                                + "free"),
+                        Row.of("Help ▸ Rules (30)…", "all 30 Prolog rules in their five groups, each with its file "
+                                + "and how often this game cited it"),
+                        Row.of("Tip", "press This vessel above the log and pick the ship's chat tab: the log "
+                                + "shows only that ship's messages"))),
                 new Section("Talking to a ship",
                         "Type in the ship's chat tab, or press its buttons: Accept takes their offer, Reject turns "
                                 + "them away, Hint asks the Assistant. The grey example in the box is a price that "
@@ -113,7 +135,9 @@ public final class HelpText {
                         Row.of("Autosave", "at the end of every day — Game ▸ Load Game… ▸ Autosave"),
                         Row.of("Game ▸ Save Game…", "your one manual save; negotiations still open are not "
                                 + "saved (you are asked first)"),
-                        Row.of("Game ▸ Open comm-log file", "the comm log's archive on disk"),
+                        Row.of("Game ▸ Export comm log…", "the comm log as you see it, as a text file you choose "
+                                + "- it ends with the rules this game cited (the full archive stays on disk, under "
+                                + "logs/)"),
                         Row.of("Exit", "asks first while a game is running: Save & quit, Quit or Cancel"))));
     }
 }

@@ -931,6 +931,10 @@ class CommLogPanelTest {
         JTextPane pane = named(panel, "commlog-text", JTextPane.class);
         JTextArea line = named(panel, "commlog-rule-line", JTextArea.class);
         JButton resume = named(panel, "commlog-resume", JButton.class);
+        // S19 (playtest 5, PT29): "▼ resume" looked like the game's own Resume.
+        assertEquals("▼ Jump to latest", resume.getText());
+        JButton export = named(panel, "commlog-export", JButton.class);
+        assertEquals("Export…", export.getText());
 
         assertSame(panel.presetToggleForTest(CommLogPreset.ALL), all);
         assertSame(panel.presetToggleForTest(CommLogPreset.THIS_VESSEL), thisVessel);
@@ -1003,5 +1007,53 @@ class CommLogPanelTest {
         assertTrue(onEdt(panel::allText).contains("\"second\""), onEdt(panel::allText));
         assertTrue(onEdt(() -> named(panel, CommLogPanel.NAME_TEXT, javax.swing.JTextPane.class)
                 .getCaret().isSelectionVisible()), "a selection shows although the log never takes the focus");
+    }
+
+    // ==================== S19 (playtest 5): Export (PT29 / PT35 / PT43) and the Raw auction id (PT40) ====================
+
+    @Test
+    @Timeout(5)
+    void theExportIsTheViewAsShownThenTheRulesThisGameCited() throws Exception {
+        EventBus bus = new EventBus();
+        CommLogPanel panel = newPanel(bus);
+        publish(bus, berthGrant(1_000), queueGrant(2_000), berthGrant(3_000));
+
+        String export = onEdt(panel::exportText);
+
+        assertEquals(it.unige.portcommand.gui.model.CommLogExport.text(text(panel), java.util.Map.of("R7", 2, "R25", 1, "R26", 1, "R27", 1, "R30", 1)),
+                export);
+        assertTrue(export.endsWith("R7: 2\nR25: 1\nR26: 1\nR27: 1\nR30: 1\n"), export);
+    }
+
+    @Test
+    @Timeout(5)
+    void theExportButtonHandsTheSaveDialogToTheWindow() throws Exception {
+        EventBus bus = new EventBus();
+        CommLogPanel panel = newPanel(bus);
+        List<Runnable> asked = new java.util.ArrayList<>();
+        runOnEdt(() -> panel.setExportWrapper(asked::add));
+
+        click(named(panel, "commlog-export", JButton.class));
+
+        assertEquals(1, asked.size(), "the window runs the dialog - paused behind it");
+    }
+
+    @Test
+    @Timeout(5)
+    void aRawAuctionIdIsShortWithTheFullIdAsItsTooltip() throws Exception {
+        EventBus bus = new EventBus();
+        CommLogPanel panel = newPanel(bus);
+        String auction = "cnp-3508e53a-1b2c-4d5e-8f90-1234567af624";
+        publish(bus, new CommLogEvent(1_000, "tug_2", List.of(HM), ACLMessage.PROPOSE, "tug_2 bids",
+                auction, MessageFactory.ONTOLOGY, "fipa-contract-net", "{\"eta\":29.247660187185026}"));
+
+        click(panel.rawToggleForTest());
+        String raw = text(panel);
+        int at = raw.indexOf("cnp-…f624");
+
+        assertTrue(at >= 0 && !raw.contains(auction), raw);
+        assertTrue(raw.contains("\"eta\": 29.25"), raw);
+        assertEquals(auction, onEdt(() -> panel.fullIdAtForTest(at + 3)), "over the short id: the full one");
+        assertEquals(null, onEdt(() -> panel.fullIdAtForTest(1)), "anywhere else: nothing");
     }
 }

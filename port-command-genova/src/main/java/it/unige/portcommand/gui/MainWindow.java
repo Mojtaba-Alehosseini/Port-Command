@@ -265,6 +265,7 @@ public final class MainWindow extends JFrame {
         // blocked while paused any more - everything it blocked (the bar's speed toggles and Next
         // ship) was reachable through the menu bar it let through anyway.
         screen.onPauseToggle(this::toggleMenuResume); // S18b (PT4): the top bar's ⏸/▶
+        screen.onCommLogExport(this::whilePaused); // S19 (PT29 / PT35): the save dialog, paused behind it
         setJMenuBar(buildMenuBar(eventBus, onClose));
         setLayout(new BorderLayout());
         add(screen, BorderLayout.CENTER);
@@ -617,9 +618,10 @@ public final class MainWindow extends JFrame {
         quitItem.addActionListener(e -> confirmQuit());
         JMenuItem exit = new JMenuItem("Exit");
         exit.addActionListener(e -> requestExit(onClose)); // S18b (P1)
-        // S18b (playtest 2, PT11): the comm log's archive file, or its folder before there is one.
-        JMenuItem openCommLog = new JMenuItem("Open comm-log file");
-        openCommLog.addActionListener(e -> openCommLogFile());
+        // S19 (playtest 5, PT35): the readable export. Game ▸ Open comm-log file (S18b, PT11) showed
+        // the raw JSON archive; the archive stays on disk under logs/, for analysis.
+        JMenuItem exportCommLog = new JMenuItem("Export comm log…");
+        exportCommLog.addActionListener(e -> screen.exportCommLog());
         // S17b (playtest 2, PT8): the same request as the top bar's "Next ship" button.
         callNextShipItem = new JMenuItem("Call Next Ship");
         callNextShipItem.addActionListener(
@@ -631,7 +633,7 @@ public final class MainWindow extends JFrame {
         game.addSeparator();
         game.add(saveItem);
         game.add(loadItem);
-        game.add(openCommLog);
+        game.add(exportCommLog);
         game.addSeparator();
         game.add(quitItem);
         game.addSeparator();
@@ -811,6 +813,11 @@ public final class MainWindow extends JFrame {
         helpItem.addActionListener(e -> whilePaused(() -> new HelpDialog(this).setVisible(true))); // S18b (P2)
         JMenuItem tutorial = new JMenuItem("Show tutorial");
         tutorial.addActionListener(e -> tutorialOverlay.startFromBeginning());
+        // S19 (playtest 5, PT43): every rule, not only the ones the log cites - with this game's counts.
+        it.unige.portcommand.core.RuleCatalogue catalogue = it.unige.portcommand.core.RuleCatalogue.get();
+        JMenuItem rules = new JMenuItem("Rules (" + catalogue.all().size() + ")…");
+        rules.addActionListener(e -> whilePaused(() -> new RulesDialog(this,
+                it.unige.portcommand.gui.model.RuleBook.groups(catalogue, screen.ruleCitations())).setVisible(true)));
         JMenuItem about = new JMenuItem("About");
         about.addActionListener(e -> JOptionPane.showMessageDialog(this,
                 "Port Command Genova\nA JADE + SWI-Prolog + Rasa + local-LLM port-management game.\n"
@@ -818,6 +825,7 @@ public final class MainWindow extends JFrame {
                 "About Port Command Genova", JOptionPane.INFORMATION_MESSAGE));
         help.add(helpItem);
         help.add(tutorial);
+        help.add(rules);
         help.addSeparator();
         help.add(about);
         return help;
@@ -1166,32 +1174,6 @@ public final class MainWindow extends JFrame {
         if (choice == JOptionPane.OK_OPTION) {
             lifecycle.quit();
         }
-    }
-
-    /**
-     * S18b (playtest 2, PT11): opens the newest comm-log archive — or, before anything has been
-     * archived, the folder it goes to. A file type the desktop has no program for falls back to
-     * the folder; when even that fails, the path is said.
-     */
-    private void openCommLogFile() {
-        java.nio.file.Path dir = it.unige.portcommand.gui.LogArchiver.defaultDir();
-        Optional<java.nio.file.Path> newest = it.unige.portcommand.gui.LogArchiver.newestArchive(dir);
-        try {
-            java.nio.file.Files.createDirectories(dir);
-            java.awt.Desktop.getDesktop().open(newest.orElse(dir).toFile());
-            return;
-        } catch (Exception noProgramForTheFile) {
-            if (newest.isPresent()) {
-                try {
-                    java.awt.Desktop.getDesktop().open(dir.toFile());
-                    return;
-                } catch (Exception noFolderEither) {
-                    // said below
-                }
-            }
-        }
-        JOptionPane.showMessageDialog(this, "The comm-log archive is in " + dir.toAbsolutePath() + ".",
-                "Comm log", JOptionPane.INFORMATION_MESSAGE);
     }
 
     /** Esc toggles pause/resume — bound WHEN_IN_FOCUSED_WINDOW so it works from any panel. */

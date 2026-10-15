@@ -323,6 +323,21 @@ final class GameScreen extends JPanel {
         });
     }
 
+    /** S19 (playtest 5, PT29 / PT35): the window runs the comm log's save dialog, paused behind it. */
+    void onCommLogExport(java.util.function.Consumer<Runnable> wrapper) {
+        commLogPanel.setExportWrapper(wrapper);
+    }
+
+    /** S19 (PT35): Game ▸ Export comm log… - the same export as the log's own Export… button. */
+    void exportCommLog() {
+        commLogPanel.export();
+    }
+
+    /** S19 (PT43): how often this game's comm log cited each rule (Help ▸ Rules). */
+    java.util.Map<String, Integer> ruleCitations() {
+        return commLogPanel.ruleCitations();
+    }
+
     /** S18b (PT4): what the top bar's pause button does — the window's one pause funnel. */
     void onPauseToggle(Runnable action) {
         hud.onPauseToggle(action);
