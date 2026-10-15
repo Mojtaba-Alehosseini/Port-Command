@@ -81,6 +81,26 @@ class TutorialOverlayTest {
         assertEquals(1, ended[0], "and the window remembers the tutorial was seen");
     }
 
+    /** S19 review (PT23): resumed with ▶ part-way through the tour, the last card has nothing to start. */
+    @Test
+    @Timeout(20)
+    void aGameResumedDuringTheTourEndsItOnDone() throws Exception {
+        TutorialOverlay overlay = overlay(new EventBus());
+        int[] started = new int[1];
+        SwingUtilities.invokeAndWait(() -> overlay.startTour(TOUR, () -> started[0]++));
+        for (int step = 1; step < TutorialOverlay.TOTAL_STEPS; step++) {
+            SwingUtilities.invokeAndWait(overlay::advanceForTest);
+        }
+        assertEquals("Start playing", overlay.nextLabelForTest(), "fixture");
+
+        SwingUtilities.invokeAndWait(overlay::gameRunning);
+
+        assertEquals("Done", overlay.nextLabelForTest(), "the game runs: there is nothing to start");
+        SwingUtilities.invokeAndWait(overlay::advanceForTest);
+        assertEquals(0, started[0]);
+        assertFalse(overlay.isShowingAStep());
+    }
+
     @Test
     @Timeout(20)
     void skipEndsTheTourAndStartsNothing() throws Exception {

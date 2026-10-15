@@ -309,7 +309,14 @@ public final class MainWindow extends JFrame {
         // the dialog's componentHidden unfreezes it, but only if THIS handler paused (a manual
         // pause, or a game-over racing the same settlement, is left alone).
         eventBus.subscribe(GamePausedEvent.class, e -> reflectMode(), DeliveryMode.EDT);
-        eventBus.subscribe(GameResumedEvent.class, e -> reflectMode(), DeliveryMode.EDT);
+        eventBus.subscribe(GameResumedEvent.class, e -> {
+            reflectMode();
+            // S19 review (PT23): resumed during the tour - its last card has nothing left to start.
+            // Read the mode NOW: a world's boot announces a resume an instant before its paused start.
+            if (lifecycle.mode() == GameMode.RUNNING) {
+                tutorialOverlay.gameRunning();
+            }
+        }, DeliveryMode.EDT);
         eventBus.subscribe(GameOverEvent.class, e -> reflectMode(), DeliveryMode.EDT);
         // Task 22: after a load the previous world's settled summary no longer describes
         // this timeline — the Debug re-show falls back to the synthetic day until the
@@ -489,6 +496,9 @@ public final class MainWindow extends JFrame {
         if (session.saveLoadManager().isFirstLaunch()
                 && !prefs.getBoolean(PREF_TUTORIAL_CLOSED, false) // S18b (P10)
                 && !TUTORIAL_SCENARIO_KEY.equals(session.activeScenarioKey())) {
+            if (pauseForTheTour(lifecycle.mode(), saveInProgress || loadInProgress)) {
+                lifecycle.pause(); // S19 review: the tour is at a paused start - free play starts running
+            }
             tutorialOverlay.startTour(java.util.List.of(), startPlayingIfPaused());
         }
     }
@@ -509,6 +519,13 @@ public final class MainWindow extends JFrame {
                 .filter(tutorial -> firstCardStillToCome(tutorial, lifecycle.simClock().nowSimMillis()))
                 .ifPresent(tutorial -> tutorialOverlay.startTour(scriptedTutorialSteps(tutorial),
                         startPlayingIfPaused()));
+    }
+
+    /** S19 review (PT23): whether the first-launch tour pauses the game first - a free-play game
+     * starts running (only a scenario or a load the window starts comes up paused); never while a
+     * save or a load owns the pause. Pure, for {@code MainWindowTutorialStartTest}. */
+    static boolean pauseForTheTour(GameMode mode, boolean busy) {
+        return mode == GameMode.RUNNING && !busy;
     }
 
     /** S19 (PT23): what a tour's last card starts - the paused game, or nothing when it runs. */

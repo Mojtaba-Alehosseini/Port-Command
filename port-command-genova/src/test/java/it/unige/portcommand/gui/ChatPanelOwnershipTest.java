@@ -428,6 +428,33 @@ class ChatPanelOwnershipTest {
                 + "Press Take over first."));
     }
 
+    /** S19 review (PT27): a typed "hint" still being read when the Assistant takes the tab runs no
+     * Hint there - the button is hidden in a tab the Assistant negotiates in. */
+    @Test
+    @Timeout(5)
+    void aTypedHintStillBeingReadWhenTheAssistantTakesTheTabRunsNoHint() throws Exception {
+        ownership(false);
+        DialogueTabView view = open(A, "A");
+        CompletableFuture<PipelineResult> parse = processor.holdNext();
+        HeadlessSwing.onEdt(() -> view.sendText("hint"));
+        flush();
+
+        ownership(true);
+        parse.complete(new PipelineResult.Routed(hintRequest()));
+        flush();
+        flush();
+
+        assertEquals(List.of(), published(it.unige.portcommand.gui.events.HintButtonEvent.class));
+        assertEquals(1, linesSaying(A, "The Assistant is negotiating here now \u2014 nothing was sent. "
+                + "Press Take over first."));
+    }
+
+    private static ACLMessage hintRequest() {
+        ACLMessage msg = MessageFactory.create(ACLMessage.REQUEST);
+        msg.setContent(TerminalJson.write(Map.of(it.unige.portcommand.nlp.NLPPipeline.HINT_REQUEST_KEY, true)));
+        return msg;
+    }
+
     // ==================== Take over ====================
 
     @Test

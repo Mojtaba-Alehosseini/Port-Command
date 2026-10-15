@@ -259,6 +259,21 @@ class RecommendationAlgorithmTest {
 
     /** An offer below cost late in the talk is a "no": the counter it would take is a long shot,
      * and over budget on the last round the ship leaves. (Early it is countered if that pays.) */
+    /** S19 review (PT38a point 2): with 30 s or less left but rounds to go, the old cautious formula
+     * decides - counters stay candidates, scored as before S19. Only the LAST round below cost is a
+     * plain no (point 4). */
+    @Test
+    void belowCostWithThirtySecondsLeftKeepsTheCautiousCounters() {
+        RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), 4);
+        WalkInDialogueSnapshot cheap = new WalkInDialogueSnapshot("W9", "tanker", 14.0, 140.0, 20000, "liquid_bulk",
+                "berth_1", 6, 1000.0, 0.0, 1, 0.0, false).withTime(150.0, 180.0);
+
+        java.util.List<RecommendationCandidate> candidates = algorithm.candidates(cheap);
+
+        assertTrue(candidates.stream().anyMatch(c -> RecommendationCandidate.COUNTER.equals(c.action())),
+                "round 1 of 4, 30 s left, EUR 1000 against a EUR 1100 cost: " + candidates);
+    }
+
     @Test
     void belowCostOnTheLastRoundIsANo() {
         RecommendationAlgorithm algorithm = new RecommendationAlgorithm(new MarketHistoryArtifact(), ROUNDS);

@@ -161,9 +161,15 @@ public final class NegotiationTabRegistry {
      */
     public Optional<String> onPlayerCommandRefused(PlayerCommandRefusedEvent event) {
         // S19 (playtest 5, PT30): the move was never sent, so it is never echoed - whichever tab
-        // held its line (a move typed in one tab may be addressed to another vessel by name).
+        // held its line (a move typed in one tab may be addressed to another vessel by name). S19
+        // review: a tab that typed it for ANOTHER ship says where the reason is - the refusal line
+        // goes to that ship's tab.
         for (DialogueTabModel held : tabs.values()) {
-            held.takeHeldEcho(event.commandId());
+            if (held.takeHeldEcho(event.commandId()).isPresent() && !held.dialogueId().equals(event.dialogueId())) {
+                DialogueTabModel target = tabs.get(event.dialogueId());
+                held.appendSystemMessage("Not sent to " + (target == null ? "that ship" : target.snapshot().vesselName())
+                        + " — the reason is in its tab.");
+            }
         }
         DialogueTabModel tab = tabs.get(event.dialogueId());
         if (tab == null || event.commandId() == PlayerCommandEvent.NO_COMMAND_ID) {
@@ -305,6 +311,16 @@ public final class NegotiationTabRegistry {
         DialogueTabModel gone = tabs.remove(dialogueId);
         dialogueIdByVesselId.remove(gone.vesselId(), dialogueId); // two-arg: never drop a newer mapping
         tabOrder.remove(dialogueId); // S15: the id leaves the strip order with its tab
+    }
+
+    /** S19 review (PT30): the tab that holds the line of {@code commandId}, if any. */
+    public Optional<String> tabHoldingEcho(long commandId) {
+        for (DialogueTabModel tab : tabs.values()) {
+            if (tab.holdsEcho(commandId)) {
+                return Optional.of(tab.dialogueId());
+            }
+        }
+        return Optional.empty();
     }
 
     /**

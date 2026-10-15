@@ -213,6 +213,27 @@ class AutopilotPlanTest {
         assertEquals(List.of(PREFIX + "said no — this ship does not fit berth 2."), chatLines());
     }
 
+    /** S19 review (PT38a): "more than 30 s left" is asked of the tab's clock as it reads AT THE MOVE
+     * - the snapshot's time dates from her message (the Hint reads the clock at the click). A plan
+     * switched on while her offer waited answered from the time it had when she spoke. */
+    @Test
+    void theAutopilotReadsTheTabsClockAtTheMove() {
+        it.unige.portcommand.util.ConversationClock conversations = new it.unige.portcommand.util.ConversationClock();
+        conversations.open("nego-v1", 180_000L);
+        conversations.advance(160_000L); // 20 s left now
+        AutopilotExecuteBehaviour plan = new AutopilotExecuteBehaviour(new Agent(), algorithm, policies, bus, cache,
+                on, AutopilotPacing.NONE, null, conversations);
+        WalkInDialogueSnapshot asSheSpoke = new WalkInDialogueSnapshot("v1", "tanker", 14.0, 140.0, 20000,
+                "liquid_bulk", "berth_1", 6, 6000.0, 0.0, 1, 0.0, false).withTime(10.0, 180.0);
+        assertEquals(RecommendationCandidate.COUNTER, algorithm.run(asSheSpoke).action(),
+                "fixture: with 170 s left, as she spoke, the calculation counters");
+
+        plan.onNegotiationOpened(new NegotiationOpenedEvent("nego-v1", asSheSpoke));
+
+        assertEquals(PlayerCommandKind.ACCEPT, commands().get(0).kind(),
+                "20 s left at the move: the old caution - accept her offer");
+    }
+
     @Test
     void anAcceptAndACounterGoOutAsBeforeWithTheirPriceAndTheTalksId() {
         AutopilotExecuteBehaviour plan = plan();

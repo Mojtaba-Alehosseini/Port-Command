@@ -29,6 +29,18 @@ class MainWindowTutorialStartTest {
         assertTrue(cards.stream().noneMatch(String::isBlank), cards.toString());
     }
 
+    /** S19 review (PT23): the first-launch tour is at a PAUSED start too - a free-play game starts
+     * running, so the window pauses it first; never while a save or a load owns the pause. */
+    @Test
+    void theFirstLaunchTourPausesARunningGameFirst() {
+        assertTrue(MainWindow.pauseForTheTour(it.unige.portcommand.lifecycle.GameMode.RUNNING, false));
+        assertFalse(MainWindow.pauseForTheTour(it.unige.portcommand.lifecycle.GameMode.PAUSED, false),
+                "already paused");
+        assertFalse(MainWindow.pauseForTheTour(it.unige.portcommand.lifecycle.GameMode.RUNNING, true),
+                "a save or a load owns the pause");
+        assertFalse(MainWindow.pauseForTheTour(it.unige.portcommand.lifecycle.GameMode.MENU, false), "no game");
+    }
+
     /** S18b (adversarial review): {@code --load} of a tutorial save past its first step showed
      * card 1 again. The window shows that card only at the tutorial's opening minute. */
     @Test

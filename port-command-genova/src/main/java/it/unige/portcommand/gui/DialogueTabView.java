@@ -938,6 +938,12 @@ final class DialogueTabView extends JPanel {
         if (content != null && Boolean.TRUE.equals(content.get(NLPPipeline.HINT_REQUEST_KEY))) {
             // S19 (playtest 5, PT27): a typed request for the Assistant's suggestion does what the
             // Hint button does. Rasa used to read "hint" as a refusal, and the vessel left.
+            if (assistantOwnsDialogue.test(dialogueId)) {
+                // S19 review: the Assistant took the tab while the line was read - no Hint where the
+                // button is hidden.
+                appendSystem(assistantIsNegotiatingLine(displayNameFor(vesselId()), true));
+                return;
+            }
             appendSystem(HINT_ECHO);
             onHint();
             return;

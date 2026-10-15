@@ -137,7 +137,7 @@ public final class AssistantAgent extends PortCommandAgent {
             autopilotPacing = pacing;
         }
         autopilotPlan = new AutopilotExecuteBehaviour(this, algorithm, policyRegistry, eventBus, cache,
-                autopilotEnabled, autopilotPacing, null);
+                autopilotEnabled, autopilotPacing, null, conversationClock); // S19 review: the clock at the move
         policyPlan = new PolicyParseBehaviour(this, policyRegistry, eventBus);
         explainPlan = new ExplainEventBehaviour(this, cache, llmBridge, eventBus);
         addBehaviour(recommendPlan);

@@ -112,11 +112,12 @@ public final class RecommendationAlgorithm {
         List<ScoredCandidate> candidates = new ArrayList<>();
         if (compatible) {
             candidates.add(scoreAccept(snapshot, marginalCost));
-            // PT38a (4): an offer below cost late in the talk is answered "no" - the counter it
-            // would take is a long shot, and over budget on the last round the ship leaves. Early
-            // it is countered when that pays (the argmax against "no"'s EV of 0 decides).
+            // PT38a (4): an offer below cost on the LAST round is answered "no" - over budget there
+            // the ship leaves. Early it is countered when that pays (the argmax against "no"'s EV of
+            // 0 decides); with 30 s or less left but rounds to go, PT38a (2) - the old cautious
+            // formula - scores the counters as before S19 (S19 review).
             boolean belowCost = snapshot.lastVesselOffer() < marginalCost;
-            if (early || !belowCost) {
+            if (!(belowCost && lastRound)) {
                 for (double pct : new double[] {COUNTER_10_PCT, COUNTER_20_PCT}) {
                     ScoredCandidate counter = scoreCounter(snapshot, marginalCost, band, urgency, pct, early);
                     // PT38a (3): the band clamp can pull a counter down to the band top; at or

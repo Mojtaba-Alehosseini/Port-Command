@@ -335,6 +335,11 @@ public final class DialogueTabModel {
         heldEchoes.put(commandId, Objects.requireNonNull(line, "line"));
     }
 
+    /** S19 review (PT30): whether this tab holds the line of {@code commandId}. */
+    public boolean holdsEcho(long commandId) {
+        return heldEchoes.containsKey(commandId);
+    }
+
     /** S19 (PT30): the line held for {@code commandId}, and no longer held - empty when there is none. */
     public Optional<String> takeHeldEcho(long commandId) {
         return Optional.ofNullable(heldEchoes.remove(commandId));

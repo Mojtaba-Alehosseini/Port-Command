@@ -516,12 +516,16 @@ public final class ChatPanel extends JPanel implements DialogueDirectory {
     }
 
     private void onPlayerCommandRefused(PlayerCommandRefusedEvent event) {
+        // S19 review (PT30): a move typed in another tab - that tab gets a line, so it re-renders.
+        Optional<String> typedIn = registry.tabHoldingEcho(event.commandId())
+                .filter(id -> !id.equals(event.dialogueId()));
         registry.onPlayerCommandRefused(event).ifPresent(id -> {
             DialogueTabView view = views.get(id);
             if (view != null) {
                 view.refreshStrip();
             }
         });
+        typedIn.map(views::get).ifPresent(DialogueTabView::refresh);
         // S18b (U8, review): a refused move is an answer too - the tab's Accept and Reject come back.
         DialogueTabView answered = views.get(event.dialogueId());
         if (answered != null) {

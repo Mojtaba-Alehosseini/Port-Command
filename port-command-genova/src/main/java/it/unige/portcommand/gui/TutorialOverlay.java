@@ -184,6 +184,15 @@ public final class TutorialOverlay extends JComponent {
         showStep(1);
     }
 
+    /** S19 review (PT23): the game runs (▶ Resume, or Esc, during the tour): the last card has
+     * nothing left to start - it says Done. */
+    public void gameRunning() {
+        onStartPlaying = null;
+        if (currentStep == TOTAL_STEPS) {
+            nextButton.setText(DONE);
+        }
+    }
+
     /** True once the window is on screen ({@link GuiReadyEvent}) OR the overlay is displayable — so
      * nothing paints against not-yet-valid component bounds. */
     public boolean isReady() {

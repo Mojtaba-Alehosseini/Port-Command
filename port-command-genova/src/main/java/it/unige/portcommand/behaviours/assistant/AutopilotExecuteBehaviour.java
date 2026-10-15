@@ -142,6 +142,9 @@ public final class AutopilotExecuteBehaviour extends OneShotBehaviour {
      */
     private final LinkedHashMap<String, Closed> recentlyClosed = new LinkedHashMap<>();
     private long sequence;
+    /** S19 review (PT38a): the tabs' clock, read at the move; {@code null} in a plan built by hand
+     * (then the stored snapshot's time stands). */
+    private final it.unige.portcommand.util.ConversationClock conversationClock;
 
     /** One decided move. {@code rec} is {@code null} for a policy's move, {@code policy} for an EV one. */
     private record Decision(String action, double price, String policy, Recommendation rec) {
@@ -176,7 +179,21 @@ public final class AutopilotExecuteBehaviour extends OneShotBehaviour {
                                      PolicyRegistryArtifact policyRegistry, EventBus eventBus,
                                      RecommendationCache cache, AtomicBoolean autopilotEnabled,
                                      AutopilotPacing pacing, MoveTimer timer) {
+        this(agent, algorithm, policyRegistry, eventBus, cache, autopilotEnabled, pacing, timer, null);
+    }
+
+    /**
+     * @param conversationClock S19 review (PT38a): the game's conversation clock, so a move asks
+     *                          "more than 30 s left?" of the tab's clock as it reads at the move;
+     *                          {@code null} and the snapshot's own time stands
+     */
+    public AutopilotExecuteBehaviour(Agent agent, RecommendationAlgorithm algorithm,
+                                     PolicyRegistryArtifact policyRegistry, EventBus eventBus,
+                                     RecommendationCache cache, AtomicBoolean autopilotEnabled,
+                                     AutopilotPacing pacing, MoveTimer timer,
+                                     it.unige.portcommand.util.ConversationClock conversationClock) {
         super(agent);
+        this.conversationClock = conversationClock;
         this.agent = agent;
         this.algorithm = algorithm;
         this.policyRegistry = policyRegistry;
@@ -357,7 +374,8 @@ public final class AutopilotExecuteBehaviour extends OneShotBehaviour {
      * The move for {@code snapshot}: the player's first matching policy, else the expected-value
      * calculation. {@code policiesToo} is false for the one retry after a refusal.
      */
-    private Decision decide(String dialogueId, WalkInDialogueSnapshot snapshot, boolean policiesToo) {
+    private Decision decide(String dialogueId, WalkInDialogueSnapshot stored, boolean policiesToo) {
+        WalkInDialogueSnapshot snapshot = asItReadsNow(dialogueId, stored);
         Optional<PolicyRule> matched = policiesToo ? policyRegistry.firstMatching(snapshot) : Optional.empty();
         if (matched.isPresent()) {
             PolicyAction policyAction = matched.get().action();
@@ -367,6 +385,21 @@ public final class AutopilotExecuteBehaviour extends OneShotBehaviour {
         Recommendation rec = algorithm.run(snapshot);
         cache.put(RecommendOnDemandBehaviour.decisionId(dialogueId, snapshot), rec);
         return new Decision(rec.action(), rec.price(), null, rec);
+    }
+
+    /**
+     * S19 review (PT38a): the snapshot with the tab's counter as it reads NOW. The stored one's time
+     * dates from the vessel's message; a move waits for its pacing, a plan switched on answers an
+     * offer that has waited, and a retry follows a refusal - and PT38a's "more than 30 s left" is
+     * asked at the move, as the Hint asks it at the click ({@code DialogueTabView.onHint}).
+     */
+    private WalkInDialogueSnapshot asItReadsNow(String dialogueId, WalkInDialogueSnapshot stored) {
+        if (conversationClock == null) {
+            return stored;
+        }
+        return conversationClock.view(dialogueId)
+                .map(view -> stored.withTime(view.elapsedMillis() / 1000.0, view.totalMillis() / 1000.0))
+                .orElse(stored);
     }
 
     private static double priceFor(PolicyAction action, WalkInDialogueSnapshot snapshot) {

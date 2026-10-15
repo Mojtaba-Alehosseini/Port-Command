@@ -442,6 +442,34 @@ class ChatPanelTest {
                 transcript.get(before), "S19 (playtest 5, PT32): the player's own move says who made it");
     }
 
+    /** S19 review (PT30): a move typed in one tab for another ship, and refused - the refusal line goes
+     * to that ship's tab, and the typing tab, which held the echo, says where the reason is. */
+    @Test
+    @Timeout(5)
+    void aRefusedMoveForAnotherShipSaysWhereTheReasonIs() throws Exception {
+        EventBus bus = new EventBus();
+        StubProcessor processor = new StubProcessor();
+        ChatPanel panel = new ChatPanel(bus, processor);
+        openTab(bus, panel, "nego-A", "A", "cargo_vessel", "A");
+        openTab(bus, panel, "nego-B", "B", "tanker", "Genoa Star");
+        processor.returning(new PipelineResult.Routed(acl(ACLMessage.PROPOSE,
+                Map.of("money", Map.of("amount", 2000.0, "currency", "EUR"), "duration", 5)), "B"));
+        panel.viewForTest("nego-A").sendText("Genoa Star: 2000 for 5h");
+        flush();
+        PlayerCommandEvent sent = published(bus, PlayerCommandEvent.class).get(0);
+        assertEquals("B", sent.targetVesselId(), "fixture: the move is for Genoa Star");
+
+        bus.publish(new PlayerCommandRefusedEvent("nego-B", PlayerCommandKind.PROPOSE, sent.commandId(), 0.0,
+                "berth_4 is incompatible with a tanker [R7]"));
+        flush();
+
+        assertEquals(new DialogueTabModel.ChatEntry(DialogueTabModel.Speaker.SYSTEM,
+                "Not sent to Genoa Star — the reason is in its tab."), lastEntry(panel, "nego-A"));
+        assertTrue(transcriptOf(panel, "nego-A").stream().noneMatch(e -> e.text().startsWith("→")));
+        assertTrue(panel.viewForTest("nego-A").transcriptTextForTest().contains("Not sent to Genoa Star"),
+                "and the typing tab shows it");
+    }
+
     /** S19 (PT30): the gate judges an acceptance too, so it carries an id the refusal can name. */
     @Test
     @Timeout(5)
